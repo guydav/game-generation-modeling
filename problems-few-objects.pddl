@@ -18,7 +18,6 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - dodgeball) (preference chairBetweenAgentAndBall
@@ -34,11 +33,9 @@
     ) )
 ) )
 (:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (episode_over)
-    (forall (?d - dodgeball) 
-        (and
-            (thrown ?d)
-            (not (in_motion ?d))
+    (exists (?h - hexagonal_bin)
+        (forall (?d - dodgeball) 
+            (on ?h ?d)
         )
     )
 ))
@@ -54,8 +51,8 @@
 (:init ; likewise - we could populate fully by a script
 )
 (:goal (and
-    (forall (?d - desktop) 
-        (not (on desk ?d))
+    (forall (?c - (either desktop laptop)) 
+        (not (on desk ?c))
     )
 
 ))
@@ -118,35 +115,37 @@
 (:goal (and
     (exists (?w - wall) 
         (exists (?h - hexagonal_bin) 
-            (< (distance ?w ?h) 1)
+            (= (distance ?w ?h) 1)
         )
     )
 ))
+)
 
 (define (problem scoring-4) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - dodgeball) (preference throwToWallToBin
         (exists (?w - wall) (exists (?h - hexagonal_bin)
             (sometime-after (agent_holds ?d) ; ball starts in hand
                 (always-until 
-                    (not (agent_holds ?d)) ; not in hand until...
-                    (sometime-after (touch ?w ?d) (on ?h ?d)) ; touches wall before in bin
+                    (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
+                    (sometime-after (touch ?w ?d) (and (on ?h ?d) (not ((in_motion ?d))))) ; touches wall before in bin
                 )
             )
         ) ) 
     ) )
 ) )
 (:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (episode_over)
-    (forall (?d - dodgeball) 
-        (and
-            (thrown ?d)
-            (not (in_motion ?d))
+    (exists (?h - hexagonal_bin)
+        (forall (?d - dodgeball) 
+            (and
+                (thrown ?d)
+                (on ?h ?d)
+                (not (in_motion ?d))
+            )
         )
     )
 ))
@@ -165,14 +164,15 @@
                 (exists (?t - textbook)
                     (and
                         (adjacent_side ?h front ?c back)
-                        (= (distance_side ?d center ?c front) 1)
+                        (= (distance_side ?t center ?c front) 1)
                         (adjacent ?d ?t)
                     )
                 )
             )
         )
     )
-)))
+))
+)
 
 (define (problem scoring-5) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
@@ -186,19 +186,21 @@
             (sometime-after 
                 (touch agent ?d) ; agent starts by touching ball
                 (always-until 
-                    (not (agent_holds ?d))  ; not in hand until...
-                    (sometime-after (on ?r ?d) (on ?h ?d)) ; on ramp and then in bin -- should this be touch?
+                    (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
+                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d))))  ; on ramp and then in bin -- should this be touch?
                 ) 
             )
         ) ) 
     )))
 ) 
 (:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (episode_over)
-    (forall (?d - dodgeball) 
-        (and
-            (thrown ?d)
-            (not (in_motion ?d))
+    (exists (?h - hexagonal_bin)
+        (forall (?d - dodgeball) 
+            (and
+                (on ?h ?d)
+                (thrown ?d)
+                (not (in_motion ?d))
+            )
         )
     )
 ))
@@ -227,26 +229,27 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - dodgeball) (preference bowlBallToBin
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
             (sometime-after (agent_holds ?d) ; agent starts by holding ball
                 (always-until 
-                    (not (agent_holds ?d)) ; not in hand until...
-                    (sometime-after (on ?r ?d) (on ?h ?d)) ; on ramp and then in bin -- should this be touch?
+                    (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
+                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d)))) ; on ramp and then in bin -- should this be touch?
                 ) 
             )
         )) 
     )) 
 ))
 (:goal (and 
-    (episode_over)
-    (forall (?d - dodgeball) 
-        (and
-            (thrown ?d)
-            (not (in_motion ?d))
+    (exists (?h - hexagonal_bin)
+        (forall (?d - dodgeball) 
+            (and
+                (thrown ?d)
+                (not (in_motion ?d))
+                (on ?h ?d)
+            )
         )
     )
 ))
@@ -272,26 +275,27 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - dodgeball) (preference rollBallToBin
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
             (sometime-after (agent_holds ?d) ; agent starts by holding ball
                 (always-until 
-                    (not (agent_holds ?d)) ; not in hand until in bin
-                    (sometime-after (on ?r ?d) (on ?h ?d)) ; on ramp and then in bin -- should this be touch?
+                    (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
+                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d)))) ; on ramp and then in bin -- should this be touch?
                 ) 
             )
         )) 
     ))
 )) 
 (:goal (and  ; TODO: is this the correct goal state? Or should we consider the goal state a time out?
-    (episode_over)
-    (forall (?d - dodgeball) 
-        (and
-            (thrown ?d)
-            (not (in_motion ?d))
+    (exists (?h - hexagonal_bin)
+        (forall (?d - dodgeball) 
+            (and
+                (thrown ?d)
+                (not (in_motion ?d))
+                (on ?h ?d)
+            )
         )
     )
 ))
@@ -304,7 +308,6 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (preference cellPhoneThrownOnDoggieBed
@@ -324,13 +327,15 @@
     )
 )) 
 (:goal (and  ; TODO: should this be for all of them? or at least one of them?
-    (episode_over)
     (forall (?o - (either cellphone textbook laptop))
-        (and 
-            (thrown ?o)
-            (not (in_motion ?o))
+        (exists (?h hexagonal_bin)
+            (and 
+                (thrown ?o)
+                (not (in_motion ?o))
+                (on ?h ?o)
+            )
         )
-    )
+)
 )
 )
 (:metric maximize (+ 
@@ -345,32 +350,31 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - doggie_bed) (preference chairHitFromBedWithDoggieBed
-        (exists (?b - bed) (exists (?c - chair)
+        (exists (?c - chair)
             (sometime-after 
-                (and (agent_holds ?d) (on ?b agent))
-                (always-until (not (agent_holds ?d)) (touch ?d ?c))
+                (and (agent_holds ?d) (on bed agent))
+                (always-until (and (not (agent_holds ?d)) (in_motion ?d)) (touch ?d ?c))
             )
-        ))
+        )
     ))
     (forall (?p - pillow) (preference chairHitFromBedWithPillow
-        (exists (?b - bed) (exists (?c - chair)
+        (exists (?c - chair)
             (sometime-after 
-                (and (agent_holds ?p) (on ?b agent))
-                (always-until (not (agent_holds ?p)) (touch ?p ?c))
+                (and (agent_holds ?p) (on bed agent))
+                (always-until (and (not (agent_holds ?p)) (in_motion ?p)) (touch ?p ?c))
             )
-        ))
+        )
     ))
 )) 
 (:goal (and  
-    (episode_over)
     (forall (?o - (either doggie_bed pillow))
         (and
             (thrown ?o)
             (not (in_motion ?o))
+            (not (on bed ?o))
         )
     )
 ))

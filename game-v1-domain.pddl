@@ -22,7 +22,7 @@
 )
 
 (:types ;todo: enumerate types and their hierarchy here, e.g. car truck bus - vehicle
-    side orientation color object - type
+    side orientation color object perspective - type
     building structure game_object - object
     wall - structure
     stationary_object block ball - game_object
@@ -45,6 +45,7 @@
     east_wall west_wall north_wall south_wall - wall
     agent - receptacle  ; since the agent can holds things
     green red blue yellow none - color
+    upside_down rightside_up sideways eyes_closed - perspective
 )
 
 (:predicates ;todo: define predicates here
@@ -64,7 +65,7 @@
     (object_color ?o - game-object ?c - color) ; is the object with this color
     (in_motion ?o - game-object)  ; is this game object still in motion?
     (thrown ?o - game-object)  ; has this object been thrown?
-    (episode_over)  ; seems like argument-less predicates are valid - mark when the episode is over
+    (agent_perspective ?p - perspective)  ; what perspective is the agent looking in?
 )
 
 (:functions ;todo: define numeric functions here
@@ -76,7 +77,7 @@
     (side_z_position ?o - object ?s - side) - number
     (distance ?o1 ?o2 - object) - number
     (distance_side ?o1 -object ?s1 -side ?o2 -object ?s2 -side)- number
-    (max_height ?b - building)
+    (max_height ?b - building) - number
 )
 
 ;define actions here

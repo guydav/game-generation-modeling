@@ -17,7 +17,6 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?g - golfball) (preference bounceBallToMug
@@ -26,20 +25,23 @@
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (and (agent_holds ?g) (on bed agent))
                 (always-until 
-                    ; ball not in hand until...
-                    (not (agent_holds ?g))
+                    ; ball not in hand and in motion until...
+                    (and (not (agent_holds ?g)) (in_motion ?g)) 
                     ; the ball touches a block and then lands in/on the mug
-                    (sometime-after (touch ?b ?g) (on ?m ?g))
+                    (sometime-after (touch ?b ?g) (and (on ?m ?g) (not (in_motion ?g))))
                 ) 
             )
         )))
     )
 ))
 (:goal (and
-    (forall (?g - golfball) 
-        (and 
-            (thrown ?g) 
-            (not (in_motion ?g))
+    (exists (?m - mug)
+        (forall (?g - golfball) 
+            (and 
+                (thrown ?g) 
+                (not (in_motion ?g))
+                (on ?m ?g)
+            )
         )
     )
 ))
@@ -47,14 +49,14 @@
 ))
 
 ; TODO: 24 is a juggling game - do we attempt to model it?
-; TODO: similarly, 25 is a balancing game, do we attempt to model it?
-; an attempt to model 25 would look something like
 
+
+
+; TODO: 25 is a balancing game, tricky to model:
 (define (problem scoring-25) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     ; TODO; assuming that forall () (preference ... ) attempts to evaluate the preference
@@ -69,8 +71,13 @@
     ))
 ))
 (:goal (and
-    (episode_over)
-    (forall (?r - large_triangular_ramp) (object_orientation ?r face))
+    ; TODO: this goal state doesn't work -- how do we indicate "agent was on ramp?"
+    (forall (?r - large_triangular_ramp) 
+        (and 
+            (object_orientation ?r face)
+            (not (on ?r agent))
+        )
+    )
 ))
 (:metric maximize (is-violated agentOnRampOnEdge)
 ))

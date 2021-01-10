@@ -43,14 +43,14 @@
     face edge point - orientation
     room floor desk bed - structure
     east_wall west_wall north_wall south_wall - wall
-    agent - receptacle  ; since the agent can holds things
+    agent - object  ; since the agent can holds things
     green red blue yellow none - color
     upside_down rightside_up sideways eyes_closed - perspective
 )
 
 (:predicates ;todo: define predicates here
     (agent_holds ?o - game-object) ; is the agent holding this game object
-    (on ?o1 - object ?o2 - game-object)  ; object o2 on o1
+    (on ?o1 - object ?o2 - object)  ; object o2 on o1
     (adjacent ?o1 ?o2 - object)  ; objects o1 and o2 are adjacent
     ; side s1 of object o1 is adjacent to side s2 of o2
     (adjacent_side ?o1 -object ?s1 -side ?o2 -object ?s2 - side)  
@@ -66,6 +66,7 @@
     (in_motion ?o - game-object)  ; is this game object still in motion?
     (thrown ?o - game-object)  ; has this object been thrown?
     (agent_perspective ?p - perspective)  ; what perspective is the agent looking in?
+    (agent_finished_spin)  ; did the agent just finish a full spin?
 )
 
 (:functions ;todo: define numeric functions here

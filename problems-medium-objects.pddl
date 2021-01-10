@@ -203,47 +203,47 @@
 (:constraints (and
     (preference beachballToHexagonalBin
         (exists (?b - beachball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?h ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
         ))
     )
     (preference beachballToDoggieBed
         (exists (?b - beachball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?d ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
         ))
     )
     (preference beachballToPillow
         (exists (?b - beachball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?p ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
         ))
     )
     (preference dodgeballToHexagonalBin
         (exists (?b - dodgeball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?h ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
         ))
     )
     (preference dodgeballToDoggieBed
         (exists (?b - dodgeball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?d ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
         ))
     )
     (preference dodgeballToPillow
         (exists (?b - dodgeball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?p ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
         ))
     )
     (preference basketballToHexagonalBin
         (exists (?b - basketball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?h ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
         ))
     )
     (preference basketballToDoggieBed
         (exists (?b - basketball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?d ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
         ))
     )
     (preference basketballToPillow
         (exists (?b - basketball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (not (agent_holds ?b)) (on ?p ?b )))
+            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
         ))
     )
 ))

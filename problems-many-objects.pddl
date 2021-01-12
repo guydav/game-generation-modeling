@@ -58,41 +58,64 @@
 (:constraints (and 
     ; TODO; assuming that forall () (preference ... ) attempts to evaluate the preference
     ; once at each time step
+    ; TODO: I doubt this actually captures the semantics of juggling -- I think in the 
+    ; two ball-case, it's something like both in hand => one in the air => both in the air => 
+    ; only second in the air => both in hand
     (forall () (preference twoBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) 
             (sometime-after
-                ; agent has one ball, second one is in the air
-                (and (touch agent ?g1) (not (exists (?o - object) (touch ?o ?g2))))
+                ; both balls in hand
+                (and (agent_holds ?g1) (agent_holds ?g2))
                 (always-until
                     ; first ball is in the air until
-                    (not (exists (?o - object) (touch ?o ?g1)))
-                    ; agent touches second ball 
-                    (touch agent ?g2)
+                    (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2))
+                    (always-until
+                        ; both balls are in the air 
+                        (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) )
+                        (always-until
+                            ; agent holds first ball while second is in the air
+                            (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))))
+                            ; until both are caught again
+                            (and (agent_holds ?g1) (agent_holds ?g2))
+                        )
+                    )
                 )
             )
         ))
     ))
+    ; the three ball case is even more complicated -- it's somethhing like:
+    ; all three in hand => 1 in air => 1+2 in air => 2 in air => 2+3 in air => 3 in air => all three in hand
     (forall () (preference threeBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) (exists (?g3 - golfball)  
             (sometime-after
-                ; agent has one ball, other two are in the air
-                (and (touch agent ?g1) (not (exists (?o - object) (or (touch ?o ?g2) (touch ?o ?g3)))))
-                (sometime-after
+                ; both balls in hand
+                (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
+                (always-until
+                    ; first ball is in the air while other two are held
+                    (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2) (agent_holds ?g3))
                     (always-until
-                        ; balls 1 and 3 are in the air until
-                        (not (exists (?o - object) (or (touch ?o ?g1) (touch ?o ?g3))))
-                        ; agent touches second ball 
-                        (touch agent ?g2)
-                    )
-                    (always-until
-                        ; balls 1 and 2 are in the air until
-                        (not (exists (?o - object) (or (touch ?o ?g1) (touch ?o ?g2))))
-                        ; agent touches second ball 
-                        (touch agent ?g3)
+                        ; 1+2 in the air
+                        (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3))
+                        (always-until
+                            ; only 2 in the air
+                            (always-until
+                                (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3))
+                                (always-until
+                                    ; 2 + 3 in the air
+                                    (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (not (exists (?o - object) (touch ?o ?g3))))
+                                    ; only 3 in the air
+                                    (always-until
+                                        (and (agent_holds ?g1) (agent_holds ?g2) (not (exists (?o - object) (touch ?o ?g3))))
+                                        ; all 3 in thand
+                                        (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
+                                    )
+                                )
+                            )
+                        )
                     )
                 )
             )
-        ))
+        )))
     ))
 ))
 (:goal (and

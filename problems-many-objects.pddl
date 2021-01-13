@@ -256,7 +256,12 @@
     ; TODO: I don't think there is one unless we allow is-violated here
     (is-violated circuit)
 ))
-(:metric minimize total-time
+(:metric maximize (+
+    (* (13 (is-violated circuit)))
+    (* (2 (<= total-time 60) (is-violated circuit)))
+    (* (3 (<= total-time 50) (is-violated circuit)))
+    (* (2 (<= total-time 40) (is-violated circuit)))
+)
 ))
 
 ; Note that 28 is kinda similar to this subject's other game, 18

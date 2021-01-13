@@ -14,6 +14,9 @@
 ))
 )
 
+; create tunnels with the brigde blocks and throw the balls
+; "1 point for teach"
+
 (define (problem scoring-12) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
@@ -21,7 +24,7 @@
 )
 (:constraints (and 
     (forall (?b - basketball) (preference throwBallUnderBridge
-        (forall (?bb - bridge_block)  
+        (exists (?bb - bridge_block)  
             (sometime-after 
                 ; ball starts in hand, not under the bridge
                 (and (agent_holds ?b) (not (under ?bb ?b)))
@@ -131,20 +134,64 @@
     (preference blockOnFloor (exists (?b - block) 
         (and (on floor ?b) (in_building tower ?b))
     ))
-    ; Here we have the quantifier before, to count how many times it happens 
-    (forall (?b - block) (preference blockOnBlock (exists (?b2 - block)
-            (and 
+
+    (forall (?b - block) (preference blockFellFromTower
+        (sometime-after
+            (on floor ?b)
+            (sometime-after
                 (in_building tower ?b)
-                (in_building tower ?b2)
-                (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
+                (on floor ?b)
             )
-    ))) 
+        )
+    ))
+
+    (forall (?b - block) (preference blockRemovedFromTower
+        (sometime-after
+            (in_building tower ?b)
+            (sometime-after
+                (agent_holds ?b)
+                (not (in_building tower ?b))
+            )
+        )
+    ))
+
+    ; Here we have the quantifier before, to count how many times it happens 
+    (forall (?b - block) (preference blockAddedToTower 
+        (sometime-after
+            ; agent starts holding the block
+            (agent_holds ?b - block)
+            ; at some point after the agent holds the block, the following holds:
+            (always-until
+                ; we can find a second block such that:
+                (exists (?b2 - block)
+                    (and 
+                        ; both blocks are in the tower
+                        (in_building tower ?b)
+                        (in_building tower ?b2)
+                        ; this new block ?b is on top of the second block ?b2
+                        (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
+                    )
+                )
+                ; until the tower falls
+                (building_fell tower)
+            )
+        )      
+    ))
+
+    (forall (?b - block) (preference blockFellNear 
+        (at-end
+            (and
+                (in_building tower ?b)
+                (<= (distance tower ?b) 0.1)
+            )
+        )
+    )) 
 ))
 (:goal (and
-    (building_fell tower)
-    (forall (?b - block) (preference blockFellNear 
-        (<= (distance tower ?b) 0.1)
-    ))
+    (or
+        (building_fell tower)
+        (forall (?b - block) (in_building tower ?b))
+    )
 ))
 (:metric maximize (+
     (is-violated blockOnFloor)
@@ -165,7 +212,15 @@
 )
 (:constraints (and
     ; Count how many objects are part of the tower
-    (forall (?o - game_object) (preference objectInTower (in_building tower ?o)))
+    (forall (?o - game_object) (preference objectInTower 
+        (sometime-after 
+            (agent_holds ?b)
+            (always-until
+                (in_building tower ?o)
+                (building_fell tower)
+            )
+        )
+    ))
 ))
 (:goal (and (building_fell tower)
 ))
@@ -454,7 +509,10 @@
     ; Here we have the preference before the quantifier, to count it at most once
     (forall (?b - block) (preference correctColorBlock 
         (and
-            (in_building castle ?b)
+            (sometime-after
+                (agent_holds ?b)
+                (always (in_building castle ?b))
+            )
             (or
                 (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
                 (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))

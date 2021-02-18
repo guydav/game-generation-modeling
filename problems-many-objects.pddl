@@ -21,7 +21,7 @@
 (:constraints (and 
     (forall (?g - golfball) (preference bounceBallToMug
         (exists (?m - mug) (exists (?b - (either bridge_block flat_block)) 
-            (sometime-after 
+            (always-until 
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (and (agent_holds ?g) (on bed agent))
                 (always-until 
@@ -34,16 +34,12 @@
         )))
     )
 ))
-(:goal (and
-    (exists (?m - mug)
-        (forall (?g - golfball) 
-            (and 
-                (thrown ?g) 
-                (not (in_motion ?g))
-                (on ?m ?g)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated bounceBallToMug)
 ))
@@ -63,7 +59,7 @@
     ; only second in the air => both in hand
     (forall () (preference twoBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) 
-            (sometime-after
+            (always-until
                 ; both balls in hand
                 (and (agent_holds ?g1) (agent_holds ?g2))
                 (always-until
@@ -87,7 +83,7 @@
     ; all three in hand => 1 in air => 1+2 in air => 2 in air => 2+3 in air => 3 in air => all three in hand
     (forall () (preference threeBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) (exists (?g3 - golfball)  
-            (sometime-after
+            (always-until
                 ; both balls in hand
                 (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
                 (always-until
@@ -118,15 +114,12 @@
         )))
     ))
 ))
-(:goal (and
-    ; all objects were thrown and are now stationary and on something
-    (forall (?g - golfball) (exists (?o - object)
-        (and 
-            (thrown ?g) 
-            (not (in_motion ?g))
-            (on ?o ?g)
-        )
-    ))
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
+    )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     ; TODO: this doesn't actually follow proper PDDL, since they don't allow comparisons here
@@ -157,14 +150,12 @@
         )
     ))
 ))
-(:goal (and
-    ; TODO: this goal state doesn't work -- how do we indicate "agent was on ramp?"
-    (forall (?r - large_triangular_ramp) 
-        (and 
-            (object_orientation ?r face)
-            (not (on ?r agent))
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated agentOnRampOnEdge)
 ))
@@ -201,7 +192,6 @@
     (preference circuit
         (exists (?r1 - large_triangular_ramp) (exists (?r2 - large_triangular_ramp)
         (exists (?c - chair) (exists (?h - hexagonal_bin) (exists (?b - beachball)
-        (forall (?d - dodgeball)
             (sometime-after  
                 (sometime-after   
                     ; first, agent starts not between the ramps, then passes between them 
@@ -228,33 +218,33 @@
                 )
                 (sometime-after
                     ; throw all dodgeballs into the bin
-                    (sometime-after 
-                        (agent_holds ?d) 
-                        (always-until 
-                            (and (not (agent_holds ?d)) (in_motion ?d)) 
-                            (and (on ?h ?d) (not (in_motion ?d)))
+                    (forall (?d - dodgeball)
+                        (sometime-after 
+                            (agent_holds ?d) 
+                            (always-until 
+                                (and (not (agent_holds ?d)) (in_motion ?d)) 
+                                (and (on ?h ?d) (not (in_motion ?d)))
+                            )
                         )
                     )
                     ; bounce the beachball for 20 seconds
-                    (sometime-after
+                    (always-until
                         (agent_holds ?b)
-                        (always-until
-                            ; ball in the air, only touches the agent, which is not a game-object
-                            (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b))))
-                            ; for at least 20 time-steps, this holds
-                            ; TODO: if timesteps are not seconds, this will require rescaling
-                            (within 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
-                        )
+                        ; for at least 20 time-steps, this holds
+                        ; TODO: if timesteps are not seconds, this will require rescaling
+                        (within 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
                     )
                 )
             )
         )))))
     )
 ))
-(:goal (and
-    ; TODO: is there a clear goal sttate to finishing the circuit?
-    ; TODO: I don't think there is one unless we allow is-violated here
-    (is-violated circuit)
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
+    )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     (* (13 (is-violated circuit)))
@@ -293,7 +283,7 @@
 (:init ; likewise - we could populate fully by a script
 )
 (:constraints (and 
-    ; TODO: what do we 
+    
     (forall (?g - golfball) (preference throwBetweenBlocksToBin
         (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) 
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
@@ -369,7 +359,6 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?g - golfball) (preference throwBallToMugThroughRamp
@@ -401,16 +390,12 @@
         )))
     )
 ))
-(:goal (and
-    (forall (?g - golfball) 
-        (exists (?o - (either mug hexagonal_bin))
-            (and 
-                (thrown ?g) 
-                (not (in_motion ?g))
-                (on ?o ?g)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     (* (5 (is-violated throwBallToHexagonalBinThroughRamp)))

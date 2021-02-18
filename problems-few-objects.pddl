@@ -22,8 +22,11 @@
 (:constraints (and 
     (forall (?d - dodgeball) (preference chairBetweenAgentAndBall
         (exists (?c - chair) (exists (?h - hexagonal_bin)
+            ; TODO: change-to-always-until
             (sometime-after (agent_holds ?d) 
-                (always-until (between agent ?c ?h) (and (on ?h ?d) (not (agent_holds ?d)))
+                (always-until 
+                    (between agent ?c ?h) 
+                    (and (on ?h ?d) (not (agent_holds ?d)))
                 )
             )
         ) ) 
@@ -32,12 +35,12 @@
         (exists (?h - hexagonal_bin) (sometime (on ?h ?d)))
     ) )
 ) )
-(:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (exists (?h - hexagonal_bin)
-        (forall (?d - dodgeball) 
-            (on ?h ?d)
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+ 
     (* 2 (is-violated basketsMade))
@@ -56,50 +59,52 @@
     )
 
 ))
-;un-comment the following line if metric is needed
-;(:metric minimize (???))
 )
 
 (define (problem scoring-3) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
+    tower - building
 )
 (:init ; likewise - we could populate fully by a script
 )
 (:constraints (and 
     ; Here we have the preference before the quantifier, to count it at most once
     (preference cubeBlockOnDesk (exists (?c - cube_block) 
-            (and 
-                (or (object_orientation ?c edge) (object_orientation ?c point))
-                (on desk ?c)
-            )
-    ))
-    ; Here we have the quantifier before, to count how many times it happens 
-    (forall (?c - cube_block) (preference cubeBlockOnCubeBlock (exists (?b - cube_block)
-            (and 
-                (or (object_orientation ?c edge) (object_orientation ?c point))
-                (on ?b ?c) ; an object cannot be on itself, so this fails if ?b = ?c
-            )
-    ))) 
-))
-(:goal (and  ; Game ends either after a timeout or when all blocks are stacked
-    (exists (?b - cube_block)
-        (and
-            (or (object_orientation ?b edge) (object_orientation ?b point))
-            (on desk ?b)
-            (forall (?c - cube_block)
-                (or
-                    ; either it's the base cube block
-                    (= ?c ?b)  
-                    ; or it's on the side and top of another cube_block
-                    (and
-                        (or (object_orientation ?c edge) (object_orientation ?c point))
-                        (exists (?e - cube_block) (on ?e ?c))
-                    )
-                    
+        ; TODO: can we elimnate the sometime-after and agent-holds bits here? 
+        ; In other words, do we consider what happens when the game ends, or at any point in the middle?
+        (sometime-after
+            (agent_holds ?c)
+            (at-end
+                (and 
+                    (in_building tower ?c)
+                    (or (object_orientation ?c edge) (object_orientation ?c point))
+                    (on desk ?c)
                 )
             )
         )
+    ))
+    ; Here we have the quantifier before, to count how many times it happens 
+    (forall (?c - cube_block) (preference cubeBlockOnCubeBlock (exists (?b - cube_block)
+        ; TODO: can we elimnate the sometime-after and agent-holds bits here? 
+        ; In other words, do we consider what happens when the game ends, or at any point in the middle?
+        (sometime-after
+            (agent_holds ?c)
+            (at-end
+                (and 
+                    (in_building tower ?c)
+                    (or (object_orientation ?c edge) (object_orientation ?c point))
+                    (on ?b ?c)
+                )
+            )
+        )
+    ))) 
+))
+((:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+ 
     (is-violated cubeBlockOnDesk)
@@ -138,16 +143,12 @@
         ) ) 
     ) )
 ) )
-(:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (exists (?h - hexagonal_bin)
-        (forall (?d - dodgeball) 
-            (and
-                (thrown ?d)
-                (on ?h ?d)
-                (not (in_motion ?d))
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated throwToWallToBin)) 
 )
@@ -178,13 +179,17 @@
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
-    (at 100 (episode_over))  ; assuming that 100 is some reasonable episode length
 )
 (:constraints (and 
     (forall (?d - dodgeball) (preference kickBallToBin
-        (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
+        (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin) (exists (?t - textbook)
             (sometime-after 
-                (touch agent ?d) ; agent starts by touching ball
+                ; TODO: change-to-always-until
+                ; agent starts by touching ball while next to the marking textbook
+                (and
+                    (adjacent agent ?t)
+                    (touch agent ?d) 
+                )
                 (always-until 
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
                     (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d))))  ; on ramp and then in bin -- should this be touch?
@@ -192,17 +197,13 @@
             )
         ) ) 
     )))
-) 
-(:goal (and  ; is this the correct goal state? Or should we consider the goal state a time out?
-    (exists (?h - hexagonal_bin)
-        (forall (?d - dodgeball) 
-            (and
-                (on ?h ?d)
-                (thrown ?d)
-                (not (in_motion ?d))
-            )
-        )
+))
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated throwToWallToBin))
 )
@@ -242,16 +243,12 @@
         )) 
     )) 
 ))
-(:goal (and 
-    (exists (?h - hexagonal_bin)
-        (forall (?d - dodgeball) 
-            (and
-                (thrown ?d)
-                (not (in_motion ?d))
-                (on ?h ?d)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (* 5 (is-violated bowlBallToBin)))
 )
@@ -288,16 +285,12 @@
         )) 
     ))
 )) 
-(:goal (and  ; TODO: is this the correct goal state? Or should we consider the goal state a time out?
-    (exists (?h - hexagonal_bin)
-        (forall (?d - dodgeball) 
-            (and
-                (thrown ?d)
-                (not (in_motion ?d))
-                (on ?h ?d)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (* 5 (is-violated rollBallToBin)))
 )
@@ -312,32 +305,36 @@
 (:constraints (and 
     (preference cellPhoneThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?c - cellphone)
-            (sometime-after (agent_holds ?c) (always-until (not (agent_holds ?c)) (on ?d ?c)))
+            (sometime-after (agent_holds ?c) 
+            (always-until 
+                (and (not (agent_holds ?c)) (in_motion ?c)) ; in motion, not in hand until...
+                (and (on ?d ?c) (not (in_motion ?c)))
         ))
     )
     (preference textbookThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?t - textbook)
-            (sometime-after (agent_holds ?t) (always-until (not (agent_holds ?t)) (on ?d ?t)))
+            (sometime-after (agent_holds ?c) 
+            (always-until 
+                (and (not (agent_holds ?t)) (in_motion ?t)) ; in motion, not in hand until...
+                (and (on ?d ?t) (not (in_motion ?t)))
         ))
     )
     (preference laptopThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?l - laptop)
-            (sometime-after (agent_holds ?l) (always-until (not (agent_holds ?l)) (on ?d ?l)))
+            (sometime-after (agent_holds ?i) 
+            (always-until 
+                (and (not (agent_holds ?l)) (in_motion ?l)) ; in motion, not in hand until...
+                (and (on ?d ?l) (not (in_motion ?l)))
         ))
     )
 )) 
-(:goal (and  ; TODO: should this be for all of them? or at least one of them?
-    (forall (?o - (either cellphone textbook laptop))
-        (exists (?h hexagonal_bin)
-            (and 
-                (thrown ?o)
-                (not (in_motion ?o))
-                (on ?h ?o)
-            )
-        )
-)
-)
-)
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
+    )
+    (maximum_time_reached)
+))
 (:metric maximize (+ 
     (* 15 (is-violated cellPhoneThrownOnDoggieBed))
     (* 10 (is-violated textbookThrownOnDoggieBed))
@@ -353,6 +350,7 @@
 )
 (:constraints (and 
     (forall (?d - doggie_bed) (preference chairHitFromBedWithDoggieBed
+        ; TODO: change-to-always-until
         (exists (?c - chair)
             (sometime-after 
                 (and (agent_holds ?d) (on bed agent))
@@ -361,6 +359,7 @@
         )
     ))
     (forall (?p - pillow) (preference chairHitFromBedWithPillow
+        ; TODO: change-to-always-until
         (exists (?c - chair)
             (sometime-after 
                 (and (agent_holds ?p) (on bed agent))
@@ -369,14 +368,13 @@
         )
     ))
 )) 
-(:goal (and  
-    (forall (?o - (either doggie_bed pillow))
-        (and
-            (thrown ?o)
-            (not (in_motion ?o))
-            (not (on bed ?o))
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
+)))
 ))
 (:metric maximize (+ 
     (* 20 (is-violated chairHitFromBedWithDoggieBed))

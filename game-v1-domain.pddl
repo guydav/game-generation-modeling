@@ -60,13 +60,14 @@
     (under ?o1 ?o2 - game-object) ; is o2 under o1? theoretically could also be a between with an object below, such as the floor
     ; TODO: do we want to handle the case of multiple identified buildings?
     (in_building ?b - building ?o - game_object) ; is the object part of this building?
-    (building_fell ?b - building)  ; did this building fall over?
+    (building_fell ?b - building)  ; did this building just fall over?
     (building_size ?b)  ; how many objects are in the building?
     (object_color ?o - game-object ?c - color) ; is the object with this color
     (in_motion ?o - game-object)  ; is this game object still in motion?
     (thrown ?o - game-object)  ; has this object been thrown?
     (agent_perspective ?p - perspective)  ; what perspective is the agent looking in?
     (agent_finished_spin)  ; did the agent just finish a full spin?
+    (agent_terminated_episode)
 )
 
 (:functions ;todo: define numeric functions here

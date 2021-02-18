@@ -25,6 +25,7 @@
 (:constraints (and 
     (forall (?b - basketball) (preference throwBallUnderBridge
         (exists (?bb - bridge_block)  
+            ; TODO: change-to-always-until ?
             (sometime-after 
                 ; ball starts in hand, not under the bridge
                 (and (agent_holds ?b) (not (under ?bb ?b)))
@@ -41,19 +42,12 @@
         ) 
     ) )
 ) )
-(:goal (and  
-    ; TODO: I'm unsure if there's a better goal state here -- 
-    ; TODO: perhaps something with a (moved ?b) predicate indicating
-    ; TODO: whether or not an object moved from its initial position
-    (forall (?b - basketball) 
-        (forall (?bb - bridge_block)  
-            (and 
-                (thrown ?b) 
-                (not (in_motion ?b))
-                (not (under ?bb ?b))
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated throwBallUnderBridge)) 
 )
@@ -83,29 +77,25 @@
         (exists (?c - chair) (exists (?h - hexagonal_bin) 
             ; TODO: theoretically, we'd have to repeat the setup constraints here too
             ; TODO: to make sure we throw to the same bin, at the same place, right?
-            (sometime-after 
+            (always-until
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective upside_down))
                 (always-until 
+                    (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective upside_down))
                     ; ball not in hand until...
                     (and (not (agent_holds ?b)) (in_motion ?b))
-                    ; the ball is in the bin
-                    (and (on ?h ?b) (not (in_motion ?b)))
-                ) 
+                )
+                ; the ball is in the bin
+                (and (on ?h ?b) (not (in_motion ?b))) 
             )
         ) ) 
     ))
 ) )
-(:goal (and
-    (exists (?h - hexagonal_bin)
-        (forall (?b basketball) 
-            (and 
-                (thrown ?b) 
-                (not (in_motion ?b))
-                (on ?h ?b)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (is-violated throwBallFromChairToBin))
 )
@@ -132,31 +122,19 @@
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
     (preference blockOnFloor (exists (?b - block) 
-        (and (on floor ?b) (in_building tower ?b))
-    ))
-
-    (forall (?b - block) (preference blockFellFromTower
-        (sometime-after
+        (always-until
             (on floor ?b)
-            (sometime-after
-                (in_building tower ?b)
-                (on floor ?b)
+            (always-until
+                (and
+                    (on floor ?b)
+                    (in_building tower ?b))
+                )
+                (building_fell tower)
             )
         )
-    ))
-
-    (forall (?b - block) (preference blockRemovedFromTower
-        (sometime-after
-            (in_building tower ?b)
-            (sometime-after
-                (agent_holds ?b)
-                (not (in_building tower ?b))
-            )
-        )
-    ))
-
+    )
     ; Here we have the quantifier before, to count how many times it happens 
-    (forall (?b - block) (preference blockAddedToTower 
+    (forall (?b - block) (preference blockOnBlock
         (sometime-after
             ; agent starts holding the block
             (agent_holds ?b - block)
@@ -177,21 +155,23 @@
             )
         )      
     ))
-
     (forall (?b - block) (preference blockFellNear 
-        (at-end
-            (and
-                (in_building tower ?b)
-                (<= (distance tower ?b) 0.1)
+        (always-within
+            10  ; or whatever is a reasonable time length to resolve the collapse
+            (building_fell tower)
+            (always-until
+                (and (not (agent_holds ?b) (in_motion))) ; block is falling without agent moving it until
+                (<= (distance tower ?b) 0.1) ; it settles near the tower
             )
         )
     )) 
 ))
-(:goal (and
-    (or
-        (building_fell tower)
-        (forall (?b - block) (in_building tower ?b))
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     (is-violated blockOnFloor)
@@ -222,7 +202,12 @@
         )
     ))
 ))
-(:goal (and (building_fell tower)
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
+    )
+    (maximum_time_reached)
 ))
 (:metric maximize (/ (* 100 (max_height tower)) (is-violated objectInTower))
 )
@@ -302,16 +287,12 @@
         ))
     )
 ))
-(:goal (and 
-    (forall (?b - (either beachball dodgeball basketball))
-        (exists (?o - (either hexagonal_bin doggie_bed pillow)) 
-            (and 
-                (thrown ?b) 
-                (not (in_motion ?b))
-                (on ?o ?b)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+ 
     (* 3 (is-violated beachballToHexagonalBin))
@@ -373,17 +354,15 @@
                     (touch ?b ?t)
                 ) 
             )
-        ) ) )
+        ) 
     ))
-) )
-(:goal (and
-    ; TODO: is there a better goal state here?
-    (forall (?b - basketball) 
-        (and 
-            (thrown ?b) 
-            (not (in_motion ?b))
-        )
+))
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     (* 15 (is-violated throwBetweenBlocksToBear))
@@ -405,10 +384,9 @@
                 (agent_holds ?o)
                 (always-until 
                     ; ball not in hand and in until...
-                    (and (not (agent_holds ?o)) (in_motion ?o))
-                    ; the ball passes between the blocks and then knocks off the desktop
-                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d)))
-                    )
+                    (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?d)))
+                    ; the ball knocks off the desktop
+                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d))))
                 ) 
             )
         ) 
@@ -420,9 +398,9 @@
                 (agent_holds ?o)
                 (always-until 
                     ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?o)) (in_motion ?o))
-                    ; the ball passes between the blocks and then knocks off the lamp
-                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d)))
+                    (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?d)))
+                    ; the ball knocks off the lamp
+                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d))))
                 ) 
             )
         ) 
@@ -434,21 +412,20 @@
                 (agent_holds ?o)
                 (always-until 
                     ; ball not in hand until...
-                    (and (not (agent_holds ?o)) (in_motion ?o))
-                    ; the ball passes between the blocks and then touches the bear
-                    (sometime-after (touch ?o ?c) (and (not (on desk ?c)) (not (in_motion ?c)))
+                    (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?c)))
+                    ; the ball knocks off the CD
+                    (sometime-after (touch ?o ?c) (and (not (on desk ?c)) (not (in_motion ?c))))
                 ) 
             )
         ) 
     ))
-) )
-(:goal (and
-    (forall (?d - (either cd desk_lamp desktop))
-        (and
-            (not (in_motion ?d))
-            (not (on desk ?d))
-        )
+))
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (+
     (* 5 (is-violated thrownObjectKnocksDesktop))
@@ -466,9 +443,7 @@
 (:constraints (and 
     (forall (?b - basketball) (preference throwBallWithEyesClosed
         (exists (?h - hexagonal_bin) 
-            ; TODO: theoretically, we'd have to repeat the setup constraints here too
-            ; TODO: to make sure we throw to the same bin, at the same place, right?
-            (sometime-after 
+            (always-until 
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (and (agent_holds ?b) (agent_perspective eyes_closed))
                 (always-until 
@@ -481,16 +456,12 @@
         ) 
     ))
 ) )
-(:goal (and
-    (exists (?h - hexagonal_bin)
-        (forall (?b basketball) 
-            (and 
-                (thrown ?b) 
-                (not (in_motion ?b))
-                (on ?h ?b)
-            )
-        )
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
     )
+    (maximum_time_reached)
 ))
 (:metric maximize (* 5(is-violated throwBallFromChairToBin)))
 )
@@ -523,10 +494,12 @@
         )
     ))
 ))
-(:goal (and ; TODO: is there a better goal state? 
-    ; TODO: is there a better goal state? 
-    ; TODO: One could be castle is built only with the blocks above, but that's tricky
-    (building_size castle 6)
+(:goal (or
+    (and
+        (minimum_time_reached)
+        (agent_terminated_episode)
+    )
+    (maximum_time_reached)
 ))
 (:metric maximize (* (2 (is-violated correctColorBlock)))
 )

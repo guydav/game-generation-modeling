@@ -25,18 +25,16 @@
 (:constraints (and 
     (forall (?b - basketball) (preference throwBallUnderBridge
         (exists (?bb - bridge_block)  
-            ; TODO: change-to-always-until ?
-            (sometime-after 
+            (then 
                 ; ball starts in hand, not under the bridge
-                (and (agent_holds ?b) (not (under ?bb ?b)))
-                ; Semantically, the block below means that the first condition
-                ; holds in all states until we find a pair of states satisfying
-                ; the second condition
-                (always-until 
-                    ; neither ball nor block in hand until...
-                    (and (in_motion ?b) (not (agent_holds ?b)) (not (agent_holds ?bb))) 
-                    ; the ball is under the bridge and then again not under the bridge
-                    (sometime-after (under ?bb ?b) (not (under ?bb ?b))) 
+                (once (and (agent_holds ?b) (not (under ?bb ?b))))
+                ; neither ball nor block in hand until...
+                (hold-while 
+                    (and (in_motion ?b) (not (agent_holds ?b)) (not (agent_holds ?bb)))
+                    (under ?bb ?b)
+                )     
+                ; the ball is under the bridge and then again not under the bridge
+                (once (not (under ?bb ?b))) 
                 ) 
             )
         ) 
@@ -77,15 +75,13 @@
         (exists (?c - chair) (exists (?h - hexagonal_bin) 
             ; TODO: theoretically, we'd have to repeat the setup constraints here too
             ; TODO: to make sure we throw to the same bin, at the same place, right?
-            (always-until
+            (then
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (always-until 
-                    (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective upside_down))
-                    ; ball not in hand until...
-                    (and (not (agent_holds ?b)) (in_motion ?b))
-                )
+                (once (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective upside_down)))
+                ; ball not in hand until...
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 ; the ball is in the bin
-                (and (on ?h ?b) (not (in_motion ?b))) 
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         ) ) 
     ))
@@ -122,24 +118,20 @@
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
     (preference blockOnFloor (exists (?b - block) 
-        (always-until
-            (on floor ?b)
-            (always-until
+        (then 
+            (hold
                 (and
                     (on floor ?b)
-                    (in_building tower ?b))
+                    (in_building tower ?b)
                 )
-                (building_fell tower)
             )
+            (once (building_fell tower))
         )
-    )
+    ))
     ; Here we have the quantifier before, to count how many times it happens 
     (forall (?b - block) (preference blockOnBlock
-        (sometime-after
-            ; agent starts holding the block
-            (agent_holds ?b - block)
-            ; at some point after the agent holds the block, the following holds:
-            (always-until
+        (then
+            (hold
                 ; we can find a second block such that:
                 (exists (?b2 - block)
                     (and 
@@ -150,19 +142,21 @@
                         (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
                     )
                 )
-                ; until the tower falls
-                (building_fell tower)
             )
-        )      
+            ; until the tower falls
+            (once (building_fell tower))
+        )
     ))
     (forall (?b - block) (preference blockFellNear 
-        (always-within
-            10  ; or whatever is a reasonable time length to resolve the collapse
-            (building_fell tower)
-            (always-until
-                (and (not (agent_holds ?b) (in_motion))) ; block is falling without agent moving it until
-                (<= (distance tower ?b) 0.1) ; it settles near the tower
-            )
+        (then
+            ; block is in the towr until
+            (hold (in_building ?b)
+            ; starting with the building falling
+            (once (building_fell tower))
+            ; block is falling without agent moving it until -- this only works if the blocks start moving the state after the previous state happens
+            (hold (and (not (agent_holds ?b) (in_motion ?b)))) 
+            ; it settles near the tower
+            (once (<= (distance tower ?b) 0.1)) 
         )
     )) 
 ))
@@ -193,12 +187,10 @@
 (:constraints (and
     ; Count how many objects are part of the tower
     (forall (?o - game_object) (preference objectInTower 
-        (sometime-after 
-            (agent_holds ?b)
-            (always-until
-                (in_building tower ?o)
-                (building_fell tower)
-            )
+        (then
+            (once (agent_holds ?b))
+            (hold (in_building tower ?o))
+            (once (building_fell tower))
         )
     ))
 ))
@@ -243,47 +235,83 @@
 (:constraints (and
     (preference beachballToHexagonalBin
         (exists (?b - beachball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference beachballToDoggieBed
         (exists (?b - beachball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?d ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference beachballToPillow
         (exists (?b - beachball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?p ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference dodgeballToHexagonalBin
         (exists (?b - dodgeball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference dodgeballToDoggieBed
         (exists (?b - dodgeball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?d ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference dodgeballToPillow
         (exists (?b - dodgeball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?p ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference basketballToHexagonalBin
         (exists (?b - basketball) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?h ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference basketballToDoggieBed
         (exists (?b - basketball) (exists (?d - doggie_bed)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?d ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?d ?b) (not (in_motion ?b))))
+            )
         ))
     )
     (preference basketballToPillow
         (exists (?b - basketball) (exists (?p - pillow)
-            (sometime-after (agent_holds ?b) (always-until (and (not (agent_holds ?b)) (in_motion ?b)) (and (on ?p ?b) (not (in_motion ?b)))))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (on ?p ?b) (not (in_motion ?b))))
+            )
         ))
     )
 ))
@@ -332,27 +360,22 @@
     ; TODO: is the subject refers to it first as throwing, and then as rolling, should we consider it?
     (forall (?b - basketball) (preference throwBetweenBlocksToBear
         (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) (exists (?tb - teddy_bear)
-            (sometime-after 
-                (agent_holds ?b)
-                (always-until 
-                    ; ball not in hand until...
+            (then 
+                (once (agent_holds ?b))
+                (hold-while 
                     (and (not (agent_holds ?b)) (in_motion ?b))
-                    ; the ball passes between the blocks and then touches the bear
-                    (sometime-after (between ?t1 ?b ?t2) (touch ?b ?tb))
-                ) 
+                    (between ?t1 ?b ?t2)
+                )
+                (once (touch ?b ?tb))
             )
         ) ) )
     ))
     (forall (?b - basketball) (preference thrownBallHitBlock
         (exists (?t - tall_cylindrical_block) 
-            (sometime-after 
-                (agent_holds ?b)
-                (always-until 
-                    ; ball not in hand until...
-                    (and (not (agent_holds ?b)) (in_motion ?b))
-                    ; the ball touches the block
-                    (touch ?b ?t)
-                ) 
+            (then
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))block
+                (once (touch ?b ?t)) 
             )
         ) 
     ))
@@ -379,43 +402,49 @@
 (:constraints (and 
     (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksDesktop
         (exists (?d - desktop)
-            (sometime-after 
-                ; ball starts in hand, with the agent on the chair, near the desk
-                (agent_holds ?o)
-                (always-until 
-                    ; ball not in hand and in until...
+            (then
+                ; starts with agent holding the desktop
+                (once (agent_holds ?o))
+                (hold-while
+                    ; while the object is being thrown and the agent is touching neither the object nor the desktop
                     (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?d)))
-                    ; the ball knocks off the desktop
-                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d))))
-                ) 
+                    ; the thrown object hits the desktop
+                    (touch ?o ?d)
+                )
+                ; eventually knocking it off the desk
+                (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
             )
         ) 
     ))
     (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksDeskLamp
         (exists (?d - desk_lamp)
-            (sometime-after 
-                ; ball starts in hand, with the agent on the chair, near the desk
-                (agent_holds ?o)
-                (always-until 
-                    ; ball not in hand and in motion until...
+            (then
+                ; starts with agent holding the desktop
+                (once (agent_holds ?o))
+                (hold-while
+                    ; while the object is being thrown and the agent is touching neither the object nor the desk lamp
                     (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?d)))
-                    ; the ball knocks off the lamp
-                    (sometime-after (touch ?o ?d) (and (not (on desk ?d)) (not (in_motion ?d))))
-                ) 
+                    ; the thrown object hits the desk lamp
+                    (touch ?o ?d)
+                )
+                ; eventually knocking it off the desk
+                (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
             )
         ) 
     ))
     (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksCD
         (exists (?c - cd)
-            (sometime-after 
-                ; ball starts in hand, with the agent on the chair, near the desk
-                (agent_holds ?o)
-                (always-until 
-                    ; ball not in hand until...
+            (then
+                ; starts with agent holding the desktop
+                (once (agent_holds ?o))
+                (hold-while
+                    ; while the object is being thrown and the agent is touching neither the object nor the cd
                     (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?c)))
-                    ; the ball knocks off the CD
-                    (sometime-after (touch ?o ?c) (and (not (on desk ?c)) (not (in_motion ?c))))
-                ) 
+                    ; the thrown object hits the cd
+                    (touch ?o ?c)
+                )
+                ; eventually knocking it off the desk
+                (once (and (not (on desk ?c)) (not (in_motion ?c)))) 
             )
         ) 
     ))
@@ -443,19 +472,17 @@
 (:constraints (and 
     (forall (?b - basketball) (preference throwBallWithEyesClosed
         (exists (?h - hexagonal_bin) 
-            (always-until 
+            (then
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (and (agent_holds ?b) (agent_perspective eyes_closed))
-                (always-until 
-                    ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?b)) (in_motion ?b))
-                    ; the ball is in the bin
-                    (and (on ?h ?b) (not (in_motion ?b)))
-                ) 
+                (once (and (agent_holds ?b) (agent_perspective eyes_closed)))
+                ; ball not in hand and in motion until...
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                ; the ball is in the bin
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         ) 
     ))
-) )
+))
 (:goal (or
     (and
         (minimum_time_reached)
@@ -480,10 +507,7 @@
     ; Here we have the preference before the quantifier, to count it at most once
     (forall (?b - block) (preference correctColorBlock 
         (and
-            (sometime-after
-                (agent_holds ?b)
-                (always (in_building castle ?b))
-            )
+            (at-end (in_building castle ?b))
             (or
                 (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
                 (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))

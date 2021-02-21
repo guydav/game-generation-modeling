@@ -21,15 +21,16 @@
 (:constraints (and 
     (forall (?g - golfball) (preference bounceBallToMug
         (exists (?m - mug) (exists (?b - (either bridge_block flat_block)) 
-            (always-until 
+            (then 
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (and (agent_holds ?g) (on bed agent))
-                (always-until 
+                (once (and (agent_holds ?g) (on bed agent))
+                (hold-while
                     ; ball not in hand and in motion until...
                     (and (not (agent_holds ?g)) (in_motion ?g)) 
                     ; the ball touches a block and then lands in/on the mug
-                    (sometime-after (touch ?b ?g) (and (on ?m ?g) (not (in_motion ?g))))
+                    (touch ?b ?g)
                 ) 
+                (once  (and (on ?m ?g) (not (in_motion ?g))))
             )
         )))
     )
@@ -52,30 +53,23 @@
 (:init ; likewise - we could populate fully by a script
 )
 (:constraints (and 
-    ; TODO; assuming that forall () (preference ... ) attempts to evaluate the preference
-    ; once at each time step
-    ; TODO: I doubt this actually captures the semantics of juggling -- I think in the 
-    ; two ball-case, it's something like both in hand => one in the air => both in the air => 
-    ; only second in the air => both in hand
+    ; TODO: we'd want to either specify to count all states (with overlap) where this holds
+    ; TODO: or to count that this can cycle, that is, the first condition can repeat after the last one
+    ; TODO: or perhaps a loop of this condition below in the middle, starting and ending with either 
+    ; TODO: both balls in hand or one of the on the ground (or on any other object)
     (forall () (preference twoBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) 
-            (always-until
+            (then
                 ; both balls in hand
-                (and (agent_holds ?g1) (agent_holds ?g2))
-                (always-until
-                    ; first ball is in the air until
-                    (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2))
-                    (always-until
-                        ; both balls are in the air 
-                        (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) )
-                        (always-until
-                            ; agent holds first ball while second is in the air
-                            (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))))
-                            ; until both are caught again
-                            (and (agent_holds ?g1) (agent_holds ?g2))
-                        )
-                    )
-                )
+                ; (and (agent_holds ?g1) (agent_holds ?g2))
+                ; first ball is in the air, the second in hand
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2)))
+                ; both balls are in the air 
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) ))
+                ; agent holds first ball while second is in the air
+                (hold (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2)))))
+                ; both are in the air
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) ))
             )
         ))
     ))
@@ -83,33 +77,22 @@
     ; all three in hand => 1 in air => 1+2 in air => 2 in air => 2+3 in air => 3 in air => all three in hand
     (forall () (preference threeBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) (exists (?g3 - golfball)  
-            (always-until
+            (then
                 ; both balls in hand
-                (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
-                (always-until
-                    ; first ball is in the air while other two are held
-                    (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2) (agent_holds ?g3))
-                    (always-until
-                        ; 1+2 in the air
-                        (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3))
-                        (always-until
-                            ; only 2 in the air
-                            (always-until
-                                (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3))
-                                (always-until
-                                    ; 2 + 3 in the air
-                                    (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (not (exists (?o - object) (touch ?o ?g3))))
-                                    ; only 3 in the air
-                                    (always-until
-                                        (and (agent_holds ?g1) (agent_holds ?g2) (not (exists (?o - object) (touch ?o ?g3))))
-                                        ; all 3 in thand
-                                        (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
+                ; (and (agent_holds ?g1) (agent_holds ?g2) (agent_holds ?g3))
+                ; first ball is in the air while other two are held (throw the first ball)
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2) (agent_holds ?g3))) 
+                ; 1+2 in the air, 3 in hand (throw the second ball)
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3)))
+                ; 2 in air, 1+3 in hand (catch the first ball)
+                (hold (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (agent_holds ?g3)))
+                ; 2 + 3 in the air, 1 in hand (throw the third ball)
+                (hold (and (agent_holds ?g1) (not (exists (?o - object) (touch ?o ?g2))) (not (exists (?o - object) (touch ?o ?g3)))))
+                ; 3 in the air, 1+2 in hand (catch the second ball)
+                (hold (and (agent_holds ?g1) (agent_holds ?g2) (not (exists (?o - object) (touch ?o ?g3)))))
+                ; 1+3 in the air, 2 in hand (throw the first ball)
+                (hold (and (not (exists (?o - object) (touch ?o ?g1))) (agent_holds ?g2) (not (exists (?o - object) (touch ?o ?g3)))))
+                ; the next condition in the cycle would be the first one, 1 in the air while 2+3 are in hand (catch the third ball)
             )
         )))
     ))
@@ -192,49 +175,36 @@
     (preference circuit
         (exists (?r1 - large_triangular_ramp) (exists (?r2 - large_triangular_ramp)
         (exists (?c - chair) (exists (?h - hexagonal_bin) (exists (?b - beachball)
-            (sometime-after  
-                (sometime-after   
-                    ; first, agent starts not between the ramps, then passes between them 
-                    ; so after not being between, it is between, then again not between
-                    (sometime-after 
-                        (not (between ?r1 agent ?r2))
-                        (sometime-after (between ?r1 agent ?r2) (not (between ?r1 agent ?r2)))
-                    )
-                    ; spin four times in a chair
-                    (always-until
-                        (on ?c agent)
-                        ; TODO: there's no clear way to count how many times something happens:
-                        (sometime-after
-                            (sometime-after
-                                (agent_finished_spin)
-                                (agent_finished_spin)
-                            )
-                            (sometime-after
-                                (agent_finished_spin)
-                                (agent_finished_spin)
-                            )
-                        )
+            (then 
+                ; first, agent starts not between the ramps, then passes between them 
+                ; so after not being between, it is between, then again not between
+                (not (between ?r1 agent ?r2))
+                (any)
+                (between ?r1 agent ?r2) 
+                (any)
+                (not (between ?r1 agent ?r2))
+                (any)
+                ; spin four times in a chair
+                (hold-while
+                    (on ?c agent)
+                    ; TODO: there's no clear way to count how many times something happens:
+                    (agent_finished_spin)
+                    (agent_finished_spin)
+                    (agent_finished_spin)
+                    (agent_finished_spin)
+                )
+                (any)
+                ; throw all dodgeballs into the bin
+                (forall (?d - dodgeball)
+                    (then
+                        (once (agent_holds ?d))
+                        (hold (and (not (agent_holds ?d)) (in_motion ?d)))
+                        (once (and (on ?h ?d) (not (in_motion ?d))))
+                        (any)  ; to allow for a gap before the next dodgeball is picked up
                     )
                 )
-                (sometime-after
-                    ; throw all dodgeballs into the bin
-                    (forall (?d - dodgeball)
-                        (sometime-after 
-                            (agent_holds ?d) 
-                            (always-until 
-                                (and (not (agent_holds ?d)) (in_motion ?d)) 
-                                (and (on ?h ?d) (not (in_motion ?d)))
-                            )
-                        )
-                    )
-                    ; bounce the beachball for 20 seconds
-                    (always-until
-                        (agent_holds ?b)
-                        ; for at least 20 time-steps, this holds
-                        ; TODO: if timesteps are not seconds, this will require rescaling
-                        (within 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
-                    )
-                )
+                ; bounce the beachball for 20 seconds
+                (hold-for 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
             )
         )))))
     )
@@ -287,51 +257,43 @@
     (forall (?g - golfball) (preference throwBetweenBlocksToBin
         (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) 
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
-            (sometime-after 
+            (then 
                 ; ball starts in hand
-                (agent_holds ?g)
-                (always-until 
+                (once (agent_holds ?g))
+                (hold-while 
                     ; in motion, not in hand until...
                     (and (not (agent_holds ?g)) (in_motion ?g)) 
                     ; the ball passes between the blocks...
-                    (sometime-after (between ?t1 ?g ?t2) 
-                        ; and then on the ramp and into the bin
-                        (sometime-after (on ?r ?g) (and (on ?h ?g) (not (in_motion ?g))))
-                        ; TODO: note that their scoring doesn't actually refer to the ramp
-                        ; TODO: only the gameplay does. Should it still be here?
-                    )
-                ) 
-            )
+                    (between ?t1 ?g ?t2) 
+                    ; and then on the ramp 
+                    (on ?r ?g)
+                )
+                ; and into the bin
+                (and (on ?h ?g) (not (in_motion ?g)))
+            ) 
         ) ) ) )
     ))
     (forall (?g - golfball) (preference thrownBallHitBlock
         (exists (?t - tall_cylindrical_block) 
-            (sometime-after 
+            (then
                 ; ball starts in hand
-                (agent_holds ?g)
-                (always-until 
-                    ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?g)) (in_motion ?g)) 
-                    ; the ball touches the block
-                    (touch ?g ?t)
-                ) 
+                (once (agent_holds ?g))
+                ; in motion, not in hand until...
+                (hold (and (not (agent_holds ?g)) (in_motion ?g))) 
+                ; the ball touches the block
+                (once (touch ?g ?t)) 
             )
         ) 
     ))
     (forall (?g - golfball) (preference throwMissesBin
         (exists (?h - hexagonal_bin)
-            (sometime-after 
+            (then
                 ; ball starts in hand
-                (agent_holds ?g)
-                (always-until 
-                    ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?g)) (in_motion ?g)) 
-                    ; ball settles and it's not in/on the bin
-                    (and  
-                        (not (in_motion ?g))
-                        (not (on ?h ?g))
-                    )
-                ) 
+                (once (agent_holds ?g))
+                ; ball not in hand and in motion until...
+                (hold (and (not (agent_holds ?g)) (in_motion ?g)))
+                ; ball settles and it's not in/on the bin
+                (once (and (not (in_motion ?g)) (not (on ?h ?g))))
             )
         ) 
     ))
@@ -363,32 +325,32 @@
 (:constraints (and 
     (forall (?g - golfball) (preference throwBallToMugThroughRamp
         (exists (?m - mug) (exists (?r - curved_wooden_ramp) 
-            (sometime-after 
-                ; ball starts in hand, with the agent on the chair, near the desk
-                (agent_holds ?g)
-                (always-until 
-                    ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?g)) (in_motion ?g)) 
-                    ; does "slide" mean more than touching it?
-                    (sometime-after (touch ?r ?g) (and (on ?h ?g) (not (in_motion ?g))))
-                ) 
+            (then 
+                ; ball starts in hand
+                (once (agent_holds ?g))
+                ; ball not in hand and in motion until...
+                (hold-while 
+                    (and (not (agent_holds ?g)) (in_motion ?g))
+                    (touch ?r ?g)
+                )
+                (once (and (on ?m ?g) (not (in_motion ?g)))) 
             )
-        )))
-    )
+        ))
+    ))
     (forall (?g - golfball) (preference throwBallToHexagonalBinThroughRamp
         (exists (?h - hexagonal_bin) (exists (?r - curved_wooden_ramp) 
-            (sometime-after 
-                ; ball starts in hand, with the agent on the chair, near the desk
-                (agent_holds ?g)
-                (always-until 
-                    ; ball not in hand and in motion until...
-                    (and (not (agent_holds ?g)) (in_motion ?g)) 
-                    ; does "slide" mean more than touching it?
-                    (sometime-after (touch ?r ?g) (and (on ?h ?g) (not (in_motion ?g))))
-                ) 
+            (then 
+                ; ball starts in hand
+                (once (agent_holds ?g))
+                ; ball not in hand and in motion until...
+                (hold-while 
+                    (and (not (agent_holds ?g)) (in_motion ?g))
+                    (touch ?r ?g)
+                )
+                (once (and (on ?h ?g) (not (in_motion ?g)))) 
             )
-        )))
-    )
+        ))
+    ))
 ))
 (:goal (or
     (and

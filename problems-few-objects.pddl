@@ -23,16 +23,19 @@
     (forall (?d - dodgeball) (preference chairBetweenAgentAndBall
         (exists (?c - chair) (exists (?h - hexagonal_bin)
             ; TODO: change-to-always-until
-            (sometime-after (agent_holds ?d) 
-                (always-until 
-                    (between agent ?c ?h) 
-                    (and (on ?h ?d) (not (agent_holds ?d)))
-                )
+            (then 
+                (once (agent_holds ?d))
+                (hold (between agent ?c ?h))
+                (once (and (on ?h ?d) (not (agent_holds ?d))))
             )
         ) ) 
     ) )
     (forall (?d - dodgeball) (preference basketMade
-        (exists (?h - hexagonal_bin) (sometime (on ?h ?d)))
+        (then 
+            (once (agent_holds ?d))
+            (any)
+            (once (and (on ?h ?d) (not (agent_holds ?d))))
+        )
     ) )
 ) )
 (:goal (or
@@ -70,31 +73,25 @@
 (:constraints (and 
     ; Here we have the preference before the quantifier, to count it at most once
     (preference cubeBlockOnDesk (exists (?c - cube_block) 
-        ; TODO: can we elimnate the sometime-after and agent-holds bits here? 
-        ; In other words, do we consider what happens when the game ends, or at any point in the middle?
-        (sometime-after
-            (agent_holds ?c)
-            (at-end
-                (and 
-                    (in_building tower ?c)
-                    (or (object_orientation ?c edge) (object_orientation ?c point))
-                    (on desk ?c)
-                )
+        ; TODO: two options for how to think about this game: 
+        ; if we count only at the end of the episode, as done here, then it's a little simpler
+        ; if we could also in the middle of the episode, it becomes harder
+        (at-end
+            (and 
+                (in_building tower ?c)
+                (or (object_orientation ?c edge) (object_orientation ?c point))
+                (on desk ?c)
             )
         )
     ))
     ; Here we have the quantifier before, to count how many times it happens 
     (forall (?c - cube_block) (preference cubeBlockOnCubeBlock (exists (?b - cube_block)
-        ; TODO: can we elimnate the sometime-after and agent-holds bits here? 
-        ; In other words, do we consider what happens when the game ends, or at any point in the middle?
-        (sometime-after
-            (agent_holds ?c)
-            (at-end
-                (and 
-                    (in_building tower ?c)
-                    (or (object_orientation ?c edge) (object_orientation ?c point))
-                    (on ?b ?c)
-                )
+        ; TODO: same caveats as above
+        (at-end
+            (and 
+                (in_building tower ?c)
+                (or (object_orientation ?c edge) (object_orientation ?c point))
+                (on ?b ?c)
             )
         )
     ))) 
@@ -134,11 +131,13 @@
 (:constraints (and 
     (forall (?d - dodgeball) (preference throwToWallToBin
         (exists (?w - wall) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?d) ; ball starts in hand
-                (always-until 
-                    (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
-                    (sometime-after (touch ?w ?d) (and (on ?h ?d) (not ((in_motion ?d))))) ; touches wall before in bin
-                )
+            (then 
+                (once (agent_holds ?d)) ; ball starts in hand
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (touch ?w ?d)
+                ) 
+                (once  (and (on ?h ?d) (not ((in_motion ?d))))) ; touches wall before in bin
             )
         ) ) 
     ) )
@@ -183,17 +182,14 @@
 (:constraints (and 
     (forall (?d - dodgeball) (preference kickBallToBin
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin) (exists (?t - textbook)
-            (sometime-after 
-                ; TODO: change-to-always-until
+            (then 
                 ; agent starts by touching ball while next to the marking textbook
-                (and
-                    (adjacent agent ?t)
-                    (touch agent ?d) 
-                )
-                (always-until 
+                (once (and (adjacent agent ?t) (touch agent ?d)))
+                (hold-while 
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
-                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d))))  ; on ramp and then in bin -- should this be touch?
+                    (on ?r ?d)   ; on ramp and then in bin -- should this be touch?
                 ) 
+                (once (and (on ?h ?d) (not (in_motion ?d))))
             )
         ) ) 
     )))
@@ -234,11 +230,13 @@
 (:constraints (and 
     (forall (?d - dodgeball) (preference bowlBallToBin
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?d) ; agent starts by holding ball
-                (always-until 
+            (then 
+                (once (agent_holds ?d)) ; agent starts by holding ball
+                (hold-while
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
-                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d)))) ; on ramp and then in bin -- should this be touch?
-                ) 
+                    (on ?r ?d)  ; on ramp and then in bin -- should this be touch?
+                )
+                (once (and (on ?h ?d) (not (in_motion ?d)))) 
             )
         )) 
     )) 
@@ -276,11 +274,13 @@
 (:constraints (and 
     (forall (?d - dodgeball) (preference rollBallToBin
         (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
-            (sometime-after (agent_holds ?d) ; agent starts by holding ball
-                (always-until 
+            (then 
+                (once (agent_holds ?d)) ; agent starts by holding ball
+                (hold-while
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
-                    (sometime-after (on ?r ?d) (and (on ?h ?d) (not (in_motion ?d)))) ; on ramp and then in bin -- should this be touch?
-                ) 
+                    (on ?r ?d) ; on ramp and then in bin -- should this be touch?
+                )
+                (once (and (on ?h ?d) (not (in_motion ?d)))) 
             )
         )) 
     ))
@@ -305,26 +305,29 @@
 (:constraints (and 
     (preference cellPhoneThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?c - cellphone)
-            (sometime-after (agent_holds ?c) 
-            (always-until 
-                (and (not (agent_holds ?c)) (in_motion ?c)) ; in motion, not in hand until...
-                (and (on ?d ?c) (not (in_motion ?c)))
+            (then 
+                (once (agent_holds ?c))
+                (hold (and (not (agent_holds ?c)) (in_motion ?c))) ; in motion, not in hand until...
+                (once (and (on ?d ?c) (not (in_motion ?c))))
+            )
         ))
     )
     (preference textbookThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?t - textbook)
-            (sometime-after (agent_holds ?c) 
-            (always-until 
-                (and (not (agent_holds ?t)) (in_motion ?t)) ; in motion, not in hand until...
-                (and (on ?d ?t) (not (in_motion ?t)))
+            (then 
+                (once (agent_holds ?t))
+                (hold (and (not (agent_holds ?t)) (in_motion ?t))) ; in motion, not in hand until...
+                (once (and (on ?d ?t) (not (in_motion ?t))))
+            )
         ))
     )
     (preference laptopThrownOnDoggieBed
         (exists (?d - doggie_bed) (exists (?l - laptop)
-            (sometime-after (agent_holds ?i) 
-            (always-until 
-                (and (not (agent_holds ?l)) (in_motion ?l)) ; in motion, not in hand until...
-                (and (on ?d ?l) (not (in_motion ?l)))
+            (then 
+                (once (agent_holds ?t))
+                (hold (and (not (agent_holds ?t)) (in_motion ?t))) ; in motion, not in hand until...
+                (once (and (on ?d ?t) (not (in_motion ?t))))
+            )
         ))
     )
 )) 
@@ -352,18 +355,20 @@
     (forall (?d - doggie_bed) (preference chairHitFromBedWithDoggieBed
         ; TODO: change-to-always-until
         (exists (?c - chair)
-            (sometime-after 
-                (and (agent_holds ?d) (on bed agent))
-                (always-until (and (not (agent_holds ?d)) (in_motion ?d)) (touch ?d ?c))
+            (then 
+                (once (agent_holds ?d) (on bed agent))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (touch ?d ?c))
             )
         )
     ))
     (forall (?p - pillow) (preference chairHitFromBedWithPillow
         ; TODO: change-to-always-until
         (exists (?c - chair)
-            (sometime-after 
-                (and (agent_holds ?p) (on bed agent))
-                (always-until (and (not (agent_holds ?p)) (in_motion ?p)) (touch ?p ?c))
+            (then 
+                (once (agent_holds ?p) (on bed agent))
+                (hold (and (not (agent_holds ?p)) (in_motion ?p))) 
+                (once (touch ?p ?c))
             )
         )
     ))

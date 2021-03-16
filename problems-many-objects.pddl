@@ -1,9 +1,9 @@
-; 22 requires a lot of interpretation to figure out what the participant means
+; 3 requires a lot of interpretation to figure out what the participant means
 ; since they refer to "figures" when it's unclear what that would be
 
-; 23 seems impossible but valid, and also requires a fair bit of interpretation
+; 4 seems impossible but valid, and also requires a fair bit of interpretation
 
-(define (problem setup-23) (:domain game-v1)
+(define (problem setup-4) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -13,7 +13,7 @@
 )
 )
 
-(define (problem scoring-23) (:domain game-v1)
+(define (problem scoring-4) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -45,9 +45,9 @@
 (:metric maximize (is-violated bounceBallToMug)
 ))
 
-; TODO: 24 is a juggling game - do we attempt to model it?
+; TODO: 5 is a juggling game - do we attempt to model it?
 
-(define (problem scoring-24) (:domain game-v1)
+(define (problem scoring-5) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -115,8 +115,8 @@
 )
 
 
-; TODO: 25 is a balancing game, tricky to model:
-(define (problem scoring-25) (:domain game-v1)
+; TODO: 6 is a balancing game, tricky to model:
+(define (problem scoring-6) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -143,15 +143,15 @@
 (:metric maximize (is-violated agentOnRampOnEdge)
 ))
 
-; 26 is invalid
+; 7 is invalid
 
-; TODO: I'm not quite sure how to handle 27 either
+; TODO: I'm not quite sure how to handle 8 either
 ; TODO: I could construct a preference mapping onto this entire sequence, but that's ugly
 ; TODO: I could construct a preference for each part of the circuit, but there's no
 ; TODO: real way to specify "preference A fulfilled before preference B"
 ; TODO: also: modeling the "spin in a chair" and "keep beachball in air" actions is nontrivial
 
-(define (problem setup-27) (:domain game-v1)
+(define (problem setup-8) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -166,7 +166,7 @@
 ))
 )
 
-(define (problem scoring-27) (:domain game-v1)
+(define (problem scoring-8) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -224,10 +224,10 @@
 )
 ))
 
-; Note that 28 is kinda similar to this subject's other game, 18
+; Note that 9 is kinda similar to this subject's other game, 18
 ; TODO: note I could make the setup here more specific by adding additional inferences 
 
-(define (problem setup-28) (:domain game-v1)
+(define (problem setup-9) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -247,7 +247,7 @@
 ))
 )
 
-(define (problem scoring-28) (:domain game-v1)
+(define (problem scoring-9) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -315,9 +315,9 @@
     (- (* 2 (is-violated throwMissesBin)))
 ))
 
-; 29 has no setup
+; 10 has no setup
 
-(define (problem scoring-29) (:domain game-v1)
+(define (problem scoring-10) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -366,6 +366,6 @@
 )
 
 
-; I honestly don't know if I understand 30
+; I honestly don't know if I understand 11
 
-; 31 is invalid
+; 12 is invalid

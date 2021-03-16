@@ -1,4 +1,4 @@
-(define (problem setup-12) (:domain game-v1)
+(define (problem setup-3) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -17,7 +17,7 @@
 ; create tunnels with the brigde blocks and throw the balls
 ; "1 point for teach"
 
-(define (problem scoring-12) (:domain game-v1)
+(define (problem scoring-3) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -50,7 +50,7 @@
 (:metric maximize (is-violated throwBallUnderBridge)) 
 )
 
-(define (problem setup-13) (:domain game-v1)
+(define (problem setup-4) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -65,7 +65,7 @@
 ))
 )
 
-(define (problem scoring-13) (:domain game-v1)
+(define (problem scoring-4) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -106,7 +106,7 @@
 ))
 )
 
-(define (problem scoring-14) (:domain game-v1)
+(define (problem scoring-5) (:domain game-v1)
 ; TODO: adding this here to show how we'd handle problems with buildings
 ; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
 ; which doesn't require the scoring modeling to handle instantiating them
@@ -174,9 +174,9 @@
 ))
 )
 
-; problem 15 has no setup
+; problem 6 has no setup
 
-(define (problem scoring-15) (:domain game-v1)
+(define (problem scoring-6) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
     ; TODO: adding this here to show how we'd handle problems with buildings
     ; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
@@ -205,9 +205,9 @@
 )
 )
 
-;16 is invalid
+;7 is invalid
 
-(define (problem setup-17) (:domain game-v1)
+(define (problem setup-8) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
     
 )
@@ -227,7 +227,7 @@
 ))
 )
 
-(define (problem scoring-17) (:domain game-v1)
+(define (problem scoring-8) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -351,7 +351,7 @@
 ))
 )
 
-(define (problem scoring-18) (:domain game-v1)
+(define (problem scoring-9) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -392,9 +392,9 @@
     (* (- 5) (is-violated thrownBallHitBlock))
 ))
 
-; 19 has no setup
+; 10 has no setup
 
-(define (problem scoring-19) (:domain game-v1)
+(define (problem scoring-10) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -462,9 +462,9 @@
     (* 15 (is-violated thrownObjectKnocksCD))
 ))
 
-; 20 has no setup
+; 11 has no setup
 
-(define (problem scoring-20) (:domain game-v1)
+(define (problem scoring-11) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -493,11 +493,11 @@
 (:metric maximize (* 5(is-violated throwBallFromChairToBin)))
 )
 
-; TODO: 21 has no setup, and is a little nonsensical, but could be modeled like this:
+; TODO: 12 has no setup, and is a little nonsensical, but could be modeled like this:
 
 ; TODO: adding this here to show how we'd handle problems with buildings
     ; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
-(define (problem scoring-21) (:domain game-v1)
+(define (problem scoring-12) (:domain game-v1)
 (:objects  ; we'd eventually populate by script
     castle - building  
 )
@@ -506,15 +506,16 @@
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
     (forall (?b - block) (preference correctColorBlock 
-        (and
-            (at-end (in_building castle ?b))
-            (or
-                (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
-                (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))
-                (exists (?b2 - short_cylindrical_block) (and (= ?b ?b2) (or (object_color ?b green) (object_color ?b blue) )))
-                (exists (?b2 - flat_block) (and (= ?b ?b2) (object_color ?b yellow))))
-                (exists (?b2 - cube_block) (and (= ?b ?b2) (object_color ?b blue)))
-            )
+        (at-end
+            (and 
+                (in_building castle ?b))
+                (or
+                    (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
+                    (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))
+                    (exists (?b2 - short_cylindrical_block) (and (= ?b ?b2) (or (object_color ?b green) (object_color ?b blue) )))
+                    (exists (?b2 - flat_block) (and (= ?b ?b2) (object_color ?b yellow))))
+                    (exists (?b2 - cube_block) (and (= ?b ?b2) (object_color ?b blue)))
+                )
         )
     ))
 ))

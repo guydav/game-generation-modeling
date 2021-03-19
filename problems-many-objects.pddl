@@ -3,24 +3,13 @@
 
 ; 4 seems impossible but valid, and also requires a fair bit of interpretation
 
-(define (problem setup-4) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (forall (?b - (either bridge_block flat_block)) (on floor ?b)))  
-)
-)
-
-(define (problem scoring-4) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
+(define (game many-objects-4) (:domain many-objects-room-v1)
+(:setup (and
+    (forall (?b - (either bridge_block flat_block)) (game-optional (on floor ?b))))
 )
 (:constraints (and 
-    (forall (?g - golfball) (preference bounceBallToMug
-        (exists (?m - mug) (exists (?b - (either bridge_block flat_block)) 
+    (preference bounceBallToMug
+        (exists (?g - golfball ?m - mug ?b - (either bridge_block flat_block)) 
             (then 
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (once (and (agent_holds ?g) (on bed agent))
@@ -30,33 +19,20 @@
                     ; the ball touches a block and then lands in/on the mug
                     (touch ?b ?g)
                 ) 
-                (once  (and (on ?m ?g) (not (in_motion ?g))))
+                (once (and (on ?m ?g) (not (in_motion ?g))))
             )
-        )))
+        )
     )
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (is-violated bounceBallToMug)
+(:scoring maximize (count-nonoverlapping bounceBallToMug)
 ))
 
 ; TODO: 5 is a juggling game - do we attempt to model it?
 
-(define (problem scoring-5) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
+(define (game many-objects-5) (:domain many-objects-room-v1)
+(:setup
 )
 (:constraints (and 
-    ; TODO: we'd want to either specify to count all states (with overlap) where this holds
-    ; TODO: or to count that this can cycle, that is, the first condition can repeat after the last one
-    ; TODO: or perhaps a loop of this condition below in the middle, starting and ending with either 
-    ; TODO: both balls in hand or one of the on the ground (or on any other object)
     (forall () (preference twoBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) 
             (then
@@ -97,84 +73,49 @@
         )))
     ))
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
 (:metric maximize (+
-    ; TODO: this doesn't actually follow proper PDDL, since they don't allow comparisons here
-    ; TODO: also, if timesteps are not seconds, this will require rescaling
-    (* (10 (/ (is-violated threeBallsJuggled) 30)))
-    (* (5 (/ (is-violated twoBallsJuggled) 30)))
-    (* (100 (>= (is-violated threeBallsJuggled) 120)))
-    (* (50 (>= (is-violated twoBallsJuggled) 120)))
+    ; TODO: maybe this is count-total?
+    (* (10 (/ (count-longest threeBallsJuggled) 30)))
+    (* (5 (/ (count-longest twoBallsJuggled) 30)))
+    (* (100 (>= (count-longest threeBallsJuggled) 120)))
+    (* (50 (>= (count-longest twoBallsJuggled) 120)))
 ))
 )
 
 
 ; TODO: 6 is a balancing game, tricky to model:
-(define (problem scoring-6) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
+(define (game many-objects-6) (:domain many-objects-room-v1)
+(:setup
 )
 (:constraints (and 
-    ; TODO; assuming that forall () (preference ... ) attempts to evaluate the preference
-    ; once at each time step
-    (forall () (preference agentOnRampOnEdge
+    (preference agentOnRampOnEdge
         (exists (?r - large_triangular_ramp) 
             (and
                 (object_orientation ?r edge) 
                 (on ?r agent)
             )   
         )
-    ))
-))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
     )
-    (maximum_time_reached)
 ))
-(:metric maximize (is-violated agentOnRampOnEdge)
+; TODO: is this count-total?
+(:metric maximize (count-longest agentOnRampOnEdge)
 ))
 
 ; 7 is invalid
 
-; TODO: I'm not quite sure how to handle 8 either
-; TODO: I could construct a preference mapping onto this entire sequence, but that's ugly
-; TODO: I could construct a preference for each part of the circuit, but there's no
-; TODO: real way to specify "preference A fulfilled before preference B"
-; TODO: also: modeling the "spin in a chair" and "keep beachball in air" actions is nontrivial
 
-(define (problem setup-8) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (exists (?r1 - large_triangular_ramp) (exists (?r2 - large_triangular_ramp) 
+(define (game scoring-8) (:domain many-objects-room-v1)
+(:setup (and
+    (exists (?r1 - large_triangular_ramp ?r2 - large_triangular_ramp) 
         (and
             (not (= ?r1 ?r2))
             (<= (distance ?r1 ?r2) 0.5)
         )
-    ))
+    )
 ))
-)
-
-(define (problem scoring-8) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
 (:constraints (and 
     (preference circuit
-        (exists (?r1 - large_triangular_ramp) (exists (?r2 - large_triangular_ramp)
-        (exists (?c - chair) (exists (?h - hexagonal_bin) (exists (?b - beachball)
+        (exists (?r1 - large_triangular_ramp ?r2 - large_triangular_ramp ?c - chair ?h - hexagonal_bin ?b - beachball)
             (then 
                 ; first, agent starts not between the ramps, then passes between them 
                 ; so after not being between, it is between, then again not between
@@ -195,7 +136,7 @@
                 )
                 (any)
                 ; throw all dodgeballs into the bin
-                (forall (?d - dodgeball)
+                (forall-sequence (?d - dodgeball)
                     (then
                         (once (agent_holds ?d))
                         (hold (and (not (agent_holds ?d)) (in_motion ?d)))
@@ -206,35 +147,20 @@
                 ; bounce the beachball for 20 seconds
                 (hold-for 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
             )
-        )))))
+        )
     )
-))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
 ))
 (:metric maximize (+
-    (* (13 (is-violated circuit)))
-    (* (2 (<= total-time 60) (is-violated circuit)))
-    (* (3 (<= total-time 50) (is-violated circuit)))
-    (* (2 (<= total-time 40) (is-violated circuit)))
+    (* (13 (count-once circuit)))
+    (* (2 (<= total-time 60) (count-shortest circuit)))
+    (* (3 (<= total-time 50) (count-shortest circuit)))
+    (* (2 (<= total-time 40) (count-shortest circuit)))
 )
 ))
 
-; Note that 9 is kinda similar to this subject's other game, 18
-; TODO: note I could make the setup here more specific by adding additional inferences 
-
-(define (problem setup-9) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) 
-            (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
+(define (game scoring-9) (:domain many-objects-room-v1)
+(:setup (and
+    (exists (?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin) 
         (and
             (not (= ?t1 ?t2))
             (<= (distance ?t1 ?t2) 1)
@@ -243,20 +169,11 @@
             (= (distance ?h ?t1) (distance ?h ?t2))
             (< (distance ?r ?t1) (distance ?h ?t1))
         )
-    ))))
+    )
 ))
-)
-
-(define (problem scoring-9) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
 (:constraints (and 
-    
-    (forall (?g - golfball) (preference throwBetweenBlocksToBin
-        (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) 
-        (exists (?r - curved_wooden_ramp) (exists (?h - hexagonal_bin)
+    (preference throwBetweenBlocksToBin
+        (exists (?g - golfball ?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin)
             (then 
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -271,10 +188,10 @@
                 ; and into the bin
                 (and (on ?h ?g) (not (in_motion ?g)))
             ) 
-        ) ) ) )
+        )
     ))
-    (forall (?g - golfball) (preference thrownBallHitBlock
-        (exists (?t - tall_cylindrical_block) 
+    (preference thrownBallHitBlock
+        (exists (?g - golfball ?t - tall_cylindrical_block) 
             (then
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -285,8 +202,8 @@
             )
         ) 
     ))
-    (forall (?g - golfball) (preference throwMissesBin
-        (exists (?h - hexagonal_bin)
+    (preference throwMissesBin
+        (exists (?g - golfball ?h - hexagonal_bin)
             (then
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -298,33 +215,20 @@
         ) 
     ))
 ) )
-(:goal (and
-    (exists (?h - hexagonal_bin)
-        (forall (?g - golfball) 
-            (and 
-                (thrown ?g) 
-                (not (in_motion ?g))
-                (on ?h ?g)
-            )
-        )
-    )
-))
 (:metric maximize (+
-    (* 5 (is-violated throwBetweenBlocksToBin))
-    (- (is-violated thrownBallHitBlock))
-    (- (* 2 (is-violated throwMissesBin)))
+    (* 5 (count-nonoverlapping throwBetweenBlocksToBin))
+    (- (count-nonoverlapping thrownBallHitBlock))
+    (- (* 2 (count-nonoverlapping throwMissesBin)))
 ))
 
 ; 10 has no setup
 
-(define (problem scoring-10) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
+(define (game many-objects-10) (:domain many-objects-room-v1)
+(:setup
 )
 (:constraints (and 
-    (forall (?g - golfball) (preference throwBallToMugThroughRamp
-        (exists (?m - mug) (exists (?r - curved_wooden_ramp) 
+    (preference throwBallToMugThroughRamp
+        (exists (?g - golfball ?m - mug ?r - curved_wooden_ramp)  
             (then 
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -337,8 +241,8 @@
             )
         ))
     ))
-    (forall (?g - golfball) (preference throwBallToHexagonalBinThroughRamp
-        (exists (?h - hexagonal_bin) (exists (?r - curved_wooden_ramp) 
+    (preference throwBallToHexagonalBinThroughRamp
+        (exists (?g - golfball ?h - hexagonal_bin ?r - curved_wooden_ramp) 
             (then 
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -352,19 +256,11 @@
         ))
     ))
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
 (:metric maximize (+
-    (* (5 (is-violated throwBallToHexagonalBinThroughRamp)))
-    (* (10 (is-violated throwBallToHexagonalBinThroughRamp)))
+    (* (5 (count-nonoverlapping throwBallToHexagonalBinThroughRamp)))
+    (* (10 (count-nonoverlapping throwBallToHexagonalBinThroughRamp)))
 ))
 )
-
 
 ; I honestly don't know if I understand 11
 

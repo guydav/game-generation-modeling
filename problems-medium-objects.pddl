@@ -1,30 +1,18 @@
-(define (problem setup-3) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-; Interpreting the goal as flat blocks on ground and bridge blocks on flat blocks 
-(:goal (and
-    (forall (?f - flat_block) (on floor ?f))
-    (forall (?b - bridge_block) 
-        (exists (?f - flat_block) 
-            (on ?f ?b)
-        )
-    )
-))
-)
-
 ; create tunnels with the brigde blocks and throw the balls
 ; "1 point for teach"
 
-(define (problem scoring-3) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
+(define (game medium-objects-3) (:domain medium-objects-room-v1)
+(:setup (and
+    (forall (?f - flat_block) (game-conserved (on floor ?f)))
+    (forall (?b - bridge_block) 
+        (exists (?f - flat_block) 
+            (game-conserved (on ?f ?b))
+        )
+    )
+))
 (:constraints (and 
-    (forall (?b - basketball) (preference throwBallUnderBridge
-        (exists (?bb - bridge_block)  
+    (preference throwBallUnderBridge
+        (exists (?b - basketball ?bb - bridge_block)  
             (then 
                 ; ball starts in hand, not under the bridge
                 (once (and (agent_holds ?b) (not (under ?bb ?b))))
@@ -40,41 +28,22 @@
         ) 
     ) )
 ) )
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (is-violated throwBallUnderBridge)) 
+(:metric maximize (count-nonoverlapping throwBallUnderBridge)) 
 )
 
-(define (problem setup-4) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (exists (?s - shelf) (exists (?h - hexagonal_bin)
+
+(define (game medium-objects-4) (:domain medium-objects-room-v1)
+(:setup (and
+    (exists (?s - shelf ?h - hexagonal_bin) 
         (and
-            (on ?s ?h)
-            (forall (?s2 - shelf) (>= (distance ?s desk) (distance ?s2 desk)))
+            (game-conserved (on ?s ?h))
+            (game-conserved (forall (?s2 - shelf) (>= (distance ?s desk) (distance ?s2 desk))))
         )
-    ))
+    )
 ))
-)
-
-(define (problem scoring-4) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
 (:constraints (and 
-    (forall (?b - basketball) (preference throwBallFromChairToBin
-        (exists (?c - chair) (exists (?h - hexagonal_bin) 
-            ; TODO: theoretically, we'd have to repeat the setup constraints here too
-            ; TODO: to make sure we throw to the same bin, at the same place, right?
+    (preference throwBallFromChairToBin
+        (exists (?b - basketball ?c - chair ?h - hexagonal_bin) 
             (then
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (once (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective upside_down)))
@@ -86,35 +55,18 @@
         ) ) 
     ))
 ) )
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (is-violated throwBallFromChairToBin))
+(:scoring maximize (count-nonoverlapping throwBallFromChairToBin))
 )
 
-(define (problem setup-14) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (forall (?b - block) (on floor ?b))
-))
-)
 
-(define (problem scoring-5) (:domain game-v1)
-; TODO: adding this here to show how we'd handle problems with buildings
-; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
-; which doesn't require the scoring modeling to handle instantiating them
-(:objects  ; we'd eventually populate by script
-    tower - building  
-)
-(:init ; likewise - we could populate fully by a script
-)
+(define (game medium-objects-5) (:domain medium-objects-room-v1)
+; TODO: move building definition(s) to the domain
+; (:objects  ; we'd eventually populate by script
+;     tower - building  
+; )
+(:setup (and
+    (game-optional (forall (?b - block) (on floor ?b)))
+))
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
     (preference blockOnFloor (exists (?b - block) 
@@ -129,25 +81,22 @@
         )
     ))
     ; Here we have the quantifier before, to count how many times it happens 
-    (forall (?b - block) (preference blockOnBlock
+    (preference blockOnBlock (exists (?b - block ?b2 - block)
         (then
             (hold
-                ; we can find a second block such that:
-                (exists (?b2 - block)
-                    (and 
-                        ; both blocks are in the tower
-                        (in_building tower ?b)
-                        (in_building tower ?b2)
-                        ; this new block ?b is on top of the second block ?b2
-                        (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
-                    )
+                (and 
+                    ; both blocks are in the tower
+                    (in_building tower ?b)
+                    (in_building tower ?b2)
+                    ; this new block ?b is on top of the second block ?b2
+                    (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
                 )
             )
             ; until the tower falls
             (once (building_fell tower))
         )
     ))
-    (forall (?b - block) (preference blockFellNear 
+    (preference blockFellNear (exists (?b - block) 
         (then
             ; block is in the towr until
             (hold (in_building ?b)
@@ -160,33 +109,23 @@
         )
     )) 
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
 (:metric maximize (+
-    (is-violated blockOnFloor)
-    (is-violated blockOnBlock)
-    (- (is-violated blockFellNear))
+    (count-once blockOnFloor)
+    (count-once-per-objects blockOnBlock)
+    (- (count-once-per-objects blockFellNear))
 ))
 )
 
-; problem 6 has no setup
+; 6 has no setup
 
-(define (problem scoring-6) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-    ; TODO: adding this here to show how we'd handle problems with buildings
-    ; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
-    tower - building  
-)
-(:init ; likewise - we could populate fully by a script
-)
+(define (game medium-objects-6) (:domain medium-objects-room-v1)
+; TODO: move this to the domain definition
+; (:objects  ; we'd eventually populate by script
+;     tower - building  
+; )
 (:constraints (and
     ; Count how many objects are part of the tower
-    (forall (?o - game_object) (preference objectInTower 
+    (preference objectInTower (exists (?o - game_object)
         (then
             (once (agent_holds ?b))
             (hold (in_building tower ?o))
@@ -194,110 +133,91 @@
         )
     ))
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (/ (* 100 (max_height tower)) (is-violated objectInTower))
+(:metric scoring (/ (* 100 (max_height tower)) (count-once-per-objects objectInTower))
 )
 )
 
 ;7 is invalid
 
-(define (problem setup-8) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-    
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
+(define (game scoring-8) (:domain medium-objects-room-v1)
+(:setup (and
     (exists (?h - hexagonal_bin) (exists (?d - doggie_bed) (exists (?p - pillow)
-        and(
-            (<= (distance ?h ?d) 1)
-            (<= (distance ?h ?p) 1)
-            (<= (distance ?p ?d) 1)
-            (< (distance agent ?h) (distance agent ?d))
-            (< (distance agent ?h) (distance agent ?p))
-            (< (distance agent ?d) (distance agent ?p))
-        )
+        (game-conserved (and
+                (<= (distance ?h ?d) 1)
+                (<= (distance ?h ?p) 1)
+                (<= (distance ?p ?d) 1)
+                (< (distance agent ?h) (distance agent ?d))
+                (< (distance agent ?h) (distance agent ?p))
+                (< (distance agent ?d) (distance agent ?p))
+        ))
     )))
 ))
-)
-
-(define (problem scoring-8) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
 (:constraints (and
     (preference beachballToHexagonalBin
-        (exists (?b - beachball) (exists (?h - hexagonal_bin)
+        (exists (?b - beachball ?h - hexagonal_bin)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?h ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference beachballToDoggieBed
-        (exists (?b - beachball) (exists (?d - doggie_bed)
+        (exists (?b - beachball ?d - doggie_bed)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?d ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference beachballToPillow
-        (exists (?b - beachball) (exists (?p - pillow)
+        (exists (?b - beachball ?p - pillow) 
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?p ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference dodgeballToHexagonalBin
-        (exists (?b - dodgeball) (exists (?h - hexagonal_bin)
+        (exists (?b - dodgeball ?h - hexagonal_bin)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?h ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference dodgeballToDoggieBed
-        (exists (?b - dodgeball) (exists (?d - doggie_bed)
+        (exists (?b - dodgeball ?d - doggie_bed)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?d ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference dodgeballToPillow
-        (exists (?b - dodgeball) (exists (?p - pillow)
+        (exists (?b - dodgeball ?p - pillow) 
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?p ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference basketballToHexagonalBin
-        (exists (?b - basketball) (exists (?h - hexagonal_bin)
+        (exists (?b - basketball ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (on ?h ?b) (not (in_motion ?b))))
             )
-        ))
+        )
     )
     (preference basketballToDoggieBed
-        (exists (?b - basketball) (exists (?d - doggie_bed)
+        (exists (?b - basketball ?d - doggie_bed)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
@@ -306,7 +226,7 @@
         ))
     )
     (preference basketballToPillow
-        (exists (?b - basketball) (exists (?p - pillow)
+        (exists (?b - basketball ?p - pillow)
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
@@ -315,51 +235,33 @@
         ))
     )
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
 (:metric maximize (+ 
-    (* 3 (is-violated beachballToHexagonalBin))
-    (* 5 (is-violated beachballToDoggieBed))
-    (* 7 (is-violated beachballToPillow))
-    (* 6 (is-violated dodgeballToHexagonalBin))
-    (* 8 (is-violated dodgeballToDoggieBed))
-    (* 10 (is-violated dodgeballToPillow))
-    (* 9 (is-violated basketballToHexagonalBin))
-    (* 11 (is-violated basketballToDoggieBed))
-    (* 13 (is-violated basketballToPillow))
+    (* 3 (count-nonoverlapping beachballToHexagonalBin))
+    (* 5 (count-nonoverlapping beachballToDoggieBed))
+    (* 7 (count-nonoverlapping beachballToPillow))
+    (* 6 (count-nonoverlapping dodgeballToHexagonalBin))
+    (* 8 (count-nonoverlapping dodgeballToDoggieBed))
+    (* 10 (count-nonoverlapping dodgeballToPillow))
+    (* 9 (count-nonoverlapping basketballToHexagonalBin))
+    (* 11 (count-nonoverlapping basketballToDoggieBed))
+    (* 13 (count-nonoverlapping basketballToPillow))
 ))
 )
 
-(define (problem setup-18) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
-(:goal (and
-    (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) (exists (?tb - teddy_bear)
-        (and
+(define (game scoring-9) (:domain medium-objects-room-v1)
+(:setup (and
+    (exists (?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?tb - teddy_bear)
+        (game-conserved (and
             (not (= ?t1 ?t2))
             (<= (distance ?t1 ?t2) 2)
             (= (distance ?tb ?t1) (distance ?tb ?t2))
-        )
-    )))
+        ))
+    )
 ))
-)
-
-(define (problem scoring-9) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
-)
 (:constraints (and 
     ; TODO: is the subject refers to it first as throwing, and then as rolling, should we consider it?
-    (forall (?b - basketball) (preference throwBetweenBlocksToBear
-        (exists (?t1 - tall_cylindrical_block) (exists (?t2 - tall_cylindrical_block) (exists (?tb - teddy_bear)
+    (preference throwBetweenBlocksToBear
+        (exists (?b - basketball ?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?tb - teddy_bear)
             (then 
                 (once (agent_holds ?b))
                 (hold-while 
@@ -368,40 +270,31 @@
                 )
                 (once (touch ?b ?tb))
             )
-        ) ) )
-    ))
-    (forall (?b - basketball) (preference thrownBallHitBlock
-        (exists (?t - tall_cylindrical_block) 
+        ) 
+    )
+    (preference thrownBallHitBlock
+        (exists (?b - basketball ?t - tall_cylindrical_block) 
             (then
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))block
                 (once (touch ?b ?t)) 
             )
         ) 
-    ))
-))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
     )
-    (maximum_time_reached)
 ))
 (:metric maximize (+
-    (* 15 (is-violated throwBetweenBlocksToBear))
-    (* (- 5) (is-violated thrownBallHitBlock))
+    (* 15 (count-nonoverlapping throwBetweenBlocksToBear))
+    (* (- 5) (count-nonoverlapping thrownBallHitBlock))
 ))
 
 ; 10 has no setup
 
-(define (problem scoring-10) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-)
-(:init ; likewise - we could populate fully by a script
+(define (game medium-objects-10) (:domain medium-objects-room-v1)
+(:setup
 )
 (:constraints (and 
-    (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksDesktop
-        (exists (?d - desktop)
+    (preference thrownObjectKnocksDesktop
+        (exists (?o - (either pillow beachball dodgeball) ?d - desktop)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -415,9 +308,9 @@
                 (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
             )
         ) 
-    ))
-    (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksDeskLamp
-        (exists (?d - desk_lamp)
+    )
+    (preference thrownObjectKnocksDeskLamp
+        (exists (?o - (either pillow beachball dodgeball) ?d - desk_lamp)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -431,9 +324,9 @@
                 (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
             )
         ) 
-    ))
-    (forall (?o - (either pillow beachball dodgeball)) (preference thrownObjectKnocksCD
-        (exists (?c - cd)
+    )
+    (forall (preference thrownObjectKnocksCD
+        (exists (?o - (either pillow beachball dodgeball) ?c - cd)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -449,22 +342,15 @@
         ) 
     ))
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (+
-    (* 5 (is-violated thrownObjectKnocksDesktop))
-    (* 10 (is-violated thrownObjectKnocksDeskLamp))
-    (* 15 (is-violated thrownObjectKnocksCD))
+(:scoring maximize (+
+    (* 5 (count-nonoverlapping thrownObjectKnocksDesktop))
+    (* 10 (count-nonoverlapping thrownObjectKnocksDeskLamp))
+    (* 15 (count-nonoverlapping thrownObjectKnocksCD))
 ))
 
 ; 11 has no setup
 
-(define (problem scoring-11) (:domain game-v1)
+(define (game scoring-11) (:domain medium-objects-room-v1)
 (:objects  ; we'd eventually populate by script
 )
 (:init ; likewise - we could populate fully by a script
@@ -495,17 +381,13 @@
 
 ; TODO: 12 has no setup, and is a little nonsensical, but could be modeled like this:
 
-; TODO: adding this here to show how we'd handle problems with buildings
-    ; an alternative would be to define a few buildings (b1 b2 b3...) in the domain constants
-(define (problem scoring-12) (:domain game-v1)
-(:objects  ; we'd eventually populate by script
-    castle - building  
-)
-(:init ; likewise - we could populate fully by a script
-)
+(define (game medium-objects-12) (:domain medium-objects-room-v1)
+; TODO: move to the domain decleration
+; (:objects  ; we'd eventually populate by script
+;     castle - building  
+; )
 (:constraints (and
-    ; Here we have the preference before the quantifier, to count it at most once
-    (forall (?b - block) (preference correctColorBlock 
+    (preference correctColorBlock (exists (?b - block) 
         (at-end
             (and 
                 (in_building castle ?b))
@@ -519,15 +401,7 @@
         )
     ))
 ))
-(:goal (or
-    (and
-        (minimum_time_reached)
-        (agent_terminated_episode)
-    )
-    (maximum_time_reached)
-))
-(:metric maximize (* (2 (is-violated correctColorBlock)))
+(:scoring maximize (* (2 (count-once-per-objects correctColorBlock)))
 )
 )
-
 

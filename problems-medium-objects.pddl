@@ -383,7 +383,7 @@
 
 (define (game medium-objects-12) (:domain medium-objects-room-v1)
 ; TODO: move to the domain decleration
-; (:objects  ; we'd eventually populate by script
+; (:objects  
 ;     castle - building  
 ; )
 (:constraints (and

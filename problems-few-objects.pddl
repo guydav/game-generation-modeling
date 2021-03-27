@@ -208,8 +208,7 @@
 )))
 
 
-
-(define (problem scoring-10) (:domain few-objects-room-v1)
+(define (game few-objects-10) (:domain few-objects-room-v1)
 (:setup  
 ; no real setup for 10 unless we want to mark which objects are in the game
 )
@@ -217,7 +216,7 @@
     (preference chairHitFromBedWithDoggieBed
         (exists (?c - chair ?d - doggie_bed)
             (then 
-                (once (agent_holds ?d) (on bed agent))
+                (once (and (agent_holds ?d) (on bed agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (once (touch ?d ?c))
             )
@@ -239,3 +238,213 @@
 )))
 
 ; 11 is invalid
+
+(define (game few-objects-12) (:domain few-objects-room-v1)
+(:setup  
+; no real setup for 12 since the bin moves
+)
+(:constraints (and 
+    (preference throwToBinOnBed
+        (exists (?d - dodgeball ?h - hexagonal_bin)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (and (on ?h ?d) (not (in_motion ?d)) (on bed ?h)))
+            )
+        )
+    )
+    (preference throwToBinOnDesk
+        (exists (?d - dodgeball ?h - hexagonal_bin)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (and (on ?h ?d) (not (in_motion ?d)) (on desk ?h)))
+            )
+        )
+    )
+    (preference throwToBinOnShelf
+        (exists (?d - dodgeball ?h - hexagonal_bin ?s - shelf)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (and (on ?h ?d) (not (in_motion ?d)) (on ?s ?h)))
+            )
+        )
+    )
+)) 
+(:scoring maximize (+ 
+    (* 1 (count-nonoverlapping throwToBinOnBed))
+    (* 2 (count-nonoverlapping throwToBinOnDesk))
+    (* 3 (count-nonoverlapping throwToBinOnShelf))
+)))
+
+(define (game few-objects-13) (:domain few-objects-room-v1)
+(:setup  
+; no real setup for 13 
+)
+(:constraints (and 
+    (preference onChairFromWallToWall
+        (exists (?c - chair ?w1 - wall ?w2 - wall)
+            (then
+                (once (adjacent agent ?w1))
+                (hold (on ?c agent))
+                (once (and (adjacent agent ?w2) (opposite ?w1 ?w2)))
+            )
+        )
+    )
+)) 
+(:scoring minimize (+ 
+    (* 1 (count-shortest onChairFromWallToWall))
+)))
+
+(define (game few-objects-14) (:domain few-objects-room-v1)
+(:setup  
+    ; is there a prettier way to do this? 
+    (exists (?w1 ?w2 - window ?c - chair ?x1 ?w2 wall  
+            ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
+        (and
+            (not (on floor rug))
+            (adjacent bed ?w1)
+            (adjacent desk ?w2)
+            (adjacent ?c ?x1)
+            (opposite ?x1 ?x2)
+            (=
+                (distance ?x1 ?b1)
+                (distance ?b1 ?b2)
+                (distance ?b3 ?b4)
+                (distance ?b4 ?b5)
+                (distance ?b5 ?b6)
+                (distance ?b6 ?x2)
+            )
+        )
+    )
+)
+(:constraints (and 
+    (preference onChairFromWallToBlock
+        (exists (?c - chair ?w - wall ?b - cube_block)
+            (then
+                (once (adjacent agent ?w))
+                (hold (on ?c agent))
+                (once (adjacent agent ?b))
+            )
+        )
+    )
+)) 
+(:scoring maximize (count-once-per-objects onChairFromWallToBlock)
+))
+
+
+(define (game few-objects-15) (:domain few-objects-room-v1)
+(:setup  
+; no real setup for 15
+)
+(:constraints (and 
+    (preference throwToWallAndBack
+        (exists (?d - dodgeball ?w - wall)
+            (then 
+                (once (agent_holds ?d))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (touch ?d ?w)
+                ) 
+                (once-measure (agent_holds ?d) (distance agent ?w))
+            )
+        )
+    )
+)) 
+(:scoring maximize (count-increasing-measure throwToWallAndBack)
+))
+
+
+(define (game few-objects-16) (:domain few-objects-room-v1)
+(:setup  
+    (forall (?b - cube_block) 
+        (> (distance ?b desk) 3)
+        (not (exists (?b2 - cube_block) 
+            (and 
+                (not (= ?b ?b2))
+                (< (distance ?b ?b2) 0.5)
+            )
+        ))
+    )
+)
+(:constraints (and 
+    (preference throwHitsBlock
+        (exists (?d - dodgeball ?b - cube_block)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (touch ?d ?b))
+            )
+        )
+    )
+)) 
+(:scoring minimize (+ 
+    (* 10 (count-once-per-objects throwHitsBlock))
+)))
+
+
+(define (game few-objects-17) (:domain few-objects-room-v1)
+(:setup  
+    (exists (?c - curved_wooden_ramp) (adjacent ?c rug)) 
+
+)
+(:constraints (and 
+    (preference ballLandsOnRed
+        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+            (then 
+                (once (agent_holds ?d) (< (distance agent desktop) 0.5))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (on ?c ?d)
+                ) 
+                (once (and (on rug ?d) (not (in_motion ?d)) (rug_color_under ?d red)))
+            )
+        )
+    )
+    (preference blueBallLandsOnPink
+        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+            (then 
+                (once (agent_holds ?d) (< (distance agent desktop) 0.5) (color ?d blue))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (on ?c ?d)
+                ) 
+                (once (and (on rug ?d) (not (in_motion ?d)) (rug_color_under ?d pink)))
+            )
+        )
+    )
+    (preference pinkBallLandsOnPink
+        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+            (then 
+                (once (agent_holds ?d) (< (distance agent desktop) 0.5) (color ?d pink))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (on ?c ?d)
+                ) 
+                (once (and (on rug ?d) (not (in_motion ?d)) (rug_color_under ?d pink)))
+            )
+        )
+    )
+    (preference ballLandsOnOrangeOrGreen
+        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+            (then 
+                (once (agent_holds ?d) (< (distance agent desktop) 0.5))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (on ?c ?d)
+                ) 
+                (once (and (on rug ?d) (not (in_motion ?d)) (or (rug_color_under ?d green) (rug_color_under ?d orange))))
+            )
+        )
+    )
+)) 
+(:scoring minimize (+ 
+    (* 50 (count-nonoverlapping ballLandsOnRed))
+    (* 10 (count-nonoverlapping blueBallLandsOnPink))
+    (* 15 (count-nonoverlapping pinkBallLandsOnPink))
+    (* 15 (count-nonoverlapping ballLandsOnOrangeOrGreen))
+)))
+
+
+

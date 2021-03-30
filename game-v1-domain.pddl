@@ -40,10 +40,11 @@
 (:constants 
     pickup_distance - num
     center front back left right top bottom - side
-    face edge point - orientation
+    face edge point upright - orientation
     room floor desk bed - structure
     east_wall west_wall north_wall south_wall - wall
     agent - object  ; since the agent can holds things
+    rug - game_object
     green red blue yellow none - color
     upside_down rightside_up sideways eyes_closed - perspective
 )

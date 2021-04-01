@@ -78,7 +78,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?w ?d)
                 ) 
-                (once  (and (on ?h ?d) (not ((in_motion ?d))))) ; touches wall before in bin
+                (once  (and (on ?h ?d) (not (in_motion ?d)))) ; touches wall before in bin
             )
         )
     )
@@ -139,7 +139,7 @@
                 )
                 (once (and (on ?h ?d) (not (in_motion ?d)))) 
             )
-        )) 
+    )) 
 ))
 (:scoring maximize (* 5 (count-nonoverlapping bowlBallToBin)))
 )

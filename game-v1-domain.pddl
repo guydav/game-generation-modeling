@@ -29,7 +29,7 @@
     block ball - pickupable
     dodgeball golfball beachball basketball - ball
     cube_block pyramid_block bridge_block flat_block - block
-    tall_cylindrical_block short_cylindrical_block - block
+    tall_cylindrical_block short_cylindrical_block triangular_block - block
     chair shelf hexagonal_bin doggie_bed - game_object  ; TODO - figure out if these are pickupable or not?
     desktop laptop desk_lamp cd textbook pillow teddy_bear mug - pickupable
     curved_wooden_ramp large_triangular_ramp - pickupable
@@ -43,8 +43,9 @@
     face edge point upright upside_down - orientation
     room floor desk bed - structure
     east_wall west_wall north_wall south_wall - wall
+    south_wall_shelf east_wall_shelf - shelf
     agent - object  ; since the agent can holds things
-    rug - game_object
+    rug poster - game_object
     green red blue yellow none - color
     looking_upside_down sideways eyes_closed - perspective
 )

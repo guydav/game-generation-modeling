@@ -569,7 +569,7 @@
             (= 2 (distance ?c1 ?c2))
             (= 2 (distance ?b1 ?c1))
             (= 2 (distance ?b2 ?c2))
-            (= 0.5 (distance ?h west_wall))  ; assuming it's the west one  
+            (= 0.5 (distance ?h south_wall))  ; assuming it's the south one, as it looks like a sunny morning with sun from east
         ))
     )
 )
@@ -767,7 +767,7 @@
 
 ;31 is valid and very similar to something we had before
 
-(define (game many-objects-6) (:domain many-objects-room-v1)
+(define (game many-objects-31) (:domain many-objects-room-v1)
 (:setup
 )
 (:constraints (and 

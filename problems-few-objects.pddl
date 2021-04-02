@@ -55,13 +55,12 @@
                 (on ?b ?c)
             )
         )
-    ))) 
+    )) 
 ))
 (:scoring maximize (+ 
     (count-once cubeBlockOnDesk)
     (count-once-per-objects cubeBlockOnCubeBlock)
-))
-)
+)))
 
 (define (game few-objects-4) (:domain few-objects-room-v1)
 (:setup (and

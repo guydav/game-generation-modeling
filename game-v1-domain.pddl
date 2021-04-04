@@ -69,6 +69,7 @@
     (thrown ?o - game-object)  ; has this object been thrown?
     (agent_perspective ?p - perspective)  ; what perspective is the agent looking in?
     (agent_finished_spin)  ; did the agent just finish a full spin?
+    (is_rotating ?o - game-object) ; is this object currently rotating -- could maybe use for the above? 
     (agent_terminated_episode)
 )
 
@@ -81,7 +82,8 @@
     (side_z_position ?o - object ?s - side) - number
     (distance ?o1 ?o2 - object) - number
     (distance_side ?o1 -object ?s1 -side ?o2 -object ?s2 -side)- number
-    (max_height ?b - building) - number
+    (building_height) - number
+    (max_building_height) - number
 )
 
 ;define actions here

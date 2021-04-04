@@ -33,7 +33,7 @@
 (:setup
 )
 (:constraints (and 
-    (forall () (preference twoBallsJuggled
+    (preference twoBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) 
             (then
                 ; both balls in hand
@@ -51,7 +51,7 @@
     ))
     ; the three ball case is even more complicated -- it's somethhing like:
     ; all three in hand => 1 in air => 1+2 in air => 2 in air => 2+3 in air => 3 in air => all three in hand
-    (forall () (preference threeBallsJuggled
+    (preference threeBallsJuggled
         (exists (?g1 - golfball) (exists (?g2 - golfball) (exists (?g3 - golfball)  
             (then
                 ; both balls in hand
@@ -148,10 +148,10 @@
     )
 ))
 (:scoring maximize (+
-    (* (13 (count-once circuit)))
-    (* (2 (<= total-time 60) (count-shortest circuit)))
-    (* (3 (<= total-time 50) (count-shortest circuit)))
-    (* (2 (<= total-time 40) (count-shortest circuit)))
+   (* 13 (count-once circuit))
+   (* 2 (<= (count-shortest circuit) 60))
+   (* 3 (<= (count-shortest circuit) 50))
+   (* 2 (<= (count-shortest circuit) 40))
 )))
 
 
@@ -524,7 +524,19 @@
             )
         )
     )
+    (preference throwAttempt
+        (exists (?g - golfball)
+            (then 
+                (once (agent_holds ?g))
+                (hold (and (not (agent_holds ?g)) (in_motion ?g))) 
+                (once (not (in_motion ?g)))
+            )
+        )
+    )
 ))
+(:terminal
+    (>= (count-once-per-objects throwAttempt) 3)
+)
 (:scoring maximize (+
     (* 5 (count-nonoverlapping throwLandsInTarget))
     (* 2 (count-nonoverlapping throwLandsInPerimeter))
@@ -834,6 +846,9 @@
         )
     )
 ))
+(:terminal 
+    (>= (total-score) 1000)
+)
 (:scoring maximize (+
    (* 50 (count-nonoverlapping ballHitsTeddyBear))
    (* 100 (count-nonoverlapping ballLandsOnBin))
@@ -962,11 +977,23 @@
         )
     )
     (preference ballEndedOnRug
-        (exists (?g - dodgebagolfballll) 
+        (exists (?g - golfball) 
             (at-end (on rug ?g))
         )
     )
+    (preference throwAttempt
+        (exists (?g - golfball)
+            (then 
+                (once (agent_holds ?g))
+                (hold (and (not (agent_holds ?g)) (in_motion ?g))) 
+                (once (not (in_motion ?g)))
+            )
+        )
+    )
 ))
+(:terminal
+    (>= (count-once-per-objects throwAttempt) 3)
+)
 (:scoring maximize (+
    (* 1 (count-nonoverlapping ballEndedOnRug))
    (* 2 (count-nonoverlapping ballEndedOnPoster))

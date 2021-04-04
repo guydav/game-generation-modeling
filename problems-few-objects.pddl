@@ -377,7 +377,19 @@
             )
         )
     )
-)) 
+    (preference throwAttempt
+        (exists (?d - dodgeball)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 6)
+)
 (:scoring maximize (+ 
     (* 10 (count-once-per-objects throwHitsBlock))
 )))
@@ -449,6 +461,48 @@
 ; 18 also requires an actual end state -- how do we want to handle that?
 
 
+(define (game few-objects-18) (:domain few-objects-room-v1)
+(:setup  
+)
+(:constraints (and 
+    (preference objectLandsOnRotatingChair
+        (exists (?o - game-object ?c - chair)
+            (then 
+                (once (and (agent_holds ?o) (is_rotating ?c)))
+                (hold (and (not (agent_holds ?o)) (in_motion ?o) (is_rotating ?c)))
+                (once (and 
+                    (is_rotating ?c)
+                    (not (in_motion ?o))
+                    (or 
+                        (on ?c ?o)
+                        (exists (?o2 - game-object) (and 
+                            (not (= ?o ?o2))
+                            (in_building ?o2)
+                            (on ?o2 ?o)
+                        ))
+                    )
+                ))
+            )
+        )
+    )
+    (preference chairStoppedRotating 
+        (exists (?c - chair)
+            (then
+                (once (not (is_rotating ?c)))
+                (hold (is_rotating ?c))
+                (once (not (is_rotating ?c)))
+            )
+        )
+    )
+)) 
+(:terminal 
+    (> (count-once chairStoppedRotating) 0)
+)
+(:scoring maximize (* 10 (count-once-per-objects objectLandsOnRotatingChair))
+)))
+
+
+
 (define (game few-objects-19) (:domain few-objects-room-v1)
 (:setup  
     (exists (?h - hexagonal_bin ?l - lamp) (game-conserved (on ?h ?l)))
@@ -464,8 +518,8 @@
         )
     )
 )) 
-(:scoring maximize (+ (* 10 (count-nonoverlapping ballHitsLamp))
-)))
+(:scoring maximize (* 10 (count-nonoverlapping ballHitsLamp))
+))
 
 (define (game few-objects-20) (:domain few-objects-room-v1)
 (:setup  
@@ -587,7 +641,10 @@
         )
     )
 )) 
-; TODO: the end-state here is probably that bothBallsThrownFromDesk or allBlocksHitWithSameBall is satisfied
+(:terminal (or
+    (> (count-once bothBallsThrownFromDesk) 0)
+    (> (count-once allBlocksHit) 0)
+))
 (:scoring maximize (+ 
     (* 2 (count-once bothYellowBlocksHit))
     (* 2 (count-once bothBlueBlocksHit))
@@ -653,9 +710,11 @@
             (then
                 (once (and (agent_holds ?p) (forall (?b - cube_block) (> (distance agent ?b) 2))))
                 (hold (and (not (agent_holds ?p)) (in_motion ?p))) 
-                (hold-to-end (exists (?b1 ?b2 - cube_block) 
-                    (and (on floor ?b1) (on floor ?b2) (on floor ?p) (between ?b1 ?p ?b2 ))
-                ))          
+                (once (and 
+                    (not (in_motion ?p)) 
+                    (on floor ?p) 
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?p ?b2))
+                ))
             )
         )
     )
@@ -664,9 +723,11 @@
             (then
                 (once (and (agent_holds ?c) (forall (?b - cube_block) (> (distance agent ?b) 2))))
                 (hold (and (not (agent_holds ?c)) (in_motion ?c))) 
-                (hold-to-end (exists (?b1 ?b2 - cube_block) 
-                    (and (on floor ?b1) (on floor ?b2) (on floor ?c) (between ?b1 ?c ?b2 ))
-                ))          
+                (once (and 
+                    (not (in_motion ?c)) 
+                    (on floor ?c) 
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?c ?b2))
+                ))     
             )
         )
     )
@@ -675,8 +736,10 @@
             (then
                 (once (and (agent_holds ?d) (forall (?b - cube_block) (> (distance agent ?b) 2))))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (hold-to-end (exists (?b1 ?b2 - cube_block) 
-                    (and (on floor ?b1) (on floor ?b2) (on floor ?d) (between ?b1 ?d ?b2 ))
+                (once (and 
+                    (not (in_motion ?d)) 
+                    (on floor ?d) 
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?d ?b2))
                 ))
             )
         )
@@ -687,7 +750,7 @@
                 (once (and (agent_holds ?p) (forall (?b - cube_block) (> (distance agent ?b) 2))))
                 (hold-while 
                     (and (not (agent_holds ?p)) (in_motion ?p))
-                    (exists (?b1 ?b2 - cube_block) (and (on floor ?b1) (on floor ?b2) (touch floor ?p) (between ?b1 ?p ?b2 )))
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?p ?b2))
                     (and (touch floor ?p) (not (exists (?b1 ?b2 - cube_block) (and (on floor ?b1) (on floor ?b2) (between ?b1 ?p ?b2 )))))    
                 )           
             )

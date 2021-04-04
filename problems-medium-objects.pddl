@@ -133,7 +133,7 @@
         )
     ))
 ))
-(:scoring scoring (/ (* 100 (max_height tower)) (count-once-per-objects objectInTower))
+(:scoring scoring (/ (* 100 (max_building_height)) (count-once-per-objects objectInTower))
 )
 )
 
@@ -323,7 +323,7 @@
             )
         ) 
     )
-    (forall (preference thrownObjectKnocksCD
+    (preference thrownObjectKnocksCD
         (exists (?o - (either pillow beachball dodgeball) ?c - cd)
             (then
                 ; starts with agent holding the desktop
@@ -351,8 +351,8 @@
 (:setup
 )
 (:constraints (and 
-    (forall (?b - basketball) (preference throwBallWithEyesClosed
-        (exists (?h - hexagonal_bin) 
+    (preference throwBallWithEyesClosed
+        (exists (?b - basketball ?h - hexagonal_bin) 
             (then
                 ; ball starts in hand, with the agent on the chair, near the desk
                 (once (and (agent_holds ?b) (agent_perspective eyes_closed)))
@@ -362,9 +362,9 @@
                 (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         ) 
-    ))
+    )
 ))
-(:scoring (* 5(is-violated throwBallFromChairToBin)))
+(:scoring (* 5(count-nonoverlapping throwBallFromChairToBin)))
 )
 
 (define (game medium-objects-11) (:domain medium-objects-room-v1)
@@ -498,7 +498,22 @@
             )
         )
     )
+    (preference throwMisses
+        (exists (?d - dodgeball) 
+            (then 
+                (once (and (agent_holds ?d) (on bed agent)))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d)))
+                (once (and 
+                    (not (in_motion ?d))
+                    (forall (?h - hexagonal_bin (not (on ?h ?d))))
+                ))
+            )
+        )
+    )
 ))
+(:terminal
+    (> (count-once throwMissesBin) 0)
+)
 (:scoring maximize (count-nonoverlapping throwToWallToBin)) 
 )
 
@@ -509,7 +524,7 @@
 ;     tower - building  
 ; )
 (:setup (and
-    (exists (?h - hexagonal_bin) (game-conserved  (object_orientation ?h upside_down)))
+    (exists (?h - hexagonal_bin) (game-conserved (object_orientation ?h upside_down)))
 ))
 (:constraints (and
     (preference objectInTower (exists (?o - game_object)
@@ -537,7 +552,7 @@
 ))
 (:scoring maximize (+
     (* 10 (count-once-per-objects objectInTower))
-    (* 100 (height building))
+    (* 100 (building_height))
 )))
 
 ; 19 is invalid

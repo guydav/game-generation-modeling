@@ -41,7 +41,7 @@
     (preference cubeBlockOnDesk (exists (?c - cube_block) 
         (at-end
             (and 
-                (in_building tower ?c)
+                (in_building ?c)
                 (or (object_orientation ?c edge) (object_orientation ?c point))
                 (on desk ?c)
             )
@@ -50,7 +50,7 @@
     (preference cubeBlockOnCubeBlock (exists (?b - cube_block ?c - cube_block)
         (at-end
             (and 
-                (in_building tower ?c)
+                (in_building ?c)
                 (or (object_orientation ?c edge) (object_orientation ?c point))
                 (on ?b ?c)
             )
@@ -61,6 +61,7 @@
     (count-once cubeBlockOnDesk)
     (count-once-per-objects cubeBlockOnCubeBlock)
 )))
+
 
 (define (game few-objects-4) (:domain few-objects-room-v1)
 (:setup (and
@@ -81,10 +82,12 @@
             )
         )
     )
-) )
+))
+(:terminal 
+    (>= (total-time) 60)
+)
 (:scoring maximize (count-nonoverlapping throwToWallToBin)) 
 )
-
 
 
 (define (game few-objects-5) (:domain few-objects-room-v1)
@@ -109,9 +112,21 @@
                 ) 
                 (once (and (on ?h ?d) (not (in_motion ?d))))
             )
-        ) ) 
-    )))
+        ) 
+    )
+    (preference ballKicked
+        (exists (?d - dodgeball)
+            (then 
+                (once (and (adjacent agent ?t) (touch agent ?d)))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
+            )
+        ) 
+    )
 ))
+(:terminal
+    (>= (count-nonoverlapping ballKicked) 10)
+)
 (:scoring maximize (count-nonoverlapping throwToWallToBin))
 )
 
@@ -163,13 +178,24 @@
             )
         ) 
     )
+    (preference bothBallsThrown
+        (forall (?d - dodgeball) 
+            (then 
+                (once (agent_holds ?d)) ; agent starts by holding ball
+                (hold (and (not (agent_holds ?d)) (in_motion ?d)))
+                (once (not (in_motion ?d))) 
+            )
+        ) 
+    )
 )) 
+(:terminal
+    (>= (count-nonoverlapping bothBallsThrown) 5)
+)
 (:scoring maximize (* 5 (count-nonoverlapping rollBallToBin)))
 )
 
 (define (game few-objects-9) (:domain few-objects-room-v1)
 (:setup  
-; no real setup for 9 unless we want to mark which objects are in the game
 )
 (:constraints (and 
     (preference cellPhoneThrownOnDoggieBed
@@ -414,26 +440,26 @@
         )
     )
     (preference blueBallLandsOnPink
-        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+        (exists ?c - curved_wooden_ramp)
             (then 
-                (once (and (agent_holds ?d) (< (distance agent desktop) 0.5) (color ?d blue)))
+                (once (and (agent_holds blue_dodgeball) (< (distance agent desktop) 0.5)))
                 (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
-                    (on ?c ?d)
+                    (and (not (agent_holds blue_dodgeball)) (in_motion blue_dodgeball))
+                    (on ?c blue_dodgeball)
                 ) 
-                (once (and (on rug ?d) (not (in_motion ?d)) (rug_color_under ?d pink)))
+                (once (and (on rug blue_dodgeball) (not (in_motion blue_dodgeball)) (rug_color_under blue_dodgeball pink)))
             )
         )
     )
     (preference pinkBallLandsOnPink
-        (exists (?d - dodgeball ?c - curved_wooden_ramp)
+        (exists (?c - curved_wooden_ramp)
             (then 
-                (once (and (agent_holds ?d) (< (distance agent desktop) 0.5) (color ?d pink)))
+                (once (and (agent_holds pink_dodgeball) (< (distance agent desktop) 0.5)))
                 (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
-                    (on ?c ?d)
+                    (and (not (agent_holds pink_dodgeball)) (in_motion pink_dodgeball))
+                    (on ?c pink_dodgeball)
                 ) 
-                (once (and (on rug ?d) (not (in_motion ?d)) (rug_color_under ?d pink)))
+                (once (and (on rug pink_dodgeball) (not (in_motion pink_dodgeball)) (rug_color_under pink_dodgeball pink)))
             )
         )
     )
@@ -449,16 +475,25 @@
             )
         )
     )
+    (preference throwAttempt
+        (exists (?d - dodgeball)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
+            )
+        )
+    )
 )) 
+(:terminal
+    (> (count-nonoverlapping throwAttempt) (+ (/ (total-score) 30) 1))
+)
 (:scoring maximize (+ 
     (* 50 (count-nonoverlapping ballLandsOnRed))
     (* 10 (count-nonoverlapping blueBallLandsOnPink))
     (* 15 (count-nonoverlapping pinkBallLandsOnPink))
     (* 15 (count-nonoverlapping ballLandsOnOrangeOrGreen))
 )))
-
-; 18 is a little underspecified -- what do we want to do about it?
-; 18 also requires an actual end state -- how do we want to handle that?
 
 
 (define (game few-objects-18) (:domain few-objects-room-v1)
@@ -500,7 +535,6 @@
 )
 (:scoring maximize (* 10 (count-once-per-objects objectLandsOnRotatingChair))
 )))
-
 
 
 (define (game few-objects-19) (:domain few-objects-room-v1)
@@ -697,7 +731,6 @@
                 (on floor ?b)
                 (not (= ?b ?b1))
                 (not (= ?b ?b2))
-                (not (= ?b1 ?b2))
                 (adjacent ?b ?b1)
                 (adjacent ?b ?b2)
             ))
@@ -908,7 +941,7 @@
     (preference throwHitsBlock
         (exists (?d - dodgeball ?b - cube_block ?c - chair)
             (then 
-                (once (and (on ?c agent) (agent_holds ?d)))
+                (once (and (on ?c agent) (agent_holds ?d) (is_rotating ?c)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (hold (touch ?d ?b))
                 (once (in_motion ?b))
@@ -918,13 +951,25 @@
     (preference throwInBin
         (exists (?d - dodgeball ?h - hexagonal_bin ?c - chair)
             (then 
-                (once (and (on ?c agent) (agent_holds ?d)))
+                (once (and (on ?c agent) (agent_holds ?d) (is_rotating ?c)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (once (and (on ?h ?d) (not (in_motion ?d))))
             )
         )
     )
-)) 
+    (preference throwAttempt
+        (exists (?d - dodgeball)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count-once-per-objects throwAttempt) 2)
+)
 (:scoring maximize (+ 
     (* 1 (count-once-per-objects throwHitsBlock))
     (* 5 (count-once-per-objects throwInBin))
@@ -932,7 +977,6 @@
 
 (define (game few-objects-27) (:domain few-objects-room-v1)
 (:setup  
-
 )
 (:constraints (and 
     ; Two valid ways of writing this -- one where I define all of the requirements
@@ -1010,6 +1054,9 @@
         )
     )
 )) 
+(:terminal
+    (>= (total-time) 60)
+)
 (:scoring maximize (+ 
     (count-once bookOnChairs)
     (* (count-once bookOnChairs) (count-once firstLayerOfBlocks))

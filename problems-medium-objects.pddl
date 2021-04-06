@@ -52,18 +52,14 @@
                 ; the ball is in the bin
                 (once (and (on ?h ?b) (not (in_motion ?b))))
             )
-        ) ) 
-    ))
-) )
+        )  
+    )
+)) 
 (:scoring maximize (count-nonoverlapping throwBallFromChairToBin))
 )
 
 
 (define (game medium-objects-4) (:domain medium-objects-room-v1)
-; TODO: move building definition(s) to the domain
-; (:objects  ; we'd eventually populate by script
-;     tower - building  
-; )
 (:setup (and
     (game-optional (forall (?b - block) (on floor ?b)))
 ))
@@ -74,10 +70,10 @@
             (hold
                 (and
                     (on floor ?b)
-                    (in_building tower ?b)
+                    (in_building ?b)
                 )
             )
-            (once (building_fell tower))
+            (once (building_fell))
         )
     ))
     ; Here we have the quantifier before, to count how many times it happens 
@@ -86,14 +82,14 @@
             (hold
                 (and 
                     ; both blocks are in the tower
-                    (in_building tower ?b)
-                    (in_building tower ?b2)
+                    (in_building ?b)
+                    (in_building ?b2)
                     ; this new block ?b is on top of the second block ?b2
                     (on ?b ?b2) ; an object cannot be on itself, so this fails if ?b = ?b2
                 )
             )
             ; until the tower falls
-            (once (building_fell tower))
+            (once (building_fell))
         )
     ))
     (preference blockFellNear (exists (?b - block) 
@@ -101,11 +97,11 @@
             ; block is in the towr until
             (hold (in_building ?b)
             ; starting with the building falling
-            (once (building_fell tower))
+            (once (building_fell))
             ; block is falling without agent moving it until -- this only works if the blocks start moving the state after the previous state happens
             (hold (and (not (agent_holds ?b) (in_motion ?b)))) 
             ; it settles near the tower
-            (once (<= (distance tower ?b) 0.1)) 
+            (once (<= (distance building ?b) 0.1)) 
         )
     )) 
 ))
@@ -115,8 +111,6 @@
     (- (count-once-per-objects blockFellNear))
 ))
 )
-
-; 6 has no setup
 
 (define (game medium-objects-5) (:domain medium-objects-room-v1)
 ; TODO: move this to the domain definition
@@ -250,9 +244,8 @@
 
 (define (game medium-objects-8) (:domain medium-objects-room-v1)
 (:setup (and
-    (exists (?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?tb - teddy_bear)
+    (exists (?t1 ?t2 - tall_cylindrical_block ?tb - teddy_bear)
         (game-conserved (and
-            (not (= ?t1 ?t2))
             (<= (distance ?t1 ?t2) 2)
             (= (distance ?tb ?t1) (distance ?tb ?t2))
         ))
@@ -280,7 +273,19 @@
             )
         ) 
     )
+    (preference throwAttempt
+        (exists (?b - basketball)
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
 ))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 5)
+)
 (:scoring maximize (+
     (* 15 (count-nonoverlapping throwBetweenBlocksToBear))
     (* (- 5) (count-nonoverlapping thrownBallHitBlock))
@@ -364,6 +369,9 @@
         ) 
     )
 ))
+(:terminal
+    (>= (total-score) 100)
+)
 (:scoring (* 5(count-nonoverlapping throwBallFromChairToBin)))
 )
 
@@ -480,7 +488,72 @@
 )))
 
 
-; 16 is tricky -- requires some resolution
+(define (game medium-objects-16) (:domain medium-objects-room-v1)
+(:setup  
+    (forall (?b - (either cube_block flat_block))
+        (exists  (?b2 - (either cube_block flat_block) ?h - hexagonal_bin) 
+            (and 
+                (not (= ?b ?b2))
+                (or 
+                    (on ?b ?b2)
+                    (on ?b2 ?b)
+                    (adjacent ?b ?b2)
+                )
+                (< (distance ?h ?b) 1.5)
+            )
+        )
+    )
+)
+(:constraints (and 
+    (preference throwAttempt
+        (exists (?b - (either dodgeball basketball))
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
+    (preference allBlocksHit
+        ; see notes on above
+        (forall (?bl - (either cube_block flat_block))
+            (exists (?b - (either dodgeball basketball))
+                (then
+                    (hold-while (not (touch agent ?bl))
+                        (in_motion ?b)
+                        (touch ?bl ?b)
+                        (in_motion ?bl)
+                        (not (in_motion ?bl))
+                    )
+                )
+            )
+        )
+    )
+    (preference throwInBin
+        (exists (?b - (either dodgeball basketball) ?h - hexagonal_bin)
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (and (on ?h ?b) (not (in_motion ?b))))
+            )
+        )
+    )
+    
+))
+(:terminal (or
+    (>= (count-nonoverlapping throwAttempt) 3)
+    (and
+        (> (count-once allBlocksHit) 0)
+        (> (count-once throwInBin) 0)
+    )
+))
+(:scoring maximize (+ 
+    (* 100 (count-once allBlocksHit) (count-once throwInBin) (= (count-nonoverlapping throwAttempt) 2))
+    (* 75 (count-once allBlocksHit) (count-once throwInBin) (= (count-nonoverlapping throwAttempt) 3))
+    (* 15 (count-once allBlocksHit) (= (count-once throwInBin) 0) (= (count-nonoverlapping throwAttempt) 3))
+)))
+
+
 
 (define (game medium-objects-17) (:domain few-objects-room-v1)
 (:setup 
@@ -571,7 +644,19 @@
             )
         ) 
     )
+    (preference throwAttempt
+        (exists (?b - basketball)
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
 ))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 10)
+)
 (:scoring maximize (count-nonoverlapping throwBasketballToBin)
 ))
 
@@ -605,6 +690,9 @@
         ) 
     )
 ))
+(:terminal
+    (>= (total-time) 120)
+)
 (:scoring maximize (count-nonoverlapping throwBasketballToBinAfterDribbling)
 ))
 

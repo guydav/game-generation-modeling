@@ -74,7 +74,6 @@
     ))
 ))
 (:metric maximize (+
-    ; TODO: maybe this is count-total?
     (* (10 (/ (count-longest threeBallsJuggled) 30)))
     (* (5 (/ (count-longest twoBallsJuggled) 30)))
     (* (100 (>= (count-longest threeBallsJuggled) 120)))
@@ -103,9 +102,8 @@
 
 (define (game many-objects-7) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?r1 - large_triangular_ramp ?r2 - large_triangular_ramp) 
+    (exists (?r1 ?r2 - large_triangular_ramp) 
         (game-conserved (and
-            (not (= ?r1 ?r2))
             (<= (distance ?r1 ?r2) 0.5)
         ))
     )
@@ -157,9 +155,8 @@
 
 (define (game many-objects-8) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin) 
+    (exists (?t1 ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin) 
         (game-conserved (and
-            (not (= ?t1 ?t2))
             (<= (distance ?t1 ?t2) 1)
             (= (distance ?r ?t1) (distance ?r ?t2))
             (adjacent_side ?h front ?r back)
@@ -211,14 +208,25 @@
             )
         ) 
     )
+    (preference throwAttempt
+        (exists (?g - golfball)
+            (then
+                (once (agent_holds ?g))
+                (hold (and (not (agent_holds ?g)) (in_motion ?g)))
+                (once (not (in_motion ?g)))
+            )
+        )
+    )
 ))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 15)
+)
 (:scoring maximize (+
     (* 5 (count-nonoverlapping throwBetweenBlocksToBin))
     (- (count-nonoverlapping thrownBallHitBlock))
     (- (* 2 (count-nonoverlapping throwMissesBin)))
 )))
 
-; 10 has no setup
 
 (define (game many-objects-9) (:domain many-objects-room-v1)
 (:setup
@@ -259,7 +267,7 @@
 ))
 )
 
-; I honestly don't know if I understand 10
+; 10 is too ambiguous to resolve 
 
 ; 11 is invalid
 
@@ -391,6 +399,15 @@
     )
 ))
 (:constraints (and 
+    (preference dodgeballThrowAttempt
+        (exists (?d - dodgeball)
+            (then 
+                (once (agent_holds ?d))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
+            )
+        )
+    )
     (preference dodgeballRollsOnRamp
         (exists (?d - dodgeball ?r - large_triangular_ramp ?c - chair)
             (then 
@@ -414,7 +431,16 @@
                 (once (and (on ?h ?d) (not (in_motion ?d))))
             )
         ) 
-    ) 
+    )
+    (preference golfballThrowAttempt
+        (exists (?g - golfball)
+            (then 
+                (once (agent_holds ?g))
+                (hold (and (not (agent_holds ?g)) (in_motion ?g))) 
+                (once (not (in_motion ?g)))
+            )
+        )
+    )
     (preference golfballRollsOnRamp
         (exists (?g - golfball ?r - large_triangular_ramp ?c - chair)
             (then 
@@ -439,14 +465,22 @@
                 (once (and (on ?h ?g) (not (in_motion ?g))))
             )
         ) 
-    ) 
+    )
+))
+(:terminal (or 
+    (>= (count-nonoverlapping dodgeballThrowAttempt) 3)
+    (>= (count-nonoverlapping golfballThrowAttempt) 3)
+    (and 
+        (> (count-nonoverlapping dodgeballThrowAttempt) 0) 
+        (> (count-nonoverlapping golfballThrowAttempt) 0) 
+    )
+
 ))
 (:scoring maximize (+
-    ; Assuming we don't want to tackle mutual exclusivity here
-    (* 5 (count-nonoverlapping dodgeballRollsOnRamp))
-    (* 10 (count-nonoverlapping dodgeballOnRampToBin))
-    (* 5 (count-nonoverlapping golfballRollsOnRamp))
-    (* 10 (count-nonoverlapping golfballOnRampToBin))
+    (* 5 (count-nonoverlapping dodgeballRollsOnRamp) (= (count-nonoverlapping golfballThrowAttempt) 0) )
+    (* 10 (count-nonoverlapping dodgeballOnRampToBin) (= (count-nonoverlapping golfballThrowAttempt) 0) )
+    (* 5 (count-nonoverlapping golfballRollsOnRamp) (= (count-nonoverlapping dodgeballThrowAttempt) 0))
+    (* 10 (count-nonoverlapping golfballOnRampToBin) (= (count-nonoverlapping dodgeballThrowAttempt) 0))
 )))
 
 
@@ -473,7 +507,7 @@
 (:scoring maximize (count-nonoverlapping throwBallBinThroughRamp)
 ))
 
-; I'm not sure I understand 18?
+; 18 is also ambiguous
 
 ; 19 is invalid
 
@@ -535,7 +569,7 @@
     )
 ))
 (:terminal
-    (>= (count-once-per-objects throwAttempt) 3)
+    (>= (count-nonoverlapping throwAttempt) 3)
 )
 (:scoring maximize (+
     (* 5 (count-nonoverlapping throwLandsInTarget))
@@ -801,8 +835,20 @@
                 ))
             )
         ) 
-    ) 
+    )
+    (preference rollAttempt
+        (exists (?g - golfball ?b - block)
+            (then 
+                (once (agent_holds ?g) (on bed agent))
+                (hold (and (in_motion ?g) (not (agent_holds ?g)))
+                (once (touch ?g ?b))
+            )
+        ) 
+    )
 ))
+(:terminal
+    (>= (count-nonoverlapping rollAttempt) 3)
+)
 (:scoring maximize (* 10 (count-total rollBallToBin))
 ))
 
@@ -1023,8 +1069,6 @@
 ))
 (:scoring maximize (count-total agentOnBridge)
 ))
-
-
 
 
 ; 31 is invalid 

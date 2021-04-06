@@ -47,7 +47,9 @@
     agent - object  ; since the agent can holds things
     rug poster - game_object
     green red blue yellow none - color
+    pink_dodgeball blue_dodgeball - dodgeball
     looking_upside_down sideways eyes_closed - perspective
+    building - object
 )
 
 (:predicates ;todo: define predicates here

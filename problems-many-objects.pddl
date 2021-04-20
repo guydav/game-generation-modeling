@@ -114,11 +114,11 @@
             (then 
                 ; first, agent starts not between the ramps, then passes between them 
                 ; so after not being between, it is between, then again not between
-                (not (between ?r1 agent ?r2))
+                (once (not (between ?r1 agent ?r2)))
                 (any)
-                (between ?r1 agent ?r2) 
+                (once (between ?r1 agent ?r2))
                 (any)
-                (not (between ?r1 agent ?r2))
+                (once (not (between ?r1 agent ?r2)))
                 (any)
                 ; spin four times in a chair
                 (hold-while
@@ -167,7 +167,7 @@
 ))
 (:constraints (and 
     (preference throwBetweenBlocksToBin
-        (exists (?g - golfball ?t1 - tall_cylindrical_block ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin)
+        (exists (?g - golfball ?t1 ?t2 - tall_cylindrical_block ?r - curved_wooden_ramp ?h - hexagonal_bin)
             (then 
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -1069,6 +1069,12 @@
 ))
 (:scoring maximize (count-total agentOnBridge)
 ))
+
+(forall (?x - (either type1 type2 type3)) (preference testPref (exists (?y - type4) ...)))
+
+(preference testPref (exists (?x - type1 ?y - type4) ...))
+(preference testPref (exists (?x - type2 ?y - type4) ...))
+(preference testPref (exists (?x - type3 ?y - type4) ...))
 
 
 ; 31 is invalid 

@@ -1,0 +1,65 @@
+# First attempt at modeling EBNF modeling my custom DSL
+
+@@grammar :: GameDSL
+@@parseinfo :: True
+
+start = '(define' game_def domain_def setup_def ')' $;
+game_def = '(game' game_name:id ')';
+domain_def = '(:domain' domain_name:id ')';
+
+# Generic definitions useful across sections
+
+id = /[a-z]+(-[a-z0-9]+)*/;
+name = /[a-z]+(_[a-z0-9]+)*/;
+number = /([0-9]*\.)?[0-9]+?/;
+
+variable = /\?[a-z][a-z0-9]*/;
+variable_list = '(' {variable_type_def}+ ')';
+variable_type_def = {variable}+ '-' type_defition;
+type_defition = 
+    name |
+    '(either' {name}+ ')'; # TODO: do we want to enforce more than one?
+
+function_comparison = 
+    '(' binary_comp function_eval function_eval ')' |
+    '(' binary_comp function_eval number ')' |
+    '(' binary_comp number function_eval ')' |
+    '(' '=' {function_eval}+ ')' 
+    ;
+binary_comp = '<=' | '<' | '=' | '>=' | '>';
+function_eval = '(' name {function_term}* ')';
+function_term = name | variable | number;
+
+predicate = '(' pred_name:predicate_name {pred_arg:predicate_term}* ')';
+predicate_name = '=' | name;
+predicate_term = name | variable | predicate_function;
+predicate_function = predicate;
+
+# Game Setup
+
+setup_def = '(:setup' setup ')';
+
+setup = 
+    '(and' {and_args:setup}+ ')' | # TODO: do we want to enforce more than one?
+    '(or' {or_args:setup}+ ')' | # TODO: do we want to enforce more than one?
+    '(not' not_arg:setup ')' |
+    '(exists' exists_vars:variable_list exists_arg:setup ')' |
+    '(forall' forall_vars:variable_list forall_arg:setup ')' |
+    setup_statement |
+    () 
+    ;
+
+setup_statement = 
+    '(game-conserved' {conserved_pred:setup_predicate}+ ')' |
+    '(game-optional' {optional_pred:setup_predicate}+ ')'
+    ;
+
+setup_predicate = 
+    '(and' {and_args:setup_predicate}+ ')' | # TODO: do we want to enforce more than one?
+    '(or' {or_args:setup_predicate}+ ')' | # TODO: do we want to enforce more than one?
+    '(not' not_arg:setup_predicate ')' |
+    function_comparison |
+    predicate
+    ;
+
+

@@ -113,17 +113,14 @@
 )
 
 (define (game medium-objects-5) (:domain medium-objects-room-v1)
-; TODO: move this to the domain definition
-; (:objects  ; we'd eventually populate by script
-;     tower - building  
-; )
+
 (:constraints (and
     ; Count how many objects are part of the tower
     (preference objectInTower (exists (?o - game_object)
         (then
             (once (agent_holds ?b))
-            (hold (in_building tower ?o))
-            (once (building_fell tower))
+            (hold (in_building ?o))
+            (once (building_fell))
         )
     ))
 ))
@@ -376,15 +373,11 @@
 )
 
 (define (game medium-objects-11) (:domain medium-objects-room-v1)
-; TODO: move to the domain decleration
-; (:objects  
-;     castle - building  
-; )
 (:constraints (and
     (preference correctColorBlock (exists (?b - block) 
         (at-end
             (and 
-                (in_building castle ?b))
+                (in_building ?b))
                 (or
                     (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
                     (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))
@@ -592,10 +585,6 @@
 
 
 (define (game medium-objects-18) (:domain medium-objects-room-v1)
-; TODO: move building definition(s) to the domain
-; (:objects  ; we'd eventually populate by script
-;     tower - building  
-; )
 (:setup (and
     (exists (?h - hexagonal_bin) (game-conserved (object_orientation ?h upside_down)))
 ))

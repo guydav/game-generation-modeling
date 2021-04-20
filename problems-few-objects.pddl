@@ -137,8 +137,8 @@
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) 
         (and
-            (game-conserved (adjacent_side ?h front ?c back))
-            (game-conserved(= (distance_side ?c center room center) 1))
+            (game-conserved (adjacent (side ?h front) (side ?c back)))
+            (game-conserved (= (distance ?c room_center) 1))
         )
     )
 ))
@@ -160,7 +160,7 @@
 
 
 (define (game few-objects-8) (:domain few-objects-room-v1)
-(:goal (and
+(:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) 
         (game-conserved (adjacent_side ?h front ?c back))
     )
@@ -325,9 +325,9 @@
 (define (game few-objects-14) (:domain few-objects-room-v1)
 (:setup  
     ; is there a prettier way to do this? 
-    (exists (?w1 ?w2 - window ?c - chair ?x1 ?w2 wall  
+    (exists (?w1 ?w2 - window ?c - chair ?x1 ?x2 - wall  
             ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
-        (and
+        (game-conserved (and
             (not (on floor rug))
             (adjacent bed ?w1)
             (adjacent desk ?w2)
@@ -341,7 +341,7 @@
                 (distance ?b5 ?b6)
                 (distance ?b6 ?x2)
             )
-        )
+        ))
     )
 )
 (:constraints (and 
@@ -384,13 +384,15 @@
 (define (game few-objects-16) (:domain few-objects-room-v1)
 (:setup  
     (forall (?b - cube_block) 
-        (> (distance ?b desk) 3)
-        (not (exists (?b2 - cube_block) 
-            (and 
-                (not (= ?b ?b2))
-                (< (distance ?b ?b2) 0.5)
-            )
-        ))
+        (and
+            (game-conserved (> (distance ?b desk) 3))
+            (not (exists (?b2 - cube_block) 
+                (game-optional (and 
+                    (not (= ?b ?b2))
+                    (< (distance ?b ?b2) 0.5)
+                ))
+            ))
+        )
     )
 )
 (:constraints (and 
@@ -577,7 +579,7 @@
                 )
             ))
         )
-        (forall (?d - dodgeball) (on desk ?d))
+        (forall (?d - dodgeball) (game-optional (on desk ?d)))
     )
 )
 (:constraints (and 
@@ -692,7 +694,7 @@
 (:setup  
     ; is there a prettier way to do this? 
     (and
-        (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
+        (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?c - chair)
             (game-optional (and
                 (on floor ?b1)
                 (on ?b1 ?b2)
@@ -702,6 +704,8 @@
                 (on ?b5 ?b6)
                 (= (distance ?b1 ?b3) (distance ?b1 ?b5))
                 (= (distance ?b1 ?b3) (distance ?b3 ?b5))
+                (< (distance ?c ?b1) (distance ?c ?b3))
+                (= (distance ?c ?b3) (distance ?c ?b5))
             ))
         )
     )
@@ -734,7 +738,7 @@
                 (adjacent ?b ?b1)
                 (adjacent ?b ?b2)
             ))
-        )
+        ))
     )
 )
 (:constraints (and 
@@ -802,10 +806,10 @@
 (:setup  
     (forall (?b - cube_block) 
         (not (exists (?b2 - cube_block) 
-            (and 
+            (game-optional (and 
                 (not (= ?b ?b2))
                 (< (distance ?b ?b2) 1)
-            )
+            ))
         ))
     )
 )
@@ -843,17 +847,16 @@
 (define (game few-objects-25) (:domain few-objects-room-v1)
 (:setup  
     (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?c - chair ?h - hexagonal_bin) 
-            (game-optional (and 
-                (adjacent ?b1 ?b2)
-                (adjacent ?b1 ?c)
-                (adjacent ?b2 ?c)
-                (adjacent ?b3 ?b4)
-                (adjacent ?b3 ?h)
-                (adjacent ?b4 ?h)
-                (adjacent ?b5 ?b6)
-                (on ?b5 bed)
-                (on ?b6 bed)
-            ))
+        (game-optional (and 
+            (adjacent ?b1 ?b2)
+            (adjacent ?b1 ?c)
+            (adjacent ?b2 ?c)
+            (adjacent ?b3 ?b4)
+            (adjacent ?b3 ?h)
+            (adjacent ?b4 ?h)
+            (adjacent ?b5 ?b6)
+            (on ?b5 bed)
+            (on ?b6 bed)
         ))
     )
 )
@@ -1088,10 +1091,10 @@
 (:setup  
     (and 
         (forall (?b - cube_block)
-            (game-optional (or 
-                (on bed ?b)
-                (exists (?c - cube_block) (and (not (= ?b ?c)) (on ?c ?b)))
-            ))
+            (or 
+                (game-optional (on bed ?b))
+                (exists (?c - cube_block) (game-optional (and (not (= ?b ?c)) (on ?c ?b))))
+            )
         )
         (exists (?d - dodgeball) (game-optional (on bed ?d)))
     )

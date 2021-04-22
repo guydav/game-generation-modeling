@@ -3,10 +3,13 @@
 @@grammar :: GameDSL
 @@parseinfo :: True
 
-start = '(define' game_def domain_def setup_def constraints_def ')' $;
+start = '(define' game_def domain_def setup_def constraints_def terminal_def  scoring_def ')' $;
 game_def = '(game' game_name:id ')';
 domain_def = '(:domain' domain_name:id ')';
+setup_def = '(:setup' setup ')';
 constraints_def = '(:constraints' preferences ')';
+terminal_def = '(:terminal' terminal ')' | ();  # TODO: do we want this to be optional?
+scoring_def = '(:scoring' scoring ')';
 
 # Generic definitions useful across sections
 
@@ -42,8 +45,6 @@ predicate_term = name | variable | predicate_function;
 predicate_function = predicate;
 
 # Game Setup
-
-setup_def = '(:setup' setup ')';
 
 setup = 
     '(and' {and_args:setup}+ ')' | # TODO: do we want to enforce more than one?
@@ -113,4 +114,44 @@ preference_predicate =
     '(forall' forall_vars:variable_list forall_pred:preference_predicate ')' |
     predicate |
     function_comparison 
+    ;
+
+# Terminal conditions
+
+terminal = 
+    '(and' {and_args:terminal}+ ')' | # TODO: do we want to enforce more than one?
+    '(or' {or_args:terminal}+ ')' | # TODO: do we want to enforce more than one?
+    '(not' not_arg:terminal ')' |
+    terminal_comp
+    ;
+
+terminal_comp = '(' binary_comp terminal_expr terminal_expr ')';
+
+scoring_expr = 
+    '(' multi_op {multi_expr:scoring_expr}+ ')'  | # TODO: do we want to enforce more than one?
+    '(' binary_op binary_expr_1:scoring_expr binary_expr_2:scoring_expr ')' |
+    '(-' negated_expr:scoring_expr ')' |
+    number |
+    '(total-time)' |
+    '(' preference_eval ')'
+    ;
+
+terminal_expr = scoring_expr | '(total-score)';
+
+multi_op = '+' | '*';
+binary_op = '-' | '/';
+
+preference_eval = 
+    'count-nonoverlapping' name |
+    'count-once' name |
+    'count-once-per-objects' name |
+    'count-longest' name  |
+    'count-shortest' name  |
+    'count-total' name  
+    ;
+
+# Scoring
+scoring = 
+    'maximize' scoring_expr |
+    'minimize' scoring_expr 
     ;

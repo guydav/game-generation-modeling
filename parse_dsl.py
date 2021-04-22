@@ -24,7 +24,7 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
     results = []
     start = text.find(start_token)
     while start != -1:
-        end_matches = [text.find(stop_token, start) for stop_token in stop_tokens]
+        end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
         end_matches = [match != -1 and match or len(text) for match in end_matches]
         end = min(end_matches)
         next_start = text.find(start_token, start + 1)

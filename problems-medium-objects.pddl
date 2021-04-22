@@ -94,7 +94,7 @@
     (preference blockFellNear (exists (?b - block) 
         (then
             ; block is in the towr until
-            (hold (in_building ?b)
+            (hold (in_building ?b))
             ; starting with the building falling
             (once (building_fell))
             ; block is falling without agent moving it until -- this only works if the blocks start moving the state after the previous state happens
@@ -264,7 +264,7 @@
         (exists (?b - basketball ?t - tall_cylindrical_block) 
             (then
                 (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))block
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (touch ?b ?t)) 
             )
         ) 
@@ -286,6 +286,7 @@
     (* 15 (count-nonoverlapping throwBetweenBlocksToBear))
     (* (- 5) (count-nonoverlapping thrownBallHitBlock))
 ))
+)
 
 
 (define (game medium-objects-9) (:domain medium-objects-room-v1)
@@ -339,7 +340,7 @@
                 (once (and (not (on desk ?c)) (not (in_motion ?c)))) 
             )
         ) 
-    ))
+    )
 ))
 (:scoring maximize (+
     (* 5 (count-nonoverlapping thrownObjectKnocksDesktop))
@@ -377,14 +378,15 @@
     (preference correctColorBlock (exists (?b - block) 
         (at-end
             (and 
-                (in_building ?b))
+                (in_building ?b)
                 (or
                     (exists (?b2 - bridge_block) (and (= ?b ?b2) (object_color ?b green)))
-                    (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red))
+                    (exists (?b2 - pyramid_block) (and (= ?b ?b2) (object_color ?b red)))
                     (exists (?b2 - short_cylindrical_block) (and (= ?b ?b2) (or (object_color ?b green) (object_color ?b blue) )))
-                    (exists (?b2 - flat_block) (and (= ?b ?b2) (object_color ?b yellow))))
+                    (exists (?b2 - flat_block) (and (= ?b ?b2) (object_color ?b yellow)))
                     (exists (?b2 - cube_block) (and (= ?b ?b2) (object_color ?b blue)))
                 )
+            )
         )
     ))
 ))
@@ -571,7 +573,7 @@
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and 
                     (not (in_motion ?d))
-                    (forall (?h - hexagonal_bin (not (on ?h ?d))))
+                    (forall (?h - hexagonal_bin) (not (on ?h ?d)))
                 ))
             )
         )
@@ -600,7 +602,7 @@
                             (on ?h ?o)
                         )
                     )
-                    (exists (?o2 - game-object) 
+                    (exists (?o2 - game_object) 
                         (and
                             (in_building ?o2)
                             (not (= ?o ?o2))
@@ -668,13 +670,15 @@
             (then 
                 (once (agent_holds ?b))
                 (forall-sequence (?c - (either cube_block short_cylindrical_block))
-                    (hold (agent_dribbles ?b))
-                    (once (agent_circled_around ?c))
-                    (any)  ; to give a gap to get to the next block
+                    (then
+                        (hold (agent_dribbles ?b))
+                        (once (agent_circled_around ?c))
+                        (any)  ; to give a gap to get to the next block
+                    )
                 )
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (on ?h ?b) (not (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         ) 
     )
@@ -839,7 +843,7 @@
                     (and 
                         (in_motion ?d) 
                         (not (agent_holds ?d)) 
-                        (not (exists (?o - (either tall_cylindrical_block pyramid_block large_triangular_ramp) ((touch ?o ?d)))))  
+                        (not (exists (?o - (either tall_cylindrical_block pyramid_block large_triangular_ramp)) (touch ?o ?d)))  
                     )
                     (on ?h ?b)
                 )     

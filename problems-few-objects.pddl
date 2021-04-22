@@ -250,7 +250,7 @@
     (preference chairHitFromBedWithPillow
         (exists (?c - chair ?p - pillow)
             (then 
-                (once (agent_holds ?p) (on bed agent))
+                (once (and (agent_holds ?p) (on bed agent)))
                 (hold (and (not (agent_holds ?p)) (in_motion ?p))) 
                 (once (touch ?p ?c))
             )
@@ -442,7 +442,7 @@
         )
     )
     (preference blueBallLandsOnPink
-        (exists ?c - curved_wooden_ramp)
+        (exists (?c - curved_wooden_ramp)
             (then 
                 (once (and (agent_holds blue_dodgeball) (< (distance agent desktop) 0.5)))
                 (hold-while 
@@ -503,7 +503,7 @@
 )
 (:constraints (and 
     (preference objectLandsOnRotatingChair
-        (exists (?o - game-object ?c - chair)
+        (exists (?o - game_object ?c - chair)
             (then 
                 (once (and (agent_holds ?o) (is_rotating ?c)))
                 (hold (and (not (agent_holds ?o)) (in_motion ?o) (is_rotating ?c)))
@@ -512,7 +512,7 @@
                     (not (in_motion ?o))
                     (or 
                         (on ?c ?o)
-                        (exists (?o2 - game-object) (and 
+                        (exists (?o2 - game_object) (and 
                             (not (= ?o ?o2))
                             (in_building ?o2)
                             (on ?o2 ?o)
@@ -586,10 +586,12 @@
     (preference bothBallsThrownFromDesk
         (then
             (forall-sequence (?d - dodgeball)
-                (once (and (agent_holds ?d) (adjancet agent desk)))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d) (adjacent agent desk)))
-                (once (not (in_motion ?d)))
-                (hold (adjacent agent dek))
+                (then
+                    (once (and (agent_holds ?d) (adjancet agent desk)))
+                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (adjacent agent desk)))
+                    (once (not (in_motion ?d)))
+                    (hold (adjacent agent dek))
+                )
             )
             (once (forall (?b - cube_block) (not (in_motion ?b))))
         )

@@ -12,7 +12,7 @@
         (exists (?g - golfball ?m - mug ?b - (either bridge_block flat_block)) 
             (then 
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (once (and (agent_holds ?g) (on bed agent))
+                (once (and (agent_holds ?g) (on bed agent)))
                 (hold-while
                     ; ball not in hand and in motion until...
                     (and (not (agent_holds ?g)) (in_motion ?g)) 
@@ -86,11 +86,15 @@
 )
 (:constraints (and 
     (preference agentOnRampOnEdge
-        (exists (?r - large_triangular_ramp) 
-            (and
-                (object_orientation ?r edge) 
-                (on ?r agent)
-            )   
+        (exists (?r - large_triangular_ramp)
+            (then
+                (hold     
+                    (and
+                        (object_orientation ?r edge) 
+                        (on ?r agent)
+                    )   
+                )
+            )
         )
     )
 ))
@@ -140,7 +144,7 @@
                     )
                 )
                 ; bounce the beachball for 20 seconds
-                (hold-for 20 (not (exists (?g - game-object) (or (on ?g ?b) (touch ?g ?b)))))
+                (hold-for 20 (not (exists (?g - game_object) (or (on ?g ?b) (touch ?g ?b)))))
             )
         )
     )
@@ -180,7 +184,7 @@
                     (on ?r ?g)
                 )
                 ; and into the bin
-                (and (on ?h ?g) (not (in_motion ?g)))
+                (once (and (on ?h ?g) (not (in_motion ?g))))
             ) 
         )
     )
@@ -244,8 +248,8 @@
                 )
                 (once (and (on ?m ?g) (not (in_motion ?g)))) 
             )
-        ))
-    ))
+        )
+    )
     (preference throwBallToHexagonalBinThroughRamp
         (exists (?g - golfball ?h - hexagonal_bin ?r - curved_wooden_ramp) 
             (then 
@@ -258,8 +262,8 @@
                 )
                 (once (and (on ?h ?g) (not (in_motion ?g)))) 
             )
-        ))
-    ))
+        )
+    )
 ))
 (:scoring maximize (+
     (* (5 (count-nonoverlapping throwBallToHexagonalBinThroughRamp)))
@@ -272,7 +276,7 @@
 ; 11 is invalid
 
 
-(define (game many-objects-12) (:domain medium-objects-room-v1)
+(define (game many-objects-12) (:domain many-objects-room-v1)
 (:setup (and
     (exists (?r - large_triangular_ramp ?h - hexagonal_bin) (forall (?b - block)
         ; to allow the agent to move them while playing?
@@ -357,7 +361,7 @@
 )))
 
 
-(define (game medium-objects-18) (:domain medium-objects-room-v1)
+(define (game many-objects-15) (:domain many-objects-room-v1)
 (:setup (and
     (forall (?b - (either cube_block tall_cylindrical_block short_cylindrical_block)) 
         (game-optional (< (distance room_center ?b) 1))
@@ -376,7 +380,7 @@
         (at-end
             (and 
                 (in_building tower ?b1)
-                (exists (?b2 - (either cube_block tall_cylindrical_block short_cylindrical_block) (on ?b1 ?b2)))
+                (exists (?b2 - (either cube_block tall_cylindrical_block short_cylindrical_block)) (on ?b1 ?b2))
             )
         )
     )) 
@@ -411,8 +415,8 @@
     (preference dodgeballRollsOnRamp
         (exists (?d - dodgeball ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?d) (on ?c agent))
-                (hold-while (and (in_motion ?d) (not (agent_holds ?d)))) 
+                (once (and (agent_holds ?d) (on ?c agent)))
+                (hold-while (and (in_motion ?d) (not (agent_holds ?d))) 
                     (touch (side ?r front) ?d)
                     (touch (side ?r rear) ?d)
                 )
@@ -422,12 +426,12 @@
     (preference dodgeballOnRampToBin
         (exists (?d - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?d) (on ?c agent))
-                (hold-while (and (in_motion ?d) (not (agent_holds ?d)))) 
+                (once (and (agent_holds ?d) (on ?c agent)))
+                (hold-while (and (in_motion ?d) (not (agent_holds ?d))) 
                     (touch (side ?r front) ?d)
                     (touch (side ?r rear) ?d)
                 )
-                (hold-while (and (in_motion ?d) (not (agent_holds ?d))))
+                (hold (and (in_motion ?d) (not (agent_holds ?d))))
                 (once (and (on ?h ?d) (not (in_motion ?d))))
             )
         ) 
@@ -444,8 +448,8 @@
     (preference golfballRollsOnRamp
         (exists (?g - golfball ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?g) (on ?c agent))
-                (hold-while (and (in_motion ?g) (not (agent_holds ?g)))) 
+                (once (and (agent_holds ?g) (on ?c agent)))
+                (hold-while (and (in_motion ?g) (not (agent_holds ?g))) 
                     (touch (side ?r front) ?g)
                     (touch (side ?r rear) ?g)
                 )
@@ -455,13 +459,13 @@
     (preference golfballOnRampToBin
         (exists (?g - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?g) (on ?c agent))
+                (once (and (agent_holds ?g) (on ?c agent)))
                 (hold (and (in_motion ?g) (not (agent_holds ?g))))
-                (hold-while (and (in_motion ?g) (not (agent_holds ?g)))) 
+                (hold-while (and (in_motion ?g) (not (agent_holds ?g))) 
                     (touch (side ?r front) ?g)
                     (touch (side ?r rear) ?g)
                 )
-                (hold-while (and (in_motion ?g) (not (agent_holds ?g))))
+                (hold (and (in_motion ?g) (not (agent_holds ?g))))
                 (once (and (on ?h ?g) (not (in_motion ?g))))
             )
         ) 
@@ -800,7 +804,7 @@
 )))
 
 
-(define (game many-objects-24) (:domain medium-objects-room-v1)
+(define (game many-objects-24) (:domain many-objects-room-v1)
 (:setup (and
     (exists (?h - hexagonal_bin) (forall (?b - block)
         ; to allow the agent to move them while playing?
@@ -823,7 +827,7 @@
     (preference rollBallToBin
         (exists (?g - golfball ?h - hexagonal_bin)
             (then 
-                (once (agent_holds ?g) (on bed agent))
+                (once (and (agent_holds ?g) (on bed agent)))
                 (hold (and 
                     (in_motion ?g) 
                     (not (agent_holds ?g))
@@ -839,8 +843,8 @@
     (preference rollAttempt
         (exists (?g - golfball ?b - block)
             (then 
-                (once (agent_holds ?g) (on bed agent))
-                (hold (and (in_motion ?g) (not (agent_holds ?g)))
+                (once (and (agent_holds ?g) (on bed agent)))
+                (hold (and (in_motion ?g) (not (agent_holds ?g))))
                 (once (touch ?g ?b))
             )
         ) 
@@ -917,7 +921,7 @@
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?g ?b)
                 )
-                (once (and on ?h ?b) (not (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         )
     )
@@ -929,7 +933,7 @@
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?g ?b)
                 )
-                (once (and on ?h ?b) (not (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         )
     )
@@ -941,7 +945,7 @@
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?g ?b)
                 )
-                (once (and on ?h ?b) (not (in_motion ?b)))
+                (once (and (on ?h ?b) (not (in_motion ?b))))
             )
         )
     )

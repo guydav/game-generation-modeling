@@ -3,14 +3,15 @@
 @@grammar :: GameDSL
 @@parseinfo :: True
 
-start = '(define' game_def domain_def setup_def ')' $;
+start = '(define' game_def domain_def setup_def constraints_def ')' $;
 game_def = '(game' game_name:id ')';
 domain_def = '(:domain' domain_name:id ')';
+constraints_def = '(:constraints' preferences ')';
 
 # Generic definitions useful across sections
 
 id = /[a-z]+(-[a-z0-9]+)*/;
-name = /[a-z]+(_[a-z0-9]+)*/;
+name = /[A-z]+(_[A-z0-9]+)*/;
 number = /\d*\.?\d+/;
 
 variable = /\?[a-z][a-z0-9]*/;
@@ -20,17 +21,17 @@ type_defition =
     name |
     '(either' {name}+ ')'; # TODO: do we want to enforce more than one?
 
-# function_comparison = 
-#     '(' binary_comp function_eval function_eval ')' |
-#     '(' binary_comp function_eval number ')' |
-#     '(' binary_comp number function_eval ')' |
-#     '(' '=' {function_eval}+ ')' 
-#     ;
-function_comparison = fc1 | fc2 | fc3 | fc4;
-fc1 = '(' binary_comp function_eval function_eval ')';
-fc2 = '(' binary_comp function_eval number ')';
-fc3 = '(' binary_comp number function_eval ')';
-fc4 = '(' '=' {function_eval}+ ')' ;
+function_comparison = 
+    '(' binary_comp function_eval function_eval ')' |
+    '(' binary_comp function_eval number ')' |
+    '(' binary_comp number function_eval ')' |
+    '(' '=' {function_eval}+ ')' 
+    ;
+# function_comparison = fc1 | fc2 | fc3 | fc4;
+# fc1 = '(' binary_comp function_eval function_eval ')';
+# fc2 = '(' binary_comp function_eval number ')';
+# fc3 = '(' binary_comp number function_eval ')';
+# fc4 = '(' '=' {function_eval}+ ')' ;
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' name {function_term}* ')';
 function_term = name | variable | number;
@@ -67,4 +68,49 @@ setup_predicate =
     predicate
     ;
 
+# Constraints/Preferences
+preferences = preference | 
+    '(and' {preference}+ ')'; # TODO: do we want to enforce more than one?
 
+preference = '(preference' pref_name:name pref_body ')';
+
+pref_body = 
+    '(exists' exists_vars:variable_list exists_arg:pref_body ')' |
+    '(forall' forall_vars:variable_list forall_arg:pref_body ')' |
+    then |
+    at_end 
+    ;
+
+at_end = '(at-end' at_end_pred:preference_predicate')';
+
+then = '(then' {seq_funq}+ ')';
+
+seq_funq = 
+    any |
+    once |
+    once_measure |
+    hold |
+    while_hold |
+    hold_for |
+    hold_to_end |
+    forall_seq 
+    ;
+
+any = '(any)';
+once = '(once ' once_pred:preference_predicate ')';
+once_measure = '(once-measure' once_measure_pred:preference_predicate measurement:function_eval ')';
+hold = '(hold' hold_pred:preference_predicate ')';
+while_hold = '(hold-while' hold_pred:preference_predicate {while_preds:preference_predicate}+ ')';
+hold_for = '(hold-for' number hold_pred:preference_predicate ')';
+hold_to_end = '(hold-to-end' hold_pred:preference_predicate ')';
+forall_seq = '(forall-sequence' forall_seq_vars:variable_list then ')'; 
+
+preference_predicate = 
+    '(and' {and_args:preference_predicate}+ ')' | # TODO: do we want to enforce more than one?
+    '(or' {or_args:preference_predicate}+ ')' | # TODO: do we want to enforce more than one?
+    '(not' not_arg:preference_predicate ')' |
+    '(exists' exists_vars:variable_list exists_pred:preference_predicate ')' |
+    '(forall' forall_vars:variable_list forall_pred:preference_predicate ')' |
+    predicate |
+    function_comparison 
+    ;

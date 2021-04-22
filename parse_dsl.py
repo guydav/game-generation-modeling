@@ -7,7 +7,7 @@ parser.add_argument('-g', '--grammar-file', default='./dsl.ebnf')
 parser.add_argument('-s', '--stop-tokens', action='append')
 parser.add_argument('-t', '--test-file', default='./problems-few-objects.pddl')
 
-DEFAULT_STOP_TOKENS = ('(:constraints', )
+DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
 def load_tests_from_file(path, start_token='(define', stop_tokens=None):
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS

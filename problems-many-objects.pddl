@@ -276,19 +276,19 @@
 (:setup (and
     (exists (?r - large_triangular_ramp ?h - hexagonal_bin) (forall (?b - block)
         ; to allow the agent to move them while playing?
-        (game-optional (or 
-            (adjacent ?b ?r)
-            (adjacent ?b ?h)
+        (or 
+            (game-optional (adjacent ?b ?r))
+            (game-optional (adjacent ?b ?h))
             (exists (?b2 - block)
-                (and 
+                (game-optional (and 
                     (not (= ?b ?b2))
                     (or 
                         (on ?b2 ?b)
                         (adjacent ?b2 ?b)
                     )
-                )
+                ))
             )
-        ))
+        )
     ))
 ))
 (:constraints (and 
@@ -804,19 +804,19 @@
 (:setup (and
     (exists (?h - hexagonal_bin) (forall (?b - block)
         ; to allow the agent to move them while playing?
-        (game-optional (or 
-            (adjacent ?b bed)
-            (adjacent ?b ?h)
+        (or 
+            (game-optional (adjacent ?b bed))
+            (game-optional (adjacent ?b ?h))
             (exists (?b2 - block)
-                (and 
+                (game-optional (and 
                     (not (= ?b ?b2))
                     (or 
                         (on ?b2 ?b)
                         (adjacent ?b2 ?b)
                     )
-                )
+                ))
             )
-        ))
+        )
     ))
 ))
 (:constraints (and 

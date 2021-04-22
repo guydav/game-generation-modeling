@@ -23,11 +23,10 @@
                 )     
                 ; the ball is under the bridge and then again not under the bridge
                 (once (not (under ?bb ?b))) 
-                ) 
-            )
+            ) 
         ) 
-    ) )
-) )
+    ) 
+))
 (:scoring maximize (count-nonoverlapping throwBallUnderBridge)) 
 )
 
@@ -37,7 +36,7 @@
     (exists (?s - shelf ?h - hexagonal_bin) 
         (and
             (game-conserved (on ?s ?h))
-            (game-conserved (forall (?s2 - shelf) (>= (distance ?s desk) (distance ?s2 desk))))
+            (forall (?s2 - shelf) (game-conserved (>= (distance ?s desk) (distance ?s2 desk))))
         )
     )
 ))
@@ -61,7 +60,7 @@
 
 (define (game medium-objects-4) (:domain medium-objects-room-v1)
 (:setup (and
-    (game-optional (forall (?b - block) (on floor ?b)))
+    (forall (?b - block) (game-optional (on floor ?b)))
 ))
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
@@ -113,7 +112,7 @@
 )
 
 (define (game medium-objects-5) (:domain medium-objects-room-v1)
-
+(:setup )
 (:constraints (and
     ; Count how many objects are part of the tower
     (preference objectInTower (exists (?o - game_object)
@@ -373,6 +372,7 @@
 )
 
 (define (game medium-objects-11) (:domain medium-objects-room-v1)
+(:setup )
 (:constraints (and
     (preference correctColorBlock (exists (?b - block) 
         (at-end
@@ -484,8 +484,8 @@
 (define (game medium-objects-16) (:domain medium-objects-room-v1)
 (:setup  
     (forall (?b - (either cube_block flat_block))
-        (exists  (?b2 - (either cube_block flat_block) ?h - hexagonal_bin) 
-            (and 
+        (exists (?b2 - (either cube_block flat_block) ?h - hexagonal_bin) 
+            (game-optional (and 
                 (not (= ?b ?b2))
                 (or 
                     (on ?b ?b2)
@@ -493,7 +493,7 @@
                     (adjacent ?b ?b2)
                 )
                 (< (distance ?h ?b) 1.5)
-            )
+            ))
         )
     )
 )
@@ -694,7 +694,7 @@
         (game-conserved (and (on floor ?b) (object_orientation ?b upright)))
     )
     (exists (?r - large_triangular_ramp ?b - bridge_block) 
-        (game-conserved (= 0.67 (distance ?r ?b)))
+        (game-conserved (= 0.67 (distance ?r ?b)) )
     )
     (forall (?o - (either cellphone laptop doggie_bed mug))
         (exists (?b - bridge_block ?r - large_triangular_ramp)
@@ -786,8 +786,8 @@
                     (< (distance ?b ?b2) 0.5)
                 ))
             )
-            (> (distance ?r ?b) 0.75)
-            (< (distance ?r ?b) 1.25)
+            (game-optional (> (distance ?r ?b) 0.75))
+            (game-optional (< (distance ?r ?b) 1.25))
         )
     ))
 ))

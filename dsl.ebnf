@@ -11,7 +11,7 @@ domain_def = '(:domain' domain_name:id ')';
 
 id = /[a-z]+(-[a-z0-9]+)*/;
 name = /[a-z]+(_[a-z0-9]+)*/;
-number = /([0-9]*\.)?[0-9]+?/;
+number = /\d*\.?\d+/;
 
 variable = /\?[a-z][a-z0-9]*/;
 variable_list = '(' {variable_type_def}+ ')';
@@ -20,12 +20,17 @@ type_defition =
     name |
     '(either' {name}+ ')'; # TODO: do we want to enforce more than one?
 
-function_comparison = 
-    '(' binary_comp function_eval function_eval ')' |
-    '(' binary_comp function_eval number ')' |
-    '(' binary_comp number function_eval ')' |
-    '(' '=' {function_eval}+ ')' 
-    ;
+# function_comparison = 
+#     '(' binary_comp function_eval function_eval ')' |
+#     '(' binary_comp function_eval number ')' |
+#     '(' binary_comp number function_eval ')' |
+#     '(' '=' {function_eval}+ ')' 
+#     ;
+function_comparison = fc1 | fc2 | fc3 | fc4;
+fc1 = '(' binary_comp function_eval function_eval ')';
+fc2 = '(' binary_comp function_eval number ')';
+fc3 = '(' binary_comp number function_eval ')';
+fc4 = '(' '=' {function_eval}+ ')' ;
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' name {function_term}* ')';
 function_term = name | variable | number;

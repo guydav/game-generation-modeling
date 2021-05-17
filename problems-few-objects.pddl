@@ -536,7 +536,7 @@
     (> (count-once chairStoppedRotating) 0)
 )
 (:scoring maximize (* 10 (count-once-per-objects objectLandsOnRotatingChair))
-)))
+))
 
 
 (define (game few-objects-19) (:domain few-objects-room-v1)
@@ -800,7 +800,7 @@
     (* 5 (count-once-per-objects pillowLandsInBlocks))
     (* 10 (count-once-per-objects cdLandsInBlocks))
     (* 20 (count-once-per-objects dodgeballLandsInBlocks))
-    (* -5 (count-once-per-objects objectBouncesOut))
+    (* (- 5) (count-once-per-objects objectBouncesOut))
 )))
 
 

@@ -25,7 +25,7 @@
     )
 ))
 (:scoring maximize (count-nonoverlapping bounceBallToMug)
-)))
+))
 
 ; TODO: 5 is a juggling game - do we attempt to model it?
 
@@ -48,7 +48,7 @@
                 (hold (and (not (exists (?o - object) (touch ?o ?g1))) (not (exists (?o - object) (touch ?o ?g2))) ))
             )
         ))
-    ))
+    )
     ; the three ball case is even more complicated -- it's somethhing like:
     ; all three in hand => 1 in air => 1+2 in air => 2 in air => 2+3 in air => 3 in air => all three in hand
     (preference threeBallsJuggled
@@ -71,13 +71,13 @@
                 ; the next condition in the cycle would be the first one, 1 in the air while 2+3 are in hand (catch the third ball)
             )
         )))
-    ))
+    )
 ))
-(:metric maximize (+
-    (* (10 (/ (count-longest threeBallsJuggled) 30)))
-    (* (5 (/ (count-longest twoBallsJuggled) 30)))
-    (* (100 (>= (count-longest threeBallsJuggled) 120)))
-    (* (50 (>= (count-longest twoBallsJuggled) 120)))
+(:scoring maximize (+
+    (* 10 (/ (count-longest threeBallsJuggled) 30))
+    (* 5 (/ (count-longest twoBallsJuggled) 30))
+    (* 100 (>= (count-longest threeBallsJuggled) 120))
+    (* 50 (>= (count-longest twoBallsJuggled) 120))
 )))
 
 
@@ -266,8 +266,8 @@
     )
 ))
 (:scoring maximize (+
-    (* (5 (count-nonoverlapping throwBallToHexagonalBinThroughRamp)))
-    (* (10 (count-nonoverlapping throwBallToHexagonalBinThroughRamp)))
+    (* 5 (count-nonoverlapping throwBallToHexagonalBinThroughRamp))
+    (* 10 (count-nonoverlapping throwBallToHexagonalBinThroughRamp))
 ))
 )
 

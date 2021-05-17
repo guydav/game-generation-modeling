@@ -123,9 +123,8 @@
         )
     ))
 ))
-(:scoring scoring (/ (* 100 (max_building_height)) (count-once-per-objects objectInTower))
-)
-)
+(:scoring maximize (/ (* 100 (max_building_height)) (count-once-per-objects objectInTower))
+))
 
 ;6 is invalid
  
@@ -346,7 +345,7 @@
     (* 5 (count-nonoverlapping thrownObjectKnocksDesktop))
     (* 10 (count-nonoverlapping thrownObjectKnocksDeskLamp))
     (* 15 (count-nonoverlapping thrownObjectKnocksCD))
-))
+)))
 
 
 (define (game medium-objects-10) (:domain medium-objects-room-v1)
@@ -369,7 +368,7 @@
 (:terminal
     (>= (total-score) 100)
 )
-(:scoring (* 5(count-nonoverlapping throwBallFromChairToBin)))
+(:scoring maximize (* 5 (count-nonoverlapping throwBallFromChairToBin)))
 )
 
 (define (game medium-objects-11) (:domain medium-objects-room-v1)
@@ -390,7 +389,7 @@
         )
     ))
 ))
-(:scoring maximize (* (2 (count-once-per-objects correctColorBlock)))
+(:scoring maximize (* 2 (count-once-per-objects correctColorBlock))
 ))
 
 

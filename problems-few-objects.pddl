@@ -132,7 +132,6 @@
 
 ;6 is invalid
 
-
 (define (game few-objects-7) (:domain few-objects-room-v1)
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) 

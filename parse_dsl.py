@@ -47,7 +47,6 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
 
 
 
-
     
 def main(args):
     grammar = open(args.grammar_file).read()

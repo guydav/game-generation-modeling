@@ -1,0 +1,65 @@
+,game_name,domain_name,length_of_then
+0,few-objects-2,few-objects-room-v1,"[3, 3]"
+1,few-objects-3,few-objects-room-v1,
+2,few-objects-4,few-objects-room-v1,3
+3,few-objects-5,few-objects-room-v1,"[3, 3]"
+4,few-objects-7,few-objects-room-v1,3
+5,few-objects-8,few-objects-room-v1,"[3, 3]"
+6,few-objects-9,few-objects-room-v1,"[3, 3, 3]"
+7,few-objects-10,few-objects-room-v1,"[3, 3]"
+8,few-objects-12,few-objects-room-v1,"[3, 3, 3]"
+9,few-objects-13,few-objects-room-v1,3
+10,few-objects-14,few-objects-room-v1,3
+11,few-objects-15,few-objects-room-v1,3
+12,few-objects-16,few-objects-room-v1,"[3, 3]"
+13,few-objects-17,few-objects-room-v1,"[3, 3, 3, 3, 3]"
+14,few-objects-18,few-objects-room-v1,"[3, 3]"
+15,few-objects-19,few-objects-room-v1,3
+16,few-objects-20,few-objects-room-v1,"[2, 4, 3, 3, 3, 3, 3]"
+17,few-objects-21,few-objects-room-v1,3
+18,few-objects-23,few-objects-room-v1,"[3, 3, 3, 2]"
+19,few-objects-24,few-objects-room-v1,"[3, 2]"
+20,few-objects-25,few-objects-room-v1,"[6, 6, 6]"
+21,few-objects-26,few-objects-room-v1,"[4, 3, 3]"
+22,few-objects-27,few-objects-room-v1,
+23,few-objects-28,few-objects-room-v1,"[4, 4]"
+24,medium-objects-2,medium-objects-room-v1,3
+25,medium-objects-3,medium-objects-room-v1,3
+26,medium-objects-4,medium-objects-room-v1,"[2, 2, 4]"
+27,medium-objects-5,medium-objects-room-v1,3
+28,medium-objects-7,medium-objects-room-v1,"[3, 3, 3, 3, 3, 3, 3, 3, 3]"
+29,medium-objects-8,medium-objects-room-v1,"[3, 3, 3]"
+30,medium-objects-9,medium-objects-room-v1,"[3, 3, 3]"
+31,medium-objects-10,medium-objects-room-v1,3
+32,medium-objects-11,medium-objects-room-v1,
+33,medium-objects-12,medium-objects-room-v1,"[3, 3, 3]"
+34,medium-objects-14,medium-objects-room-v1,3
+35,medium-objects-15,medium-objects-room-v1,3
+36,medium-objects-16,medium-objects-room-v1,"[3, 3, 3]"
+37,medium-objects-17,few-objects-room-v1,"[3, 3]"
+38,medium-objects-18,medium-objects-room-v1,
+39,medium-objects-20,medium-objects-room-v1,"[3, 3]"
+40,medium-objects-21,medium-objects-room-v1,"[5, 3]"
+41,medium-objects-23,medium-objects-room-v1,"[3, 3, 3, 3]"
+42,medium-objects-24,medium-objects-room-v1,2
+43,medium-objects-27,medium-objects-room-v1,3
+44,many-objects-3,many-objects-room-v1,3
+45,many-objects-4,many-objects-room-v1,"[4, 6]"
+46,many-objects-5,many-objects-room-v1,2
+47,many-objects-7,many-objects-room-v1,"[10, 4]"
+48,many-objects-8,many-objects-room-v1,"[3, 3, 3, 3]"
+49,many-objects-9,many-objects-room-v1,"[3, 3]"
+50,many-objects-12,many-objects-room-v1,3
+51,many-objects-14,many-objects-room-v1,"[3, 3]"
+52,many-objects-15,many-objects-room-v1,
+53,many-objects-16,medium-objects-room-v1,"[3, 2, 4, 3, 2, 5]"
+54,many-objects-17,many-objects-room-v1,3
+55,many-objects-20,many-objects-room-v1,"[3, 3, 3]"
+56,many-objects-21,many-objects-room-v1,3
+57,many-objects-22,many-objects-room-v1,"[2, 2, 2, 2, 2, 2, 2, 2, 2]"
+58,many-objects-23,many-objects-room-v1,"[3, 3, 3, 3]"
+59,many-objects-24,many-objects-room-v1,"[3, 3]"
+60,many-objects-25,many-objects-room-v1,"[2, 3]"
+61,many-objects-26,many-objects-room-v1,"[3, 3, 3]"
+62,many-objects-27,many-objects-room-v1,"[3, 3, 3]"
+63,many-objects-29,many-objects-room-v1,"[3, 3]"

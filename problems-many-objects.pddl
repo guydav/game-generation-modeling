@@ -1065,7 +1065,7 @@
             (then 
                 (hold (and 
                     (on ?t agent)
-                    (exists (?c - (either cube_block large_triangular_ramp) (on ?c ?t)))
+                    (exists (?c - (either cube_block large_triangular_ramp)) (on ?c ?t))
                 ))
             )
         )
@@ -1074,11 +1074,6 @@
 (:scoring maximize (count-total agentOnBridge)
 ))
 
-(forall (?x - (either type1 type2 type3)) (preference testPref (exists (?y - type4) ...)))
-
-(preference testPref (exists (?x - type1 ?y - type4) ...))
-(preference testPref (exists (?x - type2 ?y - type4) ...))
-(preference testPref (exists (?x - type3 ?y - type4) ...))
 
 
 ; 31 is invalid 

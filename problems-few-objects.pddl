@@ -1140,22 +1140,26 @@
 )
 (:constraints (and 
     (preference blockThrownToGround
-        (exists (?b cube_block)
-            (once (agent_holds ?b))
-            (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-            (hold-to-end (and (on floor ?b) (not (agent_holds ?b)) ))
+        (exists (?b - cube_block)
+            (then
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (hold-to-end (and (on floor ?b) (not (agent_holds ?b)) ))
+            )
         )
     )
     (preference blockThrownToBlock
         (exists (?b1 ?b2 - cube_block)
-            (once (agent_holds ?b1))
-            (hold (and (not (agent_holds ?b1)) (in_motion ?b1))) 
-            (hold-to-end (and (on ?b1 ?b2) (not (agent_holds ?b1)) (not (agent_holds ?b2)) ))
+            (then
+                (once (agent_holds ?b1))
+                (hold (and (not (agent_holds ?b1)) (in_motion ?b1))) 
+                (hold-to-end (and (on ?b1 ?b2) (not (agent_holds ?b1)) (not (agent_holds ?b2)) ))   
+            )
         )
     )
 )) 
 (:scoring maximize (+ 
     (* (count-once-per-objects blockThrownToGround) 
-       (+ 1 (count-once-per-objects blockThrownToBlock))
+        (+ 1 (count-once-per-objects blockThrownToBlock))
     )
 )))

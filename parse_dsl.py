@@ -36,7 +36,7 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
         end_matches = [match != -1 and match or len(text) for match in end_matches]
         end = min(end_matches)
         next_start = text.find(start_token, start + 1)
-        if end <= next_start:  # we have a match
+        if end <= next_start or end == len(text):  # we have a match
             test_case = text[start:end]
             if end < next_start:
                 test_case += ')'

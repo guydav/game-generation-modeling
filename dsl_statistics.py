@@ -145,7 +145,7 @@ def build_aggregator(args):
 
     object_types_quantified = StatExtractor(
         ('setup_exists', 'setup_forall', 'pref_body_exists', 'pref_body_forall'),
-        'objects_types_quantified', objects_referenced, aggregate_count_dicts
+        'object_types_quantified', objects_referenced, aggregate_count_dicts
     )
     agg.register(object_types_quantified)
     return agg
@@ -168,7 +168,7 @@ def main(args):
             aggregator.parse(ast)
 
     df = aggregator.to_df()
-    df.to_csv(args.output_path)    
+    df.to_csv(args.output_path, index_label='Index')    
 
 
 if __name__ == '__main__':

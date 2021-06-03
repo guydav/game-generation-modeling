@@ -549,7 +549,7 @@
 
 
 
-(define (game medium-objects-17) (:domain few-objects-room-v1)
+(define (game medium-objects-17) (:domain medium-objects-room-v1)
 (:setup 
 )
 (:constraints (and 
@@ -867,10 +867,12 @@
 )
 (:constraints (and 
     (preference agentOnRampOnEdge
-        (exists (?r - large_triangular_ramp) 
-            (and
-                (object_orientation ?r edge) 
-                (on ?r agent)
+        (exists (?r - large_triangular_ramp)
+            (then
+                (hold (and
+                    (object_orientation ?r edge) 
+                    (on ?r agent)
+                ))
             )   
         )
     )
@@ -883,4 +885,4 @@
     (* 10 (> (count-longest agentOnRampOnEdge) 40))
     (* 10 (> (count-longest agentOnRampOnEdge) 50))
     (* 10 (> (count-longest agentOnRampOnEdge) 60))
-))
+)))

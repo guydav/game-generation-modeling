@@ -47,7 +47,7 @@
             )
         )
     ))
-    (preference cubeBlockOnCubeBlock (exists (?b - cube_block ?c - cube_block)
+    (preference cubeBlockOnCubeBlock (exists (?b    ?c - cube_block)
         (at-end
             (and 
                 (in_building ?c)

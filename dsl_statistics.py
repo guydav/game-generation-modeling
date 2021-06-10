@@ -94,7 +94,9 @@ class ASTStatisticsAggregator:
 def build_aggregator(args):
     agg = ASTStatisticsAggregator()
 
-    length_of_then = StatExtractor('then', 'length_of_then', lambda ast: len(ast.then_funcs), np.mean)
+
+
+    length_of_then = StatExtractor('then', 'length_of_then', lambda ast: len(ast.then_funcs), lambda x: x)
     agg.register(length_of_then)
 
     num_preferences = StatExtractor('preference', 'num_preferences', lambda ast: 1, np.sum)
@@ -108,12 +110,12 @@ def build_aggregator(args):
 
     num_setup_objects_quantified = StatExtractor(
         ('setup_exists', 'setup_forall'), 'setup_objects_quantified', 
-        objects_quantified, np.mean)
+        objects_quantified, lambda x: x)
     agg.register(num_setup_objects_quantified)
 
     num_preference_objects_quantified = StatExtractor(
         ('pref_body_exists', 'pref_body_forall'), 'preference_objects_quantified', 
-        objects_quantified, np.mean)
+        objects_quantified, lambda x: x)
     agg.register(num_preference_objects_quantified)
 
     terminal_clause_exists = StatExtractor(

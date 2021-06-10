@@ -3,7 +3,7 @@ import tatsu
 import tqdm
 
 import ast_printer
-from ast_printer import _indent_print, pretty_print_ast
+from ast_printer import pretty_print_ast
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl.ebnf'

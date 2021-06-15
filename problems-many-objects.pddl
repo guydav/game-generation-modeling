@@ -914,7 +914,7 @@
 ))
 (:constraints (and 
     (preference golfballHitsLowerShelfBlocks
-        (exists (?g - goflball ?b - (either triangular_block cube_block)) 
+        (exists (?g - goflball ?b - (either triangular_block cube_block) ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?g))
                 (hold-while 
@@ -926,7 +926,7 @@
         )
     )
     (preference golfballHitsMiddleShelfBlocks
-        (exists (?g - goflball ?b - (either pyramid_block short_cylindrical_block)) 
+        (exists (?g - goflball ?b - (either pyramid_block short_cylindrical_block) ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?g))
                 (hold-while 
@@ -938,7 +938,7 @@
         )
     )
     (preference golfballHitsTopShelfBlocks
-        (exists (?g - goflball ?b - (either flat_block tall_cylindrical_block bridge_block)) 
+        (exists (?g - goflball ?b - (either flat_block tall_cylindrical_block bridge_block) ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?g))
                 (hold-while 

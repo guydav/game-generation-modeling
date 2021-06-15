@@ -1,15 +1,67 @@
 DEFAULT_INCREMENT = '  '
 BUFFER = None
+LINE_BUFFER = None
 
 
-def _indent_print(str, depth, increment):
-    global BUFFER
+def reset_buffers(to_list=True):
+    global BUFFER, LINE_BUFFER
 
-    out = f'{increment * depth}{str}'
-    if BUFFER is None:
-        print(out)
+    if to_list:
+        BUFFER = []
+        LINE_BUFFER = []
+
     else:
-        BUFFER.append(out)
+        BUFFER = None
+        LINE_BUFFER = None
+
+
+def preprocess_context(context):
+    if not context:
+        context = {}
+
+    if not 'html_style' in context:
+        context['html_style'] = {}
+
+    if 'color' in context['html_style']: del context['html_style']['color']
+    if 'text-decoration' in context['html_style']: del context['html_style']['text-decoration']
+
+    if 'mutation' in context:
+        if context['mutation'] == 'old':
+            context['html_style']['text-decoration'] = 'line-through'
+
+        elif context['mutation'] == 'new':
+            context['html_style']['color'] = 'aqua'
+
+    return context
+            
+
+
+def _indent_print(str, depth, increment, context=None):
+    global BUFFER, LINE_BUFFER
+
+    context = preprocess_context(context)
+
+    if 'continue_line' in context and context['continue_line']:
+        LINE_BUFFER.append(str)
+
+    else:
+        if LINE_BUFFER:
+            if 'html' in context and any([bool(s and not s.isspace()) for s in LINE_BUFFER]):
+                LINE_BUFFER.append('</div>')
+
+            line = ' '.join(LINE_BUFFER)
+            if BUFFER is None:
+                print(line)
+            else:
+                BUFFER.append(line)
+
+        if 'html' in context:
+            context['html_style']['margin-left'] = f'{20 * depth}px'
+
+            LINE_BUFFER = [f'<div style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items()})}">{str}']
+        else:
+            LINE_BUFFER = [f'{increment * depth}{str}']
+        
 
 
 def _parse_variable_list(var_list):
@@ -27,44 +79,44 @@ def _parse_variable_list(var_list):
 QUANTIFIER_KEYS = ('args', 'pred', 'then')
 
 
-def _handle_quantifier(caller, rule, ast, depth, increment):
+def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
     formatted_vars = _parse_variable_list(ast[f'{rule}_vars'][1])
-    _indent_print(f'({rule} ({" ".join(formatted_vars)})', depth, increment)
+    _indent_print(f'({rule} ({" ".join(formatted_vars)})', depth, increment, context)
 
     found_args = False
     for key in QUANTIFIER_KEYS:
         key_str = f'{rule}_{key}'
         if key_str in ast:
             found_args = True
-            caller(ast[key_str], depth + 1)
+            caller(ast[key_str], depth + 1, increment, context)
     
     if not found_args:
         raise ValueError(f'Found exists or forall with unknown arugments: {ast}')
 
-    _indent_print(')', depth, increment)
+    _indent_print(')', depth, increment, context)
 
 
-def _handle_logical(caller, rule, ast, depth, increment):
-    _indent_print(f'({rule}', depth, increment)
-    caller(ast[f'{rule}_args'], depth + 1)
-    _indent_print(f')', depth, increment)
+def _handle_logical(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({rule}', depth, increment, context)
+    caller(ast[f'{rule}_args'], depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
 
 
-def _handle_game(caller, rule, ast, depth, increment):
-    _indent_print(f'({rule.replace("_", "-")}', depth, increment)
-    caller(ast[f'{rule.replace("game_", "")}_pred'], depth + 1)
-    _indent_print(f')', depth, increment)
+def _handle_game(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({rule.replace("_", "-")}', depth, increment, context)
+    caller(ast[f'{rule.replace("game_", "")}_pred'], depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
 
 
-def _handle_function_eval(caller, rule, ast, depth, increment):
-    _indent_print(f'({ast.func_name} {ast.func_args and " ".join(ast.func_args) or ""})', depth, increment)
+def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({ast.func_name} {ast.func_args and " ".join(ast.func_args) or ""})', depth, increment, context)
 
 
 def _inline_format_function_eval(ast):
     return f'({ast.func_name} {" ".join(ast.func_args)})'
 
 
-def _handle_function_comparison(caller, rule, ast, depth, increment):
+def _handle_function_comparison(caller, rule, ast, depth, increment, context=None):
     comp_op = '='
     if 'comp_op' in ast:
         comp_op = ast.comp_op
@@ -81,10 +133,10 @@ def _handle_function_comparison(caller, rule, ast, depth, increment):
     else:
         args = [_inline_format_function_eval(func) for func in ast.equal_comp_funcs]
 
-    _indent_print(f'({comp_op} {" ".join(args)})', depth, increment)
+    _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
 
 
-def _handle_predicate(caller, rule, ast, depth, increment, return_str=False):
+def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False):
     name = ast.pred_name
     args = []
     if ast.pred_args:
@@ -95,13 +147,13 @@ def _handle_predicate(caller, rule, ast, depth, increment, return_str=False):
                 if isinstance(arg, str):
                     args.append(arg)
                 else:
-                    args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, return_str=True))
+                    args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, context, return_str=True))
 
     out = f'({name} {" ".join(args)})'
     if return_str:
         return out
 
-    _indent_print(out, depth, increment)
+    _indent_print(out, depth, increment, context)
 
 
 class ASTPrinter:
@@ -123,34 +175,34 @@ class ASTPrinter:
     def register_keyword_match(self, keywords, handler):
         self.keyword_matches.append((keywords, handler))
 
-    def _parse_base_cases(self, ast, depth, increment):
+    def _parse_base_cases(self, ast, depth, increment, context=None):
         if not ast:
             return True
 
         if isinstance(ast, tuple):
-            _indent_print(ast[0], depth, increment)
-            self(ast[1], depth + 1, increment)
+            _indent_print(ast[0], depth, increment, context)
+            self(ast[1], depth + 1, increment, context)
             if len(ast) > 2:
                 if len(ast) > 3:
                     raise ValueError(f'Unexpectedly long tuple: {ast}')
                 
-                _indent_print(ast[2], depth, increment)
+                _indent_print(ast[2], depth, increment, context)
 
             return True
 
         if isinstance(ast, list):
             for item in ast:
-                self(item, depth, increment)
+                self(item, depth, increment, context)
             return True
 
         if isinstance(ast, str):
-            _indent_print(ast, depth, increment)
+            _indent_print(ast, depth, increment, context)
             return True
 
         return False
 
-    def __call__(self, ast, depth=0, increment=DEFAULT_INCREMENT):
-        if self._parse_base_cases(ast, depth, increment):
+    def __call__(self, ast, depth=0, increment=DEFAULT_INCREMENT, context=None):
+        if self._parse_base_cases(ast, depth, increment, context):
             return
 
         rule = ast.parseinfo.rule
@@ -161,13 +213,13 @@ class ASTPrinter:
 
         if rule in self.exact_matches:
             found_match  = True
-            self.exact_matches[rule](self, rule, ast, depth, increment)
+            self.exact_matches[rule](self, rule, ast, depth, increment, context)
 
         else:
             for keywords, handler in self.keyword_matches:
                 if any([keyword in rule for keyword in keywords]):
                     found_match = True
-                    handler(self, rule, ast, depth, increment)
+                    handler(self, rule, ast, depth, increment, context)
                     break
 
         if not found_match:
@@ -184,70 +236,109 @@ def build_setup_printer():
     return printer
 
 
-def _handle_preference(caller, rule, ast, depth, increment):
-    _indent_print(f'(preference {ast.pref_name}', depth, increment)
-    caller(ast.pref_body, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_preference(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(preference {ast.pref_name}', depth, increment, context)
+    caller(ast.pref_body, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
 
 
-def _handle_then(caller, rule, ast, depth, increment):
-    _indent_print(f'(then', depth, increment)
-    caller(ast.then_funcs, depth + 1, increment)
-    _indent_print(f')', depth, increment)
+def _handle_then(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(then', depth, increment, context)
+    caller(ast.then_funcs, depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
 
 
-def _handle_at_end(caller, rule, ast, depth, increment):
-    _indent_print(f'(at-end', depth, increment)
-    caller(ast.at_end_pred, depth + 1, increment)
-    _indent_print(f')', depth, increment)
+def _handle_at_end(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(at-end', depth, increment, context)
+    caller(ast.at_end_pred, depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
 
 
-def _handle_any(caller, rule, ast, depth, increment):
-    _indent_print('(any)', depth, increment)
+def _handle_any(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(any)', depth, increment, context)
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_once(caller, rule, ast, depth, increment):
-    _indent_print('(once', depth, increment)
-    caller(ast.once_pred, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_once(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(once', depth, increment, context)
+    context['continue_line'] = True
+    caller(ast.once_pred, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_once_measure(caller, rule, ast, depth, increment):
-    _indent_print('(once-measure', depth, increment)
-    caller(ast.once_measure_pred, depth + 1, increment)
-    _indent_print(_inline_format_function_eval(ast.measurement), depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(once-measure', depth, increment, context)
+    context['continue_line'] = True
+    caller(ast.once_measure_pred, depth + 1, increment, context)
+    _indent_print(_inline_format_function_eval(ast.measurement), depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_hold(caller, rule, ast, depth, increment):
-    _indent_print('(hold', depth, increment)
-    caller(ast.hold_pred, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_hold(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(hold', depth, increment, context)
+    context['continue_line'] = True
+    caller(ast.hold_pred, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_while_hold(caller, rule, ast, depth, increment):
-    _indent_print('(hold-while', depth, increment)
-    caller([ast.hold_pred, ast.while_preds], depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_while_hold(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(hold-while', depth, increment, context)
+    context['continue_line'] = True
+    caller([ast.hold_pred, ast.while_preds], depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_hold_for(caller, rule, ast, depth, increment):
-    _indent_print(f'(hold-for {ast.num_to_hold}', depth, increment)
-    caller(ast.hold_pred, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print(f'(hold-for {ast.num_to_hold}', depth, increment, context)
+    context['continue_line'] = True
+    caller(ast.hold_pred, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
 
 
-def _handle_hold_to_end(caller, rule, ast, depth, increment):
-    _indent_print('(hold-to-end', depth, increment)
-    caller(ast.hold_pred, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    _indent_print('(hold-to-end', depth, increment, context)
+    context['continue_line'] = True
+    caller(ast.hold_pred, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+    if 'mutation' in context: del context['mutation']
 
 
-def _handle_forall_seq(caller, rule, ast, depth, increment):
+def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
     formatted_vars = _parse_variable_list(ast.forall_seq_vars[1])
-    _indent_print(f'(forall-sequence ({" ".join(formatted_vars)})', depth, increment)
-    caller(ast.forall_seq_then, depth + 1, increment)
-    _indent_print(')', depth, increment)
+    _indent_print(f'(forall-sequence ({" ".join(formatted_vars)})', depth, increment, context)
+    caller(ast.forall_seq_then, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
 
 
 def build_constraints_printer():
@@ -263,38 +354,54 @@ def build_constraints_printer():
     return printer
 
 
-def _handle_binary_comp(caller, rule, ast, depth, increment):
-    _indent_print(f'({ast.op}', depth, increment)
-    caller([ast.expr_1, ast.expr_2], depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({ast.op}', depth, increment, context)
+    if context is None:
+        context = {}
+    context['continue_line'] = True
+    caller([ast.expr_1, ast.expr_2], depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
 
 
-def _handle_multi_expr(caller, rule, ast, depth, increment):
-    _indent_print(f'({ast.op}', depth, increment)
-    caller(ast.expr, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_multi_expr(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({ast.op}', depth, increment, context)
+    if context is None:
+        context = {}
+    context['continue_line'] = True
+    caller(ast.expr, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
 
 
-def _handle_binary_expr(caller, rule, ast, depth, increment):
-    _indent_print(f'({ast.op}', depth, increment)
-    caller([ast.expr_1, ast.expr_2], depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_binary_expr(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({ast.op}', depth, increment, context)
+    caller([ast.expr_1, ast.expr_2], depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
 
 
-def _handle_neg_expr(caller, rule, ast, depth, increment):
-    _indent_print('(-', depth, increment)
-    caller(ast.expr, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_neg_expr(caller, rule, ast, depth, increment, context=None):
+    _indent_print('(-', depth, increment, context)
+    if context is None:
+        context = {}
+    context['continue_line'] = True
+    caller(ast.expr, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
 
 
-def _handle_equals_comp(caller, rule, ast, depth, increment):
-    _indent_print('(=', depth, increment)
-    caller(ast.expr, depth + 1, increment)
-    _indent_print(')', depth, increment)
+def _handle_equals_comp(caller, rule, ast, depth, increment, context=None):
+    _indent_print('(=', depth, increment, context)
+    if context is None:
+        context = {}
+    context['continue_line'] = True
+    caller(ast.expr, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
 
 
-def _handle_preference_eval(caller, rule, ast, depth, increment):
-    _indent_print(f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})', depth, increment)
+def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})', depth, increment, context)
 
 
 def build_terminal_printer():
@@ -329,20 +436,22 @@ PARSE_DICT = {
 }
 
 
-def pretty_print_ast(ast, increment=DEFAULT_INCREMENT):
-    _indent_print(f'{ast[0]} (game {ast[1]["game_name"]}) (:domain {ast[2]["domain_name"]})', 0, increment)
+def pretty_print_ast(ast, increment=DEFAULT_INCREMENT, context=None):
+    _indent_print(f'{ast[0]} (game {ast[1]["game_name"]}) (:domain {ast[2]["domain_name"]})', 0, increment, context)
     ast = ast[3:]
 
     while ast:
         key = ast[0][0]
 
         if key == ')':
-            _indent_print(f')', 0, increment)
+            _indent_print(f')', 0, increment, context)
             ast = None
 
         elif key in PARSE_DICT:
-            PARSE_DICT[key](ast[0], 0, increment)
+            PARSE_DICT[key](ast[0], 0, increment, context)
             ast = ast[1:]
 
         else:
             print(f'Encountered unknown key: {key}\n')
+
+    _indent_print('', 0, increment, context)

@@ -33,19 +33,19 @@
 
 (define (game medium-objects-3) (:domain medium-objects-room-v1)
 (:setup (and
-    (exists (?s - shelf ?h - hexagonal_bin) 
+    (exists (?s - shelf ?h - hexagonal_bin ?d - desk) 
         (and
             (game-conserved (on ?s ?h))
-            (forall (?s2 - shelf) (game-conserved (>= (distance ?s desk) (distance ?s2 desk))))
+            (forall (?s2 - shelf) (game-conserved (>= (distance ?s d) (distance ?s2 ?d))))
         )
     )
 ))
 (:constraints (and 
     (preference throwBallFromChairToBin
-        (exists (?b - basketball ?c - chair ?h - hexagonal_bin) 
+        (exists (?b - basketball ?c - chair ?h - hexagonal_bin ?d - desk) 
             (then
                 ; ball starts in hand, with the agent on the chair, near the desk
-                (once (and (agent_holds ?b) (on ?c agent) (adjacent ?c desk) (agent_perspective looking_upside_down)))
+                (once (and (agent_holds ?b) (on ?c agent) (adjacent ?c ?d) (agent_perspective looking_upside_down)))
                 ; ball not in hand until...
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 ; the ball is in the bin
@@ -60,15 +60,15 @@
 
 (define (game medium-objects-4) (:domain medium-objects-room-v1)
 (:setup (and
-    (forall (?b - block) (game-optional (on floor ?b)))
+    (exists (?f - floor) (forall (?b - block) (game-optional (on ?f ?b))))
 ))
 (:constraints (and
     ; Here we have the preference before the quantifier, to count it at most once
-    (preference blockOnFloor (exists (?b - block) 
+    (preference blockOnFloor (exists (?b - block ?f - floor) 
         (then 
             (hold
                 (and
-                    (on floor ?b)
+                    (on ?f ?b)
                     (in_building ?b)
                 )
             )
@@ -130,7 +130,7 @@
  
 (define (game medium-objects-7) (:domain medium-objects-room-v1)
 (:setup (and
-    (exists (?h - hexagonal_bin) (exists (?d - doggie_bed) (exists (?p - pillow)
+    (exists (?h - hexagonal_bin ?d - doggie_bed ?p - pillow)
         (game-conserved (and
                 (<= (distance ?h ?d) 1)
                 (<= (distance ?h ?p) 1)
@@ -139,7 +139,7 @@
                 (< (distance agent ?h) (distance agent ?p))
                 (< (distance agent ?d) (distance agent ?p))
         ))
-    )))
+    )
 ))
 (:constraints (and
     (preference beachballToHexagonalBin
@@ -293,7 +293,7 @@
 )
 (:constraints (and 
     (preference thrownObjectKnocksDesktop
-        (exists (?o - (either pillow beachball dodgeball) ?d - desktop)
+        (exists (?o - (either pillow beachball dodgeball) ?d - desktop ?e - desk)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -304,12 +304,12 @@
                     (touch ?o ?d)
                 )
                 ; eventually knocking it off the desk
-                (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
+                (once (and (not (on ?e ?d)) (not (in_motion ?d)))) 
             )
         ) 
     )
     (preference thrownObjectKnocksDeskLamp
-        (exists (?o - (either pillow beachball dodgeball) ?d - desk_lamp)
+        (exists (?o - (either pillow beachball dodgeball) ?d - desk_lamp ?e - desk)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -320,12 +320,12 @@
                     (touch ?o ?d)
                 )
                 ; eventually knocking it off the desk
-                (once (and (not (on desk ?d)) (not (in_motion ?d)))) 
+                (once (and (not (on ?e ?d)) (not (in_motion ?d)))) 
             )
         ) 
     )
     (preference thrownObjectKnocksCD
-        (exists (?o - (either pillow beachball dodgeball) ?c - cd)
+        (exists (?o - (either pillow beachball dodgeball) ?c - cd ?e - desk)
             (then
                 ; starts with agent holding the desktop
                 (once (agent_holds ?o))
@@ -336,7 +336,7 @@
                     (touch ?o ?c)
                 )
                 ; eventually knocking it off the desk
-                (once (and (not (on desk ?c)) (not (in_motion ?c)))) 
+                (once (and (not (on ?e ?c)) (not (in_motion ?c)))) 
             )
         ) 
     )
@@ -554,9 +554,9 @@
 )
 (:constraints (and 
     (preference throwToWallToBin
-        (exists (?d - dodgeball ?w - wall ?h - hexagonal_bin) 
+        (exists (?d - dodgeball ?w - wall ?h - hexagonal_bin ?b - bed) 
             (then 
-                (once (and (agent_holds ?d) (on bed agent)))
+                (once (and (agent_holds ?d) (on ?b agent)))
                 (hold-while 
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?w ?d)
@@ -566,9 +566,9 @@
         )
     )
     (preference throwMisses
-        (exists (?d - dodgeball) 
+        (exists (?d - dodgeball ?b - bed) 
             (then 
-                (once (and (agent_holds ?d) (on bed agent)))
+                (once (and (agent_holds ?d) (on ?b agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and 
                     (not (in_motion ?d))
@@ -653,13 +653,13 @@
 
 (define (game medium-objects-21) (:domain medium-objects-room-v1)
 (:setup 
-    (exists (?b1 ?b2 - cube_block ?c1 ?c2 - short_cylindrical_block ?h - hexagonal_bin)
+    (exists (?b1 ?b2 - cube_block ?c1 ?c2 - short_cylindrical_block ?h - hexagonal_bin ?w - south_wall)
         (game-conserved (and
             (= 2 (distance ?b1 ?b2))
             (= 2 (distance ?c1 ?c2))
             (= 2 (distance ?b1 ?c1))
             (= 2 (distance ?b2 ?c2))
-            (= 0.5 (distance ?h south_wall))  ; assuming it's the south one, as it looks like a sunny morning with sun from east
+            (= 0.5 (distance ?h ?w))  ; assuming it's the south one, as it looks like a sunny morning with sun from east
         ))
     )
 )
@@ -693,9 +693,9 @@
 
 (define (game medium-objects-23) (:domain medium-objects-room-v1)
 (:setup (and
-    (forall (?b - bridge_block) 
-        (game-conserved (and (on floor ?b) (object_orientation ?b upright)))
-    )
+    (exists (?f - floor) (forall (?b - bridge_block) 
+        (game-conserved (and (on ?f ?b) (object_orientation ?b upright)))
+    ))
     (exists (?r - large_triangular_ramp ?b - bridge_block) 
         (game-conserved (= 0.67 (distance ?r ?b)) )
     )

@@ -1,7 +1,6 @@
 import argparse
-from collections import namedtuple, defaultdict
+from collections import defaultdict
 import tatsu
-import copy
 import random
 
 from parse_dsl import load_tests_from_file
@@ -130,7 +129,7 @@ def replace_variables(ast, pref_valid_vars, local_valid_vars=None):
         return
     
     elif isinstance(ast, (tuple, list)):
-        [replace_variables(element, pref_valid_vars) for element in ast]
+        [replace_variables(element, pref_valid_vars, local_valid_vars) for element in ast]
 
     elif isinstance(ast, tatsu.ast.AST):
         args_key = None
@@ -161,32 +160,40 @@ def replace_variables(ast, pref_valid_vars, local_valid_vars=None):
                             ast[args_key][i] = random.choice(pref_valid_vars_copy)
                             pref_valid_vars_copy.remove(ast[args_key][i])
                     else:
-                        replace_variables(arg, pref_valid_vars)
+                        replace_variables(arg, pref_valid_vars, local_valid_vars)
             else:
-                replace_variables(ast[args_key], pref_valid_vars)
+                replace_variables(ast[args_key], pref_valid_vars, local_valid_vars)
         else:
-            if 'exists_vars' in ast:
-                lv = extract_valid_vars(ast.exists_vars)
-                local_valid_vars.extend(lv)
-                replace_variables(ast.exists_pred, pref_valid_vars)
-                [local_valid_vars.remove(v) for v in lv]
+            vars_key = None
 
+            if 'exists_vars' in ast:
+                vars_key = 'exists_vars'
+            
             elif 'forall_vars' in ast:
-                lv = extract_valid_vars(ast.forall_vars)
-                local_valid_vars.extend(lv)
-                replace_variables(ast.forall_pred, pref_valid_vars)
-                [local_valid_vars.remove(v) for v in lv]
+                vars_key = 'forall_vars'
 
             elif 'forall_seq_vars' in ast:
-                lv = extract_valid_vars(ast.forall_seq_vars)
+                vars_key = 'forall_seq_vars'
+
+            if vars_key is not None:
+                lv = extract_valid_vars(ast[vars_key])
                 local_valid_vars.extend(lv)
-                replace_variables(ast.forall_seq_then, pref_valid_vars)
+
+                inner_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
+                inner_keys.remove(vars_key)
+                
+                if len(inner_keys) > 1:
+                    raise ValueError(f'Found too many inner keys: {inner_keys}', ast, ast.keys())
+
+                inner_key = inner_keys[0]
+
+                replace_variables(ast[inner_key], pref_valid_vars, local_valid_vars)
                 [local_valid_vars.remove(v) for v in lv]
             
             else:
                 for key in ast:
                     if key != 'parseinfo':
-                        replace_variables(ast[key], pref_valid_vars)
+                        replace_variables(ast[key], pref_valid_vars, local_valid_vars)
     else:
         raise ValueError(f'In `replace_variables`, found variable of unknown type ({type(ast)}): {ast}')
 

@@ -30,11 +30,10 @@ def preprocess_context(context):
             context['html_style']['text-decoration'] = 'line-through'
 
         elif context['mutation'] == 'new':
-            context['html_style']['color'] = 'aqua'
+            context['html_style']['color'] = '#FF6A00'
 
     return context
             
-
 
 def _indent_print(str, depth, increment, context=None):
     global BUFFER, LINE_BUFFER

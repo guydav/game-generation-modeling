@@ -65,13 +65,13 @@ def _indent_print(str, depth, increment, context=None):
 
 def _parse_variable_list(var_list):
     formatted_vars = []
-    for vars in var_list:
-        if isinstance(vars[2], str):
-            formatted_vars.append(f'{" ".join(vars[0])} - {vars[2]}')
-        elif vars[2].parseinfo.rule == 'either_types':
-            formatted_vars.append(f'{" ".join(vars[0])} - (either {" ".join(vars[2].type_names)})')
+    for var_def in var_list:
+        if isinstance(var_def.var_type, str):
+            formatted_vars.append(f'{" ".join(var_def.var_names)} - {var_def.var_type}')
+        elif var_def.var_type.parseinfo.rule == 'either_types':
+            formatted_vars.append(f'{" ".join(var_def.var_names)} - (either {" ".join(var_def.var_type.type_names)})')
         else:
-            raise ValueError(f'Unrecognized quantifier variables: {vars[2]}')
+            raise ValueError(f'Unrecognized quantifier variables: {var_def[2]}')
     return formatted_vars
 
 
@@ -79,7 +79,7 @@ QUANTIFIER_KEYS = ('args', 'pred', 'then')
 
 
 def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
-    formatted_vars = _parse_variable_list(ast[f'{rule}_vars'][1])
+    formatted_vars = _parse_variable_list(ast[f'{rule}_vars'].variables)
     _indent_print(f'({rule} ({" ".join(formatted_vars)})', depth, increment, context)
 
     found_args = False
@@ -108,7 +108,7 @@ def _handle_game(caller, rule, ast, depth, increment, context=None):
 
 
 def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
-    _indent_print(f'({ast.func_name} {ast.func_args and " ".join(ast.func_args) or ""})', depth, increment, context)
+    _indent_print(f'({ast.func_name} {" ".join(ast.func_args)})', depth, increment, context)
 
 
 def _inline_format_function_eval(ast):
@@ -138,15 +138,11 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
 def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False):
     name = ast.pred_name
     args = []
-    if ast.pred_args:
-        if isinstance(ast.pred_args, str):
-            args.append(ast.pred_args)
+    for arg in ast.pred_args:
+        if isinstance(arg, str):
+            args.append(arg)
         else:
-            for arg in ast.pred_args:
-                if isinstance(arg, str):
-                    args.append(arg)
-                else:
-                    args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, context, return_str=True))
+            args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, context, return_str=True))
 
     out = f'({name} {" ".join(args)})'
     if return_str:
@@ -334,7 +330,7 @@ def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
 
 
 def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
-    formatted_vars = _parse_variable_list(ast.forall_seq_vars[1])
+    formatted_vars = _parse_variable_list(ast.forall_seq_vars.variables)
     _indent_print(f'(forall-sequence ({" ".join(formatted_vars)})', depth, increment, context)
     caller(ast.forall_seq_then, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)

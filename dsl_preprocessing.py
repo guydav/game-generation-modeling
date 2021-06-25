@@ -78,18 +78,17 @@ def map_parents_recursive(ast, mapping=None, parent='root', selector=None):
 def extract_substitutions_from_vars(ast, vars_key, preprocess_substitutions):
     substitutions = {}
     var_defs_to_remove = []
-    for var_def in ast[vars_key][1]:
-        var_name, _, var_type  = var_def
+    for var_def in ast[vars_key].variables:
         # TODO: what do I do if something being substitued is part of an (either ...)?
-        if isinstance(var_type, str) and var_type in preprocess_substitutions:
+        if isinstance(var_def.var_type, str) and var_def.var_type in preprocess_substitutions:
             var_defs_to_remove.append(var_def)
-            for name in var_name:
-                substitutions[name] = preprocess_substitutions[var_type]
+            for name in var_def.var_names:
+                substitutions[name] = preprocess_substitutions[var_def.var_type]
 
-    [ast[vars_key][1].remove(var_def) for var_def in var_defs_to_remove]
+    [ast[vars_key].variables.remove(var_def) for var_def in var_defs_to_remove]
 
     # TODO: what do we do if after this no variable definitions remain in this quantifier?
-    return substitutions, len(ast[vars_key][1]) == 0
+    return substitutions, len(ast[vars_key].variables) == 0
 
 
 def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None, local_substitutions=None):
@@ -114,32 +113,21 @@ def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None,
             args_key = 'func_args'
 
         if args_key is not None:
-            if isinstance(ast[args_key], str) and ast[args_key] in local_substitutions:
-                update(ast, 'pred_args', local_substitutions[ast[args_key]])
-
-            elif isinstance(ast[args_key], list):
-                for i, arg in enumerate(ast[args_key]):
-                    if isinstance(arg, str):
-                        if arg in local_substitutions:
-                            ast[args_key][i] = local_substitutions[arg]
-                    else:
-                        preprocess_ast_recursive(arg, preprocess_substitutions, parent_mapping, local_substitutions)
-            else:
-                preprocess_ast_recursive(ast[args_key], preprocess_substitutions, parent_mapping, local_substitutions)
+            for i, arg in enumerate(ast[args_key]):
+                if isinstance(arg, str):
+                    if arg in local_substitutions:
+                        ast[args_key][i] = local_substitutions[arg]
+                else:
+                    preprocess_ast_recursive(arg, preprocess_substitutions, parent_mapping, local_substitutions)
+        # else:
+        #     raise ValueError(f'Encountered unexpected type for {ast.parseinfo}.{args_key}: {ast[args_key]}', ast)
         else:
-            vars_key = None
-            args_key = None
+            vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
+            if len(vars_keys) > 1:
+                raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
 
-            if 'exists_vars' in ast:
-                vars_key = 'exists_vars'
-            
-            elif 'forall_vars' in ast:
-                vars_key = 'forall_vars'
-
-            elif 'forall_seq_vars' in ast:
-                vars_key = 'forall_seq_vars'
-
-            if vars_key is not None:
+            elif len(vars_keys) > 0:
+                vars_key = vars_keys[0]
                 args_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
                 args_keys.remove(vars_key)
                 
@@ -148,7 +136,7 @@ def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None,
 
                 args_key = args_keys[0]
 
-                local_subs, remove_quantifier = extract_substitutions_from_vars(ast,vars_key, preprocess_substitutions)
+                local_subs, remove_quantifier = extract_substitutions_from_vars(ast, vars_key, preprocess_substitutions)
                 local_substitutions.update(local_subs)
 
                 preprocess_ast_recursive(ast[args_key], preprocess_substitutions, parent_mapping, local_substitutions)

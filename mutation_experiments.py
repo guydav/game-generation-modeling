@@ -18,8 +18,8 @@ DEFAULT_TEST_FILES = (
 parser.add_argument('-t', '--test-files', action='append', default=[])
 DEFAULT_NUM_GAMES = 100
 parser.add_argument('-n', '--num-games', default=DEFAULT_NUM_GAMES)
-DEFAULT_OUTPUT_PATH ='./dsl_statistics.csv'
-parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
+# DEFAULT_OUTPUT_PATH ='./dsl_statistics.csv'
+# parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
 def copy_ast(grammar_parser, ast):
@@ -64,8 +64,8 @@ def extract_then_funcs(pref):
 
 def extract_valid_vars(pref_vars):
     valid_vars = []
-    for var_def in pref_vars[1]:
-        valid_vars.extend(var_def[0])
+    for var_def in pref_vars.variables:
+        valid_vars.extend(var_def.var_names)
 
     return valid_vars
 
@@ -140,42 +140,31 @@ def replace_variables(ast, pref_valid_vars, local_valid_vars=None):
             args_key = 'func_args'
 
         if args_key is not None:
-            if isinstance(ast[args_key], str) and ast[args_key].startswith('?') and ast[args_key] not in pref_valid_vars and ast[args_key] not in local_valid_vars:
-                update(ast, 'pred_args', random.choice(pref_valid_vars))
+            pref_valid_vars_copy = pref_valid_vars[:]
+            # if a variable already exists in this context, don't use it to replace
+            for arg in ast[args_key]:
+                if arg in pref_valid_vars_copy:
+                    pref_valid_vars_copy.remove(arg)
 
-            elif isinstance(ast[args_key], list):
-                pref_valid_vars_copy = pref_valid_vars[:]
-                # if a variable already exists in this context, don't use it to replace
-                for arg in ast[args_key]:
-                    if arg in pref_valid_vars_copy:
-                        pref_valid_vars_copy.remove(arg)
+            for i, arg in enumerate(ast[args_key]):
+                if isinstance(arg, str):
+                    # check it's a variable and that it's valid in the preference or local context
+                    if arg.startswith('?') and arg not in pref_valid_vars and arg not in local_valid_vars:
+                        if not pref_valid_vars_copy:
+                            raise ValueError(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
 
-                for i, arg in enumerate(ast[args_key]):
-                    if isinstance(arg, str):
-                        # check it's a variable and that it's valid in the preference or local context
-                        if arg.startswith('?') and arg not in pref_valid_vars and arg not in local_valid_vars:
-                            if not pref_valid_vars_copy:
-                                raise ValueError(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
-
-                            ast[args_key][i] = random.choice(pref_valid_vars_copy)
-                            pref_valid_vars_copy.remove(ast[args_key][i])
-                    else:
-                        replace_variables(arg, pref_valid_vars, local_valid_vars)
-            else:
-                replace_variables(ast[args_key], pref_valid_vars, local_valid_vars)
-        else:
-            vars_key = None
-
-            if 'exists_vars' in ast:
-                vars_key = 'exists_vars'
+                        ast[args_key][i] = random.choice(pref_valid_vars_copy)
+                        pref_valid_vars_copy.remove(ast[args_key][i])
+                else:
+                    replace_variables(arg, pref_valid_vars, local_valid_vars)
             
-            elif 'forall_vars' in ast:
-                vars_key = 'forall_vars'
+        else:
+            vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
+            if len(vars_keys) > 1:
+                raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
 
-            elif 'forall_seq_vars' in ast:
-                vars_key = 'forall_seq_vars'
-
-            if vars_key is not None:
+            elif len(vars_keys) > 0:
+                vars_key = vars_keys[0]
                 lv = extract_valid_vars(ast[vars_key])
                 local_valid_vars.extend(lv)
 

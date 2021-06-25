@@ -18,8 +18,8 @@ name = /[A-z]+(_[A-z0-9]+)*/;
 number = /\d*\.?\d+/;
 
 variable = /\?[a-z][a-z0-9]*/;
-variable_list = '(' {variable_type_def}+ ')';
-variable_type_def = {variable}+ '-' type_defition;
+variable_list = '(' variables:{variable_type_def}+ ')';
+variable_type_def = var_names:{variable}+ '-' var_type:type_defition;
 type_defition = name | either_types;
 either_types = '(either' {type_names:name}+ ')'; # TODO: do we want to enforce more than one?
     
@@ -36,12 +36,13 @@ function_comparison =
 # fc3 = '(' binary_comp number function_eval ')';
 # fc4 = '(' '=' {function_eval}+ ')' ;
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
-function_eval = '(' func_name:name {func_args:function_term}* ')';
+function_eval = '(' func_name:name func_args:{function_term}* ')';
 function_term = name | variable | number;
 
-predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
+predicate = '(' pred_name:predicate_name pred_args:{predicate_term}* ')';
 predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
-predicate_term = name | variable | predicate:predicate;
+# predicate_term = name | variable | predicate:predicate;
+predicate_term = name | variable | predicate;
 # predicate_function = predicate;
 
 # Game Setup

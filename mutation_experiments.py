@@ -1,37 +1,19 @@
 import argparse
-from collections import defaultdict
 import tatsu
 import random
 
-from parse_dsl import load_tests_from_file
+from ast_utils import load_asts, copy_ast, update_ast
 import ast_printer
 
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
-DEFAULT_TEST_FILES = (
-    './problems-few-objects.pddl',
-    './problems-medium-objects.pddl',
-    './problems-many-objects.pddl'
-)
 parser.add_argument('-t', '--test-files', action='append', default=[])
-DEFAULT_NUM_GAMES = 100
+DEFAULT_NUM_GAMES = 10
 parser.add_argument('-n', '--num-games', default=DEFAULT_NUM_GAMES)
 # DEFAULT_OUTPUT_PATH ='./dsl_statistics.csv'
 # parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
-
-
-def copy_ast(grammar_parser, ast):
-    ast_printer.reset_buffers(True)
-    ast_printer.pretty_print_ast(ast)
-    ast_str = ''.join(ast_printer.BUFFER)
-    return grammar_parser.parse(ast_str)
-
-
-def update(ast, key, value):
-    if isinstance(ast, tatsu.ast.AST):
-        super(tatsu.ast.AST, ast).__setitem__(key, value)
 
 
 def extract_pref_args(pref):
@@ -108,12 +90,12 @@ def mutate_seq_func_predicate(grammar_parser, asts, notebook=False, seed=None):
     # print(mut_seq_func)
     # print()
     if notebook:
-        update(mut_seq_func, 'mutation', 'new')
+        update_ast(mut_seq_func, 'mutation', 'new')
         if isinstance(then_funcs, tatsu.ast.AST):
-            update(pref_body_args, 'then_funcs', mut_seq_func)
+            update_ast(pref_body_args, 'then_funcs', mut_seq_func)
 
         else:
-            update(then_funcs[seq_func_index_to_modify], 'mutation', 'old')
+            update_ast(then_funcs[seq_func_index_to_modify], 'mutation', 'old')
             then_funcs.insert(seq_func_index_to_modify + 1, mut_seq_func)
     else:
         then_funcs[seq_func_index_to_modify] = mut_seq_func
@@ -198,15 +180,6 @@ def mutate_single_game(grammar_parser, asts, notebook=False, start_seed=None):
     return (*result, seed)
 
 
-def load_asts(args, grammar_parser):
-    if not args.test_files:
-        args.test_files.extend(DEFAULT_TEST_FILES)
-
-    return [grammar_parser.parse(game) 
-        for test_file in args.test_files 
-        for game in load_tests_from_file(test_file)]
-
-
 def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar) 
@@ -223,7 +196,4 @@ def main(args):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    if not args.test_files:
-        args.test_files.extend(DEFAULT_TEST_FILES)
-    
     main(args)

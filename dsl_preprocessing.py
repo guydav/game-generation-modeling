@@ -1,9 +1,9 @@
 import argparse
-from collections import defaultdict
 import tatsu
-from mutation_experiments import copy_ast, update, load_asts
 
 import ast_printer
+from ast_parser import ASTParser, ASTParentMapper
+from ast_utils import copy_ast, load_asts, replace_child
 
 
 parser = argparse.ArgumentParser()
@@ -25,86 +25,19 @@ PREPROCESS_SUBSTITUTIONS = {
     'chair': 'chair_obj',
 }
 
+class ASTPreprocessor(ASTParser):
+    def __init__(self, preprocess_substitutions=PREPROCESS_SUBSTITUTIONS):
+        self.preprocess_substitutions = preprocess_substitutions
 
-def apply_selector_list(parent, selector, max_index=None):
-    if max_index is None:
-        max_index = len(selector)
-    for s in selector[:max_index]:
-        parent = parent[s]
-    return parent
+    def __call__(self, ast, **kwargs):
+        self._default_kwarg(kwargs, 'parent_mapping', lambda: ASTParentMapper()(ast), should_call=True)
+        self._default_kwarg(kwargs, 'local_substitutions', {})
+        super().__call__(ast, **kwargs)
+        return ast
 
+    def _handle_ast(self, ast, **kwargs):
+        parent_mapping, local_substitutions = kwargs['parent_mapping'], kwargs['local_substitutions']
 
-def replace_child(parent, selector, new_value):
-    last_parent = apply_selector_list(parent, selector, -1)
-    last_selector = selector[-1]
-
-    if isinstance(last_selector, str):
-        update(last_parent, last_selector, new_value)
-    
-    elif isinstance(last_selector, int):
-        last_parent[last_selector] = new_value
-
-    else:
-        raise ValueError(f'replace_child received last selector of unknown type: {last_selector} ({type(last_selector)})', parent, selector)
-
-
-def map_parents_recursive(ast, mapping=None, parent='root', selector=None):
-    if mapping is None:
-        mapping = {}
-
-    if selector is None:
-        selector = []
-    
-    if not ast:
-        return
-
-    if isinstance(ast, (str, int, tatsu.buffering.Buffer)):
-        return
-    
-    elif isinstance(ast, (tuple, list)): 
-        [map_parents_recursive(element, mapping, parent, selector + [i]) 
-         for i, element in enumerate(ast)]
-
-    elif isinstance(ast, tatsu.ast.AST):
-        mapping[ast.parseinfo] = (parent, selector)
-
-        for key in ast:
-            if key != 'parseinfo':
-                map_parents_recursive(ast[key], mapping, ast, [key])
-
-    return mapping
-
-
-def extract_substitutions_from_vars(ast, vars_key, preprocess_substitutions):
-    substitutions = {}
-    var_defs_to_remove = []
-    for var_def in ast[vars_key].variables:
-        # TODO: what do I do if something being substitued is part of an (either ...)?
-        if isinstance(var_def.var_type, str) and var_def.var_type in preprocess_substitutions:
-            var_defs_to_remove.append(var_def)
-            for name in var_def.var_names:
-                substitutions[name] = preprocess_substitutions[var_def.var_type]
-
-    [ast[vars_key].variables.remove(var_def) for var_def in var_defs_to_remove]
-
-    # TODO: what do we do if after this no variable definitions remain in this quantifier?
-    return substitutions, len(ast[vars_key].variables) == 0
-
-
-def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None, local_substitutions=None):
-    if parent_mapping is None:
-        parent_mapping = map_parents_recursive(ast)
-    
-    if local_substitutions is None:
-        local_substitutions = {}
-    
-    if not ast or isinstance(ast, (str, int, tatsu.buffering.Buffer)):
-        return
-    
-    elif isinstance(ast, (tuple, list)):
-        [preprocess_ast_recursive(element, preprocess_substitutions, parent_mapping, local_substitutions) for element in ast]
-
-    elif isinstance(ast, tatsu.ast.AST):
         args_key = None
 
         if 'pred_args' in ast:
@@ -118,9 +51,8 @@ def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None,
                     if arg in local_substitutions:
                         ast[args_key][i] = local_substitutions[arg]
                 else:
-                    preprocess_ast_recursive(arg, preprocess_substitutions, parent_mapping, local_substitutions)
-        # else:
-        #     raise ValueError(f'Encountered unexpected type for {ast.parseinfo}.{args_key}: {ast[args_key]}', ast)
+                    self(arg, **kwargs)
+                    
         else:
             vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
             if len(vars_keys) > 1:
@@ -136,13 +68,13 @@ def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None,
 
                 args_key = args_keys[0]
 
-                local_subs, remove_quantifier = extract_substitutions_from_vars(ast, vars_key, preprocess_substitutions)
+                local_subs, remove_quantifier = self._extract_substitutions_from_vars(ast, vars_key)
                 local_substitutions.update(local_subs)
 
-                preprocess_ast_recursive(ast[args_key], preprocess_substitutions, parent_mapping, local_substitutions)
+                self(ast[args_key], **kwargs)
 
                 if remove_quantifier:
-                    parent, selector = parent_mapping[ast.parseinfo]
+                    _, parent, selector = parent_mapping[ast.parseinfo]
                     replace_child(parent, selector, ast[args_key])
 
                 for key in local_subs:
@@ -152,12 +84,23 @@ def preprocess_ast_recursive(ast, preprocess_substitutions, parent_mapping=None,
             else:
                 for key in ast:
                     if key != 'parseinfo':
-                        preprocess_ast_recursive(ast[key], preprocess_substitutions, parent_mapping, local_substitutions)
+                        self(ast[key], **kwargs)
 
-def preprocess_ast(grammar_parser, ast, preprocess_substitutions=PREPROCESS_SUBSTITUTIONS):
-    processed_ast = copy_ast(grammar_parser, ast)
-    preprocess_ast_recursive(processed_ast, preprocess_substitutions)
-    return processed_ast
+    def _extract_substitutions_from_vars(self, ast, vars_key):
+        substitutions = {}
+        var_defs_to_remove = []
+        for var_def in ast[vars_key].variables:
+            # TODO: what do I do if something being substitued is part of an (either ...)?
+            # answer to the above question is nothing, since it wouldn't make sense to eliminate the variable
+            # the first if catches that -- if it's an either, var_def.var_type is not a string.
+            if isinstance(var_def.var_type, str) and var_def.var_type in self.preprocess_substitutions:
+                var_defs_to_remove.append(var_def)
+                for name in var_def.var_names:
+                    substitutions[name] = self.preprocess_substitutions[var_def.var_type]
+
+        [ast[vars_key].variables.remove(var_def) for var_def in var_defs_to_remove]
+
+        return substitutions, len(ast[vars_key].variables) == 0
 
 
 def main(args):
@@ -165,8 +108,13 @@ def main(args):
     grammar_parser = tatsu.compile(grammar) 
 
     asts = load_asts(args, grammar_parser)
+    preprocessor = ASTPreprocessor()
+
     for ast in asts:
-        processed_ast = preprocess_ast(grammar_parser, ast)
+        ast_copy = copy_ast(grammar_parser, ast)
+        # preprocess_ast_recursive(processed_ast, preprocess_substitutions)
+        # processed_ast = preprocess_ast(grammar_parser, ast)
+        processed_ast = preprocessor(ast_copy)
         ast_printer.reset_buffers(False)
         ast_printer.pretty_print_ast(processed_ast, context=dict())
         print('\r\n' + '=' * 100 + '\r\n')

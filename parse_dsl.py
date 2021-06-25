@@ -3,7 +3,7 @@ import tatsu
 import tqdm
 
 import ast_printer
-from ast_printer import pretty_print_ast
+from ast_utils import load_tests_from_file
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
@@ -13,38 +13,6 @@ parser.add_argument('-t', '--test-file', default='./problems-few-objects.pddl')
 parser.add_argument('-p', '--pretty-print', action='store_true')
 parser.add_argument('-v', '--validate', action='store_true')
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-
-
-DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
-def load_tests_from_file(path, start_token='(define', stop_tokens=None):
-    if stop_tokens is None or not stop_tokens:
-        stop_tokens = DEFAULT_STOP_TOKENS
-
-    lines = open(path).readlines()
-    # new_lines = []
-    # for l in lines:
-    #     if not l.strip()[0] == ';':
-    #         print(l)
-    #         new_lines.append(l[:l.find(';')])
-    new_lines = [l[:l.find(';')] for l in lines 
-        if len(l.strip()) > 0 and not l.strip()[0] == ';']
-    text = ''.join(new_lines)
-    results = []
-    start = text.find(start_token)
-    while start != -1:
-        end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
-        end_matches = [match != -1 and match or len(text) for match in end_matches]
-        end = min(end_matches)
-        next_start = text.find(start_token, start + 1)
-        if end <= next_start or end == len(text):  # we have a match
-            test_case = text[start:end]
-            if end < next_start:
-                test_case += ')'
-            results.append(test_case)
-        start = next_start
-
-    return results
-
 
 
     
@@ -61,15 +29,15 @@ def main(args):
         try:
             ast = grammar_parser.parse(test_case)
             if args.pretty_print:
-                pretty_print_ast(ast)
+                ast_printer.pretty_print_ast(ast)
             if args.validate:
                 ast_printer.BUFFER = []
-                pretty_print_ast(ast)
+                ast_printer.pretty_print_ast(ast)
                 first_print_out = ''.join(ast_printer.BUFFER)
 
                 second_ast = grammar_parser.parse(first_print_out)
                 ast_printer.BUFFER = []
-                pretty_print_ast(second_ast)
+                ast_printer.pretty_print_ast(second_ast)
                 second_print_out = ''.join(ast_printer.BUFFER)
 
                 if first_print_out != second_print_out:

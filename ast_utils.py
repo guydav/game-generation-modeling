@@ -82,3 +82,16 @@ def replace_child(parent, selector, new_value):
 
     else:
         raise ValueError(f'replace_child received last selector of unknown type: {last_selector} ({type(last_selector)})', parent, selector)
+
+
+def find_all_parents(parent_mapping, ast):
+    parents = []
+    parent = parent_mapping[ast.parseinfo][1]
+    while parent is not None and parent != 'root':
+        parents.append(parent)
+        if isinstance(parent, tuple):
+            parent = None
+        else:
+            parent = parent_mapping[parent.parseinfo][1]
+
+    return parents

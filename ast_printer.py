@@ -1,3 +1,6 @@
+from matplotlib.colors import rgb2hex
+import matplotlib.pyplot as plt
+
 from ast_parser import ASTParser
 
 
@@ -78,6 +81,15 @@ def reset_buffers(to_list=True):
         LINE_BUFFER = None
 
 
+MUTATION_STYLES = {
+    'old': {'text-decoration': 'line-through'},
+    'new': {'color':  '#FF6A00'},
+    'modified': {'color': '#00FF80'},
+    'root': {'color': '#AA00FF'}
+}
+DEFAULT_COLORMAP = plt.get_cmap('tab10')
+MUTATION_STYLES.update({i: {'color': rgb2hex(DEFAULT_COLORMAP(i))} for i in range(10)})
+
 def preprocess_context(context):
     if not context:
         context = {}
@@ -89,22 +101,22 @@ def preprocess_context(context):
     if 'text-decoration' in context['html_style']: del context['html_style']['text-decoration']
 
     if 'mutation' in context:
-        if context['mutation'] == 'old':
-            context['html_style']['text-decoration'] = 'line-through'
-
-        elif context['mutation'] == 'new':
-            context['html_style']['color'] = '#FF6A00'
+        mutation = context['mutation']
+        if mutation in MUTATION_STYLES:
+            context['html_style'].update(MUTATION_STYLES[mutation])
+        elif str(mutation) in MUTATION_STYLES:
+            context['html_style'].update(MUTATION_STYLES[str(mutation)])
 
     return context
             
 
-def _indent_print(str, depth, increment, context=None):
+def _indent_print(out, depth, increment, context=None):
     global BUFFER, LINE_BUFFER
 
     context = preprocess_context(context)
 
     if 'continue_line' in context and context['continue_line']:
-        LINE_BUFFER.append(str)
+        LINE_BUFFER.append(out)
 
     else:
         if LINE_BUFFER:
@@ -120,29 +132,54 @@ def _indent_print(str, depth, increment, context=None):
         if 'html' in context:
             context['html_style']['margin-left'] = f'{20 * depth}px'
 
-            LINE_BUFFER = [f'<div style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items()})}">{str}']
+            LINE_BUFFER = [f'<div style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items()})}">{out}']
         else:
-            LINE_BUFFER = [f'{increment * depth}{str}']
+            LINE_BUFFER = [f'{increment * depth}{out}']
         
 
+def _out_str_to_span(out_str, context):
+    return f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">{out_str}</span>'
 
-def _parse_variable_list(var_list):
+
+def _parse_variable_list(var_list, context=None):
+    if context is None:  context = {}
     formatted_vars = []
     for var_def in var_list:
+
+        prev_mutation = None
+        if 'mutation' in context:
+            prev_mutation = context['mutation']
+        if 'mutation' in var_def:  context['mutation'] = var_def['mutation']
+        context = preprocess_context(context)
+
         if isinstance(var_def.var_type, str):
-            formatted_vars.append(f'{" ".join(var_def.var_names)} - {var_def.var_type}')
+            var_str = f'{" ".join(var_def.var_names)} - {var_def.var_type}'
         elif var_def.var_type.parseinfo.rule == 'either_types':
-            formatted_vars.append(f'{" ".join(var_def.var_names)} - (either {" ".join(var_def.var_type.type_names)})')
+            var_str = f'{" ".join(var_def.var_names)} - (either {" ".join(var_def.var_type.type_names)})'
         else:
             raise ValueError(f'Unrecognized quantifier variables: {var_def[2]}')
+
+        if 'html' in context:
+            var_str = _out_str_to_span(var_str, context)
+
+        formatted_vars.append(var_str)
+
+        if 'mutation' in var_def:  
+            if prev_mutation is not None:
+                context['mutation'] = prev_mutation
+            else:
+                del context['mutation'] 
+
     return formatted_vars
+
+
 
 
 QUANTIFIER_KEYS = ('args', 'pred', 'then')
 
 
 def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
-    formatted_vars = _parse_variable_list(ast[f'{rule}_vars'].variables)
+    formatted_vars = _parse_variable_list(ast[f'{rule}_vars'].variables, context)
     _indent_print(f'({rule} ({" ".join(formatted_vars)})', depth, increment, context)
 
     found_args = False
@@ -159,10 +196,29 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
 
 
 def _handle_logical(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    context = preprocess_context(context)
+
+    if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
+        _indent_print(f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">', depth, increment, context)
+        
     _indent_print(f'({rule}', depth, increment, context)
     caller(ast[f'{rule}_args'], depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
 
+    if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
+        _indent_print(f'</span>', depth, increment, context)
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 def _handle_game(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'({rule.replace("_", "-")}', depth, increment, context)
@@ -174,31 +230,66 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'({ast.func_name} {" ".join(ast.func_args)})', depth, increment, context)
 
 
-def _inline_format_function_eval(ast):
-    return f'({ast.func_name} {" ".join(ast.func_args)})'
+def _inline_format_function_eval(ast, context=None):
+    if context is None:  context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+
+    context = preprocess_context(context)
+    out = f'({ast.func_name} {" ".join(ast.func_args)})'
+    if 'html' in context:
+        out = _out_str_to_span(out, context)
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
+    
+    return out
 
 
 def _handle_function_comparison(caller, rule, ast, depth, increment, context=None):
+    if context is None:  context = {}
     comp_op = '='
     if 'comp_op' in ast:
         comp_op = ast.comp_op
 
     if 'comp_func_1' in ast:
-        args = [_inline_format_function_eval(ast.comp_func_1), _inline_format_function_eval(ast.comp_func_2)]
+        args = [_inline_format_function_eval(ast.comp_func_1, context), _inline_format_function_eval(ast.comp_func_2, context)]
 
     elif 'comp_func_first' in ast:
-        args = [_inline_format_function_eval(ast.comp_func_first), ast.comp_num]
+        args = [_inline_format_function_eval(ast.comp_func_first, context), ast.comp_num]
 
     elif 'comp_func_second' in ast:
-        args = [ast.comp_num, _inline_format_function_eval(ast.comp_func_second)]
+        args = [ast.comp_num, _inline_format_function_eval(ast.comp_func_second, context)]
 
     else:
-        args = [_inline_format_function_eval(func) for func in ast.equal_comp_funcs]
+        args = [_inline_format_function_eval(func, context) for func in ast.equal_comp_funcs]
 
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False):
+    if context is None:  context = {}
+
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+
+    context = preprocess_context(context)
     name = ast.pred_name
     args = []
     for arg in ast.pred_args:
@@ -208,10 +299,19 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
             args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, context, return_str=True))
 
     out = f'({name} {" ".join(args)})'
+    if 'html' in context:
+            out = _out_str_to_span(out, context)
+
     if return_str:
         return out
 
     _indent_print(out, depth, increment, context)
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def build_setup_printer():
@@ -245,63 +345,101 @@ def _handle_at_end(caller, rule, ast, depth, increment, context=None):
 def _handle_any(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(any)', depth, increment, context)
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_once(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(once', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(once-measure', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_measure_pred, depth + 1, increment, context)
-    _indent_print(_inline_format_function_eval(ast.measurement), depth + 1, increment, context)
+    _indent_print(_inline_format_function_eval(ast.measurement, context), depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_hold(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(hold', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_while_hold(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(hold-while', depth, increment, context)
     context['continue_line'] = True
     caller([ast.hold_pred, ast.while_preds], depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print(f'(hold-for {ast.num_to_hold}', depth, increment, context)
     context['continue_line'] = True
@@ -313,17 +451,24 @@ def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
 def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
     if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print('(hold-to-end', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    if 'mutation' in context: del context['mutation']
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
-    formatted_vars = _parse_variable_list(ast.forall_seq_vars.variables)
+    formatted_vars = _parse_variable_list(ast.forall_seq_vars.variables, context)
     _indent_print(f'(forall-sequence ({" ".join(formatted_vars)})', depth, increment, context)
     caller(ast.forall_seq_then, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
@@ -389,7 +534,24 @@ def _handle_equals_comp(caller, rule, ast, depth, increment, context=None):
 
 
 def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
-    _indent_print(f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})', depth, increment, context)
+    if context is None:
+        context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+    context = preprocess_context(context)
+
+    out = f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})'
+    if 'html' in context:
+        out = _out_str_to_span(out, context)
+
+    _indent_print(out, depth, increment, context)
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def build_terminal_printer():

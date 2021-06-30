@@ -1,119 +1,86 @@
 import argparse
-import tatsu
+from collections import defaultdict
 import random
+from string import ascii_lowercase
+import tatsu
 
-from ast_utils import load_asts, copy_ast, update_ast
+from ast_parser import ASTParser, ASTParentMapper
 import ast_printer
+from ast_utils import find_all_parents, load_asts, copy_ast, replace_child, update_ast
 
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('-t', '--test-files', action='append', default=[])
-DEFAULT_NUM_GAMES = 10
+DEFAULT_NUM_GAMES = 100
 parser.add_argument('-n', '--num-games', default=DEFAULT_NUM_GAMES)
 # DEFAULT_OUTPUT_PATH ='./dsl_statistics.csv'
 # parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
-def extract_pref_args(pref):
-    pref_body_keys = pref.pref_body.keys()
-    pref_type = None
-
-    if any(['exists' in key for key in pref_body_keys]):
-        pref_type = 'exists'
-    elif any(['forall' in key for key in pref_body_keys]):
-        pref_type = 'forall'
-    else:
-        return None, pref.pref_body
-
-    return extract_valid_vars(pref.pref_body[f'{pref_type}_vars']), pref.pref_body[f'{pref_type}_args']
+class SamplingFailedException(Exception):
+    pass
 
 
-def extract_then_funcs(pref):
-    _, pref_body_args = extract_pref_args(pref)
-    
-    if not pref_body_args.parseinfo or pref_body_args.parseinfo.rule != 'then':
-        return
+class ASTScoringPreferenceValidator(ASTParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pref_names = list()
 
-    then_funcs = pref_body_args.then_funcs
+    def _handle_ast(self, ast, **kwargs):
+        if ast.parseinfo.rule == 'preference':
+            self.pref_names.append(ast.pref_name)
 
-    if isinstance(then_funcs, tatsu.ast.AST):
-        return [then_funcs]
-
-    return then_funcs
-
-
-def extract_valid_vars(pref_vars):
-    valid_vars = []
-    for var_def in pref_vars.variables:
-        valid_vars.extend(var_def.var_names)
-
-    return valid_vars
-
-
-def mutate_seq_func_predicate(grammar_parser, asts, notebook=False, seed=None):
-    if seed is not None:
-        random.seed(seed)
-
-    orig_ast, mut_ast = random.sample(asts, k=2)
-    new_ast = copy_ast(grammar_parser, orig_ast)
-    new_mut_ast = copy_ast(grammar_parser, mut_ast)
-
-    preferences = new_ast[4][1][1]
-    if not preferences:
-        return
-
-    pref_to_edit = random.choice(preferences)
-    pref_body_valid_vars, pref_body_args = extract_pref_args(pref_to_edit)
-    
-    if not pref_body_args.parseinfo or pref_body_args.parseinfo.rule != 'then':
-        return
-
-    then_funcs = pref_body_args.then_funcs
-    seq_func_index_to_modify = random.choice(range(len(then_funcs)))
-
-    mut_preferences = new_mut_ast[4][1][1]
-    if not mut_preferences:
-        return
-    
-    mut_pref = random.choice(mut_preferences)
-    mut_then_funcs = extract_then_funcs(mut_pref)
-    if not mut_then_funcs:
-        return
-    
-    mut_seq_func = random.choice(mut_then_funcs)
-    try:
-        replace_variables(mut_seq_func, pref_body_valid_vars)
-    except ValueError:
-        return
-    # print(mut_seq_func)
-    # print()
-    if notebook:
-        update_ast(mut_seq_func, 'mutation', 'new')
-        if isinstance(then_funcs, tatsu.ast.AST):
-            update_ast(pref_body_args, 'then_funcs', mut_seq_func)
+        elif 'count' in ast.parseinfo.rule:
+            if ast.pref_name not in self.pref_names:
+                update_ast(ast, 'pref_name', random.choice(self.pref_names))
 
         else:
-            update_ast(then_funcs[seq_func_index_to_modify], 'mutation', 'old')
-            then_funcs.insert(seq_func_index_to_modify + 1, mut_seq_func)
-    else:
-        then_funcs[seq_func_index_to_modify] = mut_seq_func
+            super()._handle_ast(ast, **kwargs)
 
-    return new_ast, pref_to_edit.pref_name, seq_func_index_to_modify
+class ASTVariableValidator(ASTParser):
+    def _extract_and_rename_variables(self, quantifier_variables):
+        local_vars = []
+        for var_def in quantifier_variables.variables:
+            for i, var_name in enumerate(var_def.var_names):
+                replaced = False
+                while var_name in local_vars:  # check if it already exists and we need to rename
+                    var_name = f'?{random.choice(ascii_lowercase)}'
+                    replaced = True
 
+                if replaced:
+                    var_def.var_names[i] = var_name
 
-def replace_variables(ast, pref_valid_vars, local_valid_vars=None):
-    if local_valid_vars is None:
-        local_valid_vars = []
-    
-    if not ast or isinstance(ast, (str, int, tatsu.buffering.Buffer)):
-        return
-    
-    elif isinstance(ast, (tuple, list)):
-        [replace_variables(element, pref_valid_vars, local_valid_vars) for element in ast]
+            local_vars.extend(var_def.var_names)
 
-    elif isinstance(ast, tatsu.ast.AST):
+        return local_vars
+
+    def _handle_ast(self, ast, **kwargs):
+        local_valid_vars = self._default_kwarg(kwargs, 'local_valid_vars', [])
+
+        # are there variables defined in this node? if so, we should add them to the list of valid variables in this context
+        vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
+        if len(vars_keys) > 1:
+            raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
+
+        elif len(vars_keys) > 0:
+            vars_key = vars_keys[0]
+            lv = self._extract_and_rename_variables(ast[vars_key])
+            local_valid_vars.extend(lv)
+
+            inner_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
+            inner_keys.remove(vars_key)
+            
+            if len(inner_keys) > 1:
+                raise ValueError(f'Found too many inner keys: {inner_keys}', ast, ast.keys())
+
+            inner_key = inner_keys[0]
+            self(ast[inner_key], **kwargs)
+            [local_valid_vars.remove(v) for v in lv]
+            return
+
+        # is this a predicate or function call? if so, we should verify that all variables are valid
         args_key = None
 
         if 'pred_args' in ast:
@@ -122,62 +89,236 @@ def replace_variables(ast, pref_valid_vars, local_valid_vars=None):
             args_key = 'func_args'
 
         if args_key is not None:
-            pref_valid_vars_copy = pref_valid_vars[:]
+            valid_vars_copy = local_valid_vars[:]
+            used_local_vars = set()
             # if a variable already exists in this context, don't use it to replace
             for arg in ast[args_key]:
-                if arg in pref_valid_vars_copy:
-                    pref_valid_vars_copy.remove(arg)
+                if arg in valid_vars_copy:
+                    valid_vars_copy.remove(arg)
 
-            for i, arg in enumerate(ast[args_key]):
-                if isinstance(arg, str):
-                    # check it's a variable and that it's valid in the preference or local context
-                    if arg.startswith('?') and arg not in pref_valid_vars and arg not in local_valid_vars:
-                        if not pref_valid_vars_copy:
-                            raise ValueError(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
+            if isinstance(ast[args_key], str):
+                if arg.startswith('?'):
+                    if arg not in local_valid_vars or (arg in local_valid_vars and arg in used_local_vars):
+                        if not valid_vars_copy:
+                            raise SamplingFailedException(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
+                        
+                        new_var = random.choice(valid_vars_copy)
+                        update_ast(ast, args_key, new_var)
+                        valid_vars_copy.remove(new_var)
+                        used_local_vars.add(new_var)
 
-                        ast[args_key][i] = random.choice(pref_valid_vars_copy)
-                        pref_valid_vars_copy.remove(ast[args_key][i])
-                else:
-                    replace_variables(arg, pref_valid_vars, local_valid_vars)
-            
-        else:
-            vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
-            if len(vars_keys) > 1:
-                raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
+                    elif arg in local_valid_vars:
+                        used_local_vars.add(arg)
 
-            elif len(vars_keys) > 0:
-                vars_key = vars_keys[0]
-                lv = extract_valid_vars(ast[vars_key])
-                local_valid_vars.extend(lv)
+            elif isinstance(ast[args_key], list):
+                for i, arg in enumerate(ast[args_key]):
+                    if isinstance(arg, str):
+                        # check it's a variable and that it's valid in the preference or local context
+                        if arg.startswith('?'):
+                            if arg not in local_valid_vars or (arg in local_valid_vars and arg in used_local_vars):
+                                if not valid_vars_copy:
+                                    raise SamplingFailedException(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
 
-                inner_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
-                inner_keys.remove(vars_key)
-                
-                if len(inner_keys) > 1:
-                    raise ValueError(f'Found too many inner keys: {inner_keys}', ast, ast.keys())
+                                new_var = random.choice(valid_vars_copy)
+                                ast[args_key][i] = new_var
+                                valid_vars_copy.remove(new_var)
+                                used_local_vars.add(new_var)
 
-                inner_key = inner_keys[0]
+                            elif arg in local_valid_vars:
+                                used_local_vars.add(arg)
 
-                replace_variables(ast[inner_key], pref_valid_vars, local_valid_vars)
-                [local_valid_vars.remove(v) for v in lv]
-            
+                    else:
+                        self(arg, **kwargs)
             else:
-                for key in ast:
-                    if key != 'parseinfo':
-                        replace_variables(ast[key], pref_valid_vars, local_valid_vars)
-    else:
-        raise ValueError(f'In `replace_variables`, found variable of unknown type ({type(ast)}): {ast}')
+                raise ValueError(f'Encountered args key "{args_key}" with unexpected value type: {ast[args_key]}', ast)
+            
+        # if neither of these, do the standard ast treatment
+        else:
+            return super()._handle_ast(ast, **kwargs)
 
 
-def mutate_single_game(grammar_parser, asts, notebook=False, start_seed=None):
-    result = None
-    seed = start_seed
-    while not result:
-        result = mutate_seq_func_predicate(grammar_parser, asts, notebook=notebook, seed=seed)
-        if seed is not None and result is None:
-            seed += 1
+IGNORE_KEYS = ('parseinfo', 'mutation')
 
-    return (*result, seed)
+
+def _find_mutations(ast): 
+    if isinstance(ast, tatsu.ast.AST):
+        if 'mutation' in ast:
+            print(ast)
+        for key in ast:
+            if key not in IGNORE_KEYS:
+                _find_mutations(ast[key])
+
+    elif isinstance(ast, (tuple, list)):
+        for element in ast:
+            _find_mutations(element) 
+
+class ASTRegrowthSampler(ASTParser):
+    def __init__(self, grammar_parser, ast_pool, n_regrowth_points=1, mutation_prob=0.2, validators=None, ignore_keys=IGNORE_KEYS) -> None:
+        super().__init__()
+        self.grammar_parser = grammar_parser
+        self.ast_pool = ast_pool
+        self.n_regrowth_points = n_regrowth_points
+        self.mutation_prob = mutation_prob
+
+        if validators is None:
+            validators = list()
+
+        self.validators = validators
+        self.ignore_keys = set(ignore_keys)
+        self.parent_mapper = ASTParentMapper()
+
+    def _sample_regrowth_points(self, parent_mapping, n_regrowths):
+        parent_mapping_keys = list(parent_mapping.keys())
+        regrowth_points = list()
+
+        while len(regrowth_points) < n_regrowths:
+            key = random.choice(parent_mapping_keys)
+            point, parent, _ = parent_mapping[key]
+            # as opposed to the root tuple, which we can't assign into
+            if isinstance(parent, tatsu.ast.AST):
+                regrowth_points.append(point)
+                for parent in find_all_parents(parent_mapping, point):
+                    if isinstance(parent, tatsu.ast.AST) and parent.parseinfo in parent_mapping_keys:
+                        parent_mapping_keys.remove(parent.parseinfo)
+
+        return regrowth_points    
+
+    def _sample_ast_copy(self):
+        return copy_ast(self.grammar_parser, random.choice(self.ast_pool))
+
+    def _sample_node_by_rule(self, rule):
+        result = None
+        while result is None:
+            ast_to_sample_from = self._sample_ast_copy()
+            mapping = self.parent_mapper(ast_to_sample_from)
+            rule_to_elements = defaultdict(list)
+            for key, (node, _, _) in mapping.items():
+                rule_to_elements[key.rule].append(node)
+
+            if rule in rule_to_elements:
+                result = random.choice(rule_to_elements[rule])
+
+        return result
+
+    def _validate(self, current_ast):
+        for validator in self.validators:
+            validator(current_ast)
+
+        return current_ast
+
+    def sample_regrowth(self, current_ast=None):
+        if current_ast is None:
+            current_ast = self._sample_ast_copy()
+
+        current_parent_mapping = self.parent_mapper(current_ast)
+
+        n_regrowths = self.n_regrowth_points
+        if hasattr(self.n_regrowth_points, '__call__'):
+            n_regrowths = self.n_regrowth_points()
+
+        regrowth_points = self._sample_regrowth_points(current_parent_mapping, n_regrowths)
+        
+        for regrowth_point in regrowth_points:
+            _, regrowth_parent, regrwoth_selector = current_parent_mapping[regrowth_point.parseinfo]
+            replacement_node = self._mutate_node(regrowth_point, parent=regrowth_parent, selector=regrwoth_selector, mutation='root')
+            self(replacement_node, root=True)
+
+        return self._validate(current_ast)
+
+    def sample_single_step(self, current_ast=None, n_mutations=0):
+        if current_ast is None:
+            current_ast = self._sample_ast_copy()
+
+        current_parent_mapping = self.parent_mapper(current_ast)
+        regrowth_point = self._sample_regrowth_points(current_parent_mapping, 1)[0]
+        _, regrowth_parent, regrwoth_selector = current_parent_mapping[regrowth_point.parseinfo]
+
+        relevant_keys = ['root']
+        for key in regrowth_point:
+            if key not in self.ignore_keys and isinstance(regrowth_point[key], (str, list, tatsu.ast.AST)):
+                relevant_keys.append(key)
+
+        key_to_replace = random.choice(relevant_keys)
+
+        if key_to_replace == 'root':
+            self._mutate_node(regrowth_point, parent=regrowth_parent, selector=regrwoth_selector, mutation=n_mutations)
+
+        elif isinstance(regrowth_point[key_to_replace], tatsu.ast.AST):  # replace a node
+            self._mutate_node(regrowth_point[key_to_replace], parent=regrowth_point, selector=[key_to_replace], mutation=n_mutations)
+
+        else:  # replace a value
+            # TODO: this is another place we could consider adding/deleting under this (if a list), rather than just replacing
+            self._mutate_value(type(regrowth_point[key_to_replace]), parent=regrowth_point, selector=[key_to_replace], mutation=n_mutations)
+
+        return self._validate(current_ast)
+
+    def _should_mutate(self):
+        return random.random() < self.mutation_prob
+
+    def _mutate_node(self, ast, **kwargs):
+        replacement_node = self._sample_node_by_rule(ast.parseinfo.rule)
+        replace_child(kwargs['parent'], kwargs['selector'], replacement_node)
+        mutation_type = kwargs['mutation'] if 'mutation' in kwargs else 'new'
+        update_ast(replacement_node, 'mutation', mutation_type)
+        return replacement_node
+
+    def _handle_ast(self, ast, **kwargs):
+        root = self._default_kwarg(kwargs, 'root', False)
+
+        if not root:
+            # do I replace this entire tree?
+            if self._should_mutate():
+                ast = self._mutate_node(ast, **kwargs)
+
+        kwargs['parent'] = ast
+        kwargs['root'] = False
+        keys = list(ast.keys())
+        for key in keys:
+            if key not in self.ignore_keys:
+                kwargs['selector'] = [key]
+                self(ast[key], **kwargs)
+            
+    def _mutate_value(self, expected_type, **kwargs):
+        parent, selector = kwargs['parent'], kwargs['selector']
+        updated = False
+
+        while not updated:
+            replacement_node = self._sample_node_by_rule(parent.parseinfo.rule)
+            replacement_value = replacement_node[selector[0]]
+            if not isinstance(replacement_value, expected_type):
+                if not replacement_value:
+                    continue
+                
+                replacement_value = random.choice(replacement_value)
+        
+            if not isinstance(replacement_value, expected_type):
+                # raise SamplingFailedException(f'Found an incorrectly typed value (expected a {expected_type}) even after sampling from {replacement_node[selector[0]]}')
+                continue
+
+            replace_child(parent, selector, replacement_value)
+            if 'mutation' not in parent:
+                mutation_type = kwargs['mutation'] if 'mutation' in kwargs else 'modified'
+                update_ast(parent, 'mutation', mutation_type)
+
+            updated = True
+
+        return replacement_value
+
+    def _handle_str(self, ast, **kwargs):
+        # should we replace this string?
+        if self._should_mutate():
+            self._mutate_value(str, **kwargs)
+
+    def _handle_list(self, ast, **kwargs):
+        # should we replace the entire list?
+        if self._should_mutate():
+            ast = self._mutate_value(list, **kwargs)
+
+        # TODO: if we want to consider adding/removing from a list, we would do it here
+        for i, element in enumerate(ast):
+            self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i]) 
+                
+    # TODO: do we ever want to replace values in a tuple or an int?
 
 
 def main(args):
@@ -186,11 +327,22 @@ def main(args):
 
     asts = load_asts(args, grammar_parser)
 
-    for i in range(args.num_games):
-        new_ast, pref_name, seq_func_index, seed = mutate_single_game(grammar_parser, asts, notebook=True, start_seed=i * args.num_games)
-        print(f'With random seed {seed}, mutated sequence function #{seq_func_index} in "{pref_name}":\r\n')
+    for seed in range(6, args.num_games):
+        validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
+        sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
+        random.seed(seed)
+        
+        try:
+            # mutated_ast = sampler.sample_regrowth()
+            mutated_ast = sampler.sample_single_step()
+        except SamplingFailedException:
+            continue
+
+        print(f'With random seed {seed}, mutated:\r\n')
+        # new_ast, pref_name, seq_func_index, seed = mutate_single_game(grammar_parser, asts, notebook=True, start_seed=i * args.num_games)
+        # print(f'With random seed {seed}, mutated sequence function #{seq_func_index} in "{pref_name}":\r\n')
         ast_printer.reset_buffers(False)
-        ast_printer.pretty_print_ast(new_ast, context=dict(html=True))
+        ast_printer.pretty_print_ast(mutated_ast, context=dict(html=True))
         print('\r\n' + '=' * 100 + '\r\n')
 
 

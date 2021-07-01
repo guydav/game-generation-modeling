@@ -831,8 +831,8 @@
                 (once (agent_holds ?d))
                 (hold-while 
                     (not (agent_holds ?d) (not (agent_holds ?b)))
-                    (once (touch ?d ?b))
-                    (once (not (object_orientation ?b face)))
+                    (touch ?d ?b)
+                    (not (object_orientation ?b face))
                 )
             )
         )

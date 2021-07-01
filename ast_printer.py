@@ -144,6 +144,7 @@ def _out_str_to_span(out_str, context):
 def _parse_variable_list(var_list, context=None):
     if context is None:  context = {}
     formatted_vars = []
+
     for var_def in var_list:
 
         prev_mutation = None
@@ -179,7 +180,14 @@ QUANTIFIER_KEYS = ('args', 'pred', 'then')
 
 
 def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+
+    # TODO: handle the case of only the variable list being mutated, here and in the other location
     formatted_vars = _parse_variable_list(ast[f'{rule}_vars'].variables, context)
+
     _indent_print(f'({rule} ({" ".join(formatted_vars)})', depth, increment, context)
 
     found_args = False
@@ -193,6 +201,12 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
         raise ValueError(f'Found exists or forall with unknown arugments: {ast}')
 
     _indent_print(')', depth, increment, context)
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_logical(caller, rule, ast, depth, increment, context=None):
@@ -221,9 +235,21 @@ def _handle_logical(caller, rule, ast, depth, increment, context=None):
             del context['mutation'] 
 
 def _handle_game(caller, rule, ast, depth, increment, context=None):
+    if context is None:  context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+
     _indent_print(f'({rule.replace("_", "-")}', depth, increment, context)
     caller(ast[f'{rule.replace("game_", "")}_pred'], depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
@@ -325,21 +351,56 @@ def build_setup_printer():
 
 
 def _handle_preference(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print(f'(preference {ast.pref_name}', depth, increment, context)
     caller(ast.pref_body, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
+
+# TODO: transform the context/mutation handling to a decorator
 
 def _handle_then(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print(f'(then', depth, increment, context)
     caller(ast.then_funcs, depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_at_end(caller, rule, ast, depth, increment, context=None):
+    if context is None:
+        context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
     _indent_print(f'(at-end', depth, increment, context)
     caller(ast.at_end_pred, depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_any(caller, rule, ast, depth, increment, context=None):
@@ -446,6 +507,11 @@ def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
@@ -488,13 +554,25 @@ def build_constraints_printer():
 
 
 def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
-    _indent_print(f'({ast.op}', depth, increment, context)
+    
     if context is None:
         context = {}
+    prev_mutation = None
+    if 'mutation' in context:
+        prev_mutation = context['mutation']
+    if 'mutation' in ast:  context['mutation'] = ast['mutation']
+
+    _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
     caller([ast.expr_1, ast.expr_2], depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
+
+    if 'mutation' in ast:  
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
 
 
 def _handle_multi_expr(caller, rule, ast, depth, increment, context=None):

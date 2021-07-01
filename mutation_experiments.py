@@ -40,12 +40,12 @@ class ASTScoringPreferenceValidator(ASTParser):
             super()._handle_ast(ast, **kwargs)
 
 class ASTVariableValidator(ASTParser):
-    def _extract_and_rename_variables(self, quantifier_variables):
+    def _extract_and_rename_variables(self, quantifier_variables, context_variables):
         local_vars = []
         for var_def in quantifier_variables.variables:
             for i, var_name in enumerate(var_def.var_names):
                 replaced = False
-                while var_name in local_vars:  # check if it already exists and we need to rename
+                while var_name in local_vars or var_name in context_variables:  # check if it already exists and we need to rename
                     var_name = f'?{random.choice(ascii_lowercase)}'
                     replaced = True
 
@@ -66,7 +66,7 @@ class ASTVariableValidator(ASTParser):
 
         elif len(vars_keys) > 0:
             vars_key = vars_keys[0]
-            lv = self._extract_and_rename_variables(ast[vars_key])
+            lv = self._extract_and_rename_variables(ast[vars_key], local_valid_vars)
             local_valid_vars.extend(lv)
 
             inner_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
@@ -327,14 +327,14 @@ def main(args):
 
     asts = load_asts(args, grammar_parser)
 
-    for seed in range(6, args.num_games):
+    for seed in range(16, args.num_games):
         validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
         sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
         random.seed(seed)
         
         try:
-            # mutated_ast = sampler.sample_regrowth()
-            mutated_ast = sampler.sample_single_step()
+            mutated_ast = sampler.sample_regrowth()
+            # mutated_ast = sampler.sample_single_step()
         except SamplingFailedException:
             continue
 

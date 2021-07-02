@@ -327,14 +327,15 @@ def main(args):
 
     asts = load_asts(args, grammar_parser)
 
-    for seed in range(16, args.num_games):
+    start = 152
+    for seed in range(start, start + args.num_games):
         validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
         sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
         random.seed(seed)
         
         try:
-            mutated_ast = sampler.sample_regrowth()
-            # mutated_ast = sampler.sample_single_step()
+            # mutated_ast = sampler.sample_regrowth()
+            mutated_ast = sampler.sample_single_step()
         except SamplingFailedException:
             continue
 

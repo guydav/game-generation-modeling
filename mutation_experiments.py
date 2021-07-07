@@ -6,7 +6,7 @@ import tatsu
 
 from ast_parser import ASTParser, ASTParentMapper
 import ast_printer
-from ast_utils import find_all_parents, load_asts, copy_ast, replace_child, update_ast
+from ast_utils import apply_selector_list, find_all_parents, load_asts, copy_ast, replace_child, update_ast, find_selectors_from_root
 
 
 parser = argparse.ArgumentParser()
@@ -26,7 +26,7 @@ class SamplingFailedException(Exception):
 class ASTScoringPreferenceValidator(ASTParser):
     def __init__(self) -> None:
         super().__init__()
-        self.pref_names = list()
+        self.pref_names = []
 
     def _handle_ast(self, ast, **kwargs):
         if ast.parseinfo.rule == 'preference':
@@ -38,6 +38,13 @@ class ASTScoringPreferenceValidator(ASTParser):
 
         else:
             super()._handle_ast(ast, **kwargs)
+
+    def __call__(self, ast, **kwargs):
+        if 'cleared' not in kwargs:
+            self.pref_names = []
+            kwargs['cleared'] = True
+        
+        return super().__call__(ast, **kwargs)
 
 class ASTVariableValidator(ASTParser):
     def _extract_and_rename_variables(self, quantifier_variables, context_variables):
@@ -140,17 +147,33 @@ class ASTVariableValidator(ASTParser):
 IGNORE_KEYS = ('parseinfo', 'mutation')
 
 
-def _find_mutations(ast): 
+def find_mutations(ast, mutated_asts=None, should_print=True): 
+    if mutated_asts is None:
+        mutated_asts = list()
+    
     if isinstance(ast, tatsu.ast.AST):
         if 'mutation' in ast:
-            print(ast)
+            if should_print:  print(ast)
+            mutated_asts.append(ast)
         for key in ast:
             if key not in IGNORE_KEYS:
-                _find_mutations(ast[key])
+                find_mutations(ast[key], mutated_asts, should_print=should_print)
 
     elif isinstance(ast, (tuple, list)):
         for element in ast:
-            _find_mutations(element) 
+            find_mutations(element, mutated_asts, should_print=should_print)
+
+    return mutated_asts 
+
+
+def copy_mutation_tags(src_ast, dst_ast):
+    src_mutated_nodes = find_mutations(src_ast, should_print=False)
+    src_parent_mapping = ASTParentMapper()(src_ast)
+    for src_mutated_node in src_mutated_nodes:
+        selectors = find_selectors_from_root(src_parent_mapping, src_mutated_node, root_node=src_ast)
+        dst_node = apply_selector_list(dst_ast, selectors)
+        update_ast(dst_node, 'mutation', src_mutated_node['mutation'])
+
 
 class ASTRegrowthSampler(ASTParser):
     def __init__(self, grammar_parser, ast_pool, n_regrowth_points=1, mutation_prob=0.2, validators=None, ignore_keys=IGNORE_KEYS) -> None:
@@ -327,24 +350,44 @@ def main(args):
 
     asts = load_asts(args, grammar_parser)
 
-    start = 152
-    for seed in range(start, start + args.num_games):
-        validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
-        sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
-        random.seed(seed)
+    # start = 152
+    # for seed in range(start, start + args.num_games):
+    #     validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
+    #     sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
+    #     random.seed(seed)
         
-        try:
-            # mutated_ast = sampler.sample_regrowth()
-            mutated_ast = sampler.sample_single_step()
-        except SamplingFailedException:
-            continue
+    #     try:
+    #         # mutated_ast = sampler.sample_regrowth()
+    #         mutated_ast = sampler.sample_single_step()
+    #     except SamplingFailedException:
+    #         continue
 
-        print(f'With random seed {seed}, mutated:\r\n')
-        # new_ast, pref_name, seq_func_index, seed = mutate_single_game(grammar_parser, asts, notebook=True, start_seed=i * args.num_games)
-        # print(f'With random seed {seed}, mutated sequence function #{seq_func_index} in "{pref_name}":\r\n')
-        ast_printer.reset_buffers(False)
-        ast_printer.pretty_print_ast(mutated_ast, context=dict(html=True))
-        print('\r\n' + '=' * 100 + '\r\n')
+    #     print(f'With random seed {seed}, mutated:\r\n')
+    #     # new_ast, pref_name, seq_func_index, seed = mutate_single_game(grammar_parser, asts, notebook=True, start_seed=i * args.num_games)
+    #     # print(f'With random seed {seed}, mutated sequence function #{seq_func_index} in "{pref_name}":\r\n')
+    #     ast_printer.reset_buffers(False)
+    #     ast_printer.pretty_print_ast(mutated_ast, context=dict(html=True))
+    #     print('\r\n' + '=' * 100 + '\r\n')
+
+
+    first_seed = 123
+    second_seed = 2
+
+    validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
+    sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
+
+    random.seed(first_seed)
+    src_ast = sampler.sample_single_step()
+
+    src_ast_copy = copy_ast(grammar_parser, src_ast)
+    copy_mutation_tags(src_ast, src_ast_copy)
+
+    random.seed(second_seed)
+    mutated_ast = sampler.sample_single_step(src_ast_copy, n_mutations=1)
+
+    ast_printer.reset_buffers(False)
+    ast_printer.pretty_print_ast(mutated_ast, context=dict(html=True))
+    print('\r\n' + '=' * 100 + '\r\n')
 
 
 if __name__ == '__main__':

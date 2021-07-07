@@ -95,3 +95,13 @@ def find_all_parents(parent_mapping, ast):
             parent = parent_mapping[parent.parseinfo][1]
 
     return parents
+
+
+def find_selectors_from_root(parent_mapping, ast, root_node='root'):
+    selectors = []
+    parent = ast
+    while parent != root_node:
+        _, parent, selector = parent_mapping[parent.parseinfo]
+        selectors = selector + selectors
+
+    return selectors

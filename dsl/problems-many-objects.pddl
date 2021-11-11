@@ -1080,3 +1080,94 @@
 
 
 ; 31 is invalid 
+
+; game for the FRL presentation
+(define (game demo-game) (:domain many-objects-room-v1)
+(:setup (and 
+    (forall (?t - (either teddy_bear pillow))
+        (game-conserved (or 
+            (not (on bed ?t))  
+            (and
+                (on bed ?t)
+                (< (distance ?t north_wall) 0.5)
+            )
+        ))
+    ) 
+    (exists (?b1 ?b2 ?b3 - block)
+        (game-optional (and
+            (on bed ?b1)
+            (on ?b1 ?b2)
+            (on ?b2 ?b3)
+        ))
+    )
+))
+(:constraints (and 
+    (preference ballKnocksBlock
+        (exists (?g - (either goflball dodgeball) ?b - block) 
+            (then 
+                (once (and (agent_holds ?g) (< (distance agent bottom_shelf) 1)))
+                (hold-while 
+                    (and (not (agent_holds ?g)) (in_motion ?g))
+                    (touch ?g ?b)
+                    (in_motion ?b)
+                )
+                (once (and (not (in_motion ?g)) (not (in_motion ?b))))
+            )
+        )
+    )
+))
+(:scoring maximize (count-nonoverlapping ballKnocksBlock)
+))
+
+; second version
+(define (game demo-game) (:domain many-objects-room-v1)
+(:setup (and 
+    (forall (?t - (either teddy_bear pillow))
+        (game-conserved (or 
+            (not (on bed ?t))  
+            (and
+                (on bed ?t)
+                (< (distance ?t north_wall) 0.5)
+            )
+        ))
+    ) 
+    (exists (?b1 ?b2 ?b3 - block)
+        (game-optional (and
+            (on bed ?b1)
+            (on ?b1 ?b2)
+            (on ?b2 ?b3)
+        ))
+    )
+))
+(:constraints (and 
+    (preference golfballKnocksBlock
+        (exists (?g - goflball ?b - block) 
+            (then 
+                (once (and (agent_holds ?g) (< (distance agent bottom_shelf) 1)))
+                (hold-while 
+                    (and (not (agent_holds ?g)) (in_motion ?g))
+                    (touch ?g ?b)
+                    (in_motion ?b)
+                )
+                (once (and (not (in_motion ?g)) (not (in_motion ?b))))
+            )
+        )
+    )
+    (preference dodgeballKnocksBlock
+        (exists (?d - dodgeball ?b - block) 
+            (then 
+                (once (and (agent_holds ?d) (< (distance agent bottom_shelf) 1)))
+                (hold-while 
+                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (touch ?d ?b)
+                    (in_motion ?b)
+                )
+                (once (and (not (in_motion ?d)) (not (in_motion ?b))))
+            )
+        )
+    )
+))
+(:scoring maximize (+
+    (count-nonoverlapping dodgeballKnocksBlock)
+    (* 2 (count-nonoverlapping golfballKnocksBlock))
+)))

@@ -147,21 +147,21 @@ class ASTVariableValidator(ASTParser):
 IGNORE_KEYS = ('parseinfo', 'mutation')
 
 
-def find_mutations(ast, mutated_asts=None, should_print=True): 
+def find_mutations(ast, mutated_asts=None, should_print=True, depth=0): 
     if mutated_asts is None:
         mutated_asts = list()
     
     if isinstance(ast, tatsu.ast.AST):
         if 'mutation' in ast:
-            if should_print:  print(ast)
-            mutated_asts.append(ast)
+            if should_print:  print(depth, ast)
+            mutated_asts.append((depth, ast))
         for key in ast:
             if key not in IGNORE_KEYS:
-                find_mutations(ast[key], mutated_asts, should_print=should_print)
+                find_mutations(ast[key], mutated_asts, should_print=should_print, depth=depth+1)
 
     elif isinstance(ast, (tuple, list)):
         for element in ast:
-            find_mutations(element, mutated_asts, should_print=should_print)
+            find_mutations(element, mutated_asts, should_print=should_print, depth=depth+1)
 
     return mutated_asts 
 

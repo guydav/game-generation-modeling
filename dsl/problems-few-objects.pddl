@@ -94,8 +94,8 @@
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin ?d - dodgeball ?t - textbook) 
         (and
-            (game-conserved (adjacent_side ?h front ?c back))
-            (game-conserved (= (distance_side ?t center ?c front) 1))
+            (game-conserved (adjacent (side ?h front) (side ?c back)))
+            (game-conserved (= (distance ?t (side ?c front)) 1))
             (game-optional (adjacent ?d ?t))
         )
     )
@@ -161,7 +161,7 @@
 (define (game few-objects-8) (:domain few-objects-room-v1)
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) 
-        (game-conserved (adjacent_side ?h front ?c back))
+        (game-conserved (adjacent (side ?h front) (side ?c back)))
     )
 ))
 (:constraints (and 

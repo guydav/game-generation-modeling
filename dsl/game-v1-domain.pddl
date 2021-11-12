@@ -57,7 +57,7 @@
     (on ?o1 - object ?o2 - object)  ; object o2 on o1
     (adjacent ?o1 ?o2 - object)  ; objects o1 and o2 are adjacent
     ; side s1 of object o1 is adjacent to side s2 of o2
-    (adjacent_side ?o1 -object ?s1 -side ?o2 -object ?s2 - side)  
+    ; (adjacent_side ?o1 -object ?s1 -side ?o2 -object ?s2 - side)  
     (between ?o1 ?o2 ?o3 - object)  ; is o2 between o1 and o3?
     (touch ?o1 ?o2 - object)  ; are o1 and o2 touching?
     (object_orientation ?o - game_object ?r - orientation) ; is the orientation of the object as marked?
@@ -79,6 +79,7 @@
     (x_position ?o - object) - number
     (y_position ?o - object) - number
     (z_position ?o - object) - number
+    (side ?o - object ?s - side) -object
     (side_x_position ?o - object ?s - side) - number
     (side_y_position ?o - object ?s - side) - number
     (side_z_position ?o - object ?s - side) - number

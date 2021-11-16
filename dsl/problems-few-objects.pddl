@@ -6,21 +6,22 @@
     
 )
 (:constraints (and 
+    ; TODO: think about these as a test case for having "predicate while other preference"
     (preference basketWithChairInTheWay
-        (exists (?c - chair ?h - hexagonal_bin ?d - dodgeball) ; (exists (?h - hexagonal_bin)
+        (exists (?c - chair ?h - hexagonal_bin ?d - dodgeball) 
             (then 
                 (once (agent_holds ?d))
-                (hold (between agent ?c ?h))
-                (once (and (on ?h ?d) (not (agent_holds ?d))))
+                (hold (and (in_motion ?d) (not (agent_holds ?d)) (between agent ?c ?h)))
+                (once (and (in ?h ?d) (not (agent_holds ?d))))
             )
-        ) ;) 
+        )
     ) 
     (preference basketMade
-        (exists (?h - hexagonal_bin ?d - dodgeball ) ; (exists (?h - hexagonal_bin)
+        (exists (?h - hexagonal_bin ?d - dodgeball ) 
             (then 
                 (once (agent_holds ?d))
-                (any)
-                (once (and (on ?h ?d) (not (agent_holds ?d))))
+                (hold (and (in_motion ?d) (not (agent_holds ?d))))
+                (once (and (in ?h ?d) (not (agent_holds ?d))))
             )
         )
     ) 
@@ -78,7 +79,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?w ?d)
                 ) 
-                (once  (and (on ?h ?d) (not (in_motion ?d)))) ; touches wall before in bin
+                (once  (and (in ?h ?d) (not (in_motion ?d)))) ; touches wall before in bin
             )
         )
     )
@@ -110,7 +111,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
                     (on ?r ?d)   ; on ramp and then in bin -- should this be touch?
                 ) 
-                (once (and (on ?h ?d) (not (in_motion ?d))))
+                (once (and (in ?h ?d) (not (in_motion ?d))))
             )
         ) 
     )
@@ -150,7 +151,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
                     (on ?r ?d)  ; on ramp and then in bin -- should this be touch?
                 )
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
+                (once (and (in ?h ?d) (not (in_motion ?d)))) 
             )
     )) 
 ))
@@ -173,7 +174,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d)) ; in motion, not in hand until...
                     (on ?r ?d) ; on ramp and then in bin -- should this be touch?
                 )
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
+                (once (and (in ?h ?d) (not (in_motion ?d)))) 
             )
         ) 
     )
@@ -197,38 +198,20 @@
 (:setup  
 )
 (:constraints (and 
-    (preference cellPhoneThrownOnDoggieBed
-        (exists (?d - doggie_bed ?c - cellphone) 
+    (preference objectThrownOnDoggieBed
+        (exists (?d - doggie_bed ?o - (either cellphone textbook laptop)) 
             (then 
-                (once (agent_holds ?c))
-                (hold (and (not (agent_holds ?c)) (in_motion ?c))) ; in motion, not in hand until...
-                (once (and (on ?d ?c) (not (in_motion ?c))))
-            )
-        )
-    )
-    (preference textbookThrownOnDoggieBed
-        (exists (?d - doggie_bed ?t - textbook) 
-            (then 
-                (once (agent_holds ?t))
-                (hold (and (not (agent_holds ?t)) (in_motion ?t))) ; in motion, not in hand until...
-                (once (and (on ?d ?t) (not (in_motion ?t))))
-            )
-        )
-    )
-    (preference laptopThrownOnDoggieBed
-        (exists (?d - doggie_bed ?l - laptop)
-            (then 
-                (once (agent_holds ?t))
-                (hold (and (not (agent_holds ?t)) (in_motion ?t))) ; in motion, not in hand until...
-                (once (and (on ?d ?t) (not (in_motion ?t))))
+                (once (agent_holds ?o))
+                (hold (and (not (agent_holds ?o)) (in_motion ?o))) ; in motion, not in hand until...
+                (once (and (on ?d ?o) (not (in_motion ?o))))
             )
         )
     )
 )) 
 (:scoring maximize (+ 
-    (* 15 (count-nonoverlapping cellPhoneThrownOnDoggieBed))
-    (* 10 (count-nonoverlapping textbookThrownOnDoggieBed))
-    (* 5 (count-nonoverlapping laptopThrownOnDoggieBed))
+    (* 15 (with (?o - cellphone) (count-nonoverlapping objectThrownOnDoggieBed)))
+    (* 10 (with (?o - textbook) (count-nonoverlapping objectThrownOnDoggieBed)))
+    (* 5 (with (?o - laptop) (count-nonoverlapping objectThrownOnDoggieBed)))
 )))
 
 
@@ -237,28 +220,20 @@
 ; no real setup for 10 unless we want to mark which objects are in the game
 )
 (:constraints (and 
-    (preference chairHitFromBedWithDoggieBed
-        (exists (?b - bed ?c - chair ?d - doggie_bed)
+    (preference chairHitFromBed
+        (exists (?c - chair ?o - (either doggie_bed pillow))
             (then 
-                (once (and (agent_holds ?d) (on ?b agent)))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (touch ?d ?c))
-            )
-        )
-    )
-    (preference chairHitFromBedWithPillow
-        (exists (?b - bed ?c - chair ?p - pillow)
-            (then 
-                (once (and (agent_holds ?p) (on ?b agent)))
-                (hold (and (not (agent_holds ?p)) (in_motion ?p))) 
-                (once (touch ?p ?c))
+                (once (and (agent_holds ?o) (on bed agent)))
+                (hold (and (not (agent_holds ?o)) (in_motion ?o))) 
+                (once (touch ?o ?c))
             )
         )
     )
 )) 
 (:scoring maximize (+ 
-    (* 20 (count-nonoverlapping chairHitFromBedWithDoggieBed))
-    (* 20 (count-nonoverlapping chairHitFromBedWithPillow))
+    ; TODO: ths instructions here say "20 score each pillow or doggie bed hit the 2chairs 10 times in a row"
+    ; TODO: another test case for quantifying streaks?
+    (* 20 (count-nonoverlapping chairHitFromBed))
 )))
 
 ; 11 is invalid
@@ -297,9 +272,9 @@
     )
 )) 
 (:scoring maximize (+ 
-    (* 1 (count-nonoverlapping throwToBinOnBed))
-    (* 2 (count-nonoverlapping throwToBinOnDesk))
-    (* 3 (count-nonoverlapping throwToBinOnShelf))
+    (* 1 (count-once throwToBinOnBed))
+    (* 2 (count-once throwToBinOnBed) (count-once throwToBinOnDesk))
+    (* 3 (count-once throwToBinOnBed) (count-once throwToBinOnDesk) (count-once throwToBinOnShelf))
 )))
 
 (define (game few-objects-13) (:domain few-objects-room-v1)
@@ -418,15 +393,14 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 6)
 )
-(:scoring maximize (+ 
+(:scoring maximize  
     (* 10 (count-once-per-objects throwHitsBlock))
-)))
+))
 
 
 (define (game few-objects-17) (:domain few-objects-room-v1)
 (:setup  
     (exists (?c - curved_wooden_ramp ?r - rug) (game-conserved (adjacent ?c ?r)))
-
 )
 (:constraints (and 
     (preference ballLandsOnRed
@@ -561,17 +535,17 @@
 (:setup  
     ; is there a prettier way to do this? 
     (and
-        (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?b - bed)
+        (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
             (game-optional (and
-                (on ?b ?b1)
-                (on ?b ?b2)
+                (on bed ?b1)
+                (on bed ?b2)
                 (adjacent ?b1 ?b2)
                 (or 
                     (on ?b1 ?b3)
                     (on ?b2 ?b3)
                 )
-                (on ?b ?b4)
-                (on ?b ?b5)
+                (on bed ?b4)
+                (on bed ?b5)
                 (adjacent ?b4 ?b5)
                 (or 
                     (on ?b4 ?b6)
@@ -583,71 +557,20 @@
     )
 )
 (:constraints (and 
-    (preference bothBallsThrownFromDesk (exists (?d - desk)
+    (preference bothBallsThrownFromDesk 
         (then
             (forall-sequence (?b - dodgeball)
                 (then
-                    (once (and (agent_holds ?b) (adjancet agent ?d)))
-                    (hold (and (not (agent_holds ?b)) (in_motion ?b) (adjacent agent ?d)))
+                    (once (and (agent_holds ?b) (adjancet agent desk)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b) (adjacent agent desk)))
                     (once (not (in_motion ?b)))
-                    (hold (adjacent agent ?d))
+                    (hold (adjacent agent desk))
                 )
             )
             (once (forall (?b - cube_block) (not (in_motion ?b))))
         )
-    ))
-    (preference bothYellowBlocksHit
-        ; This preference was hard to define because I wanted to allow for all orderings
-        ; It could be that the same ball hits both at the same time, or the sam ball hits
-        ; both one after the other, or different balls hit both
-        (forall (?b - yellow_cube_block)
-            (exists (?d - dodgeball)
-                (then
-                    (hold-while
-                        (not (touch agent ?b))
-                        (in_motion ?d)
-                        (touch ?b ?d)
-                        (in_motion ?b)
-                        (not (in_motion ?b))
-                    )
-                )
-            )
-        )
-    )
-    (preference bothBlueBlocksHit
-        ; see notes on first one
-        (forall (?b - blue_cube_block)
-            (exists (?d - dodgeball)
-                (then
-                    (hold-while
-                        (not (touch agent ?b))
-                        (in_motion ?d)
-                        (touch ?b ?d)
-                        (in_motion ?b)
-                        (not (in_motion ?b))
-                    )
-                )
-            )
-        )
-    )
-    (preference bothBrownBlocksHit
-        ; see notes on above
-        (forall (?b - brown_cube_block)
-            (exists (?d - dodgeball)
-                (then
-                    (hold-while
-                        (not (touch agent ?b))
-                        (in_motion ?d)
-                        (touch ?b ?d)
-                        (in_motion ?b)
-                        (not (in_motion ?b))
-                    )
-                )
-            )
-        )
     )
     (preference allBlocksHit
-        ; see notes on above
         (forall (?b - cube_block)
             (exists (?d - dodgeball)
                 (then
@@ -663,7 +586,6 @@
         )
     )
     (preference allBlocksHitWithSameBall
-        ; I don't know if this is legit -- but I think I would specifcy it like this:
         (exists (?d - dodgeball)
             (forall (?b - cube_block)
                 (then
@@ -684,9 +606,9 @@
     (> (count-once allBlocksHit) 0)
 ))
 (:scoring maximize (+ 
-    (* 2 (count-once bothYellowBlocksHit))
-    (* 2 (count-once bothBlueBlocksHit))
-    (* 2 (count-once bothBrownBlocksHit))
+    (* 2 (with (?b - yellow_cube_block) (count-once allBlocksHit)))
+    (* 2 (with (?b - blue_cube_block) (count-once allBlocksHit)))
+    (* 2 (with (?b - brown_cube_block) (count-once allBlocksHit)))
     (* 1 (count-once allBlocksHit))
     (* 3 (count-once allBlocksHitWithSameBall))
 )))
@@ -732,27 +654,27 @@
 (define (game few-objects-23) (:domain few-objects-room-v1)
 (:setup  
     (and
-        (forall (?b - cube_block) (exists (?b1 ?b2 - cube_block ?f - floor)  
+        (forall (?b - cube_block) (exists (?b1 ?b2 - cube_block)  
             (game-conserved (and
-                (on ?f ?b)
+                (on floor ?b)
                 (not (= ?b ?b1))
                 (not (= ?b ?b2))
-                (adjacent ?b ?b1)
-                (adjacent ?b ?b2)
+                (touch ?b ?b1)
+                (touch ?b ?b2)
             ))
         ))
     )
 )
 (:constraints (and 
-    (preference pillowLandsInBlocks 
-        (exists (?f - floor ?p - pillow)
+    (preference objectLandsInBlocks 
+        (exists (?o - (either pillow cd dodgeball))
             (then
-                (once (and (agent_holds ?p) (forall (?b - cube_block) (> (distance agent ?b) 2))))
-                (hold (and (not (agent_holds ?p)) (in_motion ?p))) 
+                (once (and (agent_holds ?o) (forall (?b - cube_block) (> (distance agent ?b) 2))))
+                (hold (and (not (agent_holds ?o)) (in_motion ?o))) 
                 (once (and 
-                    (not (in_motion ?p)) 
-                    (on ?f ?p) 
-                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?p ?b2))
+                    (not (in_motion ?o)) 
+                    (on floor ?o) 
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?o ?b2))
                 ))
             )
         )
@@ -770,36 +692,11 @@
             )
         )
     )
-    (preference dodgeballLandsInBlocks 
-        (exists (?d - dodgeball ?f - floor)
-            (then
-                (once (and (agent_holds ?d) (forall (?b - cube_block) (> (distance agent ?b) 2))))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (and 
-                    (not (in_motion ?d)) 
-                    (on ?f ?d) 
-                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?d ?b2))
-                ))
-            )
-        )
-    )
-    (preference objectBouncesOut
-        (exists (?p - (either pillow cd dodgeball) ?f - floor)
-            (then
-                (once (and (agent_holds ?p) (forall (?b - cube_block) (> (distance agent ?b) 2))))
-                (hold-while 
-                    (and (not (agent_holds ?p)) (in_motion ?p))
-                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?p ?b2))
-                    (and (touch ?f ?p) (not (exists (?b1 ?b2 - cube_block) (and (on ?f ?b1) (on ?f ?b2) (between ?b1 ?p ?b2 )))))    
-                )           
-            )
-        )
-    )
 )) 
 (:scoring maximize (+
-    (* 5 (count-once-per-objects pillowLandsInBlocks))
-    (* 10 (count-once-per-objects cdLandsInBlocks))
-    (* 20 (count-once-per-objects dodgeballLandsInBlocks))
+    (* 5 (with (?o - pillow) (count-once-per-objects objectLandsInBlocks)))
+    (* 10 (with (?o - cd) (count-once-per-objects objectLandsInBlocks)))
+    (* 20 (with (?o - dodgeball) (count-once-per-objects objectLandsInBlocks)))
     (* (- 5) (count-once-per-objects objectBouncesOut))
 )))
 
@@ -845,7 +742,7 @@
 )))
 
 
-; this ignore the "spin X times" bit
+; this ignores the "spin X times" bit
 (define (game few-objects-25) (:domain few-objects-room-v1)
 (:setup  
     (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?c - chair ?h - hexagonal_bin ?b - bed) 
@@ -924,14 +821,14 @@
 
 (define (game few-objects-26) (:domain few-objects-room-v1)
 (:setup  
-    (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?c - chair ?h - hexagonal_bin ?b - bed ?d - desk)  
+    (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block ?c - chair ?h - hexagonal_bin)  
         (and 
             (game-conserved (and 
-                (on ?b ?h)
-                (adjacent ?c ?d)
+                (on bed ?h)
+                (adjacent ?c desk)
             ))
             (game-optional (and 
-                (adjacent ?b1 ?b)
+                (adjacent ?b1 bed)
                 (on ?b1 ?b2)
                 (adjacent ?b3 ?b1)
                 (on ?b3 ?b4)
@@ -958,7 +855,7 @@
             (then 
                 (once (and (on ?c agent) (agent_holds ?d) (is_rotating ?c)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (and (on ?h ?d) (not (in_motion ?d))))
+                (once (and (in ?h ?d) (not (in_motion ?d))))
             )
         )
     )
@@ -1092,31 +989,31 @@
 (define (game few-objects-28) (:domain few-objects-room-v1)
 (:setup  
     (and 
-        (forall (?b - cube_block ?e - bed)
+        (forall (?b - cube_block)
             (or 
-                (game-optional (on ?e ?b))
+                (game-optional (on bed ?b))
                 (exists (?c - cube_block) (game-optional (and (not (= ?b ?c)) (on ?c ?b))))
             )
         )
-        (exists (?d - dodgeball ?e - bed) (game-optional (on ?e ?d)))
+        (exists (?d - dodgeball) (game-optional (on bed ?d)))
     )
 )
 (:constraints (and 
     (preference allBlocksThrownToBinAndBallToChair
-        (exists (?d - dodgeball ?h - hexagonal_bin ?c - chair ?e - bed)
+        (exists (?d - dodgeball ?h - hexagonal_bin ?c - chair)
             (then 
-                (once (on ?e agent))  ; with a conjunction with the setup if we wanted to allow multiple attempts
+                (once (on bed agent))  ; with a conjunction with the setup if we wanted to allow multiple attempts
                 (forall-sequence (?b - cube_block) 
                     (then 
-                        (once (and (on ?e agent) (agent_holds ?b)))
-                        (hold (and (on ?e agent) (not (agent_holds ?b)) (in_motion ?b))) 
-                        (once (and (on ?e agent) (on ?h ?b) (not (in_motion ?b))))
-                        (hold (on ?e agent))  ; until picking up the next cube
+                        (once (and (on bed agent) (agent_holds ?b)))
+                        (hold (and (on bed agent) (not (agent_holds ?b)) (in_motion ?b))) 
+                        (once (and (on bed agent) (in ?h ?b) (not (in_motion ?b))))
+                        (hold (on bed agent))  ; until picking up the next cube
                     )
                 )
-                (once (and (on ?e agent) (agent_holds ?d)))
+                (once (and (on bed agent) (agent_holds ?d)))
                 (hold-while 
-                    (and (on ?e agent) (not (agent_holds ?b)))
+                    (and (on bed agent) (not (agent_holds ?b)))
                     (touch ?c ?d)
                     (not (object_orientation ?c upright))
                 ) 

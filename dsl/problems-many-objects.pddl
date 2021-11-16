@@ -5,7 +5,7 @@
 
 (define (game many-objects-3) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?f - floor) (forall (?b - (either bridge_block flat_block)) (game-optional (on ?f ?b))))
+    (forall (?b - (either bridge_block flat_block)) (game-optional (on floor ?b)))
 ))
 (:constraints (and 
     (preference bounceBallToMug
@@ -27,7 +27,6 @@
 (:scoring maximize (count-nonoverlapping bounceBallToMug)
 ))
 
-; TODO: 5 is a juggling game - do we attempt to model it?
 
 (define (game many-objects-4) (:domain many-objects-room-v1)
 (:setup
@@ -184,7 +183,7 @@
                     (on ?r ?g)
                 )
                 ; and into the bin
-                (once (and (on ?h ?g) (not (in_motion ?g))))
+                (once (and (in ?h ?g) (not (in_motion ?g))))
             ) 
         )
     )
@@ -208,7 +207,7 @@
                 ; ball not in hand and in motion until...
                 (hold (and (not (agent_holds ?g)) (in_motion ?g)))
                 ; ball settles and it's not in/on the bin
-                (once (and (not (in_motion ?g)) (not (on ?h ?g))))
+                (once (and (not (in_motion ?g)) (not (in ?h ?g))))
             )
         ) 
     )
@@ -236,8 +235,8 @@
 (:setup
 )
 (:constraints (and 
-    (preference throwBallToMugThroughRamp
-        (exists (?g - golfball ?m - mug ?r - curved_wooden_ramp)  
+    (preference throwBallToTargetThroughRamp
+        (exists (?g - golfball ?t - (either mug hexagonal_bin) ?r - curved_wooden_ramp)  
             (then 
                 ; ball starts in hand
                 (once (agent_holds ?g))
@@ -246,30 +245,15 @@
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?r ?g)
                 )
-                (once (and (on ?m ?g) (not (in_motion ?g)))) 
-            )
-        )
-    )
-    (preference throwBallToHexagonalBinThroughRamp
-        (exists (?g - golfball ?h - hexagonal_bin ?r - curved_wooden_ramp) 
-            (then 
-                ; ball starts in hand
-                (once (agent_holds ?g))
-                ; ball not in hand and in motion until...
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?r ?g)
-                )
-                (once (and (on ?h ?g) (not (in_motion ?g)))) 
+                (once (and (in ?t ?g) (not (in_motion ?g)))) 
             )
         )
     )
 ))
 (:scoring maximize (+
-    (* 5 (count-nonoverlapping throwBallToHexagonalBinThroughRamp))
-    (* 10 (count-nonoverlapping throwBallToHexagonalBinThroughRamp))
-))
-)
+    (* 5 (with (?t - hexagonal_bin) (count-nonoverlapping throwBallToTargetThroughRamp)))
+    (* 10 (with (?t - mug) (count-nonoverlapping throwBallToTargetThroughRamp)))
+)))
 
 ; 10 is too ambiguous to resolve 
 
@@ -305,7 +289,7 @@
                     (not (agent_holds ?d))
                     (exists (?b - block) (touch ?d ?b))
                 ))
-                (once (and (on ?h ?d) (not (in_motion ?d))))
+                (once (and (in ?h ?d) (not (in_motion ?d))))
             )
         ) 
     ) 
@@ -330,34 +314,22 @@
     )
 ))
 (:constraints (and 
-    (preference bounceBallToMug
-        (exists (?g - golfball ?m - mug) 
+    (preference bounceBallToTarget
+        (exists (?g - golfball ?t - (either mug hexagonal_bin)) 
             (then 
                 (once (agent_holds ?g))
                 (hold-while
                     (and (not (agent_holds ?g)) (in_motion ?g)) 
                     (touch floor ?g)
                 ) 
-                (once (and (on ?m ?g) (not (in_motion ?g))))
-            )
-        )
-    )
-    (preference bounceBallToBin
-        (exists (?g - golfball ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?g))
-                (hold-while
-                    (and (not (agent_holds ?g)) (in_motion ?g)) 
-                    (touch floor ?g)
-                ) 
-                (once (and (on ?h ?g) (not (in_motion ?g))))
+                (once (and (in ?t ?g) (not (in_motion ?g))))
             )
         )
     )
 ))
 (:scoring maximize (+
-    (count-nonoverlapping bounceBallToMug)
-    (* 3 (count-nonoverlapping bounceBallToBin))
+    (with (?t - hexagonal_bin) (count-nonoverlapping bounceBallToTarget))
+    (* 3 (with (?t - mug) (count-nonoverlapping bounceBallToTarget)))
 )))
 
 
@@ -403,88 +375,58 @@
     )
 ))
 (:constraints (and 
-    (preference dodgeballThrowAttempt
-        (exists (?d - dodgeball)
+    (preference throwAttempt
+        (exists (?b - (either dodgeball golfball))
             (then 
-                (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (not (in_motion ?d)))
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
             )
         )
     )
-    (preference dodgeballRollsOnRamp
-        (exists (?d - dodgeball ?r - large_triangular_ramp ?c - chair)
+    (preference rollBallOnRamp
+        (exists (?b - (either dodgeball golfball) ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?d) (on ?c agent)))
-                (hold-while (and (in_motion ?d) (not (agent_holds ?d))) 
-                    (touch (side ?r front) ?d)
-                    (touch (side ?r rear) ?d)
+                (once (and (agent_holds ?b) (on ?c agent)))
+                (hold-while (and (in_motion ?b) (not (agent_holds ?b))) 
+                    (touch (side ?r front) ?b)
+                    (touch (side ?r back) ?b)
                 )
             )
         ) 
     )
-    (preference dodgeballOnRampToBin
-        (exists (?d - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
+    (preference rollBallOnRampToBin
+        (exists (?b - (either dodgeball golfball) ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
             (then 
-                (once (and (agent_holds ?d) (on ?c agent)))
-                (hold-while (and (in_motion ?d) (not (agent_holds ?d))) 
-                    (touch (side ?r front) ?d)
-                    (touch (side ?r rear) ?d)
+                (once (and (agent_holds ?b) (on ?c agent)))
+                (hold-while (and (in_motion ?b) (not (agent_holds ?b))) 
+                    (touch (side ?r front) ?b)
+                    (touch (side ?r back) ?b)
                 )
-                (hold (and (in_motion ?d) (not (agent_holds ?d))))
-                (once (and (on ?h ?d) (not (in_motion ?d))))
-            )
-        ) 
-    )
-    (preference golfballThrowAttempt
-        (exists (?g - golfball)
-            (then 
-                (once (agent_holds ?g))
-                (hold (and (not (agent_holds ?g)) (in_motion ?g))) 
-                (once (not (in_motion ?g)))
-            )
-        )
-    )
-    (preference golfballRollsOnRamp
-        (exists (?g - golfball ?r - large_triangular_ramp ?c - chair)
-            (then 
-                (once (and (agent_holds ?g) (on ?c agent)))
-                (hold-while (and (in_motion ?g) (not (agent_holds ?g))) 
-                    (touch (side ?r front) ?g)
-                    (touch (side ?r rear) ?g)
-                )
-            )
-        ) 
-    )
-    (preference golfballOnRampToBin
-        (exists (?g - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
-            (then 
-                (once (and (agent_holds ?g) (on ?c agent)))
-                (hold (and (in_motion ?g) (not (agent_holds ?g))))
-                (hold-while (and (in_motion ?g) (not (agent_holds ?g))) 
-                    (touch (side ?r front) ?g)
-                    (touch (side ?r rear) ?g)
-                )
-                (hold (and (in_motion ?g) (not (agent_holds ?g))))
-                (once (and (on ?h ?g) (not (in_motion ?g))))
+                (once (and (in ?h ?b) (not (in_motion ?b))))
             )
         ) 
     )
 ))
 (:terminal (or 
-    (>= (count-nonoverlapping dodgeballThrowAttempt) 3)
-    (>= (count-nonoverlapping golfballThrowAttempt) 3)
+    (>= (with (?b - dodgeball) (count-nonoverlapping throwAttempt)) 3)
+    (>= (with (?b - golfball) (count-nonoverlapping throwAttempt)) 3)
     (and 
-        (> (count-nonoverlapping dodgeballThrowAttempt) 0) 
-        (> (count-nonoverlapping golfballThrowAttempt) 0) 
+        (> (with (?b - dodgeball) (count-nonoverlapping throwAttempt)) 0) 
+        (> (with (?b - golfball) (count-nonoverlapping throwAttempt)) 0)
     )
 
 ))
-(:scoring maximize (+
-    (* 5 (count-nonoverlapping dodgeballRollsOnRamp) (= (count-nonoverlapping golfballThrowAttempt) 0) )
-    (* 10 (count-nonoverlapping dodgeballOnRampToBin) (= (count-nonoverlapping golfballThrowAttempt) 0) )
-    (* 5 (count-nonoverlapping golfballRollsOnRamp) (= (count-nonoverlapping dodgeballThrowAttempt) 0))
-    (* 10 (count-nonoverlapping golfballOnRampToBin) (= (count-nonoverlapping dodgeballThrowAttempt) 0))
+(:scoring maximize 
+(* 
+    (+
+        (* 5 (count-nonoverlapping ballRollsOnRamp)) 
+        (* 10 (count-nonoverlapping rollBallOnRampToBin))
+    )
+    (or 
+        (= (with (?b - dodgeball) (count-nonoverlapping throwAttempt)) 0)
+        (= (with (?b - golfball) (count-nonoverlapping throwAttempt)) 0)
+    ) 
 )))
 
 
@@ -503,7 +445,7 @@
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?d ?r)
                 )
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
+                (once (and (in ?h ?d) (not (in_motion ?d)))) 
             )
         )
     )
@@ -538,27 +480,15 @@
     )
 ))
 (:constraints (and 
-    (preference throwLandsInTarget
-        (exists (?g - golfball ?r - large_triangular_ramp) 
+    (preference throwLandsIn
+        (exists (?g - golfball ?r - large_triangular_ramp ?b1 ?b2 - (either bridge_block triangular_block)) 
             (then
                 (once (and (agent_holds ?g) (exists (?t - triangular_block) (between agent ?r ?t))))
                 (hold-while 
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?d ?g)
                 )
-                (once (and (not (in_motion ?g)) (on floor ?g) (exists (?t1 ?t2 - triangular_block) (between ?t1 ?r ?t2))))
-            )
-        )
-    )
-    (preference throwLandsInPerimeter
-        (exists (?g - golfball ?r - large_triangular_ramp) 
-            (then
-                (once (and (agent_holds ?g) (exists (?t - triangular_block) (between agent ?r ?t))))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?d ?g)
-                )
-                (once (and (not (in_motion ?g)) (on floor ?g) (exists (?b1 ?b2 - bridge_block) (between ?b1 ?r ?b2))))
+                (once (and (not (in_motion ?g)) (on floor ?g) (between ?b1 ?r ?b2)))
             )
         )
     )
@@ -576,31 +506,30 @@
     (>= (count-nonoverlapping throwAttempt) 3)
 )
 (:scoring maximize (+
-    (* 5 (count-nonoverlapping throwLandsInTarget))
-    (* 2 (count-nonoverlapping throwLandsInPerimeter))
+    (* 5 (with (?b1 ?b2 - triangular_block) (count-nonoverlapping throwLandsIn)))
+    (* 2 (with (?b1 ?b2 - bridge_block) (count-nonoverlapping throwLandsIn)))
 )))
 
 
 (define (game many-objects-21) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?h - hexagonal_bin ?b - bed)
-        (game-conserved (on ?b ?h))
+    (exists (?h - hexagonal_bin)
+        (game-conserved (on bed ?h))
     )
-    (exists (?r - curved_wooden_ramp ?b - bed)
-        (game-conserved (= (distance ?b ?r) 2))
+    (exists (?r - curved_wooden_ramp)
+        (game-conserved (= (distance bed ?r) 2))
     )
 ))
 (:constraints (and 
     (preference throwBallToBinThroughRamp
-        (exists (?d - dodgeball ?h - hexagonal_bin ?r - curved_wooden_ramp ?w - north_wall)  
+        (exists (?d - dodgeball ?h - hexagonal_bin ?r - curved_wooden_ramp ?w - wall)  
             (then 
-                ; assuming the bed is on the south wall
                 (once (and (agent_holds ?d) (< (distance agent ?w) 1)))
                 (hold-while 
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?d ?r)
                 )
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
+                (once (and (in ?h ?d) (not (in_motion ?d)))) 
             )
         )
     )
@@ -613,68 +542,8 @@
 (:setup
 )
 (:constraints (and 
-    (preference beachballMovesSquareBlock
-        (exists (?b - beachball ?c - (either flat_block bridge_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference beachballMovesTallBlock
-        (exists (?b - beachball ?c - (either pyramid_block tall_cylindrical_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference beachballMovesShortBlock
-        (exists (?b - beachball ?c - short_cylindrical_block ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference dodgeballMovesSquareBlock
-        (exists (?b - dodgeball ?c - (either flat_block bridge_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference dodgeballMovesTallBlock
-        (exists (?b - dodgeball ?c - (either pyramid_block tall_cylindrical_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference dodgeballMovesShortBlock
-        (exists (?b - dodgeball ?c - short_cylindrical_block) 
+    (preference ballMovesBlock
+        (exists (?b - beachball ?c - block) 
             (then 
                 (once (and (agent_holds ?b) (on floor ?c)))
                 (hold-while
@@ -685,53 +554,17 @@
             )
         )
     )
-    (preference golfballMovesSquareBlock
-        (exists (?b - golfball ?c - (either flat_block bridge_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference golfballMovesTallBlock
-        (exists (?b - golfball ?c - (either pyramid_block tall_cylindrical_block) ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
-    (preference golfballMovesShortBlock
-        (exists (?b - golfball ?c - short_cylindrical_block ?f - floor) 
-            (then 
-                (once (and (agent_holds ?b) (on ?f ?c)))
-                (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b) (not (agent_holds ?c)))
-                    (touch ?b ?c)
-                    (in_motion ?c)
-                )
-            )
-        )
-    )
 ))
 (:scoring maximize (+
-   (* 1 (count-nonoverlapping beachballMovesSquareBlock))
-   (* 3 (count-nonoverlapping beachballMovesTallBlock))
-   (* 5 (count-nonoverlapping beachballMovesShortBlock))
-   (* 2 (count-nonoverlapping dodgeballlMovesSquareBlock))
-   (* 6 (count-nonoverlapping dodgeballMovesTallBlock))
-   (* 10 (count-nonoverlapping dodgeballMovesShortBlock))
-   (* 3 (count-nonoverlapping golfballMovesSquareBlock))
-   (* 9 (count-nonoverlapping golfballMovesTallBlock))
-   (* 15 (count-nonoverlapping golfballMovesShortBlock))
+    (with (?b - beachball ?c - (either flat_block bridge_block)) (count-nonoverlapping ballMovesBlock))
+    (* 3 (with (?b - beachball ?c - (either pyramid_block tall_cylindrical_block)) (count-nonoverlapping ballMovesBlock)))
+    (* 5 (with (?b - beachball ?c - short_cylindrical_block) (count-nonoverlapping ballMovesBlock)))
+    (* 2 (with (?b - dodgeball ?c - (either flat_block bridge_block)) (count-nonoverlapping ballMovesBlock)))
+    (* 6 (with (?b - dodgeball ?c - (either pyramid_block tall_cylindrical_block)) (count-nonoverlapping ballMovesBlock)))
+    (* 10 (with (?b - dodgeball ?c - short_cylindrical_block) (count-nonoverlapping ballMovesBlock)))
+    (* 3 (with (?b - golfball ?c - (either flat_block bridge_block)) (count-nonoverlapping ballMovesBlock)))
+    (* 9 (with (?b - golfball ?c - (either pyramid_block tall_cylindrical_block)) (count-nonoverlapping ballMovesBlock)))
+    (* 15 (with (?b - golfball ?c - short_cylindrical_block) (count-nonoverlapping ballMovesBlock)))
 )))
 
 
@@ -747,39 +580,15 @@
     )
 )
 (:constraints (and 
-    (preference beachballTolBinThroughRamp
-        (exists (?b - beachball ?h - hexagonal_bin ?r - large_triangular_ramp) 
+    (preference ballTolBinThroughRamp
+        (exists (?b - ball ?h - hexagonal_bin ?r - large_triangular_ramp) 
             (then 
                 (once (agent_holds ?b))
                 (hold-while 
                     (and (not (agent_holds ?b)) (in_motion ?b))
                     (touch ?b ?r)
                 )
-                (once (and (on ?h ?b) (not (in_motion ?b)))) 
-            )
-        )
-    )
-    (preference dodgeballTolBinThroughRamp
-        (exists (?d - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp) 
-            (then 
-                (once (agent_holds ?d))
-                (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
-                    (touch ?d ?r)
-                )
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
-            )
-        )
-    )
-    (preference goflballTolBinThroughRamp
-        (exists (?g - golfball ?h - hexagonal_bin ?r - large_triangular_ramp) 
-            (then 
-                (once (agent_holds ?g))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?g ?r)
-                )
-                (once (and (on ?h ?g) (not (in_motion ?g)))) 
+                (once (and (in ?h ?b) (not (in_motion ?b)))) 
             )
         )
     )
@@ -791,15 +600,15 @@
                     (and (not (agent_holds ?b)) (in_motion ?b))
                     (touch ?b ?r)
                 )
-                (once (and (not (agent_holds ?b)) (not (on ?h ?b)) (not (in_motion ?b)))) 
+                (once (and (not (in ?h ?b)) (not (in_motion ?b)))) 
             )
         )
     )
 ))
 (:scoring maximize (+
-   (* 10 (count-nonoverlapping beachballTolBinThroughRamp))
-   (* 15 (count-nonoverlapping dodgeballTolBinThroughRamp))
-   (* 20 (count-nonoverlapping goflballTolBinThroughRamp))
+   (* 10 (with (?b - beachball) (count-nonoverlapping beachballTolBinThroughRamp)))
+   (* 15 (with (?b - dodgeball) (count-nonoverlapping beachballTolBinThroughRamp)))
+   (* 20 (with (?b - golfball) (count-nonoverlapping beachballTolBinThroughRamp)))
    (* (- 5) (count-nonoverlapping throwBouncesOffRampAndMisses))
 )))
 
@@ -825,25 +634,25 @@
 ))
 (:constraints (and 
     (preference rollBallToBin
-        (exists (?g - golfball ?h - hexagonal_bin ?b - bed ?f - floor)
+        (exists (?g - golfball ?h - hexagonal_bin)
             (then 
-                (once (and (agent_holds ?g) (on ?b agent)))
+                (once (and (agent_holds ?g) (on bed agent)))
                 (hold (and 
                     (in_motion ?g) 
                     (not (agent_holds ?g))
                     (exists (?b - block) (touch ?g ?b))
                 ))
                 (once (and 
-                    (or (on ?h ?g) (on ?f ?g))
+                    (or (on ?h ?g) (on floor ?g))
                     (not (in_motion ?g))
                 ))
             )
         ) 
     )
     (preference rollAttempt
-        (exists (?g - golfball ?b - block ?b - bed)
+        (exists (?g - golfball ?b - block)
             (then 
-                (once (and (agent_holds ?g) (on ?b agent)))
+                (once (and (agent_holds ?g) (on bed agent)))
                 (hold (and (in_motion ?g) (not (agent_holds ?g))))
                 (once (touch ?g ?b))
             )
@@ -859,26 +668,26 @@
 
 (define (game many-objects-25) (:domain many-objects-room-v1)
 (:setup (and 
-    (exists (?t1 ?t2 - teddy_bear ?h - hexagonal_bin ?b - bed) (and  
-        (game-conserved (on ?b ?t1))
-        (game-conserved (on ?b ?t2))
-        (game-conserved (on ?b ?h))
+    (exists (?t1 ?t2 - teddy_bear ?h - hexagonal_bin) (and  
+        (game-conserved (on bed ?t1))
+        (game-conserved (on bed ?t2))
+        (game-conserved (on bed ?h))
         ; player will hit them, so they might move
         (game-optional (= (distance ?t1 ?t2) 0.3))
         (game-optional (= (distance ?t1 ?h) (distance ?t2 ?h)))
     ))
-    (forall (?c - chair ?d - desk)
-        (game-conserved (> (distance ?c ?d) 2))
+    (forall (?c - chair)
+        (game-conserved (> (distance ?c desk) 2))
     )
     (forall (?b - (either dodgeball beachball))
-        (game-optional (< (distance ?b ?d) 1))
+        (game-optional (< (distance ?b desk) 1))
     )
 ))
 (:constraints (and 
     (preference ballHitsTeddyBear
-        (exists (?b - (either dodgeball beachball) ?t - teddy_bear ?d - desk) 
+        (exists (?b - (either dodgeball beachball) ?t - teddy_bear) 
             (then 
-                (once (and (agent_holds ?b) (< (distance ?b ?d) 1)))
+                (once (and (agent_holds ?b) (< (distance ?b desk) 1)))
                 (hold-while 
                     (and (not (agent_holds ?b)) (in_motion ?b))
                     (touch ?b ?t)
@@ -887,11 +696,11 @@
         )
     )
     (preference ballLandsOnBin
-        (exists (?b - (either dodgeball beachball) ?h - hexagonal_bin ?d - desk) 
+        (exists (?b - (either dodgeball beachball) ?h - hexagonal_bin) 
             (then 
-                (once (and (agent_holds ?b) (< (distance ?b ?d) 1)))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d)))
-                (once (and (on ?h ?d) (not (in_motion ?d)))) 
+                (once (and (agent_holds ?b) (< (distance agent desk) 1)))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (in ?h ?b) (not (in_motion ?b)))) 
             )
         )
     )
@@ -907,95 +716,53 @@
 
 (define (game many-objects-26) (:domain many-objects-room-v1)
 (:setup (and 
-    (exists (?s - shelf ?w - south_wall) (and 
+    (exists (?s - shelf ?w - wall) (and 
         (game-conserved (adjacent ?s ?w))
         (exists (?h - hexagonal_bin) (game-conserved (< (distance ?s ?h) 0.1)))
         (forall (?b - (either tall_cylindrical_block bridge_block)) (game-optional (on ?s ?b)))
     ))
 ))
 (:constraints (and 
-    (preference golfballHitsLowerShelfBlocks
-        (exists (?g - goflball ?b - (either triangular_block cube_block) ?h - hexagonal_bin) 
+    (preference golfballHitsBlocks
+        (exists (?g - goflball ?b - block ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?g))
                 (hold-while 
                     (and (not (agent_holds ?g)) (in_motion ?g))
                     (touch ?g ?b)
                 )
-                (once (and (on ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-    (preference golfballHitsMiddleShelfBlocks
-        (exists (?g - goflball ?b - (either pyramid_block short_cylindrical_block) ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?g))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?g ?b)
-                )
-                (once (and (on ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-    (preference golfballHitsTopShelfBlocks
-        (exists (?g - goflball ?b - (either flat_block tall_cylindrical_block bridge_block) ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?g))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?g ?b)
-                )
-                (once (and (on ?h ?b) (not (in_motion ?b))))
+                (once (and (in ?h ?b) (not (in_motion ?b))))
             )
         )
     )
 ))
 (:scoring maximize (+
-   (* 1 (count-once-per-objects golfballHitsLowerShelfBlocks))
-   (* 2 (count-once-per-objects golfballHitsMiddleShelfBlocks))
-   (* 3 (count-once-per-objects golfballHitsTopShelfBlocks))
+    (with (?b - (either triangular_block cube_block)) (count-once-per-objects golfballHitsBlocks))
+    (* 2 (with (?b - (either pyramid_block short_cylindrical_block)) (count-once-per-objects golfballHitsBlocks)))
+    (* 3 (with (?b - (either flat_block tall_cylindrical_block bridge_block)) (count-once-per-objects golfballHitsBlocks)))
 )))
 
 
 (define (game many-objects-27) (:domain many-objects-room-v1)
 (:setup (and
     (exists (?h - hexagonal_bin ?r - room_center) (game-conserved (< (distance ?r ?h) 0.5)))
-    (exists (?e - bed) (forall (?b - (either golfball dodgeball beachball)) (game-optional (on ?e ?b))))
+    (forall (?b - (either golfball dodgeball beachball)) (game-optional (on bed ?b)))
 ))
 (:constraints (and 
-    (preference golfballThrownToBin
-        (exists (?b - golfball ?h - hexagonal_bin ?e - bed) 
+    (preference ballThrownToBin
+        (exists (?b - ball ?h - hexagonal_bin) 
             (then 
-                (once (and (agent_holds ?b) (on ?e agent)))
+                (once (and (agent_holds ?b) (on bed agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (on ?h ?b) (not (in_motion ?b)))) 
-            )
-        )
-    )
-    (preference dodgeballThrownToBin
-        (exists (?b - dodgeball ?h - hexagonal_bin ?e - bed) 
-            (then 
-                (once (and (agent_holds ?b) (on ?e agent)))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (on ?h ?b) (not (in_motion ?b)))) 
-            )
-        )
-    )
-    (preference beachballThrownToBin
-        (exists (?b - beachball ?h - hexagonal_bin ?e - bed) 
-            (then 
-                (once (and (agent_holds ?b) (on ?e agent)))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (on ?h ?b) (not (in_motion ?b)))) 
+                (once (and (in ?h ?b) (not (in_motion ?b)))) 
             )
         )
     )
 ))
 (:scoring maximize (+
-   (* 1 (count-nonoverlapping golfballThrownToBin))
-   (* 2 (count-nonoverlapping dodgeballThrownToBin))
-   (* 3 (count-nonoverlapping beachballThrownToBin))
+   (with (?b - golfball) (count-nonoverlapping ballThrownToBin))
+   (* 2 (with (?b - dodgeball) (count-nonoverlapping ballThrownToBin)))
+   (* 3 (with (?b - beachball) (count-nonoverlapping ballThrownToBin)))
 )))
 
 
@@ -1004,34 +771,24 @@
 
 (define (game many-objects-29) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?r - rug ?p - poster ?c - cd) (game-conserved (and 
-        (on ?r ?p)
+    (exists (?p - poster ?c - cd) (game-conserved (and 
+        (on rug ?p)
         (on ?p ?c)
     )))
 ))
 (:constraints (and 
     (preference golfballThrown
-        (exists (?g - golfball ?b - bed) 
+        (exists (?g - golfball) 
             (then 
-                (once (and (agent_holds ?g) (on ?b agent)))
+                (once (and (agent_holds ?g) (on bed agent)))
                 (hold (and (not (agent_holds ?g)) (in_motion ?g)))
                 (hold-to-end (not (agent_holds ?g)))
             )
         )
     )
-    (preference ballEndedOnCD
-        (exists (?g - golfball ?c - cd) 
-            (at-end (on ?c ?g))
-        )
-    )
-    (preference ballEndedOnPoster
-        (exists (?g - golfball) 
-            (at-end (on poster ?g))
-        )
-    )
-    (preference ballEndedOnRug
-        (exists (?g - golfball) 
-            (at-end (on rug ?g))
+    (preference ballEndedObject
+        (exists (?g - golfball ?o - (either cd poster rug)) 
+            (at-end (on ?o ?g))
         )
     )
     (preference throwAttempt
@@ -1048,9 +805,9 @@
     (>= (count-once-per-objects throwAttempt) 3)
 )
 (:scoring maximize (+
-   (* 1 (count-nonoverlapping ballEndedOnRug))
-   (* 2 (count-nonoverlapping ballEndedOnPoster))
-   (* 3 (count-nonoverlapping ballEndedOnCD))
+   (with (?o - rug) (count-nonoverlapping ballEndedObject))
+   (* 2 (with (?o - poster) (count-nonoverlapping ballEndedObject)))
+   (* 3 (with (?o - cd) (count-nonoverlapping ballEndedObject)))
 )))
 
 
@@ -1077,97 +834,4 @@
 (:scoring maximize (count-total agentOnBridge)
 ))
 
-
-
 ; 31 is invalid 
-
-; game for the FRL presentation
-(define (game demo-game) (:domain many-objects-room-v1)
-(:setup (and 
-    (forall (?t - (either teddy_bear pillow))
-        (game-conserved (or 
-            (not (on bed ?t))  
-            (and
-                (on bed ?t)
-                (< (distance ?t north_wall) 0.5)
-            )
-        ))
-    ) 
-    (exists (?b1 ?b2 ?b3 - block)
-        (game-optional (and
-            (on bed ?b1)
-            (on ?b1 ?b2)
-            (on ?b2 ?b3)
-        ))
-    )
-))
-(:constraints (and 
-    (preference ballKnocksBlock
-        (exists (?g - (either goflball dodgeball) ?b - block) 
-            (then 
-                (once (and (agent_holds ?g) (< (distance agent bottom_shelf) 1)))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?g ?b)
-                    (in_motion ?b)
-                )
-                (once (and (not (in_motion ?g)) (not (in_motion ?b))))
-            )
-        )
-    )
-))
-(:scoring maximize (count-nonoverlapping ballKnocksBlock)
-))
-
-; second version
-(define (game demo-game) (:domain many-objects-room-v1)
-(:setup (and 
-    (forall (?t - (either teddy_bear pillow))
-        (game-conserved (or 
-            (not (on bed ?t))  
-            (and
-                (on bed ?t)
-                (< (distance ?t north_wall) 0.5)
-            )
-        ))
-    ) 
-    (exists (?b1 ?b2 ?b3 - block)
-        (game-optional (and
-            (on bed ?b1)
-            (on ?b1 ?b2)
-            (on ?b2 ?b3)
-        ))
-    )
-))
-(:constraints (and 
-    (preference golfballKnocksBlock
-        (exists (?g - goflball ?b - block) 
-            (then 
-                (once (and (agent_holds ?g) (< (distance agent bottom_shelf) 1)))
-                (hold-while 
-                    (and (not (agent_holds ?g)) (in_motion ?g))
-                    (touch ?g ?b)
-                    (in_motion ?b)
-                )
-                (once (and (not (in_motion ?g)) (not (in_motion ?b))))
-            )
-        )
-    )
-    (preference dodgeballKnocksBlock
-        (exists (?d - dodgeball ?b - block) 
-            (then 
-                (once (and (agent_holds ?d) (< (distance agent bottom_shelf) 1)))
-                (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
-                    (touch ?d ?b)
-                    (in_motion ?b)
-                )
-                (once (and (not (in_motion ?d)) (not (in_motion ?b))))
-            )
-        )
-    )
-))
-(:scoring maximize (+
-    (count-nonoverlapping dodgeballKnocksBlock)
-    (* 2 (count-nonoverlapping golfballKnocksBlock))
-)))

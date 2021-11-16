@@ -563,7 +563,7 @@ def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
     printer.register_exact_matches(
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
-        _handle_equals_comp, _handle_function_eval
+        _handle_equals_comp, _handle_function_eval, _handle_with
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
     printer.register_keyword_match(('count',), _handle_preference_eval)

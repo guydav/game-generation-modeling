@@ -156,18 +156,27 @@ scoring_expr =
     scoring_multi_expr |
     scoring_binary_expr |
     scoring_neg_expr |
+    scoring_and |
+    scoring_or |
+    scoring_not |
     total_time |
     total_score |
     number |
     preference_eval |
     scoring_comparison |
-    function_eval  | # allowing an arbitrary function evaluation as part of scoring -- do we want this?
-    scoring_with
+    scoring_with |
+    function_eval  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
     ;
 
 scoring_multi_expr = '(' op:multi_op {expr:scoring_expr}+ ')';  # TODO: do we want to enforce more than one?
 scoring_binary_expr = '(' op:binary_op expr_1:scoring_expr expr_2:scoring_expr ')';
 scoring_neg_expr = '(-' expr:scoring_expr ')';
+
+scoring_and = '(and' {and_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
+scoring_or = '(or' {or_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
+scoring_not = '(not' not_args:scoring_expr ')';
+
+
 total_time = '(total-time)';
 total_score = '(total-score)' ;  # allowing to refer to it here to say, double the score if a condition is achieved
 

@@ -12,7 +12,8 @@ parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     '../dsl/problems-few-objects.pddl',
     '../dsl/problems-medium-objects.pddl',
-    '../dsl/problems-many-objects.pddl'
+    '../dsl/problems-many-objects.pddl',
+    '../dsl/interactive-beta.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 DEFAULT_OUTPUT_PATH ='./preprocessing_examples.csv'

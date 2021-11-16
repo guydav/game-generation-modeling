@@ -297,7 +297,11 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
-    return _out_str_to_span(f'({ast.func_name} {" ".join(ast.func_args)})', context)
+    formatted_args = [
+        arg if isinstance(arg, str) 
+        else _handle_predicate(None, arg.parseinfo.rule, arg, depth, increment, context, return_str=True) 
+        for arg in ast.func_args]
+    return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
 
 
 @mutation_context
@@ -517,6 +521,40 @@ def _handle_equals_comp(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
+def _handle_with(caller, rule, ast, depth, increment, context=None):
+    _indent_print('(with ', depth, increment, context)
+    if context is None:
+        context = {}
+    context['continue_line'] = True
+    var_node = ast['with_vars']
+    formatted_vars = _parse_variable_list(caller, rule, var_node.variables, depth, increment, context)
+    var_str = f'({" ".join(formatted_vars)})'
+
+    if 'mutation' in var_node:
+        prev_mutation = None
+        if 'mutation' in context:
+            prev_mutation = context['mutation']
+        context['mutation'] = var_node['mutation']
+        context = preprocess_context(context)
+
+        _indent_print(_out_str_to_span(var_str, context), depth, increment, context)
+
+        if prev_mutation is not None:
+            context['mutation'] = prev_mutation
+        else:
+            del context['mutation'] 
+
+        context = preprocess_context(context)
+
+    else:
+        _indent_print(_out_str_to_span(var_str, context), depth, increment, context)
+
+    caller(ast.with_pref, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+    context['continue_line'] = False
+
+
+@mutation_context
 def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
     _indent_print(_out_str_to_span(f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})', context), depth, increment, context)
     
@@ -537,7 +575,7 @@ def build_scoring_printer():
     printer = ASTPrinter('(:scoring', ('scoring_',))
     printer.register_exact_matches(
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
-        _handle_equals_comp, _handle_function_eval
+        _handle_equals_comp, _handle_function_eval, _handle_with,
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
     printer.register_keyword_match(('count',), _handle_preference_eval)

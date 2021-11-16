@@ -14,7 +14,7 @@ scoring_def = '(:scoring' scoring ')';
 
 # Generic definitions useful across sections
 
-id = /[a-z]+(-[a-z0-9]+)*/;
+id = /[a-z0-9]+(-[a-z0-9]+)*/;
 name = /[A-z]+(_[A-z0-9]+)*/;
 number = /\d*\.?\d+/;
 
@@ -38,7 +38,7 @@ function_comparison =
 # fc4 = '(' '=' {function_eval}+ ')' ;
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' func_name:name func_args:{function_term}* ')';
-function_term = name | variable | number;
+function_term = name | variable | number | predicate;
 
 predicate = '(' pred_name:predicate_name pred_args:{predicate_term}* ')';
 predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
@@ -161,7 +161,8 @@ scoring_expr =
     number |
     preference_eval |
     scoring_comparison |
-    function_eval  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
+    function_eval  | # allowing an arbitrary function evaluation as part of scoring -- do we want this?
+    scoring_with
     ;
 
 scoring_multi_expr = '(' op:multi_op {expr:scoring_expr}+ ')';  # TODO: do we want to enforce more than one?
@@ -180,6 +181,7 @@ scoring_comparison =
 scoring_comp = '(' op:binary_comp expr_1:scoring_expr expr_2:scoring_expr ')';
 scoring_equals_comp = '(=' {expr:scoring_expr}+ ')';
 
+scoring_with = '(with' with_vars:variable_list with_pref:preference_eval ')';
 
 preference_eval = 
     count_nonoverlapping |
@@ -188,7 +190,8 @@ preference_eval =
     count_longest |
     count_shortest |
     count_total |
-    count_increasing_measure;
+    count_increasing_measure |
+    count_unique_positions;
 
 count_nonoverlapping = '(count-nonoverlapping' pref_name:name ')';
 count_once = '(count-once' pref_name:name ')';
@@ -197,6 +200,7 @@ count_longest = '(count-longest' pref_name:name ')';
 count_shortest = '(count-shortest' pref_name:name ')';
 count_total = '(count-total' pref_name:name ')';
 count_increasing_measure = '(count-increasing-measure' pref_name:name ')';
+count_unique_positions = '(count-unique-positions' pref_name:name')';
 
 # Scoring
 scoring = 

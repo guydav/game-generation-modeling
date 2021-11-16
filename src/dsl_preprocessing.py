@@ -7,16 +7,17 @@ from ast_utils import copy_ast, load_asts, replace_child
 
 
 parser = argparse.ArgumentParser()
-DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
+DEFAULT_GRAMMAR_FILE = '../dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
-    './problems-few-objects.pddl',
-    './problems-medium-objects.pddl',
-    './problems-many-objects.pddl'
+    '../dsl/problems-few-objects.pddl',
+    '../dsl/problems-medium-objects.pddl',
+    '../dsl/problems-many-objects.pddl'
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 DEFAULT_OUTPUT_PATH ='./preprocessing_examples.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
+parser.add_argument('-p', '--print-dsls', action='store_true')
 
 
 PREPROCESS_SUBSTITUTIONS = {
@@ -107,7 +108,7 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar) 
 
-    asts = load_asts(args, grammar_parser)
+    asts = load_asts(args, grammar_parser, should_print=args.print_dsls)
     preprocessor = ASTPreprocessor()
 
     for ast in asts:

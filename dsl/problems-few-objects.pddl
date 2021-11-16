@@ -308,7 +308,7 @@
 )
 (:constraints (and 
     (preference onChairFromWallToWall
-        (exists (?c - chair ?w1 - wall ?w2 - wall)
+        (exists (?c - chair ?w1 ?w2 - wall)
             (then
                 (once (adjacent agent ?w1))
                 (hold (on ?c agent))

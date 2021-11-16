@@ -10,13 +10,22 @@ DEFAULT_TEST_FILES = (
 )
 
 
-def load_asts(args, grammar_parser):
+def load_asts(args, grammar_parser, should_print=False):
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
 
-    return [grammar_parser.parse(game) 
-        for test_file in args.test_files 
-        for game in load_tests_from_file(test_file)]
+    if should_print:
+        results = []
+        for test_file in args.test_files:
+            for game in load_tests_from_file(test_file):
+                print(game)
+                results.append(grammar_parser.parse(game))
+        return results
+
+    else:
+        return [grammar_parser.parse(game) 
+            for test_file in args.test_files 
+            for game in load_tests_from_file(test_file)]
 
 
 DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
@@ -32,7 +41,7 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
     #         new_lines.append(l[:l.find(';')])
     new_lines = [l[:l.find(';')] for l in lines 
         if len(l.strip()) > 0 and not l.strip()[0] == ';']
-    text = ''.join(new_lines)
+    text = '\n'.join(new_lines)
     results = []
     start = text.find(start_token)
     while start != -1:

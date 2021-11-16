@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "-v", "-t", "./problems-many-objects.pddl"  
+               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl"  
             ],
             "console": "integratedTerminal"
         },

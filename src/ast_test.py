@@ -1,9 +1,10 @@
 from parse_dsl import *
-grammar = tatsu.compile(open('./dsl.ebnf').read())
+grammar = tatsu.compile(open('../dsl/dsl.ebnf').read())
 DEFAULT_TEST_FILES = (
-    './problems-few-objects.pddl',
-    './problems-medium-objects.pddl',
-    './problems-many-objects.pddl'
+    '../dsl/problems-few-objects.pddl',
+    '../dsl/problems-medium-objects.pddl',
+    '../dsl/problems-many-objects.pddl',
+    '../dsl/interactive-beta.pddl',
 )
 
 asts = {}

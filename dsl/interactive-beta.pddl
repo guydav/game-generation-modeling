@@ -372,9 +372,18 @@
             )
         )
     )
+    (preference throwAttempt
+        (exists (?t - teddy_bear)
+            (then 
+                (once (agent_holds ?t))
+                (hold (and (not (agent_holds ?t)) (in_motion ?t))) 
+                (once (not (in_motion ?t)))
+            )
+        )
+    )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwTeddyOntoPillow) 10)
+    (>= (count-nonoverlapping throwAttempt) 10)
 )
 (:scoring maximize (count-nonoverlapping throwTeddyOntoPillow)
 ))
@@ -511,6 +520,7 @@
     (* 30 (with (?b - beachball) (count-nonoverlapping throwBallToBin)))
     (* (- 1) (count-nonoverlapping failedThrowToBin))
 )))
+    
 
 (define (game 5bc79f652885710001a0e82a) (:domain few-objects-room-v1)  ; 15
 (:setup

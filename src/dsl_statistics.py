@@ -4,21 +4,23 @@ import tatsu
 import tqdm
 import pandas as pd
 import numpy as np
+import os
 
 from parse_dsl import load_tests_from_file
 
 
 parser = argparse.ArgumentParser()
-DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
+DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
-    './problems-few-objects.pddl',
-    './problems-medium-objects.pddl',
-    './problems-many-objects.pddl'
+    './dsl/problems-few-objects.pddl',
+    './dsl/problems-medium-objects.pddl',
+    './dsl/problems-many-objects.pddl',
+    './dsl/interactive-beta.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./dsl_statistics.csv'
+DEFAULT_OUTPUT_PATH ='./data/dsl_statistics.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
@@ -35,7 +37,7 @@ class ASTStatisticsAggregator:
     def __init__(self):
         self.rule_registry = defaultdict(list)
         self.header_registry = dict()
-        self.headers = ['game_name', 'domain_name']
+        self.headers = ['src_file', 'game_name', 'domain_name']
         self.rows = []
 
     def _register(self, stat, rule):
@@ -54,8 +56,9 @@ class ASTStatisticsAggregator:
     def to_df(self):
         return pd.DataFrame.from_records(self.rows, columns=self.headers)
 
-    def parse(self, ast):
+    def parse(self, ast, src_file):
         row = defaultdict(list)
+        row['src_file'].append(os.path.basename(src_file))
         row['game_name'].append(ast[1]["game_name"])
         row['domain_name'].append(ast[2]["domain_name"])
         ast = ast[3:]
@@ -70,22 +73,22 @@ class ASTStatisticsAggregator:
 
         self.rows.append(row)
 
-    def _parse(self, ast, row):
+    def _parse(self, ast, row, depth=0):
         if not ast or isinstance(ast, (str, int, tatsu.buffering.Buffer)):
             return
 
         elif isinstance(ast, (tuple, list)):
-            [self._parse(element, row) for element in ast]
+            [self._parse(element, row, depth) for element in ast]
 
         elif isinstance(ast, tatsu.ast.AST):
             if ast.parseinfo is not None:
                 stat_parsers = self.rule_registry[ast.parseinfo.rule]
                 for stat in stat_parsers:
-                    result = stat.extract(ast)
+                    result = stat.extract(ast, depth)
                     if result:
                         row[stat.header].append(result)
 
-            [self._parse(element, row) for element in ast.values()]
+            [self._parse(element, row, depth + 1) for element in ast.values()]
 
         else:
             print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
@@ -94,19 +97,18 @@ class ASTStatisticsAggregator:
 def build_aggregator(args):
     agg = ASTStatisticsAggregator()
 
-
-
-    length_of_then = StatExtractor('then', 'length_of_then', lambda ast: len(ast.then_funcs), lambda x: x)
+    length_of_then = StatExtractor('then', 'length_of_then', lambda ast, depth: len(ast.then_funcs), lambda x: x)
     agg.register(length_of_then)
 
-    num_preferences = StatExtractor('preference', 'num_preferences', lambda ast: 1, np.sum)
+    num_preferences = StatExtractor('preference', 'num_preferences', lambda ast, depth: 1, np.sum)
     agg.register(num_preferences)
 
-    def objects_quantified(ast):
+    def objects_quantified(ast, depth=0):
         key = 'exists_vars'
         if 'forall_vars' in ast:
             key = 'forall_vars'
-        return len(ast[key][1])
+
+        return len(ast[key]['variables'])
 
     num_setup_objects_quantified = StatExtractor(
         ('setup_exists', 'setup_forall'), 'setup_objects_quantified', 
@@ -119,21 +121,21 @@ def build_aggregator(args):
     agg.register(num_preference_objects_quantified)
 
     terminal_clause_exists = StatExtractor(
-        'terminal_comp', 'terminal_exists', lambda ast: True, all
+        'terminal_comp', 'terminal_exists', lambda ast, depth: True, all
     )
     agg.register(terminal_clause_exists)
 
-    def objects_referenced(ast):
+    def objects_referenced(ast, depth=None):
         key = 'exists_vars'
         if 'forall_vars' in ast:
             key = 'forall_vars'
 
         results = defaultdict(lambda: 0)
-        for quantification in ast[key][1]:
-            if isinstance(quantification[2], str):
-                results[quantification[2]] += 1
+        for quantification in ast[key]['variables']:
+            if isinstance(quantification['var_type'], str):
+                results[quantification['var_type']] += 1
             else:
-                for name in quantification[2].type_names:
+                for name in quantification['var_type'].type_names:
                     results[name] += 1
 
         return results
@@ -150,6 +152,10 @@ def build_aggregator(args):
         'object_types_quantified', objects_referenced, aggregate_count_dicts
     )
     agg.register(object_types_quantified)
+
+    max_depth = StatExtractor('predicate', 'max_depth', lambda ast, depth: depth, max)
+    agg.register(max_depth)
+
     return agg
             
 
@@ -167,7 +173,7 @@ def main(args):
 
         for test_case in test_cases:
             ast = grammar_parser.parse(test_case)
-            aggregator.parse(ast)
+            aggregator.parse(ast, test_file)
 
     df = aggregator.to_df()
     df.to_csv(args.output_path, index_label='Index')    

@@ -1,85 +1,85 @@
-Index,src_file,game_name,domain_name,length_of_then,num_preferences,setup_objects_quantified,preference_objects_quantified,terminal_exists,object_types_quantified,max_depth
-0,problems-few-objects.pddl,few-objects-2,few-objects-room-v1,"[3, 3]",2,[2],"[3, 2]",,"{'hexagonal_bin': 3, 'chair': 2, 'dodgeball': 2}",6
-1,problems-few-objects.pddl,few-objects-3,few-objects-room-v1,,2,[1],"[2, 1]",,"{'desktop': 1, 'laptop': 1, 'cube_block': 2, 'desk': 1}",5
-2,problems-few-objects.pddl,few-objects-4,few-objects-room-v1,[3],1,[2],[3],True,"{'wall': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6
-3,problems-few-objects.pddl,few-objects-5,few-objects-room-v1,"[3, 3]",2,[4],"[4, 1]",True,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 3, 'textbook': 2}",6
-4,problems-few-objects.pddl,few-objects-7,few-objects-room-v1,[3],1,[2],[3],,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6
-5,problems-few-objects.pddl,few-objects-8,few-objects-room-v1,"[3, 3]",2,[2],"[3, 1]",True,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 2}",6
-6,problems-few-objects.pddl,few-objects-9,few-objects-room-v1,[3],1,,[2],,"{'doggie_bed': 1, 'cellphone': 1, 'textbook': 1, 'laptop': 1}",6
-7,problems-few-objects.pddl,few-objects-10,few-objects-room-v1,[3],1,,[2],,"{'chair': 1, 'doggie_bed': 1, 'pillow': 1}",6
-8,problems-few-objects.pddl,few-objects-12,few-objects-room-v1,"[3, 3, 3]",3,,"[3, 3, 3]",,"{'bed': 1, 'dodgeball': 3, 'hexagonal_bin': 3, 'desk': 1, 'shelf': 1}",6
-9,problems-few-objects.pddl,few-objects-13,few-objects-room-v1,[3],1,,[2],,"{'chair': 1, 'wall': 1}",5
-10,problems-few-objects.pddl,few-objects-14,few-objects-room-v1,[3],1,[7],[3],,"{'floor': 1, 'rug': 1, 'bed': 1, 'window': 1, 'chair': 2, 'wall': 2, 'cube_block': 2}",4
-11,problems-few-objects.pddl,few-objects-15,few-objects-room-v1,[3],1,,[2],,"{'dodgeball': 1, 'wall': 1}",6
-12,problems-few-objects.pddl,few-objects-16,few-objects-room-v1,"[3, 3]",2,"[2, 1]","[2, 1]",True,"{'cube_block': 3, 'desk': 1, 'dodgeball': 2}",7
-13,problems-few-objects.pddl,few-objects-17,few-objects-room-v1,"[3, 3, 3, 3, 3]",5,[2],"[4, 4, 4, 4, 1]",True,"{'curved_wooden_ramp': 5, 'rug': 5, 'dodgeball': 3, 'desktop': 4, 'blue_dodgeball': 1, 'pink_dodgeball': 1}",6
-14,problems-few-objects.pddl,few-objects-18,few-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'game_object': 1, 'chair': 2}",9
-15,problems-few-objects.pddl,few-objects-19,few-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'lamp': 2, 'dodgeball': 1}",6
-16,problems-few-objects.pddl,few-objects-20,few-objects-room-v1,"[2, 4, 3, 3]",3,"[1, 1]","[1, 1, 1, 1]",True,"{'cube_block': 3, 'dodgeball': 3}",7
-17,problems-few-objects.pddl,few-objects-21,few-objects-room-v1,[3],1,[3],[4],,"{'cube_block': 2, 'chair': 2, 'floor': 2, 'dodgeball': 1}",6
-18,problems-few-objects.pddl,few-objects-23,few-objects-room-v1,"[3, 3]",2,"[1, 1]","[1, 2]",,"{'cube_block': 2, 'pillow': 1, 'cd': 2, 'dodgeball': 1, 'floor': 1}",6
-19,problems-few-objects.pddl,few-objects-24,few-objects-room-v1,"[3, 2]",2,"[1, 1]","[2, 2]",,"{'cube_block': 4, 'dodgeball': 2}",6
-20,problems-few-objects.pddl,few-objects-25,few-objects-room-v1,"[6, 6, 6]",3,[4],"[3, 3, 3]",,"{'cube_block': 4, 'chair': 2, 'hexagonal_bin': 2, 'bed': 2, 'shelf': 3}",7
-21,problems-few-objects.pddl,few-objects-26,few-objects-room-v1,"[4, 3, 3]",3,[3],"[3, 3, 1]",True,"{'cube_block': 2, 'chair': 3, 'hexagonal_bin': 2, 'dodgeball': 3}",6
-22,problems-few-objects.pddl,few-objects-27,few-objects-room-v1,,6,,"[2, 2, 1, 1, 2, 2]",True,"{'chair': 1, 'textbook': 2, 'cube_block': 4, 'mug': 2, 'dodgeball': 1}",4
-23,problems-few-objects.pddl,few-objects-28,few-objects-room-v1,"[4, 4]",1,"[1, 1, 1]",[3],,"{'cube_block': 2, 'dodgeball': 2, 'hexagonal_bin': 1, 'chair': 1}",8
-24,problems-few-objects.pddl,few-objects-31,few-objects-room-v1,"[3, 3]",2,,"[2, 1]",,"{'cube_block': 2, 'floor': 1}",6
-25,problems-medium-objects.pddl,medium-objects-2,medium-objects-room-v1,[3],1,"[1, 1, 1]",[2],,"{'flat_block': 2, 'bridge_block': 2, 'basketball': 1}",6
-26,problems-medium-objects.pddl,medium-objects-3,medium-objects-room-v1,[3],1,"[3, 1]",[4],,"{'shelf': 2, 'hexagonal_bin': 2, 'desk': 2, 'basketball': 1, 'chair': 1}",6
-27,problems-medium-objects.pddl,medium-objects-4,medium-objects-room-v1,"[2, 2, 4]",3,"[1, 1]","[1, 1, 1]",,"{'floor': 1, 'block': 4}",6
-28,problems-medium-objects.pddl,medium-objects-5,medium-objects-room-v1,[3],1,,[1],,{'game_object': 1},4
-29,problems-medium-objects.pddl,medium-objects-7,medium-objects-room-v1,[3],1,[3],[2],,"{'hexagonal_bin': 2, 'doggie_bed': 2, 'pillow': 2, 'ball': 1}",6
-30,problems-medium-objects.pddl,medium-objects-8,medium-objects-room-v1,"[3, 3, 3]",3,[2],"[4, 2, 1]",True,"{'tall_cylindrical_block': 4, 'teddy_bear': 2, 'basketball': 3}",6
-31,problems-medium-objects.pddl,medium-objects-9,medium-objects-room-v1,[3],1,,[2],,"{'pillow': 1, 'beachball': 1, 'dodgeball': 1, 'desktop': 1, 'desk_lamp': 1, 'cd': 1}",6
-32,problems-medium-objects.pddl,medium-objects-10,medium-objects-room-v1,[3],1,,[2],True,"{'basketball': 1, 'hexagonal_bin': 1}",6
-33,problems-medium-objects.pddl,medium-objects-11,medium-objects-room-v1,,1,,[1],,"{'green_bridge_block': 1, 'red_pyramid_block': 1, 'green_short_cylindrical_block': 1, 'blue_short_cylindrical_block': 1, 'yellow_flat_block': 1, 'blue_cube_block': 1}",4
-34,problems-medium-objects.pddl,medium-objects-12,medium-objects-room-v1,[3],1,,[2],,"{'ball': 1, 'hexagonal_bin': 1}",6
-35,problems-medium-objects.pddl,medium-objects-14,medium-objects-room-v1,[3],1,[2],[3],,"{'wall': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6
-36,problems-medium-objects.pddl,medium-objects-15,medium-objects-room-v1,[3],1,[2],[3],,"{'large_triangular_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6
-37,problems-medium-objects.pddl,medium-objects-16,medium-objects-room-v1,"[3, 3, 3]",3,"[1, 2]","[1, 1, 1, 2]",True,"{'cube_block': 3, 'flat_block': 3, 'hexagonal_bin': 2, 'dodgeball': 3, 'basketball': 3}",6
-38,problems-medium-objects.pddl,medium-objects-17,medium-objects-room-v1,"[3, 3]",2,,"[3, 1]",True,"{'dodgeball': 2, 'wall': 1, 'hexagonal_bin': 1}",7
-39,problems-medium-objects.pddl,medium-objects-18,medium-objects-room-v1,,1,[1],[1],,"{'hexagonal_bin': 1, 'game_object': 1}",8
-40,problems-medium-objects.pddl,medium-objects-20,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'basketball': 2, 'hexagonal_bin': 1}",6
-41,problems-medium-objects.pddl,medium-objects-21,medium-objects-room-v1,"[5, 3]",1,[4],[2],True,"{'cube_block': 1, 'short_cylindrical_block': 1, 'hexagonal_bin': 2, 'wall': 1, 'basketball': 1}",6
-42,problems-medium-objects.pddl,medium-objects-23,medium-objects-room-v1,"[3, 3]",2,"[1, 2, 1, 2]","[3, 2]",,"{'bridge_block': 5, 'large_triangular_ramp': 3, 'cellphone': 2, 'laptop': 2, 'doggie_bed': 2, 'mug': 2, 'ball': 2, 'tall_cylindrical_block': 2, 'cd': 2}",6
-43,problems-medium-objects.pddl,medium-objects-24,medium-objects-room-v1,[2],1,"[1, 1, 1, 1]",[3],,"{'large_triangular_ramp': 2, 'block': 4, 'dodgeball': 1}",8
-44,problems-medium-objects.pddl,medium-objects-27,medium-objects-room-v1,[3],1,[5],[3],,"{'hexagonal_bin': 2, 'doggie_bed': 2, 'tall_cylindrical_block': 1, 'pyramid_block': 1, 'large_triangular_ramp': 1, 'dodgeball': 1, 'basketball': 1}",7
-45,problems-medium-objects.pddl,many-objects-31,many-objects-room-v1,[2],1,,[1],,{'large_triangular_ramp': 1},5
-46,problems-many-objects.pddl,many-objects-3,many-objects-room-v1,[3],1,[1],[3],,"{'bridge_block': 2, 'flat_block': 2, 'golfball': 1, 'mug': 1}",6
-47,problems-many-objects.pddl,many-objects-4,many-objects-room-v1,"[4, 6]",2,,"[1, 1]",,{'golfball': 2},7
-48,problems-many-objects.pddl,many-objects-5,many-objects-room-v1,[2],1,,[1],,{'large_triangular_ramp': 1},5
-49,problems-many-objects.pddl,many-objects-7,many-objects-room-v1,"[10, 4]",1,[1],[5],,"{'large_triangular_ramp': 3, 'chair': 1, 'hexagonal_bin': 1, 'beachball': 1}",8
-50,problems-many-objects.pddl,many-objects-8,many-objects-room-v1,"[3, 3, 3, 3]",4,[3],"[4, 2, 2, 1]",True,"{'tall_cylindrical_block': 3, 'curved_wooden_ramp': 2, 'hexagonal_bin': 3, 'golfball': 4}",6
-51,problems-many-objects.pddl,many-objects-9,many-objects-room-v1,[3],1,,[3],,"{'golfball': 1, 'mug': 1, 'hexagonal_bin': 1, 'curved_wooden_ramp': 1}",6
-52,problems-many-objects.pddl,many-objects-12,many-objects-room-v1,[3],1,"[2, 1, 1]",[2],,"{'large_triangular_ramp': 1, 'hexagonal_bin': 2, 'block': 2, 'dodgeball': 1}",8
-53,problems-many-objects.pddl,many-objects-14,many-objects-room-v1,[3],1,[6],[2],,"{'mug': 2, 'hexagonal_bin': 2, 'floor': 1, 'rug': 1, 'bed': 1, 'desk': 1, 'golfball': 1}",6
-54,problems-many-objects.pddl,many-objects-15,many-objects-room-v1,,2,[2],"[1, 1]",,"{'cube_block': 3, 'tall_cylindrical_block': 3, 'short_cylindrical_block': 3, 'room_center': 1}",5
-55,problems-many-objects.pddl,many-objects-16,medium-objects-room-v1,"[3, 2, 3]",3,[3],"[1, 3, 4]",True,"{'large_triangular_ramp': 3, 'hexagonal_bin': 2, 'chair': 3, 'dodgeball': 3, 'golfball': 3}",6
-56,problems-many-objects.pddl,many-objects-17,many-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'large_triangular_ramp': 2, 'dodgeball': 1}",6
-57,problems-many-objects.pddl,many-objects-20,many-objects-room-v1,"[3, 3]",2,"[1, 1, 2, 3]","[3, 1]",True,"{'triangular_block': 4, 'bridge_block': 4, 'large_triangular_ramp': 2, 'golfball': 2}",6
-58,problems-many-objects.pddl,many-objects-21,many-objects-room-v1,[3],1,"[1, 1]",[4],,"{'hexagonal_bin': 2, 'curved_wooden_ramp': 2, 'dodgeball': 1, 'wall': 1}",6
-59,problems-many-objects.pddl,many-objects-22,many-objects-room-v1,[2],1,,[2],,"{'beachball': 1, 'block': 1}",6
-60,problems-many-objects.pddl,many-objects-23,many-objects-room-v1,"[3, 3]",2,[3],"[3, 3]",,"{'hexagonal_bin': 3, 'large_triangular_ramp': 3, 'room_center': 1, 'ball': 1, 'beachball': 1, 'dodgeball': 1, 'golfball': 1}",6
-61,problems-many-objects.pddl,many-objects-24,many-objects-room-v1,"[3, 3]",2,"[1, 1, 1]","[2, 2]",True,"{'hexagonal_bin': 2, 'block': 3, 'golfball': 2}",8
-62,problems-many-objects.pddl,many-objects-25,many-objects-room-v1,"[2, 3]",2,"[2, 1, 1]","[2, 2]",True,"{'teddy_bear': 2, 'hexagonal_bin': 2, 'chair': 1, 'dodgeball': 3, 'beachball': 3}",6
-63,problems-many-objects.pddl,many-objects-26,many-objects-room-v1,[3],1,"[2, 1, 1]",[3],,"{'shelf': 1, 'wall': 1, 'hexagonal_bin': 2, 'tall_cylindrical_block': 1, 'bridge_block': 1, 'goflball': 1, 'block': 1}",6
-64,problems-many-objects.pddl,many-objects-27,many-objects-room-v1,[3],1,"[2, 1]",[2],,"{'hexagonal_bin': 2, 'room_center': 1, 'golfball': 1, 'dodgeball': 1, 'beachball': 1, 'ball': 1}",6
-65,problems-many-objects.pddl,many-objects-29,many-objects-room-v1,"[3, 3]",3,[2],"[1, 2, 1]",True,"{'poster': 2, 'cd': 2, 'golfball': 3, 'rug': 1}",6
-66,problems-many-objects.pddl,many-objects-30,many-objects-room-v1,[2],1,"[1, 1]",[1],,"{'tall_cylindrical_block': 2, 'cube_block': 1, 'large_triangular_ramp': 1}",6
-67,interactive-beta.pddl,5e2df2855e01ef3e5d01ab58,medium-objects-room-v1,"[5, 3]",4,,"[1, 1, 2, 1]",,"{'block': 4, 'dogeball': 1}",7
-68,interactive-beta.pddl,60e93f64ec69ecdac3107555,medium-objects-room-v1,"[3, 3, 3]",3,[1],"[2, 2, 1]",True,"{'ball': 4, 'doggie_bed': 2, 'hexagonal_bin': 1}",6
-69,interactive-beta.pddl,613e4bf960ca68f8de00e5e7,medium-objects-room-v1,,1,,[5],,"{'bridge_block': 1, 'flat_block': 1, 'tall_cylindrical_block': 1, 'cube_block': 1, 'pyramid_block': 1}",4
-70,interactive-beta.pddl,616e4f7a16145200573161a6,few-objects-room-v1,[3],1,[3],[3],,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'block': 1, 'dodgeball': 1}",6
-71,interactive-beta.pddl,5f5d6c3cbacc025bf0a03440,few-objects-room-v1,"[3, 3]",2,"[1, 1, 1]","[4, 1]",True,"{'hexagonal_bin': 2, 'cube_block': 3, 'dogeball': 1, 'chair': 1, 'dodgeball': 1}",7
-72,interactive-beta.pddl,609c15fd6888b88a23312c42,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'ball': 2, 'hexagonal_bin': 1}",6
-73,interactive-beta.pddl,616e5ae706e970fe0aff99b6,many-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'large_triangular_ramp': 2, 'dodgeball': 1, 'golfball': 1}",6
-74,interactive-beta.pddl,613bb29f16252362f4dc11a3,medium-objects-room-v1,[3],1,[1],[3],,"{'hexagonal_bin': 2, 'dodgeball': 1, 'curved_wooden_ramp': 1}",6
-75,interactive-beta.pddl,5d29412ab711e9001ab74ece,many-objects-room-v1,,3,,"[1, 1, 1]",,"{'block': 2, 'pyramid_block': 1}",6
-76,interactive-beta.pddl,57aa430b4cda6e00018420e9,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'teddy_bear': 2, 'pillow': 1}",6
-77,interactive-beta.pddl,615452aaabb932ada88ef3ca,many-objects-room-v1,"[3, 3]",2,"[1, 1]","[2, 2]",,"{'hexagonal_bin': 3, 'wall': 1, 'dodgeball': 2}",8
-78,interactive-beta.pddl,615b40bb6cdb0f1f6f291f45,few-objects-room-v1,"[3, 3]",2,[1],"[2, 1]",True,"{'curved_wooden_ramp': 2, 'dodgeball': 1, 'ball': 1}",7
-79,interactive-beta.pddl,614dec67f6eb129c3a77defd,medium-objects-room-v1,"[3, 3]",2,"[1, 1]","[2, 2]",,"{'hexagonal_bin': 3, 'teddy_bear': 1, 'pillow': 1, 'ball': 2}",6
-80,interactive-beta.pddl,5bc79f652885710001a0e82a,few-objects-room-v1,[3],1,,[2],,"{'dodgeball': 1, 'hexagonal_bin': 1}",6
-81,interactive-beta.pddl,614b603d4da88384282967a7,many-objects-room-v1,,2,,"[1, 1]",,{'block': 2},6
-82,interactive-beta.pddl,5f77754ba932fb2c4ba181d8,many-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'dodgeball': 2, 'golfball': 2, 'top_drawer': 1, 'hexagonal_bin': 1}",6
-83,interactive-beta.pddl,6172feb1665491d1efbce164,medium-objects-room-v1,"[3, 2]",2,[2],"[3, 1]",True,"{'hexagonal_bin': 3, 'large_triangular_ramp': 2, 'ball': 1}",6
+Index,src_file,game_name,domain_name,length_of_then,num_preferences,setup_objects_quantified,preference_objects_quantified,terminal_exists,object_types_quantified,max_depth,ast_nodes
+0,problems-few-objects.pddl,few-objects-2,few-objects-room-v1,"[3, 3]",2,[2],"[3, 2]",,"{'hexagonal_bin': 3, 'chair': 2, 'dodgeball': 2}",6,50
+1,problems-few-objects.pddl,few-objects-3,few-objects-room-v1,,2,[1],"[2, 1]",,"{'desktop': 1, 'laptop': 1, 'cube_block': 2, 'desk': 1}",5,33
+2,problems-few-objects.pddl,few-objects-4,few-objects-room-v1,[3],1,[2],[3],True,"{'wall': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6,30
+3,problems-few-objects.pddl,few-objects-5,few-objects-room-v1,"[3, 3]",2,[4],"[4, 1]",True,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 3, 'textbook': 2}",6,61
+4,problems-few-objects.pddl,few-objects-7,few-objects-room-v1,[3],1,[2],[3],,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6,35
+5,problems-few-objects.pddl,few-objects-8,few-objects-room-v1,"[3, 3]",2,[2],"[3, 1]",True,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 2}",6,48
+6,problems-few-objects.pddl,few-objects-9,few-objects-room-v1,[3],1,,[2],,"{'doggie_bed': 1, 'cellphone': 1, 'textbook': 1, 'laptop': 1}",6,35
+7,problems-few-objects.pddl,few-objects-10,few-objects-room-v1,[3],1,,[2],,"{'chair': 1, 'doggie_bed': 1, 'pillow': 1}",6,21
+8,problems-few-objects.pddl,few-objects-12,few-objects-room-v1,"[3, 3, 3]",3,,"[3, 3, 3]",,"{'bed': 1, 'dodgeball': 3, 'hexagonal_bin': 3, 'desk': 1, 'shelf': 1}",6,70
+9,problems-few-objects.pddl,few-objects-13,few-objects-room-v1,[3],1,,[2],,"{'chair': 1, 'wall': 1}",5,17
+10,problems-few-objects.pddl,few-objects-14,few-objects-room-v1,[3],1,[7],[3],,"{'floor': 1, 'rug': 1, 'bed': 1, 'window': 1, 'chair': 2, 'wall': 2, 'cube_block': 2}",4,38
+11,problems-few-objects.pddl,few-objects-15,few-objects-room-v1,[3],1,,[2],,"{'dodgeball': 1, 'wall': 1}",6,18
+12,problems-few-objects.pddl,few-objects-16,few-objects-room-v1,"[3, 3]",2,"[2, 1]","[2, 1]",True,"{'cube_block': 3, 'desk': 1, 'dodgeball': 2}",7,52
+13,problems-few-objects.pddl,few-objects-17,few-objects-room-v1,"[3, 3, 3, 3, 3]",5,[2],"[4, 4, 4, 4, 1]",True,"{'curved_wooden_ramp': 5, 'rug': 5, 'dodgeball': 3, 'desktop': 4, 'blue_dodgeball': 1, 'pink_dodgeball': 1}",6,136
+14,problems-few-objects.pddl,few-objects-18,few-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'game_object': 1, 'chair': 2}",9,48
+15,problems-few-objects.pddl,few-objects-19,few-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'lamp': 2, 'dodgeball': 1}",6,31
+16,problems-few-objects.pddl,few-objects-20,few-objects-room-v1,"[2, 4, 3, 3]",3,"[1, 1]","[1, 1, 1, 1]",True,"{'cube_block': 3, 'dodgeball': 3}",7,107
+17,problems-few-objects.pddl,few-objects-21,few-objects-room-v1,[3],1,[3],[4],,"{'cube_block': 2, 'chair': 2, 'floor': 2, 'dodgeball': 1}",6,54
+18,problems-few-objects.pddl,few-objects-23,few-objects-room-v1,"[3, 3]",2,"[1, 1]","[1, 2]",,"{'cube_block': 2, 'pillow': 1, 'cd': 2, 'dodgeball': 1, 'floor': 1}",6,91
+19,problems-few-objects.pddl,few-objects-24,few-objects-room-v1,"[3, 2]",2,"[1, 1]","[2, 2]",,"{'cube_block': 4, 'dodgeball': 2}",6,49
+20,problems-few-objects.pddl,few-objects-25,few-objects-room-v1,"[6, 6, 6]",3,[4],"[3, 3, 3]",,"{'cube_block': 4, 'chair': 2, 'hexagonal_bin': 2, 'bed': 2, 'shelf': 3}",7,135
+21,problems-few-objects.pddl,few-objects-26,few-objects-room-v1,"[4, 3, 3]",3,[3],"[3, 3, 1]",True,"{'cube_block': 2, 'chair': 3, 'hexagonal_bin': 2, 'dodgeball': 3}",6,84
+22,problems-few-objects.pddl,few-objects-27,few-objects-room-v1,,6,,"[2, 2, 1, 1, 2, 2]",True,"{'chair': 1, 'textbook': 2, 'cube_block': 4, 'mug': 2, 'dodgeball': 1}",4,99
+23,problems-few-objects.pddl,few-objects-28,few-objects-room-v1,"[4, 4]",1,"[1, 1, 1]",[3],,"{'cube_block': 2, 'dodgeball': 2, 'hexagonal_bin': 1, 'chair': 1}",8,66
+24,problems-few-objects.pddl,few-objects-31,few-objects-room-v1,"[3, 3]",2,,"[2, 1]",,"{'cube_block': 2, 'floor': 1}",6,42
+25,problems-medium-objects.pddl,medium-objects-2,medium-objects-room-v1,[3],1,"[1, 1, 1]",[2],,"{'flat_block': 2, 'bridge_block': 2, 'basketball': 1}",6,37
+26,problems-medium-objects.pddl,medium-objects-3,medium-objects-room-v1,[3],1,"[3, 1]",[4],,"{'shelf': 2, 'hexagonal_bin': 2, 'desk': 2, 'basketball': 1, 'chair': 1}",6,41
+27,problems-medium-objects.pddl,medium-objects-4,medium-objects-room-v1,"[2, 2, 4]",3,"[1, 1]","[1, 1, 1]",,"{'floor': 1, 'block': 4}",6,54
+28,problems-medium-objects.pddl,medium-objects-5,medium-objects-room-v1,[3],1,,[1],,{'game_object': 1},4,15
+29,problems-medium-objects.pddl,medium-objects-7,medium-objects-room-v1,[3],1,[3],[2],,"{'hexagonal_bin': 2, 'doggie_bed': 2, 'pillow': 2, 'ball': 1}",6,99
+30,problems-medium-objects.pddl,medium-objects-8,medium-objects-room-v1,"[3, 3, 3]",3,[2],"[4, 2, 1]",True,"{'tall_cylindrical_block': 4, 'teddy_bear': 2, 'basketball': 3}",6,68
+31,problems-medium-objects.pddl,medium-objects-9,medium-objects-room-v1,[3],1,,[2],,"{'pillow': 1, 'beachball': 1, 'dodgeball': 1, 'desktop': 1, 'desk_lamp': 1, 'cd': 1}",6,40
+32,problems-medium-objects.pddl,medium-objects-10,medium-objects-room-v1,[3],1,,[2],True,"{'basketball': 1, 'hexagonal_bin': 1}",6,23
+33,problems-medium-objects.pddl,medium-objects-11,medium-objects-room-v1,,1,,[1],,"{'green_bridge_block': 1, 'red_pyramid_block': 1, 'green_short_cylindrical_block': 1, 'blue_short_cylindrical_block': 1, 'yellow_flat_block': 1, 'blue_cube_block': 1}",4,10
+34,problems-medium-objects.pddl,medium-objects-12,medium-objects-room-v1,[3],1,,[2],,"{'ball': 1, 'hexagonal_bin': 1}",6,37
+35,problems-medium-objects.pddl,medium-objects-14,medium-objects-room-v1,[3],1,[2],[3],,"{'wall': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6,30
+36,problems-medium-objects.pddl,medium-objects-15,medium-objects-room-v1,[3],1,[2],[3],,"{'large_triangular_ramp': 2, 'hexagonal_bin': 2, 'dodgeball': 1}",6,32
+37,problems-medium-objects.pddl,medium-objects-16,medium-objects-room-v1,"[3, 3, 3]",3,"[1, 2]","[1, 1, 1, 2]",True,"{'cube_block': 3, 'flat_block': 3, 'hexagonal_bin': 2, 'dodgeball': 3, 'basketball': 3}",6,97
+38,problems-medium-objects.pddl,medium-objects-17,medium-objects-room-v1,"[3, 3]",2,,"[3, 1]",True,"{'dodgeball': 2, 'wall': 1, 'hexagonal_bin': 1}",7,48
+39,problems-medium-objects.pddl,medium-objects-18,medium-objects-room-v1,,1,[1],[1],,"{'hexagonal_bin': 1, 'game_object': 1}",8,33
+40,problems-medium-objects.pddl,medium-objects-20,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'basketball': 2, 'hexagonal_bin': 1}",6,39
+41,problems-medium-objects.pddl,medium-objects-21,medium-objects-room-v1,"[5, 3]",1,[4],[2],True,"{'cube_block': 1, 'short_cylindrical_block': 1, 'hexagonal_bin': 2, 'wall': 1, 'basketball': 1}",6,49
+42,problems-medium-objects.pddl,medium-objects-23,medium-objects-room-v1,"[3, 3]",2,"[1, 2, 1, 2]","[3, 2]",,"{'bridge_block': 5, 'large_triangular_ramp': 3, 'cellphone': 2, 'laptop': 2, 'doggie_bed': 2, 'mug': 2, 'ball': 2, 'tall_cylindrical_block': 2, 'cd': 2}",6,82
+43,problems-medium-objects.pddl,medium-objects-24,medium-objects-room-v1,[2],1,"[1, 1, 1, 1]",[3],,"{'large_triangular_ramp': 2, 'block': 4, 'dodgeball': 1}",8,49
+44,problems-medium-objects.pddl,medium-objects-27,medium-objects-room-v1,[3],1,[5],[3],,"{'hexagonal_bin': 2, 'doggie_bed': 2, 'tall_cylindrical_block': 1, 'pyramid_block': 1, 'large_triangular_ramp': 1, 'dodgeball': 1, 'basketball': 1}",7,47
+45,problems-medium-objects.pddl,many-objects-31,many-objects-room-v1,[2],1,,[1],,{'large_triangular_ramp': 1},5,28
+46,problems-many-objects.pddl,many-objects-3,many-objects-room-v1,[3],1,[1],[3],,"{'bridge_block': 2, 'flat_block': 2, 'golfball': 1, 'mug': 1}",6,31
+47,problems-many-objects.pddl,many-objects-4,many-objects-room-v1,"[4, 6]",2,,"[1, 1]",,{'golfball': 2},7,129
+48,problems-many-objects.pddl,many-objects-5,many-objects-room-v1,[2],1,,[1],,{'large_triangular_ramp': 1},5,10
+49,problems-many-objects.pddl,many-objects-7,many-objects-room-v1,"[10, 4]",1,[1],[5],,"{'large_triangular_ramp': 3, 'chair': 1, 'hexagonal_bin': 1, 'beachball': 1}",8,67
+50,problems-many-objects.pddl,many-objects-8,many-objects-room-v1,"[3, 3, 3, 3]",4,[3],"[4, 2, 2, 1]",True,"{'tall_cylindrical_block': 3, 'curved_wooden_ramp': 2, 'hexagonal_bin': 3, 'golfball': 4}",6,101
+51,problems-many-objects.pddl,many-objects-9,many-objects-room-v1,[3],1,,[3],,"{'golfball': 1, 'mug': 1, 'hexagonal_bin': 1, 'curved_wooden_ramp': 1}",6,32
+52,problems-many-objects.pddl,many-objects-12,many-objects-room-v1,[3],1,"[2, 1, 1]",[2],,"{'large_triangular_ramp': 1, 'hexagonal_bin': 2, 'block': 2, 'dodgeball': 1}",8,46
+53,problems-many-objects.pddl,many-objects-14,many-objects-room-v1,[3],1,[6],[2],,"{'mug': 2, 'hexagonal_bin': 2, 'floor': 1, 'rug': 1, 'bed': 1, 'desk': 1, 'golfball': 1}",6,49
+54,problems-many-objects.pddl,many-objects-15,many-objects-room-v1,,2,[2],"[1, 1]",,"{'cube_block': 3, 'tall_cylindrical_block': 3, 'short_cylindrical_block': 3, 'room_center': 1}",5,34
+55,problems-many-objects.pddl,many-objects-16,medium-objects-room-v1,"[3, 2, 3]",3,[3],"[1, 3, 4]",True,"{'large_triangular_ramp': 3, 'hexagonal_bin': 2, 'chair': 3, 'dodgeball': 3, 'golfball': 3}",6,118
+56,problems-many-objects.pddl,many-objects-17,many-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'large_triangular_ramp': 2, 'dodgeball': 1}",6,29
+57,problems-many-objects.pddl,many-objects-20,many-objects-room-v1,"[3, 3]",2,"[1, 1, 2, 3]","[3, 1]",True,"{'triangular_block': 4, 'bridge_block': 4, 'large_triangular_ramp': 2, 'golfball': 2}",6,88
+58,problems-many-objects.pddl,many-objects-21,many-objects-room-v1,[3],1,"[1, 1]",[4],,"{'hexagonal_bin': 2, 'curved_wooden_ramp': 2, 'dodgeball': 1, 'wall': 1}",6,37
+59,problems-many-objects.pddl,many-objects-22,many-objects-room-v1,[2],1,,[2],,"{'beachball': 1, 'block': 1}",6,79
+60,problems-many-objects.pddl,many-objects-23,many-objects-room-v1,"[3, 3]",2,[3],"[3, 3]",,"{'hexagonal_bin': 3, 'large_triangular_ramp': 3, 'room_center': 1, 'ball': 1, 'beachball': 1, 'dodgeball': 1, 'golfball': 1}",6,77
+61,problems-many-objects.pddl,many-objects-24,many-objects-room-v1,"[3, 3]",2,"[1, 1, 1]","[2, 2]",True,"{'hexagonal_bin': 2, 'block': 3, 'golfball': 2}",8,69
+62,problems-many-objects.pddl,many-objects-25,many-objects-room-v1,"[2, 3]",2,"[2, 1, 1]","[2, 2]",True,"{'teddy_bear': 2, 'hexagonal_bin': 2, 'chair': 1, 'dodgeball': 3, 'beachball': 3}",6,78
+63,problems-many-objects.pddl,many-objects-26,many-objects-room-v1,[3],1,"[2, 1, 1]",[3],,"{'shelf': 1, 'wall': 1, 'hexagonal_bin': 2, 'tall_cylindrical_block': 1, 'bridge_block': 1, 'goflball': 1, 'block': 1}",6,58
+64,problems-many-objects.pddl,many-objects-27,many-objects-room-v1,[3],1,"[2, 1]",[2],,"{'hexagonal_bin': 2, 'room_center': 1, 'golfball': 1, 'dodgeball': 1, 'beachball': 1, 'ball': 1}",6,49
+65,problems-many-objects.pddl,many-objects-29,many-objects-room-v1,"[3, 3]",3,[2],"[1, 2, 1]",True,"{'poster': 2, 'cd': 2, 'golfball': 3, 'rug': 1}",6,66
+66,problems-many-objects.pddl,many-objects-30,many-objects-room-v1,[2],1,"[1, 1]",[1],,"{'tall_cylindrical_block': 2, 'cube_block': 1, 'large_triangular_ramp': 1}",6,23
+67,interactive-beta.pddl,5e2df2855e01ef3e5d01ab58,medium-objects-room-v1,"[5, 3]",4,,"[1, 1, 2, 1]",,"{'block': 4, 'dogeball': 1}",7,78
+68,interactive-beta.pddl,60e93f64ec69ecdac3107555,medium-objects-room-v1,"[3, 3, 3]",3,[1],"[2, 2, 1]",True,"{'ball': 4, 'doggie_bed': 2, 'hexagonal_bin': 1}",6,119
+69,interactive-beta.pddl,613e4bf960ca68f8de00e5e7,medium-objects-room-v1,,1,,[5],,"{'bridge_block': 1, 'flat_block': 1, 'tall_cylindrical_block': 1, 'cube_block': 1, 'pyramid_block': 1}",4,171
+70,interactive-beta.pddl,616e4f7a16145200573161a6,few-objects-room-v1,[3],1,[3],[3],,"{'curved_wooden_ramp': 2, 'hexagonal_bin': 2, 'block': 1, 'dodgeball': 1}",6,40
+71,interactive-beta.pddl,5f5d6c3cbacc025bf0a03440,few-objects-room-v1,"[3, 3]",2,"[1, 1, 1]","[4, 1]",True,"{'hexagonal_bin': 2, 'cube_block': 3, 'dogeball': 1, 'chair': 1, 'dodgeball': 1}",7,71
+72,interactive-beta.pddl,609c15fd6888b88a23312c42,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'ball': 2, 'hexagonal_bin': 1}",6,38
+73,interactive-beta.pddl,616e5ae706e970fe0aff99b6,many-objects-room-v1,[3],1,[2],[3],,"{'hexagonal_bin': 2, 'large_triangular_ramp': 2, 'dodgeball': 1, 'golfball': 1}",6,46
+74,interactive-beta.pddl,613bb29f16252362f4dc11a3,medium-objects-room-v1,[3],1,[1],[3],,"{'hexagonal_bin': 2, 'dodgeball': 1, 'curved_wooden_ramp': 1}",6,34
+75,interactive-beta.pddl,5d29412ab711e9001ab74ece,many-objects-room-v1,,3,,"[1, 1, 1]",,"{'block': 2, 'pyramid_block': 1}",6,49
+76,interactive-beta.pddl,57aa430b4cda6e00018420e9,medium-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'teddy_bear': 2, 'pillow': 1}",6,36
+77,interactive-beta.pddl,615452aaabb932ada88ef3ca,many-objects-room-v1,"[3, 3]",2,"[1, 1]","[2, 2]",,"{'hexagonal_bin': 3, 'wall': 1, 'dodgeball': 2}",8,73
+78,interactive-beta.pddl,615b40bb6cdb0f1f6f291f45,few-objects-room-v1,"[3, 3]",2,[1],"[2, 1]",True,"{'curved_wooden_ramp': 2, 'dodgeball': 1, 'ball': 1}",7,65
+79,interactive-beta.pddl,614dec67f6eb129c3a77defd,medium-objects-room-v1,"[3, 3]",2,"[1, 1]","[2, 2]",,"{'hexagonal_bin': 3, 'teddy_bear': 1, 'pillow': 1, 'ball': 2}",6,73
+80,interactive-beta.pddl,5bc79f652885710001a0e82a,few-objects-room-v1,[3],1,,[2],,"{'dodgeball': 1, 'hexagonal_bin': 1}",6,22
+81,interactive-beta.pddl,614b603d4da88384282967a7,many-objects-room-v1,,2,,"[1, 1]",,{'block': 2},6,26
+82,interactive-beta.pddl,5f77754ba932fb2c4ba181d8,many-objects-room-v1,"[3, 3]",2,,"[2, 1]",True,"{'dodgeball': 2, 'golfball': 2, 'top_drawer': 1, 'hexagonal_bin': 1}",6,65
+83,interactive-beta.pddl,6172feb1665491d1efbce164,medium-objects-room-v1,"[3, 2]",2,[2],"[3, 1]",True,"{'hexagonal_bin': 3, 'large_triangular_ramp': 2, 'ball': 1}",6,45

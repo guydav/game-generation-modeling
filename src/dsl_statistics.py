@@ -5,6 +5,7 @@ import tqdm
 import pandas as pd
 import numpy as np
 import os
+import re
 
 from parse_dsl import load_tests_from_file
 
@@ -24,8 +25,6 @@ DEFAULT_OUTPUT_PATH ='./data/dsl_statistics.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
-ASTStat = namedtuple('ASTStat', ('rule_or_rules', 'header', 'method', ))
-
 class StatExtractor:
     def __init__(self, rule_or_rules, header, extract, aggregate=None):
         self.rule_or_rules = rule_or_rules
@@ -36,6 +35,7 @@ class StatExtractor:
 class ASTStatisticsAggregator:
     def __init__(self):
         self.rule_registry = defaultdict(list)
+        self.regex_rules = []
         self.header_registry = dict()
         self.headers = ['src_file', 'game_name', 'domain_name']
         self.rows = []
@@ -44,11 +44,15 @@ class ASTStatisticsAggregator:
         self.rule_registry[rule].append(stat)
 
     def register(self, stat):
-        if isinstance(stat.rule_or_rules, str):
-            self._register(stat, stat.rule_or_rules)
+        if isinstance(stat.rule_or_rules, re.Pattern):
+            self.regex_rules.append(stat)
+
         else:
-            for rule in stat.rule_or_rules:
-                self._register(stat, rule)
+            if isinstance(stat.rule_or_rules, str):
+                self._register(stat, stat.rule_or_rules)
+            else:
+                for rule in stat.rule_or_rules:
+                    self._register(stat, rule)
 
         self.header_registry[stat.header] = stat
         self.headers.append(stat.header)
@@ -87,6 +91,12 @@ class ASTStatisticsAggregator:
                     result = stat.extract(ast, depth)
                     if result:
                         row[stat.header].append(result)
+                
+                for regex_stat in self.regex_rules:
+                    if regex_stat.rule_or_rules.match(ast.parseinfo.rule):
+                        result = regex_stat.extract(ast, depth)
+                        if result:
+                            row[regex_stat.header].append(result)
 
             [self._parse(element, row, depth + 1) for element in ast.values()]
 
@@ -155,6 +165,9 @@ def build_aggregator(args):
 
     max_depth = StatExtractor('predicate', 'max_depth', lambda ast, depth: depth, max)
     agg.register(max_depth)
+
+    total_ast_nodes = StatExtractor(re.compile('.*'), 'ast_nodes', lambda ast, depth: 1, np.sum)
+    agg.register(total_ast_nodes)
 
     return agg
             

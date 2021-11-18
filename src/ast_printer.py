@@ -223,7 +223,7 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
     return formatted_vars
 
 
-QUANTIFIER_KEYS = ('args', 'pred', 'then')
+QUANTIFIER_KEYS = ('args', 'pred', 'then', 'pref')
 
 
 @mutation_context
@@ -234,9 +234,13 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
     context['continue_line'] = True
 
     var_node = ast[f'{rule}_vars']
-    formatted_vars = _parse_variable_list(caller, rule, var_node.variables, depth, increment, context)
-    var_str = f'({" ".join(formatted_vars)})'
-    if 'mutation' in var_node:
+    if var_node is not None:
+        formatted_vars = _parse_variable_list(caller, rule, var_node.variables, depth, increment, context)
+        var_str = f'({" ".join(formatted_vars)})'
+    else:
+        var_str = ''
+    
+    if var_node is not None and 'mutation' in var_node:
         prev_mutation = None
         if 'mutation' in context:
             prev_mutation = context['mutation']
@@ -265,6 +269,9 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
             caller(ast[key_str], depth + 1, increment, context)
     
     if not found_args:
+        print(ast.keys())
+        print(rule)
+        print([f'{rule}_{key}' for key in QUANTIFIER_KEYS])
         raise ValueError(f'Found exists or forall with unknown arugments: {ast}')
 
     _indent_print(_out_str_to_span(')', context), depth, increment, context)

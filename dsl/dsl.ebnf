@@ -81,10 +81,15 @@ setup_or_predicate = '(or' {or_args:setup_predicate}+ ')';  # TODO: do we want t
 setup_not_predicate = '(not' not_args:setup_predicate ')';
 
 # Constraints/Preferences
-preferences = preference | 
-    '(and' {preference}+ ')'; # TODO: do we want to enforce more than one?
+preferences = 
+    '(and' {pref_def}+ ')' | # TODO: do we want to enforce more than one?
+    pref_def;
 
+pref_def = 
+    preference |
+    pref_forall;
 preference = '(preference' pref_name:name pref_body:pref_body ')';
+pref_forall = '(forall' forall_vars:variable_list forall_pref:preference ')';
 
 pref_body = 
     pref_body_exists |
@@ -164,7 +169,6 @@ scoring_expr =
     number |
     preference_eval |
     scoring_comparison |
-    scoring_with |
     function_eval  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
     ;
 
@@ -190,7 +194,6 @@ scoring_comparison =
 scoring_comp = '(' op:binary_comp expr_1:scoring_expr expr_2:scoring_expr ')';
 scoring_equals_comp = '(=' {expr:scoring_expr}+ ')';
 
-scoring_with = '(with' with_vars:variable_list with_pref:preference_eval ')';
 
 preference_eval = 
     count_nonoverlapping |
@@ -202,14 +205,16 @@ preference_eval =
     count_increasing_measure |
     count_unique_positions;
 
-count_nonoverlapping = '(count-nonoverlapping' pref_name:name ')';
-count_once = '(count-once' pref_name:name ')';
-count_once_per_objects = '(count-once-per-objects' pref_name:name ')';
-count_longest = '(count-longest' pref_name:name ')';
-count_shortest = '(count-shortest' pref_name:name ')';
-count_total = '(count-total' pref_name:name ')';
-count_increasing_measure = '(count-increasing-measure' pref_name:name ')';
-count_unique_positions = '(count-unique-positions' pref_name:name')';
+count_nonoverlapping = '(count-nonoverlapping' pref_name:name {object_tpes:pref_object_type}* ')';
+count_once = '(count-once' pref_name:name {object_tpes:pref_object_type}* ')';
+count_once_per_objects = '(count-once-per-objects' pref_name:name {object_tpes:pref_object_type}* ')';
+count_longest = '(count-longest' pref_name:name {object_tpes:pref_object_type}* ')';
+count_shortest = '(count-shortest' pref_name:name {object_tpes:pref_object_type}*')';
+count_total = '(count-total' pref_name:name {object_tpes:pref_object_type}* ')';
+count_increasing_measure = '(count-increasing-measure' pref_name:name {object_tpes:pref_object_type}* ')';
+count_unique_positions = '(count-unique-positions' pref_name:name {object_tpes:pref_object_type}*')';
+
+pref_object_type = ':' type_name:name;
 
 # Scoring
 scoring = 

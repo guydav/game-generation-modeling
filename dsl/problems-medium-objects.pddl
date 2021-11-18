@@ -129,8 +129,8 @@
     )
 ))
 (:constraints (and
-    (preference ballThrownToTarget
-        (exists (?b - ball ?t - (either hexagonal_bin doggie_bed pillow))
+    (forall (?b - ball ?t - (either hexagonal_bin doggie_bed pillow))
+        (preference ballThrownToTarget
             (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
@@ -140,15 +140,15 @@
     )
 ))
 (:scoring maximize (+ 
-    (* 3 (with (?b - beachball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 5 (with (?b - beachball ?t - doggie_bed) (count-nonoverlapping ballThrownToTarget)))
-    (* 7 (with (?b - beachball ?t - pillow) (count-nonoverlapping ballThrownToTarget)))
-    (* 6 (with (?b - dodgeball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 8 (with (?b - dodgeball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 10 (with (?b - dodgeball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 9 (with (?b - basketball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 11 (with (?b - basketball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
-    (* 13 (with (?b - basketball ?t - hexagonal_bin) (count-nonoverlapping ballThrownToTarget)))
+    (* 3 (count-nonoverlapping ballThrownToTarget:beachball:hexagonal_bin))
+    (* 5 (count-nonoverlapping ballThrownToTarget:beachball:doggie_bed))
+    (* 7 (count-nonoverlapping ballThrownToTarget:beachball:pillow))
+    (* 6 (count-nonoverlapping ballThrownToTarget:dodgeball:hexagonal_bin))
+    (* 8 (count-nonoverlapping ballThrownToTarget:dodgeball:doggie_bed))
+    (* 10 (count-nonoverlapping ballThrownToTarget:dodgeball:pillow))
+    (* 9 (count-nonoverlapping ballThrownToTarget:basketball:hexagonal_bin))
+    (* 11 (count-nonoverlapping ballThrownToTarget:basketball:doggie_bed))
+    (* 13 (count-nonoverlapping ballThrownToTarget:basketball:pillow))
 )))
 
 
@@ -207,27 +207,25 @@
 (:setup
 )
 (:constraints (and 
-    (preference thrownObjectKnocksTarget
-        (exists (?o - (either pillow beachball dodgeball) ?t - (either desktop desk_lamp cd))
-            (then
-                ; starts with agent holding the desktop
-                (once (agent_holds ?o))
-                (hold-while
-                    ; while the object is being thrown and the agent is touching neither the object nor the desktop
-                    (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?t)))
-                    ; the thrown object hits the desktop
-                    (touch ?o ?t)
+    (forall (?t - (either desktop desk_lamp cd))
+        (preference thrownObjectKnocksTarget
+            (exists (?o - (either pillow beachball dodgeball))
+                (then
+                    (once (agent_holds ?o))
+                    (hold-while
+                        (and (not (agent_holds ?o)) (in_motion ?o) (not (agent_holds ?t)))
+                        (touch ?o ?t)
+                    )
+                    (once (and (not (on desk ?t)) (not (in_motion ?t)))) 
                 )
-                ; eventually knocking it off the desk
-                (once (and (not (on desk ?t)) (not (in_motion ?t)))) 
-            )
-        ) 
+            ) 
+        )
     )
 ))
 (:scoring maximize (+
-    (* 5 (with (?t - desktop) (count-nonoverlapping thrownObjectKnocksTarget)))
-    (* 10 (with (?t - desk_lamp) (count-nonoverlapping thrownObjectKnocksTarget)))
-    (* 15 (with (?t - cd) (count-nonoverlapping thrownObjectKnocksTarget)))
+    (* 5 (count-nonoverlapping thrownObjectKnocksTarget:desktop))
+    (* 10 (count-nonoverlapping thrownObjectKnocksTarget:desk_lamp))
+    (* 15 (count-nonoverlapping thrownObjectKnocksTarget:cd))
 )))
 
 
@@ -238,7 +236,7 @@
     (preference throwBallWithEyesClosed
         (exists (?b - basketball ?h - hexagonal_bin) 
             (then
-                ; ball starts in hand, with the agent on the chair, near the desk
+                ; ball starts in hand, the agent on the chair, near the desk
                 (once (and (agent_holds ?b) (agent_perspective eyes_closed)))
                 ; ball not in hand and in motion until...
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
@@ -273,20 +271,22 @@
 (:setup 
 )
 (:constraints (and 
-    (preference throwBallToBin
-        (exists (?b - ball ?h - hexagonal_bin)
-            (then 
-                (once (and (agent_holds ?b) (> (distance agent ?h) 5)))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (in ?h ?b) (not (in_motion ?b))))
-            )
-        ) 
+    (forall (?b - ball)
+        (preference throwBallToBin
+            (exists (?h - hexagonal_bin)
+                (then 
+                    (once (and (agent_holds ?b) (> (distance agent ?h) 5)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                    (once (and (in ?h ?b) (not (in_motion ?b))))
+                )
+            ) 
+        )
     )
 ))
 (:scoring maximize (+
-    (* 1 (with (?b - dodgeball) (count-nonoverlapping throwBallToBin)))
-    (* 1 (with (?b - beachball) (count-nonoverlapping throwBallToBin)))
-    (* 1 (with (?b - basketball) (count-nonoverlapping throwBallToBin)))
+    (count-nonoverlapping throwBallToBin:dodgeball)
+    (* 2 (count-nonoverlapping throwBallToBin:beachball))
+    (* 3 (count-nonoverlapping throwBallToBin:basketball))
 )))
 
 ; 13 is effectively invalid -- no real scoring + references to multiple agents
@@ -334,9 +334,10 @@
     )
 ))
 (:scoring maximize (* 
-    ; "the points increase by one with each step back" - n * n-1
+    ; "the points increase by one with each step back" - n * (n + 1) / 2
     (count-increasing-measure rollBallToBin)
-    (+ (count-increasing-measure rollBallToBin) (- 1))
+    (+ (count-increasing-measure rollBallToBin) 1)
+    0.5
 )))
 
 
@@ -567,19 +568,21 @@
     )
 ))
 (:constraints (and 
-    (preference rollObjectToTargets
-        (exists (?o - (either ball tall_cylindrical_block cd) ?r - large_triangular_ramp
-                ?t - (either cellphone laptop doggie_bed mug bridge_block))  
-            (then 
-                (once (agent_holds ?o))
-                (hold-while 
-                    (and (in_motion ?o) (not (agent_holds ?o)))
-                    (on ?r ?o)
-                )     
-                (once (touch ?o ?t))  
-            )
-        ) 
-    )  
+    (forall (?o - (either ball tall_cylindrical_block cd))
+        (preference rollObjectToTargets
+            (exists (?r - large_triangular_ramp
+                    ?t - (either cellphone laptop doggie_bed mug bridge_block))  
+                (then 
+                    (once (agent_holds ?o))
+                    (hold-while 
+                        (and (in_motion ?o) (not (agent_holds ?o)))
+                        (on ?r ?o)
+                    )     
+                    (once (touch ?o ?t))  
+                )
+            ) 
+        )  
+    )
     (preference objectHitsBlock
         (exists (?o - (either ball tall_cylindrical_block cd) ?b - bridge_block)  
             (then 
@@ -591,9 +594,9 @@
     )
 ))
 (:scoring maximize (+
-    (* 5 (with (?o - ball) (count-nonoverlapping rollObjectToTargets)))
-    (* 8 (with (?o - tall_cylindrical_block) (count-nonoverlapping rollObjectToTargets)))
-    (* 10 (with (?o - cd) (count-nonoverlapping rollObjectToTargets)))
+    (* 5 (count-nonoverlapping rollObjectToTargets:ball))
+    (* 8 (count-nonoverlapping rollObjectToTargets:tall_cylindrical_block))
+    (* 10 (count-nonoverlapping rollObjectToTargets:cd))
     (* (- 5) (count-nonoverlapping objectHitsBlock))
 )))
 

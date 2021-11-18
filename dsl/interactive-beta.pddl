@@ -60,8 +60,8 @@
     )
 ))
 (:constraints (and 
-    (preference ballThrownIntoTarget
-        (exists (?b - ball ?t - (either doggie_bed hexagonal_bin)) 
+    (forall (?b - ball ?t - (either doggie_bed hexagonal_bin))
+        (preference ballThrownIntoTarget
             (then 
                 (once (and (agent_holds ?b) (< (distance agent door) 1)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
@@ -69,12 +69,14 @@
             )
         )
     )
-    (preference ballThrownOntoTarget
-        (exists (?b - ball ?t - doggie_bed) 
-            (then 
-                (once (and (agent_holds ?b) (< (distance agent door) 1)))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (and (on ?t ?b) (not (in_motion ?b))))
+    (forall (?b - ball)
+        (preference ballThrownOntoTarget
+            (exists (?t - doggie_bed) 
+                (then 
+                    (once (and (agent_holds ?b) (< (distance agent door) 1)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (on ?t ?b) (not (in_motion ?b))))
+                )
             )
         )
     )
@@ -92,15 +94,15 @@
     (>= (count-once-per-objects throwAttempt) 3)
 )
 (:scoring maximize (+ 
-    (* 6 (with (?b - dodgeball ?t - hexagonal_bin) (count-once-per-objects ballThrownIntoTarget)))
-    (* 5 (with (?b - beachball ?t - hexagonal_bin) (count-once-per-objects ballThrownIntoTarget)))
-    (* 4 (with (?b - baseketball ?t - hexagonal_bin) (count-once-per-objects ballThrownIntoTarget)))
-    (* 5 (with (?b - dodgeball ?t - doggie_bed) (count-once-per-objects ballThrownIntoTarget)))
-    (* 4 (with (?b - beachball ?t - doggie_bed) (count-once-per-objects ballThrownIntoTarget)))
-    (* 3 (with (?b - baseketball ?t - doggie_bed) (count-once-per-objects ballThrownIntoTarget)))
-    (* 5 (with (?b - dodgeball) (count-once-per-objects ballThrownOntoTarget)))
-    (* 4 (with (?b - beachball) (count-once-per-objects ballThrownOntoTarget)))
-    (* 3 (with (?b - baseketball) (count-once-per-objects ballThrownOntoTarget)))
+    (* 6 (count-once-per-objects ballThrownIntoTarget:dodgeball:hexagonal_bin))
+    (* 5 (count-once-per-objects ballThrownIntoTarget:beachball:hexagonal_bin))
+    (* 4 (count-once-per-objects ballThrownIntoTarget:basketball:hexagonal_bin))
+    (* 5 (count-once-per-objects ballThrownIntoTarget:dodgeball:doggie_bed))
+    (* 4 (count-once-per-objects ballThrownIntoTarget:beachball:doggie_bed))
+    (* 3 (count-once-per-objects ballThrownIntoTarget:basketball:doggie_bed))
+    (* 5 (count-once-per-objects ballThrownOntoTarget:dodgeball))
+    (* 4 (count-once-per-objects ballThrownOntoTarget:beachball))
+    (* 3 (count-once-per-objects ballThrownOntoTarget:basketball))
 )))
 
 (define (game 613e4bf960ca68f8de00e5e7) (:domain medium-objects-room-v1)  ; 2 
@@ -119,37 +121,37 @@
     ))
 ))
 (:scoring maximize (+ 
-    (* 10 (count-once-per-objects beachballThrownFromDoorToDoggieBed))
-    (* 4 (or 
-        (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block) (count-once-per-objects castleBuilt))
-        (with (?b - green_bridge_block ?f - yellow_flat_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-        (with (?b - green_bridge_block ?f - yellow_flat_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-        (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ))
-    (* 3 (or 
-        (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-        (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?b - green_bridge_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ))
-    (* 3 (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))) 
-    (* 4 (or 
-        (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block) (count-once-per-objects castleBuilt))
-        (with (?b - brown_bridge_block ?f - gray_flat_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-        (with (?b - brown_bridge_block ?f - gray_flat_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-        (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ))
-    (* 3 (or 
-        (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-        (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?b - brown_bridge_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-        (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ))
-    (* 3 (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))) 
+    (* 10 (count-once-per-objects castleBuilt))
+    ; (* 4 (or 
+    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ; ))
+    ; (* 3 (or 
+    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - green_bridge_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
+    ; ))
+    ; (* 3 (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))) 
+    ; (* 4 (or 
+    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ; ))
+    ; (* 3 (or 
+    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?b - brown_bridge_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
+    ; ))
+    ; (* 3 (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))) 
 )))
 
 ; 3 is a dup of 2
@@ -274,22 +276,24 @@
     ))
 ))
 (:constraints (and 
-    (preference throwToRampToBin
-        (exists (?d - (either dodgeball golfball) ?r - large_triangular_ramp ?h - hexagonal_bin) 
-            (then 
-                (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
-                (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
-                    (touch ?r ?d)
-                ) 
-                (once (and (in ?h ?d) (not (in_motion ?d)))) ; touches wall before in bin
+    (forall (?d - (either dodgeball golfball))
+        (preference throwToRampToBin
+            (exists (?r - large_triangular_ramp ?h - hexagonal_bin) 
+                (then 
+                    (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
+                    (hold-while 
+                        (and (not (agent_holds ?d)) (in_motion ?d))
+                        (touch ?r ?d)
+                    ) 
+                    (once (and (in ?h ?d) (not (in_motion ?d)))) ; touches wall before in bin
+                )
             )
         )
     )
 ))
 (:scoring maximize (+
-    (* 6 (with (?d - dodgeball) (count-nonoverlapping throwToRampToBin)))
-    (* 3 (with (?d - golfball) (count-nonoverlapping throwToRampToBin)))
+    (* 6 (count-nonoverlapping throwToRampToBin:dodgeball))
+    (* 3 (count-nonoverlapping throwToRampToBin:golfball))
 )))
 
 ; 8 requires quantifying based on position -- something like
@@ -302,7 +306,7 @@
 ))
 (:constraints (and 
     (preference throwToRampToBin
-        (exists (?d - dodgeball ?c - curved_wooden_ramp ?h - hexagonal_bin) 
+        (exists (?c - curved_wooden_ramp ?d - dodgeball ?h - hexagonal_bin) 
             (then 
                 (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
                 (hold-while 
@@ -315,7 +319,7 @@
     )
 ))
 (:scoring maximize
-    (with (?c - curved_wooden_ramp) (count-unique-positions throwToRampToBin)) 
+    (count-unique-positions throwToRampToBin)
 ))
 
 
@@ -495,12 +499,14 @@
     (forall (?x - (either teddy_bear pillow)) (game-conserved (not (on bed ?x))))
 ))
 (:constraints (and 
-    (preference throwBallToBin
-        (exists (?b - ball ?h - hexagonal_bin)
-            (then 
-                (once (and (agent_holds ?b) (adjacent agent desk)))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (and (not (in_motion ?b)) (in ?h ?b)))
+    (forall (?b - ball)
+        (preference throwBallToBin
+            (exists (?h - hexagonal_bin)
+                (then 
+                    (once (and (agent_holds ?b) (adjacent agent desk)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
+                )
             )
         )
     )
@@ -515,9 +521,9 @@
     )
 ))
 (:scoring maximize (+
-    (* 10 (with (?b - dodgeball) (count-nonoverlapping throwBallToBin)))
-    (* 20 (with (?b - basketball) (count-nonoverlapping throwBallToBin)))
-    (* 30 (with (?b - beachball) (count-nonoverlapping throwBallToBin)))
+    (* 10 (count-nonoverlapping throwBallToBin:dodgeball))
+    (* 20 (count-nonoverlapping throwBallToBin:basketball))
+    (* 30 (count-nonoverlapping throwBallToBin:beachball))
     (* (- 1) (count-nonoverlapping failedThrowToBin))
 )))
     
@@ -595,9 +601,9 @@
 (:terminal (>= (count-once-per-objects throwAttempt) 6)
 )
 (:scoring maximize (+ 
-    (with (?b - golfball ?t - hexagonal_bin) (count-once-per-objects throwToDrawerOrBin))
-    (* 2 (with (?b - dodgeball ?t - hexagonal_bin) (count-once-per-objects throwToDrawerOrBin)))
-    (* 3 (with (?b - golfball ?t - top_drawer) (count-once-per-objects throwToDrawerOrBin)))
+    (count-once-per-objects throwToDrawerOrBin:golfball:hexagonal_bin)
+    (* 2 (count-once-per-objects throwToDrawerOrBin:dodgeball:hexagonal_bin))
+    (* 3 (count-once-per-objects throwToDrawerOrBin:golfball:top_drawer))
     (+ (count-once-per-objects throwToDrawerOrBin) (- (count-once-per-objects throwAttempt)))  ; as a way to encode -1 for each missed throw
 )))
 

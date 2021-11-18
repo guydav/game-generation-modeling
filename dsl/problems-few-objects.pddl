@@ -17,7 +17,7 @@
         )
     ) 
     (preference basketMade
-        (exists (?h - hexagonal_bin ?d - dodgeball ) 
+        (exists (?h - hexagonal_bin ?d - dodgeball) 
             (then 
                 (once (agent_holds ?d))
                 (hold (and (in_motion ?d) (not (agent_holds ?d))))
@@ -198,20 +198,22 @@
 (:setup  
 )
 (:constraints (and 
-    (preference objectThrownOnDoggieBed
-        (exists (?d - doggie_bed ?o - (either cellphone textbook laptop)) 
-            (then 
-                (once (agent_holds ?o))
-                (hold (and (not (agent_holds ?o)) (in_motion ?o))) ; in motion, not in hand until...
-                (once (and (on ?d ?o) (not (in_motion ?o))))
+    (forall (?o - (either cellphone textbook laptop))
+        (preference objectThrownOnDoggieBed
+            (exists (?d - doggie_bed) 
+                (then 
+                    (once (agent_holds ?o))
+                    (hold (and (not (agent_holds ?o)) (in_motion ?o))) ; in motion, not in hand until...
+                    (once (and (on ?d ?o) (not (in_motion ?o))))
+                )
             )
         )
     )
 )) 
 (:scoring maximize (+ 
-    (* 15 (with (?o - cellphone) (count-nonoverlapping objectThrownOnDoggieBed)))
-    (* 10 (with (?o - textbook) (count-nonoverlapping objectThrownOnDoggieBed)))
-    (* 5 (with (?o - laptop) (count-nonoverlapping objectThrownOnDoggieBed)))
+    (* 15 (count-nonoverlapping objectThrownOnDoggieBed:cellphone))
+    (* 10 (count-nonoverlapping objectThrownOnDoggieBed:textbook))
+    (* 5 (count-nonoverlapping objectThrownOnDoggieBed:laptop))
 )))
 
 
@@ -559,58 +561,47 @@
 (:constraints (and 
     (preference bothBallsThrownFromDesk 
         (then
-            (forall-sequence (?b - dodgeball)
+            (forall-sequence (?d - dodgeball)
                 (then
-                    (once (and (agent_holds ?b) (adjancet agent desk)))
-                    (hold (and (not (agent_holds ?b)) (in_motion ?b) (adjacent agent desk)))
-                    (once (not (in_motion ?b)))
-                    (hold (adjacent agent desk))
+                    (once (and (agent_holds ?d) (adjancet agent desk)))
+                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (adjacent agent desk)))
+                    (once (not (in_motion ?d)))
+                    (hold (adjacent agent desk)) ; unti the second throw
                 )
             )
             (once (forall (?b - cube_block) (not (in_motion ?b))))
         )
     )
-    (preference allBlocksHit
-        (forall (?b - cube_block)
-            (exists (?d - dodgeball)
-                (then
-                    (hold-while
-                        (not (touch agent ?b))
-                        (in_motion ?d)
-                        (touch ?b ?d)
-                        (in_motion ?b)
-                        (not (in_motion ?b))
-                    )
+    (forall (?b - cube_block)
+        (preference allBlocksHit (exists (?d - dodgeball)
+            (then
+                (once (and (agent_holds ?d) (adjancet agent desk)))
+                (hold-while
+                    (and (not (touch agent ?b) (in_motion ?d)))
+                    (touch ?b ?d)
+                    (in_motion ?b)
+                    (not (in_motion ?b))
                 )
+                (once (not (in_motion ?d)))
             )
-        )
+        ))
     )
-    (preference allBlocksHitWithSameBall
-        (exists (?d - dodgeball)
-            (forall (?b - cube_block)
-                (then
-                    (hold-while
-                        (not (touch agent ?b))
-                        (in_motion ?d)
-                        (touch ?b ?d)
-                        (in_motion ?b)
-                        (not (in_motion ?b))
-                    )
-                )
-            )
+    (preference throwAttempt (exists (?d - dodgeball )
+        (then
+            (once (and (agent_hholds ?d)))   
         )
-    )
+    ))
 )) 
 (:terminal (or
     (> (count-once bothBallsThrownFromDesk) 0)
     (> (count-once allBlocksHit) 0)
 ))
 (:scoring maximize (+ 
-    (* 2 (with (?b - yellow_cube_block) (count-once allBlocksHit)))
-    (* 2 (with (?b - blue_cube_block) (count-once allBlocksHit)))
-    (* 2 (with (?b - brown_cube_block) (count-once allBlocksHit)))
-    (* 1 (count-once allBlocksHit))
-    (* 3 (count-once allBlocksHitWithSameBall))
+    (* 2 (count-once allBlocksHit:yellow_cube_block))
+    (* 2 (count-once allBlocksHit:blue_cube_block))
+    (* 2 (count-once allBlocksHit:brown_cube_block))
+    (* 1 (count-once allBlocksHit)) ; the 7th point if all blocks are knocked over
+    (* 3 (count-once allBlocksHit) (= (count-nonoverlapping throwAttempt) 1)) ; points 8-10 for doing it all in one throw
 )))
 
 
@@ -666,37 +657,38 @@
     )
 )
 (:constraints (and 
-    (preference objectLandsInBlocks 
-        (exists (?o - (either pillow cd dodgeball))
-            (then
-                (once (and (agent_holds ?o) (forall (?b - cube_block) (> (distance agent ?b) 2))))
-                (hold (and (not (agent_holds ?o)) (in_motion ?o))) 
-                (once (and 
-                    (not (in_motion ?o)) 
-                    (on floor ?o) 
-                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?o ?b2))
-                ))
+    (forall (?o - (either pillow cd dodgeball))
+        (preference objectLandsInBlocks 
+            (exists (?b1 ?b2 - cube_block)
+                (then
+                    (once (and (agent_holds ?o) (forall (?b - cube_block) (> (distance agent ?b) 2))))
+                    (hold (and (not (agent_holds ?o)) (in_motion ?o))) 
+                    (once (and 
+                        (not (in_motion ?o)) 
+                        (on floor ?o) 
+                        (between ?b1 ?o ?b2)
+                    ))
+                )
             )
         )
-    )
-    (preference cdLandsInBlocks 
-        (exists (?c - cd ?f - floor)
+    )   
+    (preference objectBouncesOut
+        (exists (?p - (either pillow cd dodgeball) ?f - floor)
             (then
-                (once (and (agent_holds ?c) (forall (?b - cube_block) (> (distance agent ?b) 2))))
-                (hold (and (not (agent_holds ?c)) (in_motion ?c))) 
-                (once (and 
-                    (not (in_motion ?c)) 
-                    (on ?f ?c) 
-                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?c ?b2))
-                ))     
+                (once (and (agent_holds ?p) (forall (?b - cube_block) (> (distance agent ?b) 2))))
+                (hold-while 
+                    (and (not (agent_holds ?p)) (in_motion ?p))
+                    (exists (?b1 ?b2 - cube_block) (between ?b1 ?p ?b2))
+                    (and (touch ?f ?p) (not (exists (?b1 ?b2 - cube_block) (and (on ?f ?b1) (on ?f ?b2) (between ?b1 ?p ?b2 )))))    
+                )           
             )
         )
     )
 )) 
 (:scoring maximize (+
-    (* 5 (with (?o - pillow) (count-once-per-objects objectLandsInBlocks)))
-    (* 10 (with (?o - cd) (count-once-per-objects objectLandsInBlocks)))
-    (* 20 (with (?o - dodgeball) (count-once-per-objects objectLandsInBlocks)))
+    (* 5 (count-once-per-objects objectLandsInBlocks:pillow))
+    (* 10 (count-once-per-objects objectLandsInBlocks:cd))
+    (* 20 (count-once-per-objects objectLandsInBlocks:dodgeball))
     (* (- 5) (count-once-per-objects objectBouncesOut))
 )))
 
@@ -1002,7 +994,7 @@
     (preference allBlocksThrownToBinAndBallToChair
         (exists (?d - dodgeball ?h - hexagonal_bin ?c - chair)
             (then 
-                (once (on bed agent))  ; with a conjunction with the setup if we wanted to allow multiple attempts
+                (once (on bed agent))  
                 (forall-sequence (?b - cube_block) 
                     (then 
                         (once (and (on bed agent) (agent_holds ?b)))

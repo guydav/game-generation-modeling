@@ -126,7 +126,7 @@ def build_aggregator(args):
     agg.register(num_setup_objects_quantified)
 
     num_preference_objects_quantified = StatExtractor(
-        ('pref_body_exists', 'pref_body_forall'), 'preference_objects_quantified', 
+        ('pref_body_exists', 'pref_body_forall', 'pref_forall'), 'preference_objects_quantified', 
         objects_quantified, lambda x: x)
     agg.register(num_preference_objects_quantified)
 
@@ -158,7 +158,7 @@ def build_aggregator(args):
         return dict(results)
 
     object_types_quantified = StatExtractor(
-        ('setup_exists', 'setup_forall', 'pref_body_exists', 'pref_body_forall'),
+        ('setup_exists', 'setup_forall', 'pref_body_exists', 'pref_body_forall', 'preference_forall'),
         'object_types_quantified', objects_referenced, aggregate_count_dicts
     )
     agg.register(object_types_quantified)

@@ -205,14 +205,16 @@ preference_eval =
     count_increasing_measure |
     count_unique_positions;
 
-count_nonoverlapping = '(count-nonoverlapping' pref_name:name {object_tpes:pref_object_type}* ')';
-count_once = '(count-once' pref_name:name {object_tpes:pref_object_type}* ')';
-count_once_per_objects = '(count-once-per-objects' pref_name:name {object_tpes:pref_object_type}* ')';
-count_longest = '(count-longest' pref_name:name {object_tpes:pref_object_type}* ')';
-count_shortest = '(count-shortest' pref_name:name {object_tpes:pref_object_type}*')';
-count_total = '(count-total' pref_name:name {object_tpes:pref_object_type}* ')';
-count_increasing_measure = '(count-increasing-measure' pref_name:name {object_tpes:pref_object_type}* ')';
-count_unique_positions = '(count-unique-positions' pref_name:name {object_tpes:pref_object_type}*')';
+count_nonoverlapping = '(count-nonoverlapping'  name_and_types:pref_name_and_types')';
+count_once = '(count-once' name_and_types:pref_name_and_types ')';
+count_once_per_objects = '(count-once-per-objects' name_and_types:pref_name_and_types ')';
+count_longest = '(count-longest' name_and_types:pref_name_and_types ')';
+count_shortest = '(count-shortest' name_and_types:pref_name_and_types ')';
+count_total = '(count-total' name_and_types:pref_name_and_types ')';
+count_increasing_measure = '(count-increasing-measure' name_and_types:pref_name_and_types ')';
+count_unique_positions = '(count-unique-positions' name_and_types:pref_name_and_types')';
+
+pref_name_and_types = pref_name:name {object_types:pref_object_type}*;
 
 pref_object_type = ':' type_name:name;
 

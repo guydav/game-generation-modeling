@@ -2,6 +2,7 @@ import functools
 from matplotlib.colors import rgb2hex
 import matplotlib.pyplot as plt
 from numpy.core.fromnumeric import var
+import tatsu
 
 from ast_parser import ASTParser
 
@@ -563,7 +564,13 @@ def _handle_with(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
-    _indent_print(_out_str_to_span(f'({ast.parseinfo.rule.replace("_", "-")} {ast.pref_name})', context), depth, increment, context)
+    type_str = ''
+    if ast.name_and_types.object_types:
+        if isinstance(ast.name_and_types.object_types, tatsu.ast.AST):
+            type_str =f':{ast.name_and_types.object_types.type_name}'
+        else:
+            type_str = ":" + ":".join([t.type_name for t in ast.name_and_types.object_types])
+    _indent_print(_out_str_to_span(f'({ast.parseinfo.rule.replace("_", "-")} {ast.name_and_types.pref_name}{type_str})', context), depth, increment, context)
     
 
 def build_terminal_printer():

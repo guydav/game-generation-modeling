@@ -194,19 +194,27 @@
         (game-conserved (object_orientation ?h upside_down))
         (forall (?b - cube_block) (or 
             (game-optional (on ?h ?b))
-            (exists (?b2 - cube_block) (game-optional (on ?b ?b2)))   
+            (exists (?b2 - cube_block) (game-optional (and 
+                (above ?h ?b) 
+                (on ?b2 ?b)
+            )))
         ))
     ))
 ))
 (:constraints (and 
-    (preference blockInTowerKnockedByDodgeball (exists (?b - cube_block ?d - dogeball ?h - hexagonal_bin ?c - chair)
+    (preference blockInTowerKnockedByDodgeball (exists (?b - cube_block 
+        ?d - dogeball ?h - hexagonal_bin ?c - chair)
         (then
             (once (and 
                 (agent_holds ?d)
                 (adjacent agent ?c)
                 (or 
                     (on ?h ?b)
-                    (exists (?b2 - cube_block) (on ?b2 ?b))
+                    ; TODO: do we want to / how can we enforce that the block was on the bin? An (above) predicate?
+                    (and 
+                        (above ?h ?b) 
+                        (exists (?b2 - cube_block) (on ?b2 ?b))
+                    )
                 )    
             ))
             (hold-while (and (not (agent_holds ?d)) (in_motion ?d))
@@ -329,27 +337,26 @@
 (:constraints (and 
     (preference baseBlockInTowerAtEnd (exists (?b1 - block)
         (at-end
-            (and 
-                (in_building ?b1)
-                (not (exists (?b2 - block) (on ?b1 ?b2)))
-            )
+            (on floor ?b1)
         )
     ))
     (preference blockOnBlockInTowerAtEnd (exists (?b1 - block)
         (at-end
             (and 
-                (in_building ?b1)
-                (exists (?b2 - block) (on ?b1 ?b2))
-                (exists (?b2 - block) (on ?b2 ?b1))
+                (exists (?b2 - block) (and (on floor ?b2) (above ?b2 ?b1)))
+                (exists (?b3 - block) (on ?b3 ?b1))
+                (exists (?b4 - block) (on ?b1 ?b4))
+                (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?b))))
             )
         )
     )) 
     (preference pyramidBlockAtopTowerAtEnd (exists (?p - pyramid_block)
         (at-end
             (and 
-                (in_building ?p)
-                (exists (?b - block) (on ?b ?p))
-                (not (exists (?b - block) (on ?p ?b)))
+                (exists (?b1 - block) (and (on ?floor ?p) (above ?b1 ?p)))
+                (exists (?b2 - block) (on ?b2 ?b1))
+                (not (exists (?b3 - block) (on ?p ?b3)))
+                (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?p))))
             )
         )
     )) 

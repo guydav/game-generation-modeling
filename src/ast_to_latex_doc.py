@@ -24,7 +24,7 @@ parser.add_argument('-o', '--output-file', default=DEFAULT_OUTPUT_FILE)
 parser.add_argument('-p', '--print-dsls', action='store_true')
 DEFAULT_TEMPLATE_FILE = './latex/template.tex'
 parser.add_argument('-f', '--template-file', default=DEFAULT_TEMPLATE_FILE)
-
+parser.add_argument('-c', '--compile-pdf', action='store_true')
 
 DEFAULT_PREFIX_LINES = [
     r'\section{DSL Docuemntation as of \today}'
@@ -602,16 +602,17 @@ def main(args):
     parser.process()
     parser.output()
 
-    out_dir, original_out_file = os.path.split(args.output_file)
-    out_dir = os.path.join(out_dir, 'out')
-    os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, original_out_file)
-    shutil.copy(args.output_file, out_file)
+    if args.compile_pdf:
+        out_dir, original_out_file = os.path.split(args.output_file)
+        out_dir = os.path.join(out_dir, 'out')
+        os.makedirs(out_dir, exist_ok=True)
+        out_file = os.path.join(out_dir, original_out_file)
+        shutil.copy(args.output_file, out_file)
 
-    os.system(f'cd {out_dir} && pdflatex -shell-escape {original_out_file}')
-    pdf_out_path = os.path.splitext(out_file)[0] + '.pdf'
-    pdf_final_path = args.output_file.replace('.tex', '.pdf')
-    shutil.copy(pdf_out_path, pdf_final_path)
+        os.system(f'cd {out_dir} && pdflatex -shell-escape {original_out_file}')
+        pdf_out_path = os.path.splitext(out_file)[0] + '.pdf'
+        pdf_final_path = args.output_file.replace('.tex', '.pdf')
+        shutil.copy(pdf_out_path, pdf_final_path)
 
 
 if __name__ == '__main__':

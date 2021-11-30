@@ -18,7 +18,7 @@
             )
         )
     )) 
-    (preference blockInTowerKnockedByDodgeball (exists (?b - block ?d - dogeball)
+    (preference blockInTowerKnockedByDodgeball (exists (?b - block ?d - dodgeball)
         (then
             (once (and (in_building ?b) (agent_holds ?d)))
             (hold (and (in_building ?b) (not (agent_holds ?d)) (in_motion ?d)))
@@ -36,7 +36,7 @@
                     (in_building ?b1)
                     (or 
                         (agent_holds ?b2) 
-                        (and (not agent_holds ?b2) (in_motion ?b2))
+                        (and (not (agent_holds ?b2)) (in_motion ?b2))
                     )
                 )
                 (touch ?b1 ?b2)
@@ -160,14 +160,14 @@
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin ?b1 ?b2 ?b3 ?b4 - block) 
         (game-conserved (and
-            (adjacent (side ?h front) (side ?c back)))
+            (adjacent (side ?h front) (side ?c back))
             (on floor ?b1)
             (adjacent (side ?h left) ?b1)
             (on ?b1 ?b2)
             (on floor ?b3)
             (adjacent (side ?h right) ?b3)
             (on ?b3 ?b4)
-        )
+        ))
     )
 ))
 (:constraints (and 
@@ -203,14 +203,13 @@
 ))
 (:constraints (and 
     (preference blockInTowerKnockedByDodgeball (exists (?b - cube_block 
-        ?d - dogeball ?h - hexagonal_bin ?c - chair)
+        ?d - dodgeball ?h - hexagonal_bin ?c - chair)
         (then
             (once (and 
                 (agent_holds ?d)
                 (adjacent agent ?c)
                 (or 
                     (on ?h ?b)
-                    ; TODO: do we want to / how can we enforce that the block was on the bin? An (above) predicate?
                     (and 
                         (above ?h ?b) 
                         (exists (?b2 - cube_block) (on ?b2 ?b))

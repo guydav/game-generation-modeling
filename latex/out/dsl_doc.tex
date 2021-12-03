@@ -376,7 +376,7 @@ The predicates are not defined as part of the DSL, but rather I envision them is
 (in_building <arg1>) [9 references] ; Is the object part of a building? (* \textbf I dislike this predicate, which I previously used as a crutch, and I am trying to find alternatives around it *)
 (in_motion <arg1>) [49 references] ; Is the object in motion?
 (object_orientation <arg1> <arg2>) [2 references] ; Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down
-(on <arg1> <arg2>) [34 references] ; Is the second object on the first one?
+(on <ambiguous arguments>) [35 references] ; Is the second object on the first one?
 (open <arg1>) [1 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
 (opposite <arg1> <arg2>) [2 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
 (side <arg1> <arg2>) [8 references] ; (* \textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)
@@ -415,6 +415,63 @@ wall [3 references] ; One of the walls in the room
 
 
 
+
+\section{Modal Definitions in LTL}
+LTL offers the following operators, and using $\varphi$ and $\psi$ as the symbols (in our case, predicates). 
+I'm trying to translate from standard logic notation to something that makes sense in our case, where we're operating sequence of states $S_0, S_1, \cdots, S_n$. 
+\begin{itemize}
+    \item \textbf{Next}, $X \psi$: at the next timestep, $\psi$ will be true. If we are at timestep $i$, then $S_{i+1} \vdash \psi$
+    
+    \item \textbf{Finally}, $F \psi$: at some future timestep, $\psi$ will be true. If we are at timestep $i$, then $\exists j > i:  S_{j} \vdash \psi$
+    
+    \item \textbf{Globally}, $G \psi$: from this timestep on, $\psi$ will be true. If we are at timestep $i$, then $\forall j: j \geq i: S_{j} \vdash \psi$
+    
+    \item \textbf{Until}, $\psi U \varphi$: $\psi$ will be true from the current timestep until a timestep at which $\varphi$ is true. If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$.
+    \item \textbf{Strong release}, $\psi M \varphi$: the same as until, but demanding that both $\psi$ and $\varphi$ are true simultaneously: If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k \leq j: S_k \vdash \psi$, and $S_j \vdash \varphi$. 
+    
+    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. I'm leaving those two as an aside since I don't know we'll need them. 
+    
+\end{itemize}
+
+Formally, to satisfy a (then ...) preference, we're looking to find a sub-sequence of $S_0, S_1, \cdots, S_n$ that satisfies the formula we translate to. 
+We translate a (then ...) operator by translating the constituent sequence-functions (once, hold, while-hold)\footnote{These are the ones I've needed so far with the interactive games -- if we find ourselves needing additional ones, I'll translate those, too.} to LTL. 
+Since the translation of each individual sequence function leaves the last operand empty, we append a `true' ($\top$) as the final operand, since we don't care what happens in the state after the sequence is complete. 
+
+(once $\psi$) := $\psi X \cdots$
+
+(hold $\psi$) := $\psi U \cdots$
+
+(hold-while $\psi$ $\alpha$ $\beta$ $\cdots \nu$) := ($\psi M \alpha) X (\psi M \beta) X \cdots X (\psi M \nu) X \cdots$
+
+For example, a sequence such as the following, which signifies a throw attempt:
+\begin{lstlisting}
+(then
+    (once (agent_holds ?b))
+    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+    (once (not (in_motion ?b)))
+)
+\end{lstlisting}
+Can be translated to LTL using $\psi:=$ (agent_holds ?b), $\varphi:=$ (in_motion ?b) as:
+
+$\psi X (\neg \psi \wedge \varphi) U (\neg \varphi) X \top $
+
+Here's another example: 
+\begin{lstlisting}
+(then 
+    (once (agent_holds ?b))  (* \color{blue} $\alpha$*)
+    (hold-while 
+        (and (not (agent_holds ?b)) (in_motion ?b)) (* \color{blue} $\beta$ *)
+        (touch ?b ?r) (* \color{blue} $\gamma$*)
+    ) 
+    (once  (and (in ?h ?b) (not (in_motion ?b)))) (* \color{blue} $\delta$*) 
+)
+\end{lstlisting}
+If we translate each predicate to the letter appearing in blue at the end of the line, this translates to:
+
+$\alpha X (\beta M \gamma) X \delta X \top$
+
+I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 
+The predicate end up being rather more complex, but that doesn't matter to the LTL translation.
 
 \section{Modal Definitions}
 

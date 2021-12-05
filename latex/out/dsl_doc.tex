@@ -441,7 +441,7 @@ Since the translation of each individual sequence function leaves the last opera
 
 (hold $\psi$) := $\psi U \cdots$
 
-(hold-while $\psi$ $\alpha$ $\beta$ $\cdots \nu$) := ($\psi M \alpha) X (\psi M \beta) X \cdots X (\psi M \nu) X \cdots$
+(hold-while $\psi$ $\alpha$ $\beta$ $\cdots \nu$) := ($\psi M \alpha) X (\psi M \beta) X \cdots X (\psi M \nu) X \psi U \cdots$ where the last $\psi U \cdots$ allows for additional states satisfying $\psi$ until the next modal is satisfied.
 
 For example, a sequence such as the following, which signifies a throw attempt:
 \begin{lstlisting}
@@ -468,7 +468,7 @@ Here's another example:
 \end{lstlisting}
 If we translate each predicate to the letter appearing in blue at the end of the line, this translates to:
 
-$\alpha X (\beta M \gamma) X \delta X \top$
+$\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
 I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 
 The predicate end up being rather more complex, but that doesn't matter to the LTL translation.

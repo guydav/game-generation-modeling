@@ -562,6 +562,7 @@
             (and 
                 (in_building ?b1)
                 (not (exists (?b2 - block) (on ?b1 ?b2)))
+                (on floor )
             )
         )
     ))

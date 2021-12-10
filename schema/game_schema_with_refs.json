@@ -1,0 +1,79 @@
+{
+    "type": "object",
+    "properties": {
+        "prolific_id": {"type": "string"},
+        "id": {"type": "string"},
+        "index": {"type": "number"},
+        "room": {"type": "string"},
+        "notes": {"type": "string"},
+        "throwing": {
+            "type": "object",
+            "properties": {
+                "what": {
+                    "type": "array",
+                    "items": {
+                        "enum": ["golfball", "dodgeball", "basketball", "beachball", "teddy_bear"]
+                    }
+                },
+                "from": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/objectWithPredicates" }
+                },
+                "on": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/objectWithPredicates" }
+                },
+                "goal": {
+                    "type": "array", 
+                    "items": {"enum": ["in", "over", "hit", "on"]}
+                },
+                "to": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/objectWithPredicates" }
+                }
+            },
+            "required": ["what", "to", "goal"],
+            "additionalProperties": false
+        },
+        "building": {
+            "type": "object",
+            "properties": {
+                "objects": {"enum": ["block", "any"]},
+                "goal": {"enum": ["num_objects", "structure"]},
+                "structure": {"enum": ["pyramid", "tower"]},
+                "order": {
+                    "type": "array",
+                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block"] }
+                },
+                "on": { "$ref": "#/$defs/objectWithPredicates" }
+            },
+            "required": ["objects", "goal"],
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false,
+    "required": ["prolific_id", "id", "room"],
+
+    "$defs": {
+        "objectWithPredicates": {
+            "type": "object",
+            "properties": {
+                "object": {"enum": ["hexagonal_bin", "curved_wooden_ramp", "large_triangular_ramp", "doggie_bed", "building", "pillow", "top_drawer", "door", "rug", "desk"]},
+                "predicates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "object": {"enum": ["bed", "floor", "curved_wooden_ramp", "room_center", "block", "hexagonal_bin"]},
+                            "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "facing"]}
+                        },
+                        "required": ["predicate"],
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "required": ["object"],
+            "additionalProperties": false
+        }
+    }
+}

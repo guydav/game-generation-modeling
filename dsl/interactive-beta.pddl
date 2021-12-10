@@ -44,6 +44,13 @@
             (once (on floor ?b1))
         )
     ))
+(preference blockInLargestBuildingAtEnd (exists (?b - building ?l - block))
+    (at-end
+        (not (exists (?b2 - building)) (> (objects_in_building ?b2) (objects_in_building ?b)))
+        (in_building ?b ?l)
+    )
+)
+
 ))
 (:scoring maximize (+ 
     (count-once-per-objects baseBlockInTowerAtEnd)
@@ -201,6 +208,8 @@
         ))
     ))
 ))
+; TODO: this person specifies a "pyramidal" structure, but doesn't do that in gameplay
+; TODO: do we go with the written words or the actions? 
 (:constraints (and 
     (preference blockInTowerKnockedByDodgeball (exists (?b - cube_block 
         ?d - dodgeball ?h - hexagonal_bin ?c - chair)

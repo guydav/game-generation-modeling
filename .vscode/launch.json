@@ -18,7 +18,17 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl"  
+               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-c"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: schema validation",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+               "-s", "./schema/game_schema_with_refs.json",
             ],
             "console": "integratedTerminal"
         },

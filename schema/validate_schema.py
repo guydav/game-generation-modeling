@@ -6,7 +6,7 @@ import os
 
 
 parser = argparse.ArgumentParser()
-DEFAULT_SCHEMA_FILE = './schema/game_schema.json'
+DEFAULT_SCHEMA_FILE = './schema/game_schema_with_refs.json'
 parser.add_argument('-s', '--schema-file', default=DEFAULT_SCHEMA_FILE)
 DEFAULT_TEST_FILES = (
     './schema/interactive_beta.json',

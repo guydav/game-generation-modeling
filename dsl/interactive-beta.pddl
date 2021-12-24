@@ -2,60 +2,59 @@
 (:setup 
 )
 (:constraints (and 
-    (preference baseBlockInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (and 
-                (in_building ?b1)
-                (not (exists (?b2 - block) (on ?b1 ?b2)))
+    (forall (?b - building) (and  
+        ; (preference blocktInTowerUntilTowerHitByDodgeball (exists (?l - block)
+        ;     (then 
+        ;         (hold (in ?b ?l))
+        ;         (once (exists (?l2 - block ?d - dodgeball) (and 
+        ;             (in ?b ?l2)
+        ;             (touch ?d ?l2)
+        ;         )))
+        ;     )
+        ; ))
+        (preference blockInTowerAtEnd (exists (?l - block)
+            (at-end
+                (and 
+                    (in building ?b ?l)
+                )
             )
-        )
-    ))
-    (preference blockOnBlockInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (and 
-                (in_building ?b1)
-                (exists (?b2 - block) (on ?b1 ?b2))
+        ))
+        (preference blockInTowerKnockedByDodgeball (exists (?l - block ?d - dodgeball)
+            (then
+                (once (and (in ?b ?l) (agent_holds ?d)))
+                (hold (and (in ?b ?l) (not (agent_holds ?d)) (in_motion ?d)))
+                (once (and (in ?b ?l) (touch ?d ?b)))
+                (hold (in_motion ?l))
+                (once (not (in_motion ?l)))
             )
-        )
-    )) 
-    (preference blockInTowerKnockedByDodgeball (exists (?b - block ?d - dodgeball)
-        (then
-            (once (and (in_building ?b) (agent_holds ?d)))
-            (hold (and (in_building ?b) (not (agent_holds ?d)) (in_motion ?d)))
-            (once (and (in_building ?b) (touch ?d ?b)))
-            (hold (in_motion ?b))
-            (once (not (in_motion ?b)))
-        )
+        ))
+
     ))
-    (preference towerFallsWhileBuilding (exists (?b1 ?b2 - block)
+    (preference towerFallsWhileBuilding (exists (?b - building ?l1 ?l2 - block)
         (then
-            (once (and (in_building ?b1) (agent_holds ?b2)))
+            (once (and (in ?b ?l1) (agent_holds ?l2)))
             (hold-while 
                 (and
-                    (not (agent_holds ?b1)) 
-                    (in_building ?b1)
+                    (not (agent_holds ?l1)) 
+                    (in_building ?l1)
                     (or 
-                        (agent_holds ?b2) 
-                        (and (not (agent_holds ?b2)) (in_motion ?b2))
+                        (agent_holds ?l2) 
+                        (and (not (agent_holds ?l2)) (in_motion ?l2))
                     )
                 )
-                (touch ?b1 ?b2)
+                (touch ?l1 ?l2)
             )
-            (once (on floor ?b1))
+            (hold (and 
+                (in_motion ?l1)
+                (not (agent_holds ?l1))
+            ))
+            (once (not (in_motion ?l1)))
         )
     ))
-(preference blockInLargestBuildingAtEnd (exists (?b - building ?l - block))
-    (at-end
-        (not (exists (?b2 - building)) (> (objects_in_building ?b2) (objects_in_building ?b)))
-        (in_building ?b ?l)
-    )
-)
-
 ))
 (:scoring maximize (+ 
-    (count-once-per-objects baseBlockInTowerAtEnd)
-    (count-once-per-objects blockOnBlockInTowerAtEnd)
-    (* 2 (count-once-per-objects blockInTowerKnockedByDodgeball))
+    (count-maximal-once-per-objects blockInTowerAtEnd)
+    (* 2 (count-maximal-once-per-objects blockInTowerKnockedByDodgeball))
     (* (- 1) (count-nonoverlapping towerFallsWhileBuilding))
 )))
 
@@ -196,34 +195,31 @@
 
 (define (game 5f5d6c3cbacc025bf0a03440) (:domain few-objects-room-v1)  ; 5
 (:setup (and
-    (exists (?h - hexagonal_bin) (and 
+    (exists (?h - hexagonal_bin ?b - building) (and 
         (game-conserved (adjacent ?h bed))
         (game-conserved (object_orientation ?h upside_down))
-        (forall (?b - cube_block) (or 
-            (game-optional (on ?h ?b))
-            (exists (?b2 - cube_block) (game-optional (and 
-                (above ?h ?b) 
-                (on ?b2 ?b)
-            )))
-        ))
+        (game-optional (on ?h ?b)) ; optional since building might cease to exist in game
+        (forall (?c - cube_block) (game-optional (in ?b ?c)))
+        (exists (?c1 ?c2 ?c3 ?c4 ?c5 ?c6 - cube_block) (game-optional (and ; specifying the pyramidal structure
+           (on ?h ?c1)
+           (on ?h ?c2)
+           (on ?h ?c3)
+           (on ?c1 ?c4)
+           (on ?c2 ?c5)
+           (on ?c4 ?c6) 
+        )))
     ))
 ))
-; TODO: this person specifies a "pyramidal" structure, but doesn't do that in gameplay
-; TODO: do we go with the written words or the actions? 
+
 (:constraints (and 
-    (preference blockInTowerKnockedByDodgeball (exists (?b - cube_block 
+    (preference blockInTowerKnockedByDodgeball (exists (?b - building ?c - cube_block 
         ?d - dodgeball ?h - hexagonal_bin ?c - chair)
         (then
             (once (and 
                 (agent_holds ?d)
                 (adjacent agent ?c)
-                (or 
-                    (on ?h ?b)
-                    (and 
-                        (above ?h ?b) 
-                        (exists (?b2 - cube_block) (on ?b2 ?b))
-                    )
-                )    
+                (on ?h ?b)
+                (in ?b ?c) 
             ))
             (hold-while (and (not (agent_holds ?d)) (in_motion ?d))
                 (or 
@@ -343,38 +339,38 @@
 (:setup 
 )
 (:constraints (and 
-    (preference baseBlockInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (on floor ?b1)
-        )
+    (forall (?b - building) (and 
+        (preference baseBlockInTowerAtEnd (exists (?l - block)
+            (at-end (and
+                (in ?b ?l)  
+                (on floor ?l)
+            ))
+        ))
+        (preference blockOnBlockInTowerAtEnd (exists (?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?b))))
+                )
+            )
+        )) 
+        (preference pyramidBlockAtopTowerAtEnd (exists (?p - pyramid_block)
+            (at-end
+                (and
+                    (in ?b ?p)   
+                    (not (exists (?l - block) (on ?p ?l)))
+                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?p))))
+                )
+            )
+        )) 
     ))
-    (preference blockOnBlockInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (and 
-                (exists (?b2 - block) (and (on floor ?b2) (above ?b2 ?b1)))
-                (exists (?b3 - block) (on ?b3 ?b1))
-                (exists (?b4 - block) (on ?b1 ?b4))
-                (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?b))))
-            )
-        )
-    )) 
-    (preference pyramidBlockAtopTowerAtEnd (exists (?p - pyramid_block)
-        (at-end
-            (and 
-                (exists (?b1 - block) (and (on ?floor ?p) (above ?b1 ?p)))
-                (exists (?b2 - block) (on ?b2 ?b1))
-                (not (exists (?b3 - block) (on ?p ?b3)))
-                (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?p))))
-            )
-        )
-    )) 
 ))
 (:scoring maximize (* 
-    (count-once pyramidBlockAtopTowerAtEnd)
+    (count-maximal-once pyramidBlockAtopTowerAtEnd)
+    (count-maximal-once baseBlockInTowerAtEnd)
     (+ 
-        (count-once pyramidBlockAtopTowerAtEnd)
-        (count-once baseBlockInTowerAtEnd)
-        (count-once-per-objects blockOnBlockInTowerAtEnd)   
+        (count-maximal-once baseBlockInTowerAtEnd)
+        (count-maximal-once-per-objects blockOnBlockInTowerAtEnd)   
     )     
 )))
 
@@ -566,27 +562,14 @@
 (define (game 614b603d4da88384282967a7) (:domain many-objects-room-v1)  ; 17
 (:setup )
 (:constraints (and 
-    (preference baseBlocktInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (and 
-                (in_building ?b1)
-                (not (exists (?b2 - block) (on ?b1 ?b2)))
-                (on floor )
-            )
-        )
-    ))
-    (preference blockOnBlockInTowerAtEnd (exists (?b1 - block)
-        (at-end
-            (and 
-                (in_building ?b1)
-                (exists (?b2 - block) (on ?b2 ?b1))
-            )
-        )
-    )) 
+    (forall (?b - building) 
+        (preference blocktInTowerAtEnd (exists (?l - block)
+            (at-end (in ?b ?l))
+        ))
+    )
 ))
 (:scoring maximize (+
-    (count-once baseBlocktInTowerAtEnd)
-    (count-once-per-objects blockOnBlockInTowerAtEnd)
+    (count-maximal-once-per-objects blocktInTowerAtEnd)
 )))
 
 

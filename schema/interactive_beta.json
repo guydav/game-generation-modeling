@@ -1,76 +1,206 @@
 {
     "games": [
-        { 
-            "prolific_id": "5e2df2855e01ef3e5d01ab58",
-            "id": "qSbsQv2jOptuDovotsIE",
-            "index": 0,
-            "room": "medium_objects",
-            "notes": "mixture of construction (for # blocks, using blocks, no constraints) and throwing",
+        {
+            "metadata": {
+                "prolific_id": "6172feb1665491d1efbce164",
+                "id": "RfP7c4trKFGmDp6xpiG8",
+                "index": 0,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["basketball", "dodgeball", "beachball"],
+                "on": [{
+                    "object": "large_triangular_ramp",
+                    "predicates": [{"object": "hexagonal_bin", "predicate": "adjacent"}]
+                }],
+                "goal": ["hit"],
+                "to": [{
+                    "object": "hexagonal_bin"
+                }]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5f77754ba932fb2c4ba181d8",
+                "id": "SFpazSkgQ7MFSwDEa3c9",
+                "index": 2,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "golfball"],
+                "from": [{
+                    "object": "door",
+                    "predicates": [{"predicate": "adjacent"}]
+                }],
+                "goal": ["in"],
+                "to": [
+                    {
+                        "object": "top_drawer",
+                        "predicates": [{"predicate": "open"}]
+                    },
+                    {
+                        "object": "hexagonal_bin"
+                    }
+                ]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "614b603d4da88384282967a7",
+                "id": "lchV8TQjaHcYtHAqR31Q",
+                "index": 3,
+                "room": "many_objects",
+                "notes": "Construction game for num blocks"
+            },
             "building": {
                 "objects": "block",
                 "structure": "tower",
                 "goal": "num_objects"
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5bc79f652885710001a0e82a",
+                "id": "elaUTwEvCJFrZToj8DBY",
+                "index": 5,
+                "room": "few_objects",
+                "notes": ""
             },
             "throwing": {
                 "what": ["dodgeball"],
-                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}]}],
-                "goal": ["hit"],
-                "to": [{"object": "building"}]
+                "goal": ["in"],
+                "to": [{
+                    "object": "hexagonal_bin"
+                }]
             }
         },
         {
-            "prolific_id": "60e93f64ec69ecdac3107555",
-            "id": "SdpyTxFIhhYu7wNwmHFa",
-            "index": 1,
-            "room": "medium_objects",
+            "metadata": {
+                "prolific_id": "614dec67f6eb129c3a77defd",
+                "id": "ImigmCOsFcfkSwe0ctO2",
+                "index": 6,
+                "room": "medium_objects",
+                "notes": ""
+            },
             "throwing": {
-                "what": ["basketball", "beachball", "beachball"],
-                "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
-                "goal": ["on", "in"],
-                "to": [{"object": "doggie_bed"}, {"object": "hexagonal_bin"}]
+                "what": ["dodgeball", "basketball", "beachball"],
+                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}] }],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "bed", "predicate": "adjacent"}]  }]
             }
         },
         {
-            "prolific_id": "613e4bf960ca68f8de00e5e7",
-            "id": "PJ2WCWCLedT8sDLrvn49",
-            "index": 2,
+            "metadata": {
+                "prolific_id": "615b40bb6cdb0f1f6f291f45",
+                "id": "Kns1TGpthEFdKLHHOcey",
+                "index": 8,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "goal": ["over"],
+                "to": [{"object": "curved_wooden_ramp"}]
+            }
+        },
+        {
+            "prolific_id": "615452aaabb932ada88ef3ca",
+            "id": "cdo6CztpMH0It12THBAy",
+            "index": 9,
+            "room": "many_objects",
+            "notes": "",
+            "throwing": {
+                "what": ["dodgeball", "basketball"],
+                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}] }],
+                "goal": ["in"],
+                "to": [
+                    {"object": "hexagonal_bin"}, 
+                    {"object": "hexagonal_bin", "predicates": [{"object": "bed", "predicate": "on"}]}
+                ]
+            }
+        },
+        {
+            "prolific_id": "57aa430b4cda6e00018420e9",
+            "id": "jhO40BilcfyPMScEKLiE",
+            "index": 10,
             "room": "medium_objects",
-            "notes": "The complex construction game -- specific order of blocks + scoring by color of each",
+            "notes": "",
+            "throwing": {
+                "what": ["teddy_bear"],
+                "goal": ["on"],
+                "to": [{"object": "pillow"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5d29412ab711e9001ab74ece",
+                "id": "rTVvF1dBAKE8juHCF69f",
+                "index": 11,
+                "room": "many_objects",
+                "notes": "Construction (for num blocks, ending with a pyramidal block)"
+            },
             "building": {
                 "objects": "block",
                 "structure": "tower",
-                "goal": "structure",
-                "order": ["bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "pyramid_block"]
+                "goal": "num_objects",
+                "order": ["any", "pyramid_block"]
             }
         },
         {
-            "prolific_id": "616e4f7a16145200573161a6",
-            "id": "yWwOhJSjWiuzNkkHzhft",
-            "index": 4,
-            "room": "few_objects",
-            "notes": "To what extent do we want to specify setup as part of the schema?",
+            "prolific_id": "613bb29f16252362f4dc11a3",
+            "id": "gZ8ce0O2anOHAMWWJJZw",
+            "index": 12,
+            "room": "medium_objects",
+            "notes": "TODO: do we want to specify the moving locations think somehow?",
             "throwing": {
                 "what": ["dodgeball"],
-                "on": [
-                    {
-                        "object": "curved_wooden_ramp", 
-                        "predicates": [
-                            {"object": "hexagonal_bin", "predicate": "adjacent"},
-                            {"object": "block", "predicate": "left"}, 
-                            {"object": "block", "predicate": "right"}
-                        ] 
-                    }
-                ],
+                "on": [{"object": "curved_wooden_ramp"}],
                 "goal": ["in"],
-                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "curved_wooden_ramp", "predicate": "adjacent"}]}]
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "room_center", "predicate": "on"}] }]
             }
         },
         {
-            "prolific_id": "5f5d6c3cbacc025bf0a03440",
-            "id": "5DOVQT0dE9jCRwYHvIx6",
-            "index": 5,
-            "room": "few_objects",
-            "notes": "The person specified a 'pyramidal' structure, but didn't do that in gameplay, do we consider it?",
+            "prolific_id": "616e5ae706e970fe0aff99b6",
+            "id": "Q9FPLgdunp3o75RFGEU7",
+            "index": 13,
+            "room": "many_objects",
+            "notes": "",
+            "throwing": {
+                "what": ["golfball", "dodgeball"],
+                "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
+                "on": [{"object": "curved_wooden_ramp", "predicates": [
+                    {"object": "room_center", "predicate": "near"},
+                    {"object": "hexagonal_bin", "predicate": "facing"}
+                ]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "609c15fd6888b88a23312c42",
+                "id": "oevKPEL8LXqT4gswKdMK",
+                "index": 14,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "basketball", "beachball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5f5d6c3cbacc025bf0a03440",
+                "id": "5DOVQT0dE9jCRwYHvIx6",
+                "index": 15,
+                "room": "few_objects",
+                "notes": "The person specified a 'pyramidal' structure, but didn't do that in gameplay, do we consider it?"
+            },
             "building": {
                 "objects": "block",
                 "structure": "pyramid",
@@ -91,181 +221,77 @@
             }
         },
         {
-            "prolific_id": "609c15fd6888b88a23312c42",
-            "id": "oevKPEL8LXqT4gswKdMK",
-            "index": 6,
-            "room": "medium_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["dodgeball", "basketball", "beachball"],
-                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
-                "goal": ["in"],
-                "to": [{"object": "hexagonal_bin"}]
-            }
-        },
-        {
-            "prolific_id": "616e5ae706e970fe0aff99b6",
-            "id": "Q9FPLgdunp3o75RFGEU7",
-            "index": 7,
-            "room": "many_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["golfball", "dodgeball"],
-                "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
-                "on": [{"object": "curved_wooden_ramp", "predicates": [
-                    {"object": "room_center", "predicate": "near"},
-                    {"object": "hexagonal_bin", "predicate": "facing"}
-                ]}],
-                "goal": ["in"],
-                "to": [{"object": "hexagonal_bin"}]
-            }
-        },
-        {
-            "prolific_id": "613bb29f16252362f4dc11a3",
-            "id": "gZ8ce0O2anOHAMWWJJZw",
-            "index": 8,
-            "room": "medium_objects",
-            "notes": "TODO: do we want to specify the moving locations think somehow?",
+            "metadata": {
+                "prolific_id": "616e4f7a16145200573161a6",
+                "id": "yWOhJSjWiuzNkkHzhft",
+                "index": 16,
+                "room": "few_objects",
+                "notes": "To what extent do we want to specify setup as part of the schema?"
+            },
             "throwing": {
                 "what": ["dodgeball"],
-                "on": [{"object": "curved_wooden_ramp"}],
+                "on": [
+                    {
+                        "object": "curved_wooden_ramp", 
+                        "predicates": [
+                            {"object": "hexagonal_bin", "predicate": "adjacent"},
+                            {"object": "block", "predicate": "left"}, 
+                            {"object": "block", "predicate": "right"}
+                        ] 
+                    }
+                ],
                 "goal": ["in"],
-                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "room_center", "predicate": "on"}] }]
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "curved_wooden_ramp", "predicate": "adjacent"}]}]
             }
         },
         {
-            "prolific_id": "5d29412ab711e9001ab74ece",
-            "id": "rTVvF1dBAKE8juHCF69f",
-            "index": 9,
-            "room": "many_objects",
-            "notes": "Construction (for num blocks, ending with a pyramidal block)",
+            "metadata": {
+                "prolific_id": "613e4bf960ca68f8de00e5e7",
+                "id": "PJ2WCWCLedT8sDLrvn49",
+                "index": 18,
+                "room": "medium_objects",
+                "notes": "The complex construction game -- specific order of blocks + scoring by color of each"
+            },
             "building": {
                 "objects": "block",
                 "structure": "tower",
-                "goal": "num_objects",
-                "order": ["any", "pyramid_block"]
+                "goal": "structure",
+                "order": ["bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "pyramid_block"]
             }
         },
         {
-            "prolific_id": "57aa430b4cda6e00018420e9",
-            "id": "jhO40BilcfyPMScEKLiE",
-            "index": 10,
-            "room": "medium_objects",
-            "notes": "",
+            "metadata": {
+                "prolific_id": "60e93f64ec69ecdac3107555",
+                "id": "SdpyTxFIhhYu7wNwmHFa",
+                "index": 19,
+                "room": "medium_objects"
+            },
             "throwing": {
-                "what": ["teddy_bear"],
-                "goal": ["on"],
-                "to": [{"object": "pillow"}]
+                "what": ["basketball", "beachball", "beachball"],
+                "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
+                "goal": ["on", "in"],
+                "to": [{"object": "doggie_bed"}, {"object": "hexagonal_bin"}]
             }
         },
-        {
-            "prolific_id": "615452aaabb932ada88ef3ca",
-            "id": "cdo6CztpMH0It12THBAy",
-            "index": 11,
-            "room": "many_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["dodgeball", "basketball"],
-                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}] }],
-                "goal": ["in"],
-                "to": [
-                    {"object": "hexagonal_bin"}, 
-                    {"object": "hexagonal_bin", "predicates": [{"object": "bed", "predicate": "on"}]}
-                ]
-            }
-        },
-        {
-            "prolific_id": "615b40bb6cdb0f1f6f291f45",
-            "id": "Kns1TGpthEFdKLHHOcey",
-            "index": 12,
-            "room": "few_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["dodgeball"],
-                "goal": ["over"],
-                "to": [{"object": "curved_wooden_ramp"}]
-            }
-        },
-        {
-            "prolific_id": "614dec67f6eb129c3a77defd",
-            "id": "ImigmCOsFcfkSwe0ctO2",
-            "index": 14,
-            "room": "medium_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["dodgeball", "basketball", "beachball"],
-                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}] }],
-                "goal": ["in"],
-                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "bed", "predicate": "adjacent"}]  }]
-            }
-        },
-        {
-            "prolific_id": "5bc79f652885710001a0e82a",
-            "id": "elaUTwEvCJFrZToj8DBY",
-            "index": 15,
-            "room": "few_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["dodgeball"],
-                "goal": ["in"],
-                "to": [{
-                    "object": "hexagonal_bin"
-                }]
-            }
-        },
-        {
-            "prolific_id": "614b603d4da88384282967a7",
-            "id": "lchV8TQjaHcYtHAqR31Q",
-            "index": 17,
-            "room": "many_objects",
-            "notes": "Construction game for num blocks",
+        { 
+            "metadata": {
+                "prolific_id": "5e2df2855e01ef3e5d01ab58",
+                "id": "qSbsQv2jOptuDovotsIE",
+                "index": 20,
+                "room": "medium_objects",
+                "notes": "mixture of construction (for # blocks, using blocks, no constraints) and throwing"
+            },
             "building": {
                 "objects": "block",
                 "structure": "tower",
                 "goal": "num_objects"
-            }
-        },
-        {
-            "prolific_id": "5f77754ba932fb2c4ba181d8",
-            "id": "SFpazSkgQ7MFSwDEa3c9",
-            "index": 18,
-            "room": "many_objects",
-            "notes": "",
+            },
             "throwing": {
-                "what": ["dodgeball", "golfball"],
-                "from": [{
-                    "object": "door",
-                    "predicates": [{"predicate": "adjacent"}]
-                }],
-                "goal": ["in"],
-                "to": [
-                    {
-                        "object": "top_drawer",
-                        "predicates": [{"predicate": "open"}]
-                    },
-                    {
-                        "object": "hexagonal_bin"
-                    }
-                ]
-            }
-        },
-        {
-            "prolific_id": "6172feb1665491d1efbce164",
-            "id": "RfP7c4trKFGmDp6xpiG8",
-            "index": 20,
-            "room": "medium_objects",
-            "notes": "",
-            "throwing": {
-                "what": ["basketball", "dodgeball", "beachball"],
-                "on": [{
-                    "object": "large_triangular_ramp",
-                    "predicates": [{"object": "hexagonal_bin", "predicate": "adjacent"}]
-                }],
+                "what": ["dodgeball"],
+                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}]}],
                 "goal": ["hit"],
-                "to": [{
-                    "object": "hexagonal_bin"
-                }]
+                "to": [{"object": "building"}]
             }
-        }
+        }  
     ]
 }

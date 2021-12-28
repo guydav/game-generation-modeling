@@ -1,11 +1,18 @@
 {
     "type": "object",
     "properties": {
-        "prolific_id": {"type": "string"},
-        "id": {"type": "string"},
-        "index": {"type": "number"},
-        "room": {"type": "string"},
-        "notes": {"type": "string"},
+        "metadata": {
+            "type": "object",
+            "properties": {
+                "prolific_id": {"type": "string"},
+                "id": {"type": "string"},
+                "index": {"type": "number"},
+                "room": {"type": "string"},
+                "notes": {"type": "string"}
+            },
+            "required": ["prolific_id", "id", "index", "room"],
+            "additionalProperties": false
+        },
         "throwing": {
             "type": "object",
             "properties": {

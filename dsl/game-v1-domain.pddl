@@ -43,7 +43,7 @@
     face edge point upright upside_down - orientation
     room floor desk bed - structure
     east_wall west_wall north_wall south_wall - wall
-    south_wall_shelf east_wall_shelf - shelf
+    west_wall_shelf south_wall_shelf - shelf
     agent - object  ; since the agent can holds things
     rug poster - game_object
     green red blue yellow none - color

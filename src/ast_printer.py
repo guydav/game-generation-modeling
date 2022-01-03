@@ -381,6 +381,13 @@ def _handle_at_end(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'(at-end', depth, increment, context)
     caller(ast.at_end_pred, depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
+
+
+@mutation_context
+def _handle_always(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(always', depth, increment, context)
+    caller(ast.always_pred, depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
     
 
 @mutation_context
@@ -472,7 +479,7 @@ def build_constraints_printer():
     printer = ASTPrinter('(:constraints', ('pref_body_', 'pref_', 'predicate_'))
     printer.register_exact_matches(
         _handle_preference, _handle_function_comparison, _handle_predicate,
-        _handle_at_end, _handle_then, _handle_any, _handle_once, _handle_once_measure,
+        _handle_at_end, _handle_always, _handle_then, _handle_any, _handle_once, _handle_once_measure,
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end, 
         _handle_forall_seq, _handle_function_eval
     )

@@ -45,17 +45,32 @@
         "building": {
             "type": "object",
             "properties": {
-                "objects": {"enum": ["block", "any"]},
+                "objects": {
+                    "type": "array",
+                    "items": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block"] }
+                },
                 "goal": {"enum": ["num_objects", "structure"]},
                 "structure": {"enum": ["pyramid", "tower"]},
                 "order": {
                     "type": "array",
-                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block"] }
+                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block"] }
                 },
                 "on": { "$ref": "#/$defs/objectWithPredicates" }
             },
             "required": ["objects", "goal"],
             "additionalProperties": false
+        },
+        "organizing": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "what": {"type": "array"},
+                    "from": { "$ref": "#/$defs/objectWithPredicates" },
+                    "to": { "$ref": "#/$defs/objectWithPredicates" }
+                },
+                "required": ["what", "to"]
+            }
         }
     },
     "additionalProperties": false,

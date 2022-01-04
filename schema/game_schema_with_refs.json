@@ -18,9 +18,7 @@
             "properties": {
                 "what": {
                     "type": "array",
-                    "items": {
-                        "enum": ["golfball", "dodgeball", "basketball", "beachball", "teddy_bear"]
-                    }
+                    "items": {"$ref": "#/$defs/throwingObject"}
                 },
                 "from": {
                     "type": "array",
@@ -47,13 +45,13 @@
             "properties": {
                 "objects": {
                     "type": "array",
-                    "items": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block"] }
+                    "items": {"$ref": "#/$defs/buildingObject"}
                 },
                 "goal": {"enum": ["num_objects", "structure"]},
                 "structure": {"enum": ["pyramid", "tower"]},
                 "order": {
                     "type": "array",
-                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin"] }
+                    "items": {"$ref": "#/$defs/buildingObject"}
                 },
                 "on": { "$ref": "#/$defs/objectWithPredicates" }
             },
@@ -65,7 +63,10 @@
             "items": {
                 "type": "object",
                 "properties": {
-                    "what": {"type": "array"},
+                    "what": {
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/moveableObject"}
+                    },
                     "from": { "$ref": "#/$defs/objectWithPredicates" },
                     "to": { 
                         "type": "array",
@@ -82,14 +83,15 @@
         "objectWithPredicates": {
             "type": "object",
             "properties": {
-                "object": {"enum": ["hexagonal_bin", "curved_wooden_ramp", "large_triangular_ramp", "doggie_bed", "building", "pillow", "top_drawer", "door", "rug", "desk"]},
+                "object": {"$ref": "#/$defs/anyObject"},
                 "predicates": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "object": {"enum": ["bed", "floor", "curved_wooden_ramp", "room_center", "block", "hexagonal_bin"]},
-                            "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "facing"]}
+                            "object": {"$ref": "#/$defs/anyObject"},
+                            "predicate": {"$ref": "#/$defs/predicate"},
+                            "negate": {"type": "boolean", "default": false}
                         },
                         "required": ["predicate"],
                         "additionalProperties": false
@@ -98,6 +100,26 @@
             },
             "required": ["object"],
             "additionalProperties": false
-        }
+        },
+        "anyObject": {"anyOf": [ 
+            {"$ref": "#/$defs/schemaReferences"},
+            {"$ref": "#/$defs/immoveableObject"},
+            {"$ref": "#/$defs/moveableObject"},
+            {"const": "agent"}
+        ]},
+        "schemaReferences": {"enum": "from"},
+        "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door"]},
+
+        "moveableObject": {"anyOf": [
+            {"$ref": "#/$defs/throwingObject"}, 
+            {"$ref": "#/$defs/buildingObject"},
+            {"$ref": "#/$defs/otherObject"},
+            {"const": ""}
+        ]},
+        "throwingObject": {"enum": ["golfball", "dodgeball", "basketball", "beachball", "teddy_bear", "book", "cube_block", "laptop", "purple_dodgeball", "green_golfball"]},
+        "buildingObject": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin"] },
+        "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "large_triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_small_ramp", "desktop", "blinds"]},
+
+        "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "facing", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
     }
 }

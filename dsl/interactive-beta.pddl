@@ -97,7 +97,7 @@
     (count-maximal-once-per-objects blocktInTowerAtEnd)
 )))
 
-; 4 is also woefully underconstrained
+; 4 is invalid -- woefully underconstrained
 
 (define (game 5bc79f652885710001a0e82a) (:domain few-objects-room-v1)  ; 5
 (:setup
@@ -150,7 +150,7 @@
     (* (- 1) (count-nonoverlapping failedThrowToBin))
 )))
 
-; 7 is vastly under-constrained -- I could probably make some guesses but leaving alone
+; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
 
 (define (game 615b40bb6cdb0f1f6f291f45) (:domain few-objects-room-v1)  ; 8
 (:setup (and 
@@ -934,7 +934,7 @@
 ))
 
 
-; 30 is rather underdetermined, I could try, but it would take some guesswork
+; 30 is invalid --  rather underdetermined, I could try, but it would take some guesswork
 
 
 (define (game 5b8c8e7d0c740e00019d55c3) (:domain few-objects-room-v1)  ; 31

@@ -106,11 +106,13 @@
             }
         },
         {
-            "prolific_id": "615452aaabb932ada88ef3ca",
-            "id": "cdo6CztpMH0It12THBAy",
-            "index": 9,
-            "room": "many_objects",
-            "notes": "",
+            "metadata": {
+                "prolific_id": "615452aaabb932ada88ef3ca",
+                "id": "cdo6CztpMH0It12THBAy",
+                "index": 9,
+                "room": "many_objects",
+                "notes": ""
+            },
             "throwing": {
                 "what": ["dodgeball", "basketball"],
                 "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}] }],
@@ -122,11 +124,13 @@
             }
         },
         {
-            "prolific_id": "57aa430b4cda6e00018420e9",
-            "id": "jhO40BilcfyPMScEKLiE",
-            "index": 10,
-            "room": "medium_objects",
-            "notes": "",
+            "metadata": {
+                "prolific_id": "57aa430b4cda6e00018420e9",
+                "id": "jhO40BilcfyPMScEKLiE",
+                "index": 10,
+                "room": "medium_objects",
+                "notes": ""
+            },
             "throwing": {
                 "what": ["teddy_bear"],
                 "goal": ["on"],
@@ -149,11 +153,13 @@
             }
         },
         {
-            "prolific_id": "613bb29f16252362f4dc11a3",
-            "id": "gZ8ce0O2anOHAMWWJJZw",
-            "index": 12,
-            "room": "medium_objects",
-            "notes": "TODO: do we want to specify the moving locations think somehow?",
+            "metadata": {
+                "prolific_id": "613bb29f16252362f4dc11a3",
+                "id": "gZ8ce0O2anOHAMWWJJZw",
+                "index": 12,
+                "room": "medium_objects",
+                "notes": "TODO: do we want to specify the moving locations think somehow?"
+            },
             "throwing": {
                 "what": ["dodgeball"],
                 "on": [{"object": "curved_wooden_ramp"}],
@@ -162,11 +168,13 @@
             }
         },
         {
-            "prolific_id": "616e5ae706e970fe0aff99b6",
-            "id": "Q9FPLgdunp3o75RFGEU7",
-            "index": 13,
-            "room": "many_objects",
-            "notes": "",
+            "metadata": {
+                "prolific_id": "616e5ae706e970fe0aff99b6",
+                "id": "Q9FPLgdunp3o75RFGEU7",
+                "index": 13,
+                "room": "many_objects",
+                "notes": ""
+            },
             "throwing": {
                 "what": ["golfball", "dodgeball"],
                 "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
@@ -306,7 +314,7 @@
                 "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}]}],
                 "goal": ["in", "on", "on"],
                 "to": [
-                    {"object": "bin"},
+                    {"object": "hexagonal_bin"},
                     {"object": "bed"},
                     {"object": "chair", "predicates": [{"object": "room_center", "predicate": "on"}]}
                 ]
@@ -325,7 +333,7 @@
                 "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
                 "goal": ["in"],
                 "to": [
-                    {"object": "bin", "predicates": [{"object": "desk", "predicate": "adjacent"}]}
+                    {"object": "hexagonal_bin", "predicates": [{"object": "desk", "predicate": "adjacent"}]}
                 ]
             }
         },
@@ -385,7 +393,7 @@
                 },
                 {
                     "what": ["main_light_switch", "desktop", "laptop"],
-                    "to": [{"object": "", "predicates": [{"predicate": "not toggled_on"}]}]
+                    "to": [{"object": "", "predicates": [{"predicate": "toggled_on", "negate": true}]}]
                 }
             ]
         },
@@ -400,7 +408,7 @@
             "throwing": {
                 "what": ["dodgeball"],
                 "goal": ["hit"],
-                "on": [{"object": "rug", "predicates": [{"object": "cube_block", "predicate": "not touch"}]}], 
+                "on": [{"object": "rug", "predicates": [{"object": "cube_block", "predicate": "touch", "negate": true}]}], 
                 "to": [{"object": "bed"}, {"object": "west_wall"}]
             }
         },
@@ -414,7 +422,7 @@
             },
             "organizing": [
                 {
-                    "what": ["any"],
+                    "what": [""],
                     "to": [{"object": "bed"}]
                 }
             ]
@@ -452,8 +460,8 @@
             },
             "organizing": [
                 {
-                    "what": ["any"],
-                    "to": [{"object": "top_drawer", "predicates": [{"predicate": "closed"}]}]
+                    "what": [""],
+                    "to": [{"object": "top_drawer", "predicates": [{"predicate": "open", "negate": true}]}]
                 }
             ]
         },
@@ -468,7 +476,7 @@
             "throwing": {
                 "what": ["dodgeball", "book"],
                 "goal": ["in"],
-                "on": [{"object": "any"}],
+                "on": [{"object": ""}],
                 "to": [{"object": "hexagonal_bin"}]
             }
         },
@@ -563,11 +571,11 @@
                 "room": "many_objects",
                 "notes": "TODO: does doing what I did here make sense?"
             },
-            "organizing": {
-                "what": ["any"],
+            "organizing": [{
+                "what": [""],
                 "from": {"object": "room_side"},
-                "to": [{"object": "room_side", "predicates": [{"object": "from", "predicate": "not equal"}]}]
-            }
+                "to": [{"object": "room_side", "predicates": [{"object": "from", "predicate": "equal", "negate": true}]}]
+            }]
         },
         {
             "metadata": {
@@ -648,7 +656,7 @@
             },
             "throwing": {
                 "what": ["beachball"],
-                "from": [{"object": "rug", "predicates": [{"predicate": "not on"}]}],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on", "negate": true}]}],
                 "goal": ["on"],
                 "on": [{"object": "green_small_ramp"}],
                 "to": [{"object": "rug"}]
@@ -672,7 +680,7 @@
             "throwing": {
                 "what": ["dodgeball", "basketball", "beachball"],
                 "goal": ["in", "on"],
-                "to": {"object": "hexagonal_bin", "predicates": [{"object": "building", "predicate": "in"}]}
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "building", "predicate": "in"}]}]
             },
             "organizing": [
                 {
@@ -704,7 +712,7 @@
                 "what": ["dodgeball"],
                 "from": [{"object": "green_golfball", "predicates": [{"object": "door", "predicate": "near"}]}],
                 "goal": ["in"],
-                "to": {"object": "hexagonal_bin"}
+                "to": [{"object": "hexagonal_bin"}]
             }
         },
         {
@@ -715,10 +723,10 @@
                 "room": "medium_objects",
                 "notes": ""
             },
-            "organizing": {
-                "what": ["any"],
+            "organizing": [{
+                "what": [""],
                 "to": [{"object": "hexagonal_bin", "predicates": [{"object": "room_center", "predicate": "near"}]}]
-            }
+            }]
         },
         {
             "metadata": {
@@ -729,7 +737,7 @@
                 "notes": ""
             },
             "throwing": {
-                "what": "dodgeball",
+                "what": ["dodgeball"],
                 "goal": ["in"],
                 "to": [{"object": "hexagonal_bin"}]
             }

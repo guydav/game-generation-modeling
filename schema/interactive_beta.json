@@ -180,7 +180,7 @@
                 "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}] }],
                 "on": [{"object": "curved_wooden_ramp", "predicates": [
                     {"object": "room_center", "predicate": "near"},
-                    {"object": "hexagonal_bin", "predicate": "facing"}
+                    {"object": "hexagonal_bin", "predicate": "faces"}
                 ]}],
                 "goal": ["in"],
                 "to": [{"object": "hexagonal_bin"}]

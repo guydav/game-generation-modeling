@@ -1,17 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ; 0 is a bit ambiguous, but I did my best
 
 (define (game 6172feb1665491d1efbce164) (:domain medium-objects-room-v1)  ; 0
@@ -85,7 +71,8 @@
 
 ; 3 says "figures", but their demonstration only uses blocks, so I'm guessing that's what they meant
 (define (game 614b603d4da88384282967a7) (:domain many-objects-room-v1)  ; 3
-(:setup )
+(:setup 
+)
 (:constraints (and 
     (forall (?b - building) 
         (preference blocktInTowerAtEnd (exists (?l - block)
@@ -199,10 +186,10 @@
 (define (game 615452aaabb932ada88ef3ca) (:domain many-objects-room-v1)  ; 9
 (:setup (and 
     (exists (?h - hexagonal_bin)
-        (or
-            (game-conserved (on bed ?h))
-            (exists (?w - wall) (game-conserved (adjacent ?w ?h)))
-        )
+        (game-conserved (or
+            (on bed ?h)
+            (exists (?w - wall) (adjacent ?w ?h))
+        ))
     )        
 ))
 (:constraints (and 
@@ -710,7 +697,7 @@
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (adjacent (bed ?h))))
     (forall (?b - ball) (game-optional (on rug ?b)))
-    (not (exists (?g - game_object) (game-conserved (on desk ?g))))
+    (game-optional (not (exists (?g - game_object) (on desk ?g))))
 ))
 (:constraints (and 
     (forall (?b - ball ?c - (either red yellow pink))
@@ -903,10 +890,10 @@
             )
         )
 ))
-(:terminal
+(:terminal (or 
     (>= (total-time) 180)
     (>= (total-score) 50)
-)
+))
 (:scoring maximize (+
     (* 10 (count-nonoverlapping thrownBallReachesEnd))
     (* (- 5) (count-nonoverlapping thrownBallHitsBlock:red))
@@ -939,10 +926,10 @@
 
 (define (game 5b8c8e7d0c740e00019d55c3) (:domain few-objects-room-v1)  ; 31
 (:setup (and 
-    (exists (?h - hexagonal_bin) (and 
-        (game-conserved (adjacent bed ?h))
+    (exists (?h - hexagonal_bin) (game-conserved (and 
+        (adjacent bed ?h)
         (forall (?b - cube_block) (adjacent ?h ?b))
-    )
+    )))
     (forall (?o - (either clock cellphone mug key_chain cd book ball))
         (game-optional (or 
             (on nightstand ?o)
@@ -955,7 +942,7 @@
         (preference objectThrownFromRug
             (exists (?o - (either clock cellphone mug key_chain cd book ball) ?h - hexagonal_bin)
                 (then
-                    (once on ?s ?o)
+                    (once (on ?s ?o))
                     (hold (and (agent_holds ?o) (on rug agent)))
                     (hold (and (not (agent_holds ?o)) (in_motion ?o))) 
                     (once (and (not (in_motion ?o)) (in ?h ?o)))
@@ -1005,7 +992,8 @@
                 (on desk ?b)
                 (in ?b ?c) 
             ))
-            (hold-while (and (not (agent_holds ?d)) (in_motion ?d))
+            (hold-while 
+                (and (not (agent_holds ?d)) (in_motion ?d))
                 (or 
                     (touch ?c ?d)
                     (exists (?c2 - (either cube_block cylindrical_block pyramid_block)) (touch ?c2 ?c))
@@ -1075,7 +1063,6 @@
 
 (define (game 615dd68523c38ecff40b29b4) (:domain few-objects-room-v1)  ; 35
 (:setup
-    
 )
 (:constraints (and 
     (forall (?b - (either book dodgeball))
@@ -1158,9 +1145,8 @@
 
 
 (define (game 5fa45dc96da3af0b7dcba9a8) (:domain many-objects-room-v1)  ; 37
-(:setup (and 
-
-))
+(:setup 
+)
 (:constraints (and 
     (preference throwToBinFromOppositeWall
         (exists (?d - dodgeball ?h - hexagonal_bin ?w1 ?w2 - wall)
@@ -1196,9 +1182,8 @@
 ; projected 38 onto the space of feasible games, but could also ignore
 
 (define (game 616abb33ebe1d6112545f76d) (:domain medium-objects-room-v1)  ; 38
-(:setup (and 
-
-))
+(:setup 
+)
 (:constraints (and 
     (preference throwToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
@@ -1246,7 +1231,7 @@
         (preference ballRolledOnRampToRug
             (exists (?b - beachball ?r - curved_wooden_ramp)
                 (then 
-                    (once (and (agent_holds ?b))
+                    (once (agent_holds ?b))
                     (hold-while 
                         (and (not (agent_holds ?b)) (in_motion ?d))
                         (on ?r ?b)    
@@ -1279,7 +1264,7 @@
             (not (type ?g bridge_block))
             (> (distance ?w1 ?b) (distance ?w2 ?b))
         )))
-    )))
+    ))
 ))
 (:constraints (and
     (forall (?w1 ?w2 - wall)  
@@ -1319,8 +1304,8 @@
             (> (distance ?h ?g) 1) 
         )))      
         (forall (?d - dodgeball) (game-optional (and
-            (> (distance ?h ?g) 2) 
-            (< (distance ?h ?g) 6) 
+            (> (distance ?h ?d) 2) 
+            (< (distance ?h ?d) 6) 
         )))
     ))
 ))
@@ -1354,10 +1339,10 @@
 
 (define (game 617378aeffbba11d8971051c) (:domain medium-objects-room-v1)  ; 43
 (:setup (and 
-    (exists (?d - doggie_bed) (game-conserved (adjacent room_center ?d)))
+    (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 1)))
 ))
 (:constraints (and 
-    (forall (?b - ball)
+    (forall (?b - ball) (and 
         (preference throwBallToBin
             (exists (?d - doggie_bed)
                 (then 
@@ -1379,7 +1364,7 @@
                 )
             )
         )  
-    )
+    ))
 ))
 (:scoring maximize (+
     (count-nonoverlapping throwBallToBin:basketball)
@@ -1387,7 +1372,7 @@
     (* 3 (count-nonoverlapping throwBallToBin:dodgeball))
     (* 2 (count-nonoverlapping throwBallToBin:basketball))
     (* 3 (count-nonoverlapping throwBallToBin:beachball))
-    (* 4 (count-nonoverlapping throwBallToBin:dodgeball)
+    (* 4 (count-nonoverlapping throwBallToBin:dodgeball))
 )))
 
 ; 44 is another find the hidden object game
@@ -1403,7 +1388,7 @@
     )))
 ))
 (:constraints (and 
-    (forall (?b - (either golfball dodgeball)) 
+    (forall (?b - (either golfball dodgeball)) (and 
         (preference throwKnocksOverBear (exists (?t - teddy_bear ?s - sliding_door) 
             (then
                 (once (and 
@@ -1414,9 +1399,9 @@
                     ; (= (z_position ?t) (z_position bed))
                 ))
                 (hold-while
-                    (and (in_motion ?b) (not (agent_holds ?b))
+                    (and (in_motion ?b) (not (agent_holds ?b)))
                     (touch ?b ?t)
-                ))
+                )
                 (once (in_motion ?t))
             )
         ))
@@ -1427,7 +1412,7 @@
                 (once (not (in_motion ?b)))
             )
         ))
-    )
+    ))
 ))
 (:terminal (or 
     (> (count-maximal-nonoverlapping throwAttempt) 1)
@@ -1440,9 +1425,9 @@
 
 (define (game 5d5b0dd7c032a2001ad7cf5d) (:domain few-objects-room-v1)  ; 46
 (:setup (and 
-    (exists (?c - curved_wooden_ramp) (game_conserved (and
+    (exists (?c - curved_wooden_ramp) (game-conserved
         (< (distance ?c room_center) 3)  
-    )))
+    ))
 ))
 (:constraints (and 
     (preference ballThrownToRampToBed (exists (?c - curved_wooden_ramp)
@@ -1473,9 +1458,8 @@
 
 
 (define (game 5d470786da637a00014ba26f) (:domain many-objects-room-v1)  ; 47
-(:setup (and 
-
-))
+(:setup 
+)
 (:constraints (and 
     (forall (?c - color) 
         (preference beachballBouncedOffRamp
@@ -1505,7 +1489,7 @@
     (exists (?b - building ?h - hexagonal_bin) (game-conserved (and 
         (in ?b ?h)
         (>= (building_size ?b) 4) ; TODO: could also quantify out additional objects
-        (not (exists ?g - game_object) (and (in ?b ?g) (on ?h ?g)))
+        (not (exists (?g - game_object) (and (in ?b ?g) (on ?h ?g))))
         (< (distance ?b room_center) 1)
     )))
 ))
@@ -1520,18 +1504,18 @@
         ))
     )
     (preference itemsHidingScreens 
-        (exists (?s - desktop laptop ?o - (either pillow doggie_bed teddy_bear)) 
+        (exists (?s - (either desktop laptop) ?o - (either pillow doggie_bed teddy_bear)) 
             (at-end (on ?s ?o))    
         )
     )
     (preference objectsHidden
         (exists (?o - (either alarm_clock cellphone) ?d - drawer)
-            (at_end (in ?d ?o))
+            (at-end (in ?d ?o))
         )
     )
     (preference blindsOpened
         (exists (?b - blinds)
-            (at_end (open ?b))  ; blinds being open = they were pulled down
+            (at-end (open ?b))  ; blinds being open = they were pulled down
         )
     )
     (preference objectMoved
@@ -1562,10 +1546,10 @@
 (define (game 60ddfb3db6a71ad9ba75e387) (:domain many-objects-room-v1)  ; 49
 (:setup (and 
     (game-conserved (< (distance green_golfball door) 0.5))
-    (forall (?d - dodgeball) (game-optional (< distance green_golfball ?d)) 1)
+    (forall (?d - dodgeball) (game-optional (< (distance green_golfball ?d) 1)))
 ))
 (:constraints (and 
-    (forall (?d - dodgeball) 
+    (forall (?d - dodgeball) (and 
         (preference dodgeballThrownToBin (exists (?h - hexagonal_bin)
             (then
                 (once (and 
@@ -1588,7 +1572,7 @@
                 (once (not (in_motion ?d)))
             )
         )
-    )
+    ))
 ))
 (:terminal (or 
     (> (count-maximal-nonoverlapping throwAttemptFromDoor) 1)
@@ -1603,13 +1587,13 @@
     (exists (?h - hexagonal_bin) (game-conserved (< (distance room_center ?h) 1)))
 ))
 (:constraints (and 
-    (preference gameObjectToBin (exists (?g - game_object ?h - hexagonal_bin)) 
+    (preference gameObjectToBin (exists (?g - game_object ?h - hexagonal_bin)
         (then 
             (once (not (agent_holds ?g)))
             (hold (or (agent_holds ?g) (in_motion ?g)))
             (once (and (not (in_motion ?g)) (in ?h ?g)))
         )
-    )
+    ))
 ))
 (:scoring maximize
     (count-once-per-objects gameObjectToBin)
@@ -1645,7 +1629,7 @@
                 (on rug agent)
                 (in_motion ?c)
                 (not (agent_holds ?c))
-                (not (exists (?o - either lamp desktop laptop)) (or (is_broken ?o) (in_motion ?o)))
+                (not (exists (?o - (either lamp desktop laptop)) (or (is_broken ?o) (in_motion ?o))))
             ))
             (once (and (on rug agent) (on desk ?c) (not (in_motion ?c))))
         )

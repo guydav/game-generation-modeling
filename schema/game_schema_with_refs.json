@@ -120,6 +120,6 @@
         "buildingObject": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin"] },
         "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "large_triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_small_ramp", "desktop", "blinds"]},
 
-        "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "facing", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
+        "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "faces", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
     }
 }

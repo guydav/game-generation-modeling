@@ -72,6 +72,8 @@ setup_predicate =
     setup_and_predicate |
     setup_or_predicate |
     setup_not_predicate | 
+    setup_exists_predicate |
+    setup_forall_predicate |
     function_comparison |
     predicate
     ;
@@ -79,6 +81,8 @@ setup_predicate =
 setup_and_predicate = '(and' {and_args:setup_predicate}+ ')'; # TODO: do we want to enforce more than one?
 setup_or_predicate = '(or' {or_args:setup_predicate}+ ')';  # TODO: do we want to enforce more than one?
 setup_not_predicate = '(not' not_args:setup_predicate ')';
+setup_exists_predicate = '(exists' exists_vars:variable_list exists_args:setup_predicate ')';
+setup_forall_predicate = '(forall' forall_vars:variable_list forall_args:setup_predicate ')';
 
 # Constraints/Preferences
 preferences = 

@@ -27,6 +27,7 @@ def main(args):
         with open(test_path) as test_file:
             test_file_json = json.load(test_file)
             games = test_file_json['games']
+            print(len(games))
 
             for game in games:
                 try:
@@ -34,7 +35,8 @@ def main(args):
                     validate(game, schema)
 
                 except ValidationError as err:
-                    print(f'In game {game["prolific_id"]} ({game["id"]}): {err.message}')
+                    meta = game['metadata']
+                    print(f'In game {meta["prolific_id"]} ({meta["id"]}): {err.message}')
 
 
 if __name__ == '__main__':

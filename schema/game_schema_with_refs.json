@@ -53,7 +53,7 @@
                 "structure": {"enum": ["pyramid", "tower"]},
                 "order": {
                     "type": "array",
-                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block"] }
+                    "items": {"enum": ["any", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin"] }
                 },
                 "on": { "$ref": "#/$defs/objectWithPredicates" }
             },
@@ -67,14 +67,16 @@
                 "properties": {
                     "what": {"type": "array"},
                     "from": { "$ref": "#/$defs/objectWithPredicates" },
-                    "to": { "$ref": "#/$defs/objectWithPredicates" }
+                    "to": { 
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/objectWithPredicates"}
+                    }
                 },
                 "required": ["what", "to"]
             }
         }
     },
     "additionalProperties": false,
-    "required": ["prolific_id", "id", "room"],
 
     "$defs": {
         "objectWithPredicates": {

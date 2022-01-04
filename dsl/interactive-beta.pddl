@@ -819,8 +819,8 @@
 (define (game 606e4eb2a56685e5593304cd) (:domain few-objects-room-v1)  ; 27
 (:setup (and 
     (forall (?d - (either dogeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
-    (game-optional (turned_on main_light_switch))
-    (game-optional (turned_on desktop))
+    (game-optional (toggled_on main_light_switch))
+    (game-optional (toggled_on desktop))
 ))
 (:constraints (and 
     (preference dodgeballsInPlace 
@@ -852,9 +852,9 @@
         )
     )
     (preference itemsTurnedOff
-        (exists (?o - (either main_light_switch))
+        (exists (?o - (either main_light_switch desktop laptop))
             (at-end (and 
-                (not (turned_on ?o))
+                (not (toggled_on ?o))
             ))
         )
     )
@@ -1498,7 +1498,66 @@
     (* 10 (count-nonoverlapping beachballBouncedOffRamp:pink))
 )))
 
-;48 is complicated as fuck -- leaving for last
+; TODO: this is a crude approximation of 48 -- let's hope it's reasonable?
+
+(define (game 61254c5a6facc8ed023a64de) (:domain medium-objects-room-v1)  ; 48
+(:setup (and 
+    (exists (?b - building ?h - hexagonal_bin) (game-conserved (and 
+        (in ?b ?h)
+        (>= (building_size ?b) 4) ; TODO: could also quantify out additional objects
+        (not (exists ?g - game_object) (and (in ?b ?g) (on ?h ?g)))
+        (< (distance ?b room_center) 1)
+    )))
+))
+(:constraints (and 
+    (forall (?d - (either dodgeball basketball beachball))
+        (preference ballThrownToBin (exists (?b - building ?h - hexagonal_bin)
+            (then
+                (once (agent_holds ?d))
+                (hold (and (in_motion ?d) (not (agent_holds ?d))))
+                (once (and (not (in_motion ?d)) (or (in ?h ?d) (on ?h ?d))))
+            )
+        ))
+    )
+    (preference itemsHidingScreens 
+        (exists (?s - desktop laptop ?o - (either pillow doggie_bed teddy_bear)) 
+            (at-end (on ?s ?o))    
+        )
+    )
+    (preference objectsHidden
+        (exists (?o - (either alarm_clock cellphone) ?d - drawer)
+            (at_end (in ?d ?o))
+        )
+    )
+    (preference blindsOpened
+        (exists (?b - blinds)
+            (at_end (open ?b))  ; blinds being open = they were pulled down
+        )
+    )
+    (preference objectMoved
+        (exists (?g - game_object) 
+            (then
+                (once (and 
+                    (not (in_motion ?g)) 
+                    (not (type ?g ball))
+                    (not (type ?g drawer))
+                    (not (type ?g blinds))
+                ))
+                (hold (in_motion ?g))
+                (once (not (in_motion ?g)))
+            )
+        )
+    )
+))
+(:scoring maximize (+ 
+    (* 5 (count-nonoverlapping ballThrownToBin:dodgeball))
+    (* 7 (count-nonoverlapping ballThrownToBin:basketball))
+    (* 15 (count-nonoverlapping ballThrownToBin:beachball))
+    (* 10 (count-once-per-objects itemsHidingScreens))
+    (* 10 (count-once-per-objects objectsHidden))
+    (* 10 (count-once-per-objects blindsOpened))
+    (* (- 5) (count-nonoverlapping objectMoved))
+)))
 
 (define (game 60ddfb3db6a71ad9ba75e387) (:domain many-objects-room-v1)  ; 49
 (:setup (and 
@@ -1612,7 +1671,7 @@
         )
     )
     (preference smallItemsInPlace
-        (exists (?o - (either cellphone key_chain mug credit_card cd watch) ?d - drawer)
+        (exists (?o - (either cellphone key_chain mug credit_card cd watch alarm_clock) ?d - drawer)
             (at-end (and 
                 (in ?d ?o)
             ))

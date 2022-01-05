@@ -32,7 +32,7 @@
     tall_cylindrical_block short_cylindrical_block triangular_block - block
     chair shelf hexagonal_bin doggie_bed - game_object  ; TODO - figure out if these are pickupable or not?
     desktop laptop desk_lamp cd textbook pillow teddy_bear mug - pickupable
-    curved_wooden_ramp large_triangular_ramp - pickupable
+    curved_wooden_ramp triangular_ramp - pickupable
     ; do we actually want a category of all objects that can be picked up?
 )
 

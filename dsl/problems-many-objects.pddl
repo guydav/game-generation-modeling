@@ -85,7 +85,7 @@
 )
 (:constraints (and 
     (preference agentOnRampOnEdge
-        (exists (?r - large_triangular_ramp)
+        (exists (?r - triangular_ramp)
             (then
                 (hold     
                     (and
@@ -105,7 +105,7 @@
 
 (define (game many-objects-7) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?r1 ?r2 - large_triangular_ramp) 
+    (exists (?r1 ?r2 - triangular_ramp) 
         (game-conserved (and
             (<= (distance ?r1 ?r2) 0.5)
         ))
@@ -113,7 +113,7 @@
 ))
 (:constraints (and 
     (preference circuit
-        (exists (?r1 - large_triangular_ramp ?r2 - large_triangular_ramp ?c - chair ?h - hexagonal_bin ?b - beachball)
+        (exists (?r1 - triangular_ramp ?r2 - triangular_ramp ?c - chair ?h - hexagonal_bin ?b - beachball)
             (then 
                 ; first, agent starts not between the ramps, then passes between them 
                 ; so after not being between, it is between, then again not between
@@ -264,7 +264,7 @@
 
 (define (game many-objects-12) (:domain many-objects-room-v1)
 (:setup (and
-    (exists (?r - large_triangular_ramp ?h - hexagonal_bin) (forall (?b - block)
+    (exists (?r - triangular_ramp ?h - hexagonal_bin) (forall (?b - block)
         ; to allow the agent to move them while playing?
         (or 
             (game-optional (adjacent ?b ?r))
@@ -369,7 +369,7 @@
 
 (define (game many-objects-16) (:domain medium-objects-room-v1)
 (:setup (and
-    (exists (?r - large_triangular_ramp ?h - hexagonal_bin ?c - chair) 
+    (exists (?r - triangular_ramp ?h - hexagonal_bin ?c - chair) 
         (game-conserved (and 
             (< (distance ?c ?r) 1)
             (> (distance ?r ?h) 1)
@@ -389,7 +389,7 @@
         )
     )
     (preference rollBallOnRamp
-        (exists (?b - (either dodgeball golfball) ?r - large_triangular_ramp ?c - chair)
+        (exists (?b - (either dodgeball golfball) ?r - triangular_ramp ?c - chair)
             (then 
                 (once (and (agent_holds ?b) (on ?c agent)))
                 (hold-while (and (in_motion ?b) (not (agent_holds ?b))) 
@@ -400,7 +400,7 @@
         ) 
     )
     (preference rollBallOnRampToBin
-        (exists (?b - (either dodgeball golfball) ?h - hexagonal_bin ?r - large_triangular_ramp ?c - chair)
+        (exists (?b - (either dodgeball golfball) ?h - hexagonal_bin ?r - triangular_ramp ?c - chair)
             (then 
                 (once (and (agent_holds ?b) (on ?c agent)))
                 (hold-while (and (in_motion ?b) (not (agent_holds ?b))) 
@@ -436,13 +436,13 @@
 
 (define (game many-objects-17) (:domain many-objects-room-v1)
 (:setup
-    (exists (?h - hexagonal_bin ?r - large_triangular_ramp)
+    (exists (?h - hexagonal_bin ?r - triangular_ramp)
         (game-conserved (adjacent (side ?h front) (side ?r back)))
     )
 )
 (:constraints (and 
     (preference throwBallBinThroughRamp
-        (exists (?d - dodgeball ?h - hexagonal_bin ?r - large_triangular_ramp) 
+        (exists (?d - dodgeball ?h - hexagonal_bin ?r - triangular_ramp) 
             (then 
                 (once (agent_holds ?d))
                 (hold-while 
@@ -479,14 +479,14 @@
             )
         )
     )
-    (exists (?r - large_triangular_ramp ?b - bridge_block ?t - triangular_block)
+    (exists (?r - triangular_ramp ?b - bridge_block ?t - triangular_block)
         (game-conserved (between ?r ?b ?t))
     )
 ))
 (:constraints (and 
     (forall (?b1 ?b2 - (either bridge_block triangular_block))
         (preference throwLandsIn
-            (exists (?g - golfball ?r - large_triangular_ramp) 
+            (exists (?g - golfball ?r - triangular_ramp) 
                 (then
                     (once (and (agent_holds ?g) (exists (?t - triangular_block) (between agent ?r ?t))))
                     (hold-while 
@@ -596,7 +596,7 @@
 
 (define (game many-objects-23) (:domain many-objects-room-v1)
 (:setup
-    (exists (?h - hexagonal_bin ?r1 ?r2 - large_triangular_ramp ?r - room_center)
+    (exists (?h - hexagonal_bin ?r1 ?r2 - triangular_ramp ?r - room_center)
         (game-conserved (and
              (< (distance ?r ?h) 0.5)
              (= (distance ?r1 ?r2) 0.67)
@@ -608,7 +608,7 @@
 (:constraints (and
     (forall (?b - ball) 
         (preference ballTolBinThroughRamp
-            (exists (?h - hexagonal_bin ?r - large_triangular_ramp) 
+            (exists (?h - hexagonal_bin ?r - triangular_ramp) 
                 (then 
                     (once (agent_holds ?b))
                     (hold-while 
@@ -621,7 +621,7 @@
         )
     )
     (preference throwBouncesOffRampAndMisses
-        (exists (?b - (either beachball dodgeball golfball) ?h - hexagonal_bin ?r - large_triangular_ramp) 
+        (exists (?b - (either beachball dodgeball golfball) ?h - hexagonal_bin ?r - triangular_ramp) 
             (then 
                 (once (agent_holds ?b))
                 (hold-while 
@@ -859,7 +859,7 @@
 (define (game many-objects-30) (:domain many-objects-room-v1)
 (:setup
     (forall (?t - tall_cylindrical_block)
-        (exists (?c - (either cube_block large_triangular_ramp))
+        (exists (?c - (either cube_block triangular_ramp))
             (game-optional (on ?c ?t)) ; game optional since player might fall and move
         )
     )
@@ -870,7 +870,7 @@
             (then 
                 (hold (and 
                     (on ?t agent)
-                    (exists (?c - (either cube_block large_triangular_ramp)) (on ?c ?t))
+                    (exists (?c - (either cube_block triangular_ramp)) (on ?c ?t))
                 ))
             )
         )

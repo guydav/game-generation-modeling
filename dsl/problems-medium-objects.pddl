@@ -315,13 +315,13 @@
 
 (define (game medium-objects-15) (:domain medium-objects-room-v1)
 (:setup 
-    (exists (?r - large_triangular_ramp ?h - hexagonal_bin) 
+    (exists (?r - triangular_ramp ?h - hexagonal_bin) 
         (game-conserved (adjacent ?r ?h))
     )
 )
 (:constraints (and 
     (preference rollBallToBin
-        (exists (?d - dodgeball ?r - large_triangular_ramp ?h - hexagonal_bin) 
+        (exists (?d - dodgeball ?r - triangular_ramp ?h - hexagonal_bin) 
             (then 
                 (once-measure (agent_holds ?d) (distance agent ?h) )
                 (hold-while
@@ -555,11 +555,11 @@
     (forall (?b - bridge_block) 
         (game-conserved (and (on floor ?b) (object_orientation ?b upright)))
     )
-    (exists (?r - large_triangular_ramp ?b - bridge_block) 
+    (exists (?r - triangular_ramp ?b - bridge_block) 
         (game-conserved (= 0.67 (distance ?r ?b)) )
     )
     (forall (?o - (either cellphone laptop doggie_bed mug))
-        (exists (?b - bridge_block ?r - large_triangular_ramp)
+        (exists (?b - bridge_block ?r - triangular_ramp)
             (game-optional (and 
                 (between ?o ?b ?r)
                 (= 0.67 (distance ?o ?b))
@@ -570,7 +570,7 @@
 (:constraints (and 
     (forall (?o - (either ball tall_cylindrical_block cd))
         (preference rollObjectToTargets
-            (exists (?r - large_triangular_ramp
+            (exists (?r - triangular_ramp
                     ?t - (either cellphone laptop doggie_bed mug bridge_block))  
                 (then 
                     (once (agent_holds ?o))
@@ -603,7 +603,7 @@
 
 (define (game medium-objects-24) (:domain medium-objects-room-v1)
 (:setup (and
-    (exists (?r - large_triangular_ramp) (forall (?b - block)
+    (exists (?r - triangular_ramp) (forall (?b - block)
         (and 
             (exists (?b2 - block)
                 (game-optional (and 
@@ -622,7 +622,7 @@
 ))
 (:constraints (and 
     (preference rollBallToWall
-        (exists (?d - dodgeball ?r - large_triangular_ramp ?b - block)
+        (exists (?d - dodgeball ?r - triangular_ramp ?b - block)
             (then 
                 (once (agent_holds ?d))
                 (hold-while 
@@ -645,7 +645,7 @@
 (define (game medium-objects-27) (:domain medium-objects-room-v1)
 (:setup (and
     (exists (?h - hexagonal_bin ?d - doggie_bed ?c1 ?c2 - tall_cylindrical_block
-            ?p1 ?p2 - pyramid_block ?r - large_triangular_ramp) 
+            ?p1 ?p2 - pyramid_block ?r - triangular_ramp) 
         (game-conserved (and
             (object_orientation ?h upside_down)
             (= 0.67 (distance ?h ?d))
@@ -667,7 +667,7 @@
                     (and 
                         (in_motion ?b) 
                         (not (agent_holds ?b)) 
-                        (not (exists (?o - (either tall_cylindrical_block pyramid_block large_triangular_ramp)) (touch ?o ?d)))  
+                        (not (exists (?o - (either tall_cylindrical_block pyramid_block triangular_ramp)) (touch ?o ?d)))  
                     )
                     (touch ?h ?b)
                 )     
@@ -692,7 +692,7 @@
 )
 (:constraints (and 
     (preference agentOnRampOnEdge
-        (exists (?r - large_triangular_ramp)
+        (exists (?r - triangular_ramp)
             (then
                 (hold (and
                     (object_orientation ?r edge) 

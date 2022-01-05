@@ -1,5 +1,5 @@
 import argparse
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from itertools import chain
 import tatsu
 import shutil
@@ -25,9 +25,18 @@ parser.add_argument('-p', '--print-dsls', action='store_true')
 DEFAULT_TEMPLATE_FILE = './latex/template.tex'
 parser.add_argument('-f', '--template-file', default=DEFAULT_TEMPLATE_FILE)
 parser.add_argument('-c', '--compile-pdf', action='store_true')
+parser.add_argument('-n', '--new-data-start')
 
 DEFAULT_PREFIX_LINES = [
-    r'\section{DSL Docuemntation as of \today}'
+    r'\section{DSL Docuemntation as of \today}',
+    '',
+    r'\subsection*{Color-coding}',
+    r'\begin{itemize}',
+    r'\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for',
+    r'\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games',
+    r'\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated',
+    r'\end{itemize}',
+    ''
     r'\subsection{Game Definition}',
     r'\begin{grammar}',
     r'<game> ::= (define (game <name>) \\',
@@ -45,10 +54,12 @@ r'\end{grammar}',
 
 TEMPLATE_PLACEHOLDER = '{{BODY}}'
 class DSLToLatexParser(ASTParser):
-    def __init__(self, template_path, output_path, prefix_lines=DEFAULT_PREFIX_LINES, postfix_lines=None) -> None:
+    def __init__(self, template_path, output_path, new_data_start=None, prefix_lines=DEFAULT_PREFIX_LINES, postfix_lines=None) -> None:
         super().__init__()
         self.template_path = template_path
         self.output_path = output_path
+        self.new_data_start = new_data_start
+        self.data_is_new = False
 
         self.rules_by_section = defaultdict(lambda: defaultdict(list))
         self.processors = []
@@ -59,7 +70,11 @@ class DSLToLatexParser(ASTParser):
         self.processors.append(processor)
 
     def __call__(self, ast, **kwargs):
-        # TODO: set up any local kwargs if need be
+        if isinstance(ast, tuple) and ast[0] == '(define' and \
+            self.new_data_start is not None and ast[1].game_name == self.new_data_start:
+
+            self.data_is_new = True
+        
         return super().__call__(ast, **kwargs)
 
     def _handle_tuple(self, ast, **kwargs):
@@ -70,7 +85,7 @@ class DSLToLatexParser(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         if 'section' in kwargs and ast.parseinfo:
-            self.rules_by_section[kwargs['section']][ast.parseinfo.rule].append(ast)
+            self.rules_by_section[kwargs['section']][ast.parseinfo.rule].append((ast, self.data_is_new))
 
         super()._handle_ast(ast, **kwargs)        
 
@@ -110,7 +125,8 @@ class DSLToLatexParser(ASTParser):
         open(self.output_path, 'w').write(template_text)
 
 
-UNUSED_RULE_COLOR = 'gray'
+UNUSED_RULE_OR_ELEMENT_COLOR = 'gray'
+NEW_RULE_OR_ELEMENT_COLOR = 'teal'
 UNDESCRIBED_ELEMENT_COLOR = 'red'
 
 SETUP_SECTION_KEY = 'setup'
@@ -140,19 +156,19 @@ NOTES = {
         PRE_NOTES_KEY: r"""PDDL calls their temporal preferences 'constraints', but that's not entirely the right name for us. Maybe we should rename? \\
 
         Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
-        """.format(unused_color=UNUSED_RULE_COLOR)
+        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR)
     },
     TERMINAL_SECTION_KEY: {
         PRE_NOTES_KEY: r"""There's always assumed to be a time limit after which the game is over if nothing else, but some participants specified other terminal conditions.
         """,
-        POST_NOTES_KEY: r"""For a full specification of the <scoring-expr> token, see the scoring section below.
+        POST_NOTES_KEY: r"""For a full specification of the \textlangle scoring-expr\textrangle\ token, see the scoring section below.
         """
     },
     SCORING_SECTION_KEY: {
         PRE_NOTES_KEY: r"""PDDL calls their equivalent section (:metric ...), but I renamed because it made more sense to me. 
 
         Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
-        """.format(unused_color=UNUSED_RULE_COLOR)
+        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR)
     },
     PREDICATES_SECTION_KEY: {
         PRE_NOTES_KEY: r"""The predicates are not defined as part of the DSL, but rather I envision them is being specific to a domain and being specified to any model as an input or something to be conditioned on. \\
@@ -194,13 +210,14 @@ class DSLTranslator:
 
 class SectionTranslator(DSLTranslator):
     def __init__(self, section_key, core_blocks, additional_blocks=None, section_name=None, consider_used_rules=None,
-                 section_type='grammar', unused_rule_color=UNUSED_RULE_COLOR):
+                 section_type='grammar', unused_rule_color=UNUSED_RULE_OR_ELEMENT_COLOR, new_rule_color=NEW_RULE_OR_ELEMENT_COLOR):
         super().__init__(section_key, section_type, section_name)
         self.section_key = section_key
         self.core_blocks = core_blocks
         self.additional_blocks = additional_blocks if additional_blocks is not None else []
         self.consider_used_rules = consider_used_rules if consider_used_rules is not None else []
         self.unused_rule_color = unused_rule_color
+        self.new_rule_color = new_rule_color
 
         self.lines = []
         self.remaining_rules = []
@@ -220,6 +237,11 @@ class SectionTranslator(DSLTranslator):
                         block_text = f'{{ \\color{{{self.unused_rule_color}}} {block_text} }}'
                         self.unused_rules.append(block_rules)
                     elif block_rules in keys:
+                        _, block_is_new = zip(*section_data[block_rules])
+                        rule_is_new = all(block_is_new)
+                        if rule_is_new:
+                            block_text = f'{{ \\color{{{self.new_rule_color}}} {block_text} }}'
+
                         keys.remove(block_rules)
 
                     self.lines.append(block_text)
@@ -247,25 +269,27 @@ class RuleTypeTranslator(DSLTranslator):
         self.rule_to_value_extractors = rule_to_value_extractors
         self.output_lines_func = output_lines_func
         self.count_data = defaultdict(lambda: 0)
+        self.is_new_data = defaultdict(lambda: True)
         self.additional_data = defaultdict(lambda: defaultdict(list))
         self.descriptions = descriptions if descriptions is not None else {}
 
     def process(self, section_data):
         for rule, (key_extractor, additional_extractors) in self.rule_to_value_extractors.items():
             if rule in section_data:
-                for instance in section_data[rule]:
+                for instance, instance_is_new in section_data[rule]:
                     instance_key = instance[key_extractor] if isinstance(key_extractor, str) else key_extractor(instance)
 
                     if instance_key:
                         if isinstance(instance_key, str):
-                            self._handle_single_key(instance, instance_key, additional_extractors)
+                            self._handle_single_key(instance, instance_key, instance_is_new, additional_extractors)
 
                         else:
                             for key in instance_key:
-                                self._handle_single_key(instance, key, additional_extractors)
+                                self._handle_single_key(instance, key, instance_is_new, additional_extractors)
 
-    def _handle_single_key(self, instance, instance_key, additional_extractors):
+    def _handle_single_key(self, instance, instance_key, instance_is_new, additional_extractors):
         self.count_data[instance_key] += 1
+        self.is_new_data[instance_key] = self.is_new_data[instance_key] and instance_is_new
 
         if additional_extractors:
             for additional_extractor in additional_extractors:
@@ -274,11 +298,15 @@ class RuleTypeTranslator(DSLTranslator):
                     self.additional_data[instance_key][key].append(value)
 
     def output(self):
-        self.lines = self.output_lines_func(self.count_data, self.additional_data, self.descriptions)
+        self.lines = self.output_lines_func(self.count_data, self.is_new_data, self.additional_data, self.descriptions)
         return super().output()
 
 
-def predicate_data_to_lines(count_data, additional_data, descriptions):
+def _format_line_to_color(line, color):
+    return f'(*\\color{{{color}}} {line}*)'
+
+
+def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptions):
     lines = []
 
     for key in sorted(count_data.keys()):
@@ -287,37 +315,68 @@ def predicate_data_to_lines(count_data, additional_data, descriptions):
         n_args = list(n_args)[0] if len(n_args) == 1 else None
         arg_str = ' '.join([f'<arg{i + 1}>' for i in range(n_args)]) if n_args is not None else '<ambiguous arguments>'
 
-        line = f'({key} {arg_str}) [{count} references] ; {descriptions[key] if key in descriptions else ""}'
+        line = f'({key} {arg_str}) [{count} reference{"s" if count != 1 else ""}] {"; " + descriptions[key] if key in descriptions else ""}'
         if key not in descriptions:
-            line = f'(* \\color{{{UNDESCRIBED_ELEMENT_COLOR}}}) {line} *)'
+            line = _format_line_to_color(line, UNDESCRIBED_ELEMENT_COLOR)
+
+        elif is_new_data[key]:
+            line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
 
         lines.append(line)
 
     return lines
 
 
-def type_data_to_lines(count_data, additional_data, descriptions):
+TypeDesc = namedtuple('TypeDesc', ('key', 'description', 'preformatted'), defaults=(None, '', False))
+
+
+def section_separator_typedesc(section_name):
+    return TypeDesc(section_name, f'---------- (* \\textbf{{{section_name}}} *) ----------', True)
+
+
+def type_data_to_lines(count_data, is_new_data, additional_data, descriptions):
     lines = []
+    unused_keys = set(count_data.keys())
 
-    for key in sorted(count_data.keys(), key=_type_name_sorting):
-        count = count_data[key]
-        # TODO: consider doing something with co-ocurrence data
-        line = f'{key} [{count} references] ; {descriptions[key] if key in descriptions else ""}'
-        if key not in descriptions:
-            line = f'(* \\color{{{UNDESCRIBED_ELEMENT_COLOR}}} {line} *)'
-        
-        lines.append(line)
+    for type_desc in descriptions:
+        key, description, preformatted = type_desc
+
+        if preformatted:
+            lines.append(description)
+
+        else:
+            if key in unused_keys: 
+                unused_keys.remove(key)
+
+            count = count_data[key] if key in count_data else 0
+            # TODO: consider doing something with co-ocurrence data
+            line = f'{key} [{count if count != 0 else "N/A"} reference{"s" if count != 1 else ""}] {"; " + descriptions[key] if key in descriptions else ""}'
+
+            if count == 0:
+                line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)
+
+            elif is_new_data[key]:
+                line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
+
+            lines.append(line)
+
+    if unused_keys:
+        lines.append(section_separator_typedesc('Undescribed types').description)
+        for key in unused_keys:
+            count = count_data[key]
+            line = _format_line_to_color(f'{key} [{count} reference{"s" if count != 1 else ""}]', UNDESCRIBED_ELEMENT_COLOR)
+            lines.append(line)
 
     return lines
 
 
-def _type_name_sorting(type_name):
-    if type_name == 'game_object': return -1
-    if type_name == 'block': return 0
-    if '_block' in type_name: return 1
-    if type_name == 'ball': return 2
-    if 'ball' in type_name: return 3
-    return ord(type_name[0])
+# def _type_name_sorting(type_name):
+#     if type_name == 'game_object': return -1
+#     if type_name == 'block': return 0
+#     if '_block' in type_name: return 1
+#     if type_name == 'ball': return 2
+#     if 'ball' in type_name: return 3
+#     return ord(type_name[0])
 
 
 FUNCTION_COMPARISON = 'function_comparison'
@@ -366,8 +425,10 @@ SETUP_BLOCKS = (
     (r"""<setup-predicate> ::= (and <setup-predidcate>$^+$) \alt
     (or <setup-predicate>$^+$) \alt
     (not <setup-predicate> \alt
+    (exists (<typed list(variable)>) <setup-predicate>) \alt
+    (forall (<typed list(variable)>) <setup-predicate>) \alt
     <f-comp> \alt
-    <predicate>""", ('setup_and_predicate', 'setup_or_predicate', 'setup_not_predicate')),
+    <predicate>""", ('setup_and_predicate', 'setup_or_predicate', 'setup_not_predicate', 'setup_forall_predicate', 'setup_exists_predicate')),
 )
 
 
@@ -384,9 +445,11 @@ PREFERENCES_BLOCKS = (
 \alt  (forall (<variable-list>) <preference-body>)
 \alt <preference-body>) 
 
-<preference-body> ::=  <then> | <at-end> """, ('preference', 'pref_forall', 'pref_body_exists')),
+<preference-body> ::=  <then> | <at-end> | <always> """, ('preference', 'pref_forall', 'pref_body_exists')),
 
     (r'<at-end> ::= (at-end <pref-predicate>)', 'at_end'), 
+
+    (r'<always> ::= (always <pref-predicate>)', 'always'), 
 
     (r"""<then> ::= (then <seq-func> <seq-func>$^+$) 
 
@@ -473,6 +536,11 @@ SCORING_BLOCKS = (
     (r'<count-total> ::= (count-total <name>) "#" count how many states in total satisfy this preference', 'count_total'),
     (r'<count-increasing-measure> ::= (count-increasing-measure <name>) "#" currently unused, will clarify definition if it surfaces again', 'count_increasing_measure'),
     (r'<count-unique-positions> ::= (count-unique-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
+    (r'<count-same-positions> ::= (count-same-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
+    (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
+    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <name>) "#" For the externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference', 'count_maximal_nonoverlapping'),
+    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <name>) "#" For the externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it', 'count_maximal_once_per_objects'),
+    (r'<count-maximal-once> ::= (count-maximal-once <name>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once', 'count_maximal_once'),
 
     (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
 
@@ -481,43 +549,102 @@ SCORING_BLOCKS = (
 )
 
 PREDICATE_DESCRIPTIONS = {
-    'above': 'is the first object above the second object?',
-    'adjacent': 'are the two objects adjacent? [will probably be implemented as distance below some threshold]',
-    'agent_crouches': 'is the agent crouching?',
-    'agent_holds': 'is the agent holding the object?',
-    'in': 'is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]',
+    '=': 'Are these two objects the same object?',
+    'above': 'Is the first object above the second object?',
+    'adjacent': 'Are the two objects adjacent? [will probably be implemented as distance below some threshold]',
+    'agent_crouches': 'Is the agent crouching?',
+    'agent_holds': 'Is the agent holding the object?',
+    'broken': 'Is the object broken?',
+    'equal_z_position': 'Are these two objects (approximately) in the same z position? (in Unity x, z are spatial coordinates, y is the height)',
+    'faces': 'Is the front of the first object facing the front of the second object?',
+    'in': 'Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]',
     'in_building': 'Is the object part of a building? (* \\textbf I dislike this predicate, which I previously used as a crutch, and I am trying to find alternatives around it *)',
     'in_motion': 'Is the object in motion?',
     'object_orientation': 'Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down',
     'on': 'Is the second object on the first one?',
     'open': 'Is the object open? Only valid for objects that can be opened, such as drawers.',
     'opposite': 'So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls',
+    'rug_color_under': 'Is the color of the rug under the object (first argument) the color specified by the second argument?',
     'side': '(* \\textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)',
+    'toggled_on': 'Is this object toggled on?',
     'touch': 'Are these two objects touching?',
     'type': 'Is the first argument, an object, an instance of the type specified by the second argument?',    
 }
 
-TYPE_DESCRIPTIONS = {
-    'game_object': 'Parent type of all objects',
-    'block': 'Parent type of all block types:',
-    'bridge_block': '.',
-    'cube_block': '.',
-    'flat_block': '.',
-    'pyramid_block': '.',
-    'tall_cylindrical_block': '.',
-    'ball': 'Parent type of all ball types:',
-    'dodgeball': '.',
-    'golfball': '.',
-    'chair': ',',
-    'curved_wooden_ramp': '.',
-    'doggie_bed': '.',
-    'hexagonal_bin': '.',
-    'large_triangular_ramp': '.',
-    'pillow': '.',
-    'teddy_bear': '.',
-    'top_drawer': 'The top of the two drawers in the nightstand near the bed. (* \\textbf Do we want to specify this differently? *)',
-    'wall': 'One of the walls in the room',
-}
+TYPE_DESCRIPTIONS = (
+    TypeDesc('game_object', 'Parent type of all objects'),
+    TypeDesc('agent', 'The agent'),
+    TypeDesc('building', 'Not a real game object, but rather, a way to refer to structures the agent builds'),
+    section_separator_typedesc('Blocks'),
+	TypeDesc('block', 'Parent type of all block types:'),
+	TypeDesc('bridge_block'),
+	TypeDesc('cube_block'),
+	TypeDesc('flat_block'),
+	TypeDesc('pyramid_block'),
+	TypeDesc('cylindrical_block'),
+	TypeDesc('tall_cylindrical_block'),
+    section_separator_typedesc('Balls'),
+	TypeDesc('ball', 'Parent type of all ball types:'),
+	TypeDesc('beachball'),
+	TypeDesc('basketball'),
+	TypeDesc('dodgeball'),
+    TypeDesc('blue_dodgeball', '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('pink_dodgeball', '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('golfball'),
+    TypeDesc('green_golfball', '(* \\textbf Do we want to specify colored objects or not? *)'),
+	section_separator_typedesc('Colors'),
+    TypeDesc('color', 'Likewise, not a real game object, mostly used to refer to the color of the rug under an object'),
+	TypeDesc('green'),
+	TypeDesc('pink'),
+    TypeDesc('orange'),
+	TypeDesc('purple'),
+    TypeDesc('red'),
+	TypeDesc('white'),
+	TypeDesc('yellow'),
+    section_separator_typedesc('Other moveable/interactable objects'),
+	TypeDesc('alarm_clock'),
+	TypeDesc('book'),
+	TypeDesc('blinds', 'The blinds on the windows (which for a while I did not know you could open and close)'),
+	TypeDesc('chair'),
+	TypeDesc('cellphone'),
+	TypeDesc('cd'),
+	TypeDesc('credit_card'),
+	TypeDesc('curved_wooden_ramp'),
+	TypeDesc('desktop'),
+	TypeDesc('doggie_bed'),
+	TypeDesc('hexagonal_bin'),
+	TypeDesc('key_chain'),
+	TypeDesc('lamp'),
+	TypeDesc('laptop'),
+    TypeDesc('main_light_switch', 'The main light switch on the wall'),
+	TypeDesc('mug'),
+	TypeDesc('triangular_ramp'),
+	TypeDesc('green_triangular_ramp', '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('pillow'),
+	TypeDesc('teddy_bear'),
+	TypeDesc('watch'),
+    section_separator_typedesc('Immoveable objects'),
+	TypeDesc('bed'),
+    TypeDesc('door', 'The door out of the room'),
+	TypeDesc('desk'),
+	TypeDesc('drawer', 'Either drawer in the side table'),
+	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed. (* \\textbf Do we want to specify this differently? *)'),
+	TypeDesc('floor'),
+    TypeDesc('rug'),
+	TypeDesc('shelf', '.'),
+	TypeDesc('side_table', 'The side table/nightstand next to the bed'),
+	TypeDesc('sliding_door', 'The sliding doors on the south wall (big windows)'),
+	TypeDesc('wall', 'Any of the walls in the room'),
+    TypeDesc('south_wall', 'The wall with the sliding doors'),
+    TypeDesc('west_wall', 'The wall the bed is aligned to'),
+    section_separator_typedesc('Non-object-type predicate arguments'),
+    TypeDesc('back'),
+    TypeDesc('front'),
+    TypeDesc('left'),
+    TypeDesc('right'),
+    TypeDesc('upright'),
+    TypeDesc('upside_down'),
+)
 
 
 def extract_n_args(ast, key=None):
@@ -553,6 +680,28 @@ def extract_either_variable_types(ast):
     return None
 
 
+def extract_pref_name_and_types(ast):
+    if 'object_types' in ast:
+        if isinstance(ast.object_types, tatsu.ast.AST):
+            return ast.object_types.type_name
+        else:
+            return [t.type_name for t in ast.object_types if 'type_name' in t]
+
+    return None
+
+
+def extract_types_from_predicates(ast):
+    if 'pred_args' in ast:
+        if isinstance(ast.pred_args, str) and not ast.pred_args.startswith('?'):
+            return ast.pred_args
+
+        filtered_args = [arg for arg in ast.pred_args if isinstance(arg, str) and not arg.startswith('?')]
+        if filtered_args:
+            return filtered_args
+
+    return None
+
+
 def extract_co_ocurring_types(ast, key):
     if 'type_names' in ast:
         if not isinstance(ast.type_names, str):
@@ -564,9 +713,12 @@ def extract_co_ocurring_types(ast, key):
 
     return (None, None)
 
+
 TYPE_RULES = {
     'variable_type_def': (extract_single_variable_type, None),
-    'either_types': (extract_either_variable_types, None)
+    'either_types': (extract_either_variable_types, None),
+    'pref_name_and_types': (extract_pref_name_and_types, None),
+    'predicate': (extract_types_from_predicates, None),
 }
 
 
@@ -575,18 +727,17 @@ def main(args):
     grammar_parser = tatsu.compile(grammar) 
 
     asts = load_asts(args, grammar_parser, should_print=args.print_dsls)
-    parser = DSLToLatexParser(args.template_file, args.output_file)
+    parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
     setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]))
     pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), section_name='Preferences')
     terminal_translator = SectionTranslator(TERMINAL_SECTION_KEY, TERMINAL_BLOCKS, None, section_name='Terminal Conditions')
-    scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=['preference-eval',])
+    scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=['preference-eval','maximal_explainer','count_maximal_nonoverlapping'])
 
     predicate_translator = RuleTypeTranslator(PREDICATES_SECTION_KEY, PREDICATE_RULES, predicate_data_to_lines, descriptions=PREDICATE_DESCRIPTIONS)
     type_translator = RuleTypeTranslator(TYPES_SECTION_KEY, TYPE_RULES, type_data_to_lines, descriptions=TYPE_DESCRIPTIONS)
 
     # TODO: handle mathematical definitions and open question in code, rather than in template
-    # TODO: compile latex to pdf immediately from Python?
 
     parser.register_processor(setup_translator)
     parser.register_processor(pref_translator)

@@ -2,13 +2,13 @@
 
 (define (game 6172feb1665491d1efbce164) (:domain medium-objects-room-v1)  ; 0
 (:setup (and 
-    (exists (?h - hexagonal_bin ?r - large_triangular_ramp)
+    (exists (?h - hexagonal_bin ?r - triangular_ramp)
         (game-conserved (< (distance ?h ?r) 1))
     )
 ))
 (:constraints (and 
     (preference throwToRampToBin
-        (exists (?b - ball ?r - large_triangular_ramp ?h - hexagonal_bin) 
+        (exists (?b - ball ?r - triangular_ramp ?h - hexagonal_bin) 
             (then 
                 (once (agent_holds ?b)) 
                 (hold-while 
@@ -332,7 +332,7 @@
 
 (define (game 616e5ae706e970fe0aff99b6) (:domain many-objects-room-v1)  ; 13
 (:setup (and 
-    (exists (?h - hexagonal_bin ?r - large_triangular_ramp) (game-conserved 
+    (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved 
         (and
             (< (distance ?h ?r) 1)
             (< (distance ?r room_center) 0.5)
@@ -342,7 +342,7 @@
 (:constraints (and 
     (forall (?d - (either dodgeball golfball))
         (preference throwToRampToBin
-            (exists (?r - large_triangular_ramp ?h - hexagonal_bin) 
+            (exists (?r - triangular_ramp ?h - hexagonal_bin) 
                 (then 
                     (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
                     (hold-while 
@@ -695,7 +695,7 @@
 
 (define (game 60d432ce6e413e7509dd4b78) (:domain medium-objects-room-v1)  ; 22
 (:setup (and 
-    (exists (?h - hexagonal_bin) (game-conserved (adjacent (bed ?h))))
+    (exists (?h - hexagonal_bin) (game-conserved (adjacent bed ?h)))
     (forall (?b - ball) (game-optional (on rug ?b)))
     (game-optional (not (exists (?g - game_object) (on desk ?g))))
 ))
@@ -805,7 +805,7 @@
 
 (define (game 606e4eb2a56685e5593304cd) (:domain few-objects-room-v1)  ; 27
 (:setup (and 
-    (forall (?d - (either dogeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
+    (forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
     (game-optional (toggled_on main_light_switch))
     (game-optional (toggled_on desktop))
 ))
@@ -930,17 +930,17 @@
         (adjacent bed ?h)
         (forall (?b - cube_block) (adjacent ?h ?b))
     )))
-    (forall (?o - (either clock cellphone mug key_chain cd book ball))
+    (forall (?o - (either alarm_clock cellphone mug key_chain cd book ball))
         (game-optional (or 
-            (on nightstand ?o)
+            (on side_table ?o)
             (on bed ?o)   
         ))
     )
 ))
 (:constraints (and 
-    (forall (?s - (either bed nightstand))
+    (forall (?s - (either bed side_table))
         (preference objectThrownFromRug
-            (exists (?o - (either clock cellphone mug key_chain cd book ball) ?h - hexagonal_bin)
+            (exists (?o - (either alarm_clock cellphone mug key_chain cd book ball) ?h - hexagonal_bin)
                 (then
                     (once (on ?s ?o))
                     (hold (and (agent_holds ?o) (on rug agent)))
@@ -952,7 +952,7 @@
     )
 ))
 (:scoring maximize (+
-    (count-nonoverlapping objectThrownFromRug:nightstand)
+    (count-nonoverlapping objectThrownFromRug:side_table)
     (* 2 (count-nonoverlapping objectThrownFromRug:bed))
 )))
 
@@ -1246,7 +1246,7 @@
     (count-nonoverlapping ballRolledOnRampToRug:pink)
     (* 2 (count-nonoverlapping ballRolledOnRampToRug:yellow))
     (* 3 (count-nonoverlapping ballRolledOnRampToRug:orange))
-    (* 3 (count-nonoverlapping ballRolledOnRampToRug:blue))
+    (* 3 (count-nonoverlapping ballRolledOnRampToRug:green))
     (* 4 (count-nonoverlapping ballRolledOnRampToRug:purple))
     (* (- 1) (count-nonoverlapping ballRolledOnRampToRug:white))
 )))
@@ -1432,22 +1432,22 @@
 (:constraints (and 
     (preference ballThrownToRampToBed (exists (?c - curved_wooden_ramp)
         (then
-            (once (and (agent_holds purple_dodgeball) (faces agent ?c)))
+            (once (and (agent_holds pink_dodgeball) (faces agent ?c)))
             (hold-while
-                (and (in_motion purple_dodgeball) (not (agent_holds purple_dodgeball)))
-                (touch purple_dodgeball ?c)
+                (and (in_motion pink_dodgeball) (not (agent_holds pink_dodgeball)))
+                (touch pink_dodgeball ?c)
             )
-            (once (and (not (in_motion purple_dodgeball)) (on bed purple_dodgeball)))
+            (once (and (not (in_motion pink_dodgeball)) (on bed pink_dodgeball)))
         )
     ))
     (preference ballThrownHitsAgent (exists (?c - curved_wooden_ramp)
         (then
-            (once (and (agent_holds purple_dodgeball) (faces agent ?c)))
+            (once (and (agent_holds pink_dodgeball) (faces agent ?c)))
             (hold-while
-                (and (in_motion purple_dodgeball) (not (agent_holds purple_dodgeball)))
-                (touch purple_dodgeball ?c)
+                (and (in_motion pink_dodgeball) (not (agent_holds pink_dodgeball)))
+                (touch pink_dodgeball ?c)
             )
-            (once (and (touch purple_dodgeball agent) (not (agent_holds purple_dodgeball))))
+            (once (and (touch pink_dodgeball agent) (not (agent_holds pink_dodgeball))))
         )
     ))
 ))
@@ -1463,7 +1463,7 @@
 (:constraints (and 
     (forall (?c - color) 
         (preference beachballBouncedOffRamp
-            (exists (?b - beachball ?r - green_small_ramp)
+            (exists (?b - beachball ?r - green_triangular_ramp)
                 (then
                     (once (and (agent_holds ?b) (not (on rug agent))))
                     (hold-while
@@ -1629,7 +1629,7 @@
                 (on rug agent)
                 (in_motion ?c)
                 (not (agent_holds ?c))
-                (not (exists (?o - (either lamp desktop laptop)) (or (is_broken ?o) (in_motion ?o))))
+                (not (exists (?o - (either lamp desktop laptop)) (or (broken ?o) (in_motion ?o))))
             ))
             (once (and (on rug agent) (on desk ?c) (not (in_motion ?c))))
         )

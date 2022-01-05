@@ -123,7 +123,15 @@ points]}}}
 \begin{document}
 \maketitle
 
-\section{DSL Docuemntation as of \today}\subsection{Game Definition}
+\section{DSL Docuemntation as of \today}
+
+\subsection*{Color-coding}
+\begin{itemize}
+\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for
+\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games
+\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated
+\end{itemize}
+\subsection{Game Definition}
 \begin{grammar}
 <game> ::= (define (game <name>) \\
   (:domain <name>) \\
@@ -160,6 +168,8 @@ PDDL doesn't have any close equivalent of this, but when reading through the gam
 <setup-predicate> ::= (and <setup-predidcate>$^+$) \alt
     (or <setup-predicate>$^+$) \alt
     (not <setup-predicate> \alt
+    (exists (<typed list(variable)>) <setup-predicate>) \alt
+    (forall (<typed list(variable)>) <setup-predicate>) \alt
     <f-comp> \alt
     <predicate>
 
@@ -212,9 +222,11 @@ PDDL calls their temporal preferences 'constraints', but that's not entirely the
 \alt  (forall (<variable-list>) <preference-body>)
 \alt <preference-body>) 
 
-<preference-body> ::=  <then> | <at-end> 
+<preference-body> ::=  <then> | <at-end> | <always> 
 
 <at-end> ::= (at-end <pref-predicate>)
+
+{ \color{teal} <always> ::= (always <pref-predicate>) }
 
 <then> ::= (then <seq-func> <seq-func>$^+$) 
 
@@ -300,7 +312,7 @@ There's always assumed to be a time limit after which the game is over if nothin
 
 
 \end{grammar}
-For a full specification of the <scoring-expr> token, see the scoring section below.
+For a full specification of the \textlangle scoring-expr\textrangle\ token, see the scoring section below.
         
 
 
@@ -351,6 +363,16 @@ PDDL calls their equivalent section (:metric ...), but I renamed because it made
 
 <count-unique-positions> ::= (count-unique-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.
 
+{ \color{teal} <count-same-positions> ::= (count-same-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions. }
+
+<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.
+
+<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <name>) "#" For the externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference
+
+<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <name>) "#" For the externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it
+
+<count-maximal-once> ::= (count-maximal-once <name>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once
+
 <pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
 
     <pref-object-type> ::= : <name>
@@ -368,20 +390,26 @@ The predicates are not defined as part of the DSL, but rather I envision them is
             The following describes all predicates currently found in the interactive experiment games. Any predicates I forgot to provide a description for will appear in { \color{red} red }.
         
 \begin{lstlisting}
-(above <arg1> <arg2>) [4 references] ; is the first object above the second object?
-(adjacent <arg1> <arg2>) [16 references] ; are the two objects adjacent? [will probably be implemented as distance below some threshold]
-(agent_crouches ) [2 references] ; is the agent crouching?
-(agent_holds <arg1>) [51 references] ; is the agent holding the object?
-(in <arg1> <arg2>) [12 references] ; is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
-(in_building <arg1>) [9 references] ; Is the object part of a building? (* \textbf I dislike this predicate, which I previously used as a crutch, and I am trying to find alternatives around it *)
-(in_motion <arg1>) [49 references] ; Is the object in motion?
+(*\color{teal} (= <arg1> <arg2>) [1 reference] ; Are these two objects the same object?*)
+(*\color{teal} (above <arg1> <arg2>) [1 reference] ; Is the first object above the second object?*)
+(adjacent <arg1> <arg2>) [43 references] ; Are the two objects adjacent? [will probably be implemented as distance below some threshold]
+(agent_crouches ) [2 references] ; Is the agent crouching?
+(agent_holds <arg1>) [137 references] ; Is the agent holding the object?
+(*\color{teal} (broken <arg1>) [1 reference] ; Is the object broken?*)
+(*\color{teal} (equal_z_position <arg1> <arg2>) [3 references] ; Are these two objects (approximately) in the same z position? (in Unity x, z are spatial coordinates, y is the height)*)
+(*\color{teal} (faces <arg1> <arg2>) [4 references] ; Is the front of the first object facing the front of the second object?*)
+(in <ambiguous arguments>) [51 references] ; Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
+(in_building <arg1>) [1 reference] ; Is the object part of a building? (* \textbf I dislike this predicate, which I previously used as a crutch, and I am trying to find alternatives around it *)
+(in_motion <arg1>) [135 references] ; Is the object in motion?
 (object_orientation <arg1> <arg2>) [2 references] ; Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down
-(on <ambiguous arguments>) [35 references] ; Is the second object on the first one?
-(open <arg1>) [1 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
-(opposite <arg1> <arg2>) [2 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
+(on <arg1> <arg2>) [77 references] ; Is the second object on the first one?
+(open <arg1>) [3 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
+(opposite <arg1> <arg2>) [4 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
+(*\color{teal} (rug_color_under <arg1> <arg2>) [5 references] ; Is the color of the rug under the object (first argument) the color specified by the second argument?*)
 (side <arg1> <arg2>) [8 references] ; (* \textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)
-(touch <arg1> <arg2>) [11 references] ; Are these two objects touching?
-(type <arg1> <arg2>) [2 references] ; Is the first argument, an object, an instance of the type specified by the second argument?
+(*\color{teal} (toggled_on <arg1>) [3 references] ; Is this object toggled on?*)
+(touch <arg1> <arg2>) [28 references] ; Are these two objects touching?
+(type <arg1> <arg2>) [8 references] ; Is the first argument, an object, an instance of the type specified by the second argument?
 \end{lstlisting}
 
 
@@ -392,25 +420,78 @@ The types are also not defined as part of the DSL, but I envision them as operat
             The following describes all types currently found in the interactive experiment games. Any types I forgot to provide a description for will appear in {\color{red}red }.
         
 \begin{lstlisting}
-game_object [2 references] ; Parent type of all objects
-block [19 references] ; Parent type of all block types:
-bridge_block [1 references] ; .
-flat_block [1 references] ; .
-tall_cylindrical_block [1 references] ; .
-cube_block [6 references] ; .
-pyramid_block [2 references] ; .
-ball [10 references] ; Parent type of all ball types:
-dodgeball [12 references] ; .
-golfball [3 references] ; .
-curved_wooden_ramp [5 references] ; .
-chair [1 references] ; ,
-doggie_bed [2 references] ; .
-hexagonal_bin [21 references] ; .
-large_triangular_ramp [4 references] ; .
-pillow [2 references] ; .
-teddy_bear [3 references] ; .
-top_drawer [1 references] ; The top of the two drawers in the nightstand near the bed. (* \textbf Do we want to specify this differently? *)
-wall [3 references] ; One of the walls in the room
+game_object [14 references] 
+agent [42 references] 
+building [10 references] 
+---------- (* \textbf{Blocks} *) ----------
+block [10 references] 
+bridge_block [4 references] 
+cube_block [16 references] 
+flat_block [1 reference] 
+pyramid_block [5 references] 
+(*\color{teal} cylindrical_block [3 references] *)
+tall_cylindrical_block [1 reference] 
+---------- (* \textbf{Balls} *) ----------
+ball [18 references] 
+beachball [13 references] 
+basketball [11 references] 
+dodgeball [61 references] 
+(*\color{teal} blue_dodgeball [6 references] *)
+(*\color{teal} pink_dodgeball [18 references] *)
+golfball [14 references] 
+(*\color{teal} green_golfball [2 references] *)
+---------- (* \textbf{Colors} *) ----------
+(*\color{teal} color [4 references] *)
+(*\color{teal} green [4 references] *)
+(*\color{teal} pink [10 references] *)
+(*\color{teal} orange [3 references] *)
+(*\color{teal} purple [4 references] *)
+(*\color{teal} red [8 references] *)
+(*\color{teal} white [1 reference] *)
+(*\color{teal} yellow [8 references] *)
+---------- (* \textbf{Other moveable/interactable objects} *) ----------
+(*\color{teal} alarm_clock [4 references] *)
+(*\color{teal} book [5 references] *)
+(*\color{teal} blinds [2 references] *)
+chair [5 references] 
+(*\color{teal} cellphone [5 references] *)
+(*\color{teal} cd [3 references] *)
+(*\color{teal} credit_card [1 reference] *)
+curved_wooden_ramp [10 references] 
+(*\color{teal} desktop [4 references] *)
+doggie_bed [9 references] 
+hexagonal_bin [54 references] 
+(*\color{teal} key_chain [4 references] *)
+(*\color{teal} lamp [1 reference] *)
+(*\color{teal} laptop [4 references] *)
+(*\color{teal} main_light_switch [2 references] *)
+(*\color{teal} mug [3 references] *)
+triangular_ramp [4 references] 
+(*\color{teal} green_triangular_ramp [1 reference] *)
+pillow [4 references] 
+teddy_bear [6 references] 
+(*\color{teal} watch [1 reference] *)
+---------- (* \textbf{Immoveable objects} *) ----------
+bed [21 references] 
+door [5 references] 
+desk [18 references] 
+(*\color{teal} drawer [4 references] *)
+top_drawer [6 references] 
+floor [9 references] 
+rug [18 references] 
+(*\color{teal} shelf [4 references] *)
+(*\color{teal} side_table [3 references] *)
+(*\color{teal} sliding_door [2 references] *)
+wall [13 references] 
+(*\color{teal} south_wall [1 reference] *)
+(*\color{teal} west_wall [2 references] *)
+---------- (* \textbf{Non-object-type predicate arguments} *) ----------
+back [3 references] 
+front [3 references] 
+left [1 reference] 
+right [1 reference] 
+upright [1 reference] 
+upside_down [1 reference] 
 \end{lstlisting}
 
 

@@ -20,24 +20,31 @@ parser.add_argument('-t', '--test-files', action='append', default=[])
 # parser.add_argument('-c', '--compile-pdf', action='store_true')
 
 
+def load_and_validate_game_schema(game_file_path, schema_path):
+    schema = json.load(open(schema_path))
+    all_valid = True
+
+    with open(game_file_path) as game_file:
+        test_file_json = json.load(game_file)
+        games = test_file_json['games']
+        print(len(games))
+
+        for game in games:
+            try:
+                # print(game)
+                validate(game, schema)
+
+            except ValidationError as err:
+                meta = game['metadata']
+                print(f'In game {meta["prolific_id"]} ({meta["id"]}): {err.message}')
+                all_valid = False
+        
+        if all_valid:
+            return games
+
 def main(args):
-    schema = json.load(open(args.schema_file))
-
     for test_path in args.test_files:
-        with open(test_path) as test_file:
-            test_file_json = json.load(test_file)
-            games = test_file_json['games']
-            print(len(games))
-
-            for game in games:
-                try:
-                    # print(game)
-                    validate(game, schema)
-
-                except ValidationError as err:
-                    meta = game['metadata']
-                    print(f'In game {meta["prolific_id"]} ({meta["id"]}): {err.message}')
-
+        load_and_validate_game_schema(test_path, args.schema_file)
 
 if __name__ == '__main__':
     args = parser.parse_args()

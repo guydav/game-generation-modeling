@@ -350,7 +350,7 @@ def type_data_to_lines(count_data, is_new_data, additional_data, descriptions):
 
             count = count_data[key] if key in count_data else 0
             # TODO: consider doing something with co-ocurrence data
-            line = f'{key} [{count if count != 0 else "N/A"} reference{"s" if count != 1 else ""}] {"; " + descriptions[key] if key in descriptions else ""}'
+            line = f'{key} [{count if count != 0 else "N/A"} reference{"s" if count != 1 else ""}] {"; " + description if description else ""}'
 
             if count == 0:
                 line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)

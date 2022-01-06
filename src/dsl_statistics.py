@@ -21,7 +21,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/dsl_statistics.csv'
+DEFAULT_OUTPUT_PATH ='./data/dsl_statistics_interactive.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 

@@ -122,4 +122,4 @@
 
         "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "faces", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
     }
-}
+} 

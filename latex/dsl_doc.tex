@@ -420,11 +420,11 @@ The types are also not defined as part of the DSL, but I envision them as operat
             The following describes all types currently found in the interactive experiment games. Any types I forgot to provide a description for will appear in {\color{red}red }.
         
 \begin{lstlisting}
-game_object [14 references] 
-agent [42 references] 
-building [10 references] 
+game_object [14 references] ; Parent type of all objects
+agent [42 references] ; The agent
+building [10 references] ; Not a real game object, but rather, a way to refer to structures the agent builds
 ---------- (* \textbf{Blocks} *) ----------
-block [10 references] 
+block [10 references] ; Parent type of all block types:
 bridge_block [4 references] 
 cube_block [16 references] 
 flat_block [1 reference] 
@@ -432,16 +432,16 @@ pyramid_block [5 references]
 (*\color{teal} cylindrical_block [3 references] *)
 tall_cylindrical_block [1 reference] 
 ---------- (* \textbf{Balls} *) ----------
-ball [18 references] 
+ball [18 references] ; Parent type of all ball types:
 beachball [13 references] 
 basketball [11 references] 
 dodgeball [61 references] 
-(*\color{teal} blue_dodgeball [6 references] *)
-(*\color{teal} pink_dodgeball [18 references] *)
+(*\color{teal} blue_dodgeball [6 references] ; (* \textbf Do we want to specify colored objects or not? *)*)
+(*\color{teal} pink_dodgeball [18 references] ; (* \textbf Do we want to specify colored objects or not? *)*)
 golfball [14 references] 
-(*\color{teal} green_golfball [2 references] *)
+(*\color{teal} green_golfball [2 references] ; (* \textbf Do we want to specify colored objects or not? *)*)
 ---------- (* \textbf{Colors} *) ----------
-(*\color{teal} color [4 references] *)
+(*\color{teal} color [4 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object*)
 (*\color{teal} green [4 references] *)
 (*\color{teal} pink [10 references] *)
 (*\color{teal} orange [3 references] *)
@@ -452,7 +452,7 @@ golfball [14 references]
 ---------- (* \textbf{Other moveable/interactable objects} *) ----------
 (*\color{teal} alarm_clock [4 references] *)
 (*\color{teal} book [5 references] *)
-(*\color{teal} blinds [2 references] *)
+(*\color{teal} blinds [2 references] ; The blinds on the windows (which for a while I did not know you could open and close)*)
 chair [5 references] 
 (*\color{teal} cellphone [5 references] *)
 (*\color{teal} cd [3 references] *)
@@ -464,27 +464,27 @@ hexagonal_bin [54 references]
 (*\color{teal} key_chain [4 references] *)
 (*\color{teal} lamp [1 reference] *)
 (*\color{teal} laptop [4 references] *)
-(*\color{teal} main_light_switch [2 references] *)
+(*\color{teal} main_light_switch [2 references] ; The main light switch on the wall*)
 (*\color{teal} mug [3 references] *)
 triangular_ramp [4 references] 
-(*\color{teal} green_triangular_ramp [1 reference] *)
+(*\color{teal} green_triangular_ramp [1 reference] ; (* \textbf Do we want to specify colored objects or not? *)*)
 pillow [4 references] 
 teddy_bear [6 references] 
 (*\color{teal} watch [1 reference] *)
 ---------- (* \textbf{Immoveable objects} *) ----------
 bed [21 references] 
-door [5 references] 
+door [5 references] ; The door out of the room
 desk [18 references] 
-(*\color{teal} drawer [4 references] *)
-top_drawer [6 references] 
+(*\color{teal} drawer [4 references] ; Either drawer in the side table*)
+top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed. (* \textbf Do we want to specify this differently? *)
 floor [9 references] 
 rug [18 references] 
-(*\color{teal} shelf [4 references] *)
-(*\color{teal} side_table [3 references] *)
-(*\color{teal} sliding_door [2 references] *)
-wall [13 references] 
-(*\color{teal} south_wall [1 reference] *)
-(*\color{teal} west_wall [2 references] *)
+(*\color{teal} shelf [4 references] ; .*)
+(*\color{teal} side_table [3 references] ; The side table/nightstand next to the bed*)
+(*\color{teal} sliding_door [2 references] ; The sliding doors on the south wall (big windows)*)
+wall [13 references] ; Any of the walls in the room
+(*\color{teal} south_wall [1 reference] ; The wall with the sliding doors*)
+(*\color{teal} west_wall [2 references] ; The wall the bed is aligned to*)
 ---------- (* \textbf{Non-object-type predicate arguments} *) ----------
 back [3 references] 
 front [3 references] 

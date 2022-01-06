@@ -63,7 +63,7 @@
     (object_orientation ?o - game_object ?r - orientation) ; is the orientation of the object as marked?
     (under ?o1 ?o2 - game-object) ; is o2 under o1? theoretically could also be a between with an object below, such as the floor
     ; TODO: do we want to handle the case of multiple identified buildings?
-    (in_building ?b - building ?o - game_object) ; is the object part of this building?
+    (in ?b - building ?o - game_object) ; is the object part of this building?
     (building_fell ?b - building)  ; did this building just fall over?
     (building_size ?b)  ; how many objects are in the building?
     (object_color ?o - game-object ?c - color) ; is the object with this color

@@ -8,6 +8,7 @@ import os
 import re
 
 from parse_dsl import load_tests_from_file
+from ast_parser import ASTParser
 
 
 parser = argparse.ArgumentParser()
@@ -35,24 +36,30 @@ class StatExtractor:
 class ASTStatisticsAggregator:
     def __init__(self):
         self.rule_registry = defaultdict(list)
+        self.tuple_registry = defaultdict(list)
         self.regex_rules = []
         self.header_registry = dict()
         self.headers = ['src_file', 'game_name', 'domain_name']
         self.rows = []
 
-    def _register(self, stat, rule):
-        self.rule_registry[rule].append(stat)
+    def _register(self, stat, rule, tuple_rule=False):
+        if tuple_rule:
+            self.tuple_registry[rule].append(stat)
+        else:
+            self.rule_registry[rule].append(stat)
+        
 
-    def register(self, stat):
+    def register(self, stat, tuple_rule=False):
         if isinstance(stat.rule_or_rules, re.Pattern):
             self.regex_rules.append(stat)
 
         else:
             if isinstance(stat.rule_or_rules, str):
-                self._register(stat, stat.rule_or_rules)
+                self._register(stat, stat.rule_or_rules, tuple_rule)
             else:
                 for rule in stat.rule_or_rules:
-                    self._register(stat, rule)
+                    self._register(stat, rule, tuple_rule)
+        
 
         self.header_registry[stat.header] = stat
         self.headers.append(stat.header)
@@ -82,6 +89,12 @@ class ASTStatisticsAggregator:
             return
 
         elif isinstance(ast, (tuple, list)):
+            if len(ast) > 0 and isinstance(ast[0], str):
+                for tuple_stat in self.tuple_registry[ast[0]]:
+                    result = tuple_stat.extract(ast, depth)
+                    if result:
+                        row[tuple_stat.header].append(result)
+
             [self._parse(element, row, depth) for element in ast]
 
         elif isinstance(ast, tatsu.ast.AST):
@@ -102,6 +115,22 @@ class ASTStatisticsAggregator:
 
         else:
             print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
+
+
+class ASTNodeCounter(ASTParser):
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self, ast, **kwargs):
+        if 'zero_count' in kwargs:
+            self.count = 0
+            del kwargs['zero_count']
+        super().__call__(ast, **kwargs)
+        return self.count
+
+    def _handle_ast(self, ast, **kwargs):
+        self.count += 1
+        super()._handle_ast(ast, **kwargs)
 
 
 def build_aggregator(args):
@@ -136,38 +165,84 @@ def build_aggregator(args):
     agg.register(terminal_clause_exists)
 
     def objects_referenced(ast, depth=None):
-        key = 'exists_vars'
-        if 'forall_vars' in ast:
-            key = 'forall_vars'
-
         results = defaultdict(lambda: 0)
-        for quantification in ast[key]['variables']:
-            if isinstance(quantification['var_type'], str):
-                results[quantification['var_type']] += 1
-            else:
-                for name in quantification['var_type'].type_names:
-                    results[name] += 1
+
+        if ast.parseinfo.rule == 'predicate':
+            if 'pred_args' in ast:
+                # single pred arg
+                if isinstance(ast.pred_args, str) and not ast.pred_args.startswith('?'):
+                    results[ast.pred_args] += 1
+
+                # multiple pred args
+                filtered_args = [arg for arg in ast.pred_args if isinstance(arg, str) and not arg.startswith('?')]
+                for arg in filtered_args:
+                    results[arg] += 1
+
+        elif ast.parseinfo.rule == 'pref_name_and_types':
+            if 'object_types' in ast:
+                # single object type
+                if isinstance(ast.object_types, tatsu.ast.AST):
+                    results[ast.object_types.type_name] += 1
+                
+                # multiple object types
+                else:
+                    for type_name in [t.type_name for t in ast.object_types if 'type_name' in t]:
+                        results[type_name] += 1
+        
+        else:
+            key = 'exists_vars'
+            if 'forall_vars' in ast:
+                key = 'forall_vars'
+            
+            for quantification in ast[key]['variables']:
+                # single type
+                if isinstance(quantification['var_type'], str):
+                    results[quantification['var_type']] += 1
+                
+                # either types
+                else:
+                    for name in quantification['var_type'].type_names:
+                        results[name] += 1
 
         return results
 
     def aggregate_count_dicts(count_dicts):
-        results = count_dicts[0]
-        for cd in count_dicts[1:]:
+        results = defaultdict(lambda: 0)
+        for cd in count_dicts:
             for key in cd:
                 results[key] += cd[key]
         return dict(results)
 
-    object_types_quantified = StatExtractor(
-        ('setup_exists', 'setup_forall', 'pref_body_exists', 'pref_body_forall', 'preference_forall'),
-        'object_types_quantified', objects_referenced, aggregate_count_dicts
+    object_types_referenced = StatExtractor(
+        ('setup_exists', 'setup_forall', 'setup_exists_predicate', 'setup_forall_predicate',
+        'pref_body_exists', 'pref_body_forall', 'pref_forall',
+        'pref_predicate_exists', 'pref_predicate_forall', 
+        'pref_name_and_types', 'predicate'),
+        'object_types_referenced', objects_referenced, aggregate_count_dicts
     )
-    agg.register(object_types_quantified)
+    agg.register(object_types_referenced)
+
+    predicates_referenced = StatExtractor(
+        'predicate', 'predicates_referenced', lambda ast, depth: {ast.pred_name: 1}, aggregate_count_dicts
+    )
+    agg.register(predicates_referenced)
 
     max_depth = StatExtractor('predicate', 'max_depth', lambda ast, depth: depth, max)
     agg.register(max_depth)
 
     total_ast_nodes = StatExtractor(re.compile('.*'), 'ast_nodes', lambda ast, depth: 1, np.sum)
     agg.register(total_ast_nodes)
+
+    ast_node_counter = ASTNodeCounter()
+
+    def count_setup_nodes(ast, depth):
+        if isinstance(ast[1], tatsu.ast.AST):
+            return ast_node_counter(ast[1], zero_count=True)
+
+        return 0
+
+    setup_nodes = StatExtractor('(:setup', 'setup_nodes', count_setup_nodes, np.sum)
+    agg.register(setup_nodes, tuple_rule=True)
 
     return agg
             

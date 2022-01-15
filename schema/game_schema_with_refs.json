@@ -1,4 +1,5 @@
 {
+    "$id": "GameSchema",
     "type": "object",
     "properties": {
         "metadata": {
@@ -107,7 +108,7 @@
             {"$ref": "#/$defs/moveableObject"},
             {"const": "agent"}
         ]},
-        "schemaReferences": {"enum": "from"},
+        "schemaReferences": {"enum": ["from"]},
         "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door"]},
 
         "moveableObject": {"anyOf": [
@@ -116,9 +117,9 @@
             {"$ref": "#/$defs/otherObject"},
             {"const": ""}
         ]},
-        "throwingObject": {"enum": ["golfball", "dodgeball", "basketball", "beachball", "teddy_bear", "book", "cube_block", "laptop", "purple_dodgeball", "green_golfball"]},
+        "throwingObject": {"enum": ["ball", "golfball", "dodgeball", "basketball", "beachball", "teddy_bear", "book", "cube_block", "laptop", "pink_dodgeball", "green_golfball", "alarm_clock", "cellphone", "mug", "key_chain", "cd"]},
         "buildingObject": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin"] },
-        "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "large_triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_small_ramp", "desktop", "blinds"]},
+        "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_triangular_ramp", "desktop", "blinds"]},
 
         "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "faces", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
     }

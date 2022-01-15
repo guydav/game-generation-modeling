@@ -11,7 +11,7 @@
             "throwing": {
                 "what": ["basketball", "dodgeball", "beachball"],
                 "on": [{
-                    "object": "large_triangular_ramp",
+                    "object": "triangular_ramp",
                     "predicates": [{"object": "hexagonal_bin", "predicate": "adjacent"}]
                 }],
                 "goal": ["hit"],
@@ -429,6 +429,21 @@
         },
         {
             "metadata": {
+                "prolific_id": "5b8c8e7d0c740e00019d55c3",
+                "id": "DfCWVG3I8HkoSioS37gi",
+                "index": 31,
+                "room": "few_objects",
+                "notes": "TODO: could switch the 'what' field to also be object-with-predicates, and then allow for the 'prepare the objects on the sidetable' bit"
+            },
+            "throwing": {
+                "what": ["alarm_clock", "cellphone", "mug", "key_chain", "cd", "book", "ball"],
+                "from": [{"object": "rug"}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "desk", "predicate": "adjacent"}]}]
+            }
+        },
+        {
+            "metadata": {
                 "prolific_id": "56cb8858edf8da000b6df354",
                 "id": "ShyRlIFgTWW6vqNrd3K5",
                 "index": 32,
@@ -640,7 +655,7 @@
                 "notes": ""
             },
             "throwing": {
-                "what": ["purple_dodgeball"],
+                "what": ["pink_dodgeball"],
                 "goal": ["on"],
                 "on": [{"object": "curved_wooden_ramp", "predicates": [{"object": "room_center", "predicate": "near"}]}],
                 "to": [{"object": "bed"}]
@@ -658,7 +673,7 @@
                 "what": ["beachball"],
                 "from": [{"object": "rug", "predicates": [{"predicate": "on", "negate": true}]}],
                 "goal": ["on"],
-                "on": [{"object": "green_small_ramp"}],
+                "on": [{"object": "green_triangular_ramp"}],
                 "to": [{"object": "rug"}]
             }
         },

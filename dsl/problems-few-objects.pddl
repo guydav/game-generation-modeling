@@ -116,7 +116,7 @@
         ) 
     )
     (preference ballKicked
-        (exists (?d - dodgeball)
+        (exists (?d - dodgeball ?t - textbook)
             (then 
                 (once (and (adjacent agent ?t) (touch agent ?d)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
@@ -301,13 +301,13 @@
 (define (game few-objects-14) (:domain few-objects-room-v1)
 (:setup  
     ; is there a prettier way to do this? 
-    (exists (?f - floor ?r - rug ?b - bed 
+    (exists (?f - floor ?r - rug
             ?w1 ?w2 - window ?c - chair ?x1 ?x2 - wall  
             ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
         (game-conserved (and
             (not (on ?f ?r))
-            (adjacent ?b ?w1)
-            (adjacent ?d ?w2)
+            (adjacent bed ?w1)
+            (adjacent desk ?w2)
             (adjacent ?c ?x1)
             (opposite ?x1 ?x2)
             (=

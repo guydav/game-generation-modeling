@@ -32,7 +32,7 @@
                     "items": {
                         "type": "object",
                         "properties": {
-                            "object": {"enum": ["curved_wooden_ramp", "large_triangular_ramp"]},
+                            "object": {"enum": ["curved_wooden_ramp", "triangular_ramp"]},
                             "predicates": {
                                 "type": "array",
                                 "items": {

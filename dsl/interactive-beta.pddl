@@ -1,4 +1,3 @@
-; 0 is a bit ambiguous, but I did my best
 
 (define (game 6172feb1665491d1efbce164) (:domain medium-objects-room-v1)  ; 0
 (:setup (and 
@@ -150,7 +149,7 @@
         (exists (?d - dodgeball ?c - curved_wooden_ramp)
             (then 
                 (once (and 
-                    (agent_holds ?d1) 
+                    (agent_holds ?d) 
                     (< (distance agent (side ?c front)) (distance agent (side ?c back)))
                 ))
                 (hold-while 
@@ -827,7 +826,7 @@
         (exists (?o - (either laptop book) ?s - shelf)
             (at-end (and 
                 (adjacent ?s south_wall)
-                (on ?s ?c)
+                (on ?s ?o)
             ))
         )
     )
@@ -927,7 +926,7 @@
 (define (game 5b8c8e7d0c740e00019d55c3) (:domain few-objects-room-v1)  ; 31
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (and 
-        (adjacent bed ?h)
+        (adjacent desk ?h)
         (forall (?b - cube_block) (adjacent ?h ?b))
     )))
     (forall (?o - (either alarm_clock cellphone mug key_chain cd book ball))
@@ -1209,7 +1208,7 @@
             (then
                 (once (agent_holds ?b))
                 (hold-while 
-                    (and (not (agent_holds ?d)) (in_motion ?d))
+                    (and (not (agent_holds ?b)) (in_motion ?b))
                     (touch ?w ?b)
                 )
                 (once (or (agent_holds ?b) (touch agent ?b)))
@@ -1233,7 +1232,7 @@
                 (then 
                     (once (agent_holds ?b))
                     (hold-while 
-                        (and (not (agent_holds ?b)) (in_motion ?d))
+                        (and (not (agent_holds ?b)) (in_motion ?b))
                         (on ?r ?b)    
                     ) 
                     (once (and (not (in_motion ?b)) (on rug ?b) (rug_color_under ?b ?c)))
@@ -1323,8 +1322,8 @@
         (exists (?d - dodgeball)
             (then 
                 (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (not (in_motion ?b)))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (not (in_motion ?d)))
             )
         )
     )

@@ -491,7 +491,7 @@
                     (once (and (agent_holds ?g) (exists (?t - triangular_block) (between agent ?r ?t))))
                     (hold-while 
                         (and (not (agent_holds ?g)) (in_motion ?g))
-                        (touch ?d ?g)
+                        (touch ?r ?g)
                     )
                     (once (and (not (in_motion ?g)) (on floor ?g) (between ?b1 ?r ?b2)))
                 )

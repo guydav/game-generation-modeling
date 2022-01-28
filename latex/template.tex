@@ -125,8 +125,9 @@ points]}}}
 
 {{BODY}}
 
-\section{Modal Definitions in LTL}
-LTL offers the following operators, and using $\varphi$ and $\psi$ as the symbols (in our case, predicates). 
+\section{Modal Definitions in Linear Temporal Logic}
+\subsection{Linear Temporal Logic definitions}
+Linear Temporal Logic (LTL) offers the following operators, and using $\varphi$ and $\psi$ as the symbols (in our case, predicates). 
 I'm trying to translate from standard logic notation to something that makes sense in our case, where we're operating sequence of states $S_0, S_1, \cdots, S_n$. 
 \begin{itemize}
     \item \textbf{Next}, $X \psi$: at the next timestep, $\psi$ will be true. If we are at timestep $i$, then $S_{i+1} \vdash \psi$
@@ -142,8 +143,9 @@ I'm trying to translate from standard logic notation to something that makes sen
     
 \end{itemize}
 
-Formally, to satisfy a (then ...) preference, we're looking to find a sub-sequence of $S_0, S_1, \cdots, S_n$ that satisfies the formula we translate to. 
-We translate a (then ...) operator by translating the constituent sequence-functions (once, hold, while-hold)\footnote{These are the ones I've needed so far with the interactive games -- if we find ourselves needing additional ones, I'll translate those, too.} to LTL. 
+\subsection{Satisfying a (then ...) operator}
+Formally, to satisfy a preference using a (then ...) operator, we're looking to find a sub-sequence of $S_0, S_1, \cdots, S_n$ that satisfies the formula we translate to. 
+We translate a (then ...) operator by translating the constituent sequence-functions (once, hold, while-hold)\footnote{These are the ones we've used so far in the interactive experiment dataset, even if we previously defined other ones, too.} to LTL. 
 Since the translation of each individual sequence function leaves the last operand empty, we append a `true' ($\top$) as the final operand, since we don't care what happens in the state after the sequence is complete. 
 
 (once $\psi$) := $\psi X \cdots$
@@ -179,38 +181,44 @@ If we translate each predicate to the letter appearing in blue at the end of the
 
 $\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
-I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 
-The predicate end up being rather more complex, but that doesn't matter to the LTL translation.
+\subsection{Satisfying (at-end ...) or (always ...) operators}
+Thankfully, the two other types of temporal specifications we find ourselves using as part of preferences are simpler to translate. 
+Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evauated at the terminal state of gameplay.
+The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
 
-\section{Modal Definitions}
 
-\begin{itemize}
-    \item These definitions attempt to offer precision on how the (then ...) operator works. It receives a series of sequence-functions (once, hold, etc.), each of which is parameterized by one or more predicate conditions. 
+% I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 
+% The predicate end up being rather more complex, but that doesn't matter to the LTL translation.
 
-    \item For the inner sequence-functions, I used the parentheses notation to mean "evaluated at these timesteps" -- does this notation make sense? Should I also use it for the entire then-expression? 
+% \section{Modal Definitions}
+
+% \begin{itemize}
+%     \item These definitions attempt to offer precision on how the (then ...) operator works. It receives a series of sequence-functions (once, hold, etc.), each of which is parameterized by one or more predicate conditions. 
+
+%     \item For the inner sequence-functions, I used the parentheses notation to mean "evaluated at these timesteps" -- does this notation make sense? Should I also use it for the entire then-expression? 
     
-    \item I've only provided here the for the ones currently used in the interactive experiment. 
-\end{itemize}
+%     \item I've only provided here the for the ones currently used in the interactive experiment. 
+% \end{itemize}
 
-$(\text{then}\ \langle SF_1 \rangle \ \langle SF_2 \rangle \cdots \langle SF_n \rangle) := \exists t_0 \leq t_1 < t_2 < \cdots < t_n$ such that $SF_1(t_0, t_1) \land SF_2(t_1, t_2) \land \cdots \land SF_n(t_{n-1}, t_n) = \text{true}$, that is, each seq-func evaluated at these timesteps evaluates to true. 
+% $(\text{then}\ \langle SF_1 \rangle \ \langle SF_2 \rangle \cdots \langle SF_n \rangle) := \exists t_0 \leq t_1 < t_2 < \cdots < t_n$ such that $SF_1(t_0, t_1) \land SF_2(t_1, t_2) \land \cdots \land SF_n(t_{n-1}, t_n) = \text{true}$, that is, each seq-func evaluated at these timesteps evaluates to true. 
 
-$(\text{once}\ \langle C \rangle)(t_{i-1}, t_i) := t_i = t_{i-1} + 1, S[t_i] \vdash C$, that is, the condition C holds at the next timestep from the previous assigned timestep.
+% $(\text{once}\ \langle C \rangle)(t_{i-1}, t_i) := t_i = t_{i-1} + 1, S[t_i] \vdash C$, that is, the condition C holds at the next timestep from the previous assigned timestep.
 
-$(\text{hold}\ \langle C \rangle)(t_{i-1}, t_i) := \forall t:  t_{i-1} < t \leq t_i, S[t] \vdash C$, that is, the condition holds for all timesteps starting immediately after the previous timestep and until the current timestep. 
+% $(\text{hold}\ \langle C \rangle)(t_{i-1}, t_i) := \forall t:  t_{i-1} < t \leq t_i, S[t] \vdash C$, that is, the condition holds for all timesteps starting immediately after the previous timestep and until the current timestep. 
 
-$(\text{hold-while}\ \langle C \rangle \ \langle C_a \rangle \cdots \langle C_m \rangle)(t_{i-1}, t_i) := \forall t:  t_{i-1} < t \leq t_i, S[t] \vdash C$ and $\exists t_a, \cdots, t_m: t_{i-1} < t_a < \cdots < t_m < t_i$ such that $S[t_a] \vdash C_a, \cdots, S[t_m] \vdash C_m$, that is, the same as hold happens, and while this condition $C$ holds, there exist non-overlapping states in sequence where each of the additional conditions provided hold for at least a single state.
+% $(\text{hold-while}\ \langle C \rangle \ \langle C_a \rangle \cdots \langle C_m \rangle)(t_{i-1}, t_i) := \forall t:  t_{i-1} < t \leq t_i, S[t] \vdash C$ and $\exists t_a, \cdots, t_m: t_{i-1} < t_a < \cdots < t_m < t_i$ such that $S[t_a] \vdash C_a, \cdots, S[t_m] \vdash C_m$, that is, the same as hold happens, and while this condition $C$ holds, there exist non-overlapping states in sequence where each of the additional conditions provided hold for at least a single state.
 
 % $(\text{hold-for}\ \langle n \rangle \ \langle C \rangle)(t_{i-1}, t_i) := t_i \geq t_{i-1} + n, \forall t:  t_{i-1} < t \leq t_i, S[t] \vdash C$, that is, the same as the standard hold but for at least $n$ timesteps. 
 
 % $(\text{forall-sequence}\ \langle \text{forall-quantifier(s)} \rangle \ \langle \text{then-expr} \rangle)(t_{i-1}, t_i): \forall o \in \{a, b, \cdots, k\}$ satisfying the object assignments in the forall quantifier, $\exists t_0^o, t_1^o, \cdots, t_m^o$ that satisfy the inner then expression, such that $t_{i-1} < t_0^a < \cdots t_m^a < t_0^b < \cdots t_m^b < \cdots < t_0^k < \cdots t_m^k < t_i$, that is, the series of timesteps satisfying the inner then-expression for each object assignment do not overlap, happen in sequence, and fall between the previous assigned timestep and the current assigned timestep. 
 
-\section{Open Questions}
-\begin{itemize}
-    \item Do we want to define syntax to quantify streaks? Some participants will use language like ``every three successful scores in a row get you a point''. An alternative to defining syntax or sequences would be to define the preference to count three successful attempts in a row, but that might be more awkward?
+% \section{Open Questions}
+% \begin{itemize}
+%     \item Do we want to define syntax to quantify streaks? Some participants will use language like ``every three successful scores in a row get you a point''. An alternative to defining syntax or sequences would be to define the preference to count three successful attempts in a row, but that might be more awkward?
     
-    \item How do we want to work with type hierarchy, such as block or ball being the super-types for all blocks or balls -- is it an implicit (either ...) over all of the sub-types? Or do we want to provide the hierarchy in some way to the model, perhaps as part of the enumeration of all valid types in a given environment/scene?
+%     \item How do we want to work with type hierarchy, such as block or ball being the super-types for all blocks or balls -- is it an implicit (either ...) over all of the sub-types? Or do we want to provide the hierarchy in some way to the model, perhaps as part of the enumeration of all valid types in a given environment/scene?
     
-    \item (I'm sure there are more open questions -- will add later)
-\end{itemize}
+%     \item (I'm sure there are more open questions -- will add later)
+% \end{itemize}
 
 \end{document}

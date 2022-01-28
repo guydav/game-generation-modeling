@@ -43,7 +43,7 @@ function_term = name | variable | number | predicate;
 predicate = '(' pred_name:predicate_name pred_args:{predicate_term}* ')';
 predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
 # predicate_term = name | variable | predicate:predicate;
-predicate_term = name | variable | predicate;
+predicate_term = name | variable;
 # predicate_function = predicate;
 
 # Game Setup
@@ -207,6 +207,7 @@ scoring_equals_comp = '(=' {expr:scoring_expr}+ ')';
 
 preference_eval = 
     count_nonoverlapping |
+    count_overlapping |
     count_once |
     count_once_per_objects |
     count_longest |
@@ -217,9 +218,11 @@ preference_eval =
     count_same_positions |
     count_maximal_once |
     count_maximal_once_per_objects |
-    count_maximal_nonoverlapping;
+    count_maximal_nonoverlapping | 
+    count_maximal_overlapping;
 
 count_nonoverlapping = '(count-nonoverlapping'  name_and_types:pref_name_and_types')';
+count_overlapping = '(count-overlapping'  name_and_types:pref_name_and_types')';
 count_once = '(count-once' name_and_types:pref_name_and_types ')';
 count_once_per_objects = '(count-once-per-objects' name_and_types:pref_name_and_types ')';
 count_longest = '(count-longest' name_and_types:pref_name_and_types ')';
@@ -231,6 +234,7 @@ count_same_positions = '(count-same-positions' name_and_types:pref_name_and_type
 count_maximal_once = '(count-maximal-once' name_and_types:pref_name_and_types')';
 count_maximal_once_per_objects = '(count-maximal-once-per-objects' name_and_types:pref_name_and_types')';
 count_maximal_nonoverlapping = '(count-maximal-nonoverlapping' name_and_types:pref_name_and_types')';
+count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_name_and_types')';
 
 pref_name_and_types = pref_name:name {object_types:pref_object_type}*;
 

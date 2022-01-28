@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl",
+               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-p"
             ],
             "console": "integratedTerminal"
         },

@@ -26,6 +26,9 @@ DEFAULT_TEMPLATE_FILE = './latex/template.tex'
 parser.add_argument('-f', '--template-file', default=DEFAULT_TEMPLATE_FILE)
 parser.add_argument('-c', '--compile-pdf', action='store_true')
 parser.add_argument('-n', '--new-data-start')
+parser.add_argument('-e', '--external', action='store_true')
+parser.add_argument('-u', '--omit-unused-rules', action='store_true')
+
 
 DEFAULT_PREFIX_LINES = [
     r'\section{DSL Docuemntation as of \today}',
@@ -185,10 +188,14 @@ NOTES = {
 }
 
 class DSLTranslator:
-    def __init__(self, section_key, section_type, section_name=None, notes=NOTES):
+    def __init__(self, section_key, section_type, section_name=None, external_mode=False, omit_unused=False, notes=NOTES):
         self.section_key = section_key
         self.section_type = section_type
         self.section_name = section_name if section_name is not None else section_key.capitalize()
+
+        self.external_mode = external_mode
+        self.omit_unused = omit_unused
+
         self.notes = notes
 
         self.lines = []
@@ -210,8 +217,9 @@ class DSLTranslator:
 
 class SectionTranslator(DSLTranslator):
     def __init__(self, section_key, core_blocks, additional_blocks=None, section_name=None, consider_used_rules=None,
-                 section_type='grammar', unused_rule_color=UNUSED_RULE_OR_ELEMENT_COLOR, new_rule_color=NEW_RULE_OR_ELEMENT_COLOR):
-        super().__init__(section_key, section_type, section_name)
+                 section_type='grammar', unused_rule_color=UNUSED_RULE_OR_ELEMENT_COLOR, new_rule_color=NEW_RULE_OR_ELEMENT_COLOR,
+                 external_mode=False, omit_unused=False):
+        super().__init__(section_key, section_type, section_name, external_mode=external_mode, omit_unused=omit_unused)
         self.section_key = section_key
         self.core_blocks = core_blocks
         self.additional_blocks = additional_blocks if additional_blocks is not None else []
@@ -231,15 +239,18 @@ class SectionTranslator(DSLTranslator):
 
                 if isinstance(block_rules, str):
                     if block_rules not in keys and block_rules not in self.consider_used_rules:
-                        if not is_core:
+                        self.unused_rules.append(block_rules)
+                        
+                        if not is_core or self.omit_unused:
                             continue
 
-                        block_text = f'{{ \\color{{{self.unused_rule_color}}} {block_text} }}'
-                        self.unused_rules.append(block_rules)
+                        if not self.external_mode:
+                            block_text = f'{{ \\color{{{self.unused_rule_color}}} {block_text} }}'
+                        
                     elif block_rules in keys:
                         _, block_is_new = zip(*section_data[block_rules])
                         rule_is_new = all(block_is_new)
-                        if rule_is_new:
+                        if rule_is_new and not self.external_mode:
                             block_text = f'{{ \\color{{{self.new_rule_color}}} {block_text} }}'
 
                         keys.remove(block_rules)
@@ -264,8 +275,10 @@ class SectionTranslator(DSLTranslator):
 DEFAULT_RULE_SECTION_TYPE = 'lstlisting' 
 
 class RuleTypeTranslator(DSLTranslator):
-    def __init__(self, section_key, rule_to_value_extractors, output_lines_func, section_type=DEFAULT_RULE_SECTION_TYPE, descriptions=None, section_name=None):
-        super().__init__(section_key, section_type, section_name)
+    def __init__(self, section_key, rule_to_value_extractors, output_lines_func, section_type=DEFAULT_RULE_SECTION_TYPE, 
+        descriptions=None, section_name=None, external_mode=False, omit_unused=False):
+
+        super().__init__(section_key, section_type, section_name, external_mode=external_mode, omit_unused=omit_unused)
         self.rule_to_value_extractors = rule_to_value_extractors
         self.output_lines_func = output_lines_func
         self.count_data = defaultdict(lambda: 0)
@@ -298,7 +311,7 @@ class RuleTypeTranslator(DSLTranslator):
                     self.additional_data[instance_key][key].append(value)
 
     def output(self):
-        self.lines = self.output_lines_func(self.count_data, self.is_new_data, self.additional_data, self.descriptions)
+        self.lines = self.output_lines_func(self.count_data, self.is_new_data, self.additional_data, self.descriptions, self.external_mode)
         return super().output()
 
 
@@ -306,7 +319,7 @@ def _format_line_to_color(line, color):
     return f'(*\\color{{{color}}} {line}*)'
 
 
-def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptions):
+def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptions, external_mode=False, omit_unused=False):
     lines = []
 
     for key in sorted(count_data.keys()):
@@ -316,10 +329,10 @@ def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptio
         arg_str = ' '.join([f'<arg{i + 1}>' for i in range(n_args)]) if n_args is not None else '<ambiguous arguments>'
 
         line = f'({key} {arg_str}) [{count} reference{"s" if count != 1 else ""}] {"; " + descriptions[key] if key in descriptions else ""}'
-        if key not in descriptions:
+        if key not in descriptions and not external_mode:
             line = _format_line_to_color(line, UNDESCRIBED_ELEMENT_COLOR)
 
-        elif is_new_data[key]:
+        elif is_new_data[key] and not external_mode:
             line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
 
         lines.append(line)
@@ -334,7 +347,7 @@ def section_separator_typedesc(section_name):
     return TypeDesc(section_name, f'---------- (* \\textbf{{{section_name}}} *) ----------', True)
 
 
-def type_data_to_lines(count_data, is_new_data, additional_data, descriptions):
+def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, external_mode=False, omit_unused=False):
     lines = []
     unused_keys = set(count_data.keys())
 
@@ -353,14 +366,18 @@ def type_data_to_lines(count_data, is_new_data, additional_data, descriptions):
             line = f'{key} [{count if count != 0 else "N/A"} reference{"s" if count != 1 else ""}] {"; " + description if description else ""}'
 
             if count == 0:
-                line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)
+                if omit_unused:
+                    continue
 
-            elif is_new_data[key]:
+                if not external_mode:
+                    line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)
+
+            elif is_new_data[key] and not external_mode:
                 line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
 
             lines.append(line)
 
-    if unused_keys:
+    if unused_keys and not external_mode:
         lines.append(section_separator_typedesc('Undescribed types').description)
         for key in unused_keys:
             count = count_data[key]

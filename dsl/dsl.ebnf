@@ -103,14 +103,13 @@ pref_body =
     pref_body_exists |
     pref_body_forall | 
     then |
-    at_end |
-    always
+    at_end 
     ;
 
 pref_body_exists = '(exists' exists_vars:variable_list exists_args:pref_body ')';
 pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
 at_end = '(at-end' at_end_pred:pref_predicate')';
-always = '(always' always_pred:pref_predicate')';
+# always = '(always' always_pred:pref_predicate')';
 then = '(then' {then_funcs:seq_funq}+ ')';
 
 seq_funq = 
@@ -219,7 +218,9 @@ preference_eval =
     count_maximal_once |
     count_maximal_once_per_objects |
     count_maximal_nonoverlapping | 
-    count_maximal_overlapping;
+    count_maximal_overlapping |
+    count_once_per_external_objects |
+    count_nonoverlapping_measure;
 
 count_nonoverlapping = '(count-nonoverlapping'  name_and_types:pref_name_and_types')';
 count_overlapping = '(count-overlapping'  name_and_types:pref_name_and_types')';
@@ -235,6 +236,8 @@ count_maximal_once = '(count-maximal-once' name_and_types:pref_name_and_types')'
 count_maximal_once_per_objects = '(count-maximal-once-per-objects' name_and_types:pref_name_and_types')';
 count_maximal_nonoverlapping = '(count-maximal-nonoverlapping' name_and_types:pref_name_and_types')';
 count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_name_and_types')';
+count_once_per_external_objects = '(count-once-per-external-objects' name-and-types:pref_name_and_types')';
+count_nonoverlapping_measure = ('count-nonoverlapping-measure' name_and_types:pref_name_and_types')';
 
 pref_name_and_types = pref_name:name {object_types:pref_object_type}*;
 

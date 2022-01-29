@@ -1013,8 +1013,10 @@
     )
     (forall (?d - (either dodgeball golfball))
         (preference ballNeverThrown
-            (always
-                (not (agent_holds ?d))
+            (then
+                (once (game_start))
+                (hold (not (agent_holds ?d)))
+                (hold (game_over))
             )
         )
     )
@@ -2047,3 +2049,913 @@
 ))
 
  
+(define (game 5f806f22e8159d0913945e35) (:domain medium-objects-room-v1)  ; 66
+(:setup (and 
+    (forall (?b - (either bridge_block cube_block)) 
+        (game-conserved (< (distance ?b door) 1))    
+    )
+    (forall (?b - (either cylindrical_block tall_cylindrical_block)) 
+        (game-optional (on lower_shelf ?b))
+    )
+    (forall (?b - (either flat_block pyramid_block))
+        (game-conserved (not (exists (?s - shelf) (on ?s ?b))))
+    )
+))
+(:constraints (and 
+    (forall (?b - (either cylindrical_block tall_cylindrical_block))
+        (preference blockCorrectlyPicked (exists (?d - dodgeball ?o - doggie_bed ?tb - (either bridge_block cube_block))
+            (then 
+                (once (and 
+                    (agent_holds ?d) 
+                    (on agent ?o) 
+                    (on top_shelf ?b))
+                    (not (exists (?ob - block) (and (not (= ?b ?ob) (on top_shelf ?ob)))))
+                )
+                (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (agent_holds ?b))))
+                (once (and 
+                    (not (in_motion ?d)) 
+                    (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
+                    (= (color ?b) (color ?tb))
+                ))
+            )
+        ))
+        (preference blockIncorrectlyPicked (exists (?d - dodgeball ?o - doggie_bed ?tb - (either bridge_block cube_block))
+            (then 
+                (once (and 
+                    (agent_holds ?d) 
+                    (on agent ?o) 
+                    (on top_shelf ?b))
+                    (not (exists (?ob - block) (and (not (= ?b ?ob) (on top_shelf ?ob)))))
+                )
+                (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (agent_holds ?b))))
+                (once (and 
+                    (not (in_motion ?d)) 
+                    (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
+                    (not (= (color ?b) (color ?tb)))
+                ))
+            )
+        ))
+    )   
+))
+(:terminal
+    (>= (count-once-per-external-objects blockCorrectlyPicked) 4)
+)
+(:scoring maximize (+ 
+    (* 10 (count-once-per-external-objects blockCorrectlyPicked))
+    (* (- 1) (count-nonoverlapping blockIncorrectlyPicked))
+    ( * 100 (>= (count-once-per-external-objects blockCorrectlyPicked) 4))
+)))
+
+(define (game 60feca537ed1de34c8ddbbab) (:domain medium-objects-room-v1)  ; 67
+(:setup (and 
+    (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 ?b7 ?b8 ?b9 ?b10 - (either tall_cylindrical_block bridge_block flat_block cube_block cylindrical_block))
+        (game-optional (and 
+            (= (distance desk ?b1) (distance desk ?b2) (distance desk ?b3) (distance desk ?b4))
+            (= (distance desk ?b5) (distance desk ?b6) (distance desk ?b7))
+            (= (distance desk ?b8) (distance desk ?b9))
+            (< (distance desk ?b10) 2)
+            (< (distance desk ?b1) (distance desk ?b5))
+            (< (distance desk ?b5) (distance desk ?b8))
+            (< (distance desk ?b8) (distance desk ?b10))
+        ))
+    )
+    (forall (?c - chair) (game-conserved (not (adjacent_side desk front ?c))))
+))
+(:constraints (and 
+    (forall ((?b - ball))
+        (preference ballKnocksBlockFromRug (exists (?l - block)
+            (then 
+                (once (and (agent_holds ?b) (on rug agent)))
+                (hold-while 
+                    (and (not (agent_holds ?b)) (in_motion ?b))
+                    (touch ?b ?l)
+                    (in_motion ?l)
+                )
+            )
+        ))
+        (preference throwAttempt 
+            (then 
+                (once (and (agent_holds ?b) (on rug agent)))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (and (not (in_motion ?b))))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 16)
+)
+(:scoring maximize (+ 
+    (count-once-per-objects ballKnocksBlockFromRug:dodgeball)
+    (* 0.7 (count-once-per-objects ballKnocksBlockFromRug:basketball))
+    (* 0.5 (count-once-per-objects ballKnocksBlockFromRug:beachball))
+)))
+
+; 68 has subjective scoring -- I could attempt to objectify, but it's hard
+
+(define (game 61262b36d0426eaefdb70725) (:domain many-objects-room-v1)  ; 69
+(:setup (and 
+    (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) (game-conserved (adjacent ?c ?h)))
+))
+(:constraints (and 
+    (preference ballThrownThroughRampToBin (exists (?d - dodgeball ?c - curved_wooden_ramp ?h - hexagonal_bin)
+        (then 
+            (once (agent_holds ?d))
+            (hold-while 
+                (and (not (agent_holds ?d)) (in_motion ?d))
+                (touch ?d ?c)    
+            )
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+)
+(:scoring maximize
+    (count-nonoverlapping ballThrownThroughRampToBin)
+))
+
+(define (game 5fbbf3f438be4c025df6cdd4) (:domain many-objects-room-v1)  ; 70
+(:setup (and 
+    (forall (?c - chair) (game-conserved (not (adjacent_side desk front ?c))))
+    (exists (?h - hexagonal_bin ?c - curved_wooden_ramp ) 
+        (game-conserved (and 
+            (adjacent_side desk front ?c)
+            (adjacent_side ?h front ?c back)
+        ))
+    )
+    (forall (?o - (either golfball dodgeball triangle_block pyramid_block))
+        (game-optional (< (distance side_table ?o) 1))
+    )
+))
+(:constraints (and 
+    (forall (?o - (either golfball dodgeball triangle_block pyramid_block))
+        (preference objectLandsInBin (exists (?h - hexagonal_bin)
+            (then 
+                (once (and (adjacent agent bed) (agent_holds ?o)))
+                (hold (and (in_motion ?o) (not (agent_holds ?o))))
+                (once (and (not (in_motion ?o)) (in ?h ?o)))
+            )
+        ))
+        (preference thrownObjectHitsComputer (exists (?c - (either desktop laptop))
+            (then 
+                (once (and (adjacent agent bed) (agent_holds ?o)))
+                (hold (and (in_motion ?o) (not (agent_holds ?o))))
+                (once (touch ?o ?c))
+            )
+        ))
+    )
+    (preference golfballLandsInBinThroughRamp (exists (?g - golfball ?c - curved_wooden_ramp ?h - hexagonal_bin)
+        (then 
+            (once (and (adjacent agent bed) (agent_holds ?g)))
+            (hold-while 
+                (and (in_motion ?g) (not (agent_holds ?g)))
+                (touch ?c ?g)    
+            )
+            (once (and (not (in_motion ?g)) (in ?h ?g)))
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (count-nonoverlapping objectLandsInBin:triangle_block)
+    ( * 2 (count-nonoverlapping objectLandsInBin:pyramid_block))
+    ( * 2 (count-nonoverlapping objectLandsInBin:dodgeball))
+    ( * 3 (count-nonoverlapping objectLandsInBin:golfball))
+    ( * 3 (count-nonoverlapping golfballLandsInBinThroughRamp))
+    (* (- 1) (count-nonoverlapping thrownObjectHitsComputer))
+)))
+
+(define (game 60a696c3afad1b7f16b0c744) (:domain many-objects-room-v1)  ; 71
+(:setup (and 
+    (forall (?p - pillow) (game-conserved (on bed ?p)))
+    (forall (?b - bridge_block) (game-conserved (on floor ?b)))
+    (forall (?c - cylindrical_block) (game-conserved (exists (?o - (either pillow bridge_block)) (< (distance ?c ?o) 1))) )
+))
+(:constraints (and 
+    (preference dodgeballHitsPillowWithoutTouchingBlock (exists (?d - dodgeball ?p - pillow ?r - triangular_ramp) 
+        (then 
+            (once (and (adjacent agent ?r) (< (distance ?r desk) 1) (agent_holds ?d)))
+            (hold-while 
+                (and (in_motion ?d) (not (agent_holds ?d)) (not (exists (?c - cylindrical_block) (touch ?c ?d) )) )
+                (touch ?d ?p)    
+            )
+            (once (not (in_motion ?d)))
+        )
+    ))
+    (preference golfballUnderBridgeWithoutTouchingBlock (exists (?g - golfball ?b - bridge_block ?r - triangular_ramp) 
+        (then 
+            (once (and (adjacent agent ?r) (< (distance ?r desk) 1) (agent_holds ?g)))
+            (hold-while 
+                (and (in_motion ?g) (not (agent_holds ?g)) (not (exists (?c - cylindrical_block) (touch ?c ?g) )) )
+                (above ?g ?b)    
+            )
+            (once (not (in_motion ?g)))
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (count-nonoverlapping dodgeballHitsPillowWithoutTouchingBlock)
+    (count-nonoverlapping golfballUnderBridgeWithoutTouchingBlock)
+)))
+
+(define (game 5fa23c9b64b18a4067cc842e) (:domain many-objects-room-v1)  ; 72
+(:setup (and 
+    (exists (?t - teddy_bear) (game-optional (and (on bed ?t) (object_orientation ?t upright))))
+    (forall (?b - ball) (game-optional (< (distance ?b desk) 1)))
+))
+(:constraints (and  
+    (preference ballKnocksTeddy (exists (?b - ball ?t - teddy_bear ?c - chair))
+        (then 
+            (once (and 
+                (on ?c agent)
+                (adjacent ?c desk)
+                (agent_holds ?b)
+                (object_orientation ?t upright)
+            ))
+            (hold-while 
+                (and (in_motion ?b) (not (agent_holds ?b)))
+                (touch ?b ?t)    
+            )
+            (once (not (object_orientation ?t upright)))
+        )
+    )
+))
+(:terminal
+    (>= (count-nonoverlapping ballKnocksTeddy) 7)
+)
+(:scoring maximize
+    (count-nonoverlapping ballKnocksTeddy)
+))
+
+(define (game 60ef5b1cf52939a80af77543) (:domain many-objects-room-v1)  ; 73
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (< (distance ?h room_center) 1)))
+    (forall (?d - dodgeball) (game-optional (on desk ?d)))
+))
+(:constraints (and 
+    (preference dodgeballThrownToBinFromDesk (exists (?d - dodgeball ?h - hexagonal_bin) 
+        (then 
+            (once (and (adjacent agent desk) (agent_holds ?d)))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+))
+(:scoring maximize
+    (count-nonoverlapping dodgeballThrownToBinFromDesk)
+))
+
+(define (game 613bd3a683a2ac56a4119aa6) (:domain many-objects-room-v1)  ; 74
+(:setup (and 
+    (game-conserved (exists (?h - hexagonal_bin ?p - pillow) (< (distance ?h ?p) 3)))
+))
+(:constraints (and 
+    (preference golfballInBinFromPillow (exists (?g - golfball ?h - hexagonal_bin ?p - pillow) 
+        (then 
+            (once (and (adjacent agent ?p) (agent_holds ?g) (is_setup_object ?p) ))
+            (hold (and (in_motion ?g) (not (agent_holds ?g))))
+            (once (and (not (in_motion ?g)) (in ?h ?g)))
+        )
+    ))
+    (preference throwAttempt (exists (?g - golfball)
+        (then
+            (once (agent_holds ?g))
+            (hold (and (in_motion ?g) (not (agent_holds ?g))))
+            (once (not (in_motion ?g)))
+        )
+    ))
+))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 10)
+)
+(:scoring maximize
+    (* 5 (count-nonoverlapping golfballInBinFromPillow))
+))
+
+
+(define (game 612fc78547802a3f177e0d53) (:domain few-objects-room-v1)  ; 75
+(:setup )
+(:constraints (and 
+    (preference ballDroppedInBin (exists (?b - ball ?h - hexagonal_bin) 
+        (then 
+            (once (and (adjacent agent ?h) (agent_holds ?b)))
+            (hold (and (in_motion ?b) (not (agent_holds ?b))))
+            (once (and (not (in_motion ?b)) (in ?h ?b)))
+        )
+    ))
+    (preference dropAttempt (exists (?b - ball ?h - hexagonal_bin) 
+        (then 
+            (once (and (adjacent agent ?h) (agent_holds ?b)))
+            (hold (and (in_motion ?b) (not (agent_holds ?b))))
+            (once (not (in_motion ?b)))
+        )
+    ))
+))
+(:terminal (or 
+    (>= (count-nonoverlapping dropAttempt) 5)
+    (>= (count-nonoverlapping ballDroppedInBin) 1)
+))
+(:scoring maximize
+    (* 5 (count-nonoverlapping ballDroppedInBin))
+))
+
+
+(define (game 5d0ba121619661001a7f4fe6) (:domain few-objects-room-v1)  ; 76
+(:setup )
+(:constraints (and 
+    (forall (?c - (either pink yellow))
+        (preference blockToBinFromRug (exists (?b - cube_block ?h - hexagonal_bin)
+            (then 
+                (once (and (agent_holds ?b) (rug_color_under agent ?c)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and 
+                    (not (in_motion ?b)) 
+                    (or 
+                        (in ?h ?b)
+                        (exists (?bl - building) (and 
+                            (in ?bl ?b)
+                            (in ?h bl)
+                        ))  
+                    )
+                ))
+            )
+        ))
+        (preference blockThrowAttempt (exists (?b - cube_block)
+            (then 
+                (once (and (agent_holds ?b) (rug_color_under agent ?c)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (not (in_motion ?b)))
+            )
+        ))
+    )
+    (preference blockKnockedFromBuildingInBin (exists (?d - dodgeball ?h - hexagonal_bin ?bl - building ?b - block))
+        (then
+            (once (and 
+                (agent_holds ?d)
+                (rug_color_under agent yellow)
+                (in ?bl ?b)
+                (in ?h ?bl)
+            ))
+            (hold-while  
+                (and (in_motion ?d) (not (agent_holds ?d)))
+                (touch ?d ?b)
+                (in_motion ?b)    
+            )
+            (once (and (not (in_motion ?d)) (not (in_motion ?b)) (not (in ?bl ?b))))
+        )
+    )
+    (preference ballThrowAttempt (exists (?d - dodgeball)
+        (then 
+            (once (and (agent_holds ?d) (rug_color_under agent yellow)))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (not (in_motion ?d)))
+        )
+    ))
+))
+(:terminal (and 
+    (or 
+        (>= (count-once-per-objects blockToBinFromRug) 6)
+        (>= (count-nonoverlapping blockThrowAttempt) 18)
+    )
+    (>= (count-nonoverlapping ballThrowAttempt) 2)  
+))
+(:scoring maximize (+ 
+    (* 10 (count-once-per-objects blockToBinFromRug:pink))
+    (* 10 (count-once-per-objects blockToBinFromRug:yellow))
+    (* 15 (= (count-once-per-objects blockToBinFromRug:yellow) 6))
+    (* 15 (<= (count-nonoverlapping blockThrowAttempt) 18))
+    (* 20 (count-once-per-objects blockKnockedFromBuildingInBin))
+)))
+
+
+(define (game 616da508e4014f74f43c8433) (:domain many-objects-room-v1)  ; 77
+(:setup 
+)
+(:constraints (and 
+    (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once-measure (agent_holds ?d) (distance agent ?h))
+            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+)) 
+(:scoring maximize (count-nonoverlapping-measure throwToWallAndBack)
+))
+
+
+(define (game 5eeb326764eb142830aa5cfb) (:domain medium-objects-room-v1)  ; 78
+(:setup (and 
+    (exists (?t - teddy_bear) (game-optional (and 
+        (adjacent_side bed front_left_corner ?t)
+        (object_orientation ?t upright)   
+    )))
+    (exists (?b - beachball) (game-optional (and 
+        (< (distance-side bed front_left_corner ?b) 1)
+        (on floor ?b)
+    )))
+    (forall (?o - (either hexagonal_bin basketball)) 
+        (game-conserved (< (distance ?o side_table) 1))
+    )
+))
+(:constraints (and 
+    (preference throwMovesBeachballWithoutKnockingTeddy (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggeie_bed)
+        (then 
+            (once (and (agent_holds ?d) (< (distance agent ?db) 1) (object_orientation ?t upright)))
+            (hold-while 
+                (and (in_motion ?d) (not (agent_holds ?d)) (not agent_holds ?t))
+                (touch ?d ?b)
+                (in_motion ?b)    
+            )
+            (once (and (not (in_motion ?d)) (not (in_motion ?b)) (object_orientation ?t upright)))
+        )
+    ))
+    (preference throwKnocksOverBear (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggeie_bed)
+        (then 
+            (once (and (agent_holds ?d) (< (distance agent ?db) 1) (object_orientation ?t upright)))
+            (hold (and (in_motion ?d) (not (agent_holds ?d)) (not agent_holds ?t)))
+            (once (and (not (in_motion ?d)) (not (in_motion ?b)) (not (object_orientation ?t upright))))
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (* 3 (count-nonoverlapping throwMovesBeachballWithoutKnockingTeddy))
+    (* (- 1) (count-nonoverlapping throwKnocksOverBear))
+)))
+
+
+(define (game 5ba855d47c0ebe0001272f70) (:domain many-objects-room-v1)  ; 79
+(:setup )
+(:constraints (and 
+    (preference throwGolfballToBin (exists (?g - golfball ?h - hexagonal_bin)
+        (then
+            (once (agent_holds ?g))
+            (hold (and (not (agent_holds ?g)) (in_motion ?g)))
+            (once (and (not (in_motion ?g)) (in ?h ?g)))
+        )
+    ))
+))
+(:scoring maximize (count-nonoverlapping throwGolfballToBin))
+))
+
+
+(define (game 5ea3a20ac30a773368592f9e) (:domain few-objects-room-v1)  ; 80
+(:setup )
+(:constraints (and 
+    (preference pinkObjectMovedToRoomCenter (exists (?o - game_object)
+        (then 
+            (once (and (agent_holds ?o) (= (color ?o) pink)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)))
+        )
+    ))
+    (preference blueObjectMovedToRoomCenter (exists (?o - game_object)
+        (then 
+            (once (and (agent_holds ?o) (= (color ?o) blue)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+                (exists (?o1 - game_object) (and 
+                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                ))
+            ))
+        )
+    ))
+    (preference brownObjectMovedToRoomCenter (exists (?o - game_object)
+        (then 
+            (once (and (agent_holds ?o) (= (color ?o) brown)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+                (exists (?o1 ?o2 - game_object) (and 
+                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                ))
+            ))
+        )
+    ))
+    (preference pillowMovedToRoomCenter (exists (?o - pillow)
+        (then 
+            (once (and (agent_holds ?o)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+                (exists (?o1 ?o2 ?o3 - game_object) (and 
+                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
+                ))
+            ))
+        )
+    ))
+    (preference greenObjectMovedToRoomCenter (exists (?o - game_object)
+        (then 
+            (once (and (agent_holds ?o) (= (color ?o) green)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+                (exists (?o1 ?o2 ?o3 ?o4 - game_object) (and 
+                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
+                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
+                ))
+            ))
+        )
+    ))
+    (preference tanObjectMovedToRoomCenter (exists (?o - game_object)
+        (then 
+            (once (and (agent_holds ?o) (= (color ?o) tan)))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+                (exists (?o1 ?o2 ?o3 ?o4 ?o5 - game_object) (and 
+                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
+                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
+                    (= (color ?o5) green) (< (distance room_center ?o5) 1)  
+                ))
+            ))
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (count-once pinkObjectMovedToRoomCenter)
+    (count-once blueObjectMovedToRoomCenter)
+    (count-once brownObjectMovedToRoomCenter)
+    (count-once pillowMovedToRoomCenter)
+    (count-once greenObjectMovedToRoomCenter)
+    (count-once tanObjectMovedToRoomCenter)
+)))
+
+(define (game 5fdee4d96a36576ca62e4518) (:domain many-objects-room-v1)  ; 81
+(:setup (and 
+    (exists (?h - hexagonal_bin ?r1 ?r2 - (either triangular_ramp curved_wooden_ramp)) 
+        (game-conserved (and 
+            (adjacent ?h desk)
+            (< (distance ?h ?r1) 1)
+            (< (distance ?h ?r2) 1)
+            (not (exists (?o - game_object) (adjacent_side ?h front ?o)))
+        ))
+    )
+))
+(:constraints (and 
+    (preference dodgeballFromRugToBin (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once (and (agent_holds ?d) (on rug agent)))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+))
+(:terminal 
+    (>= (count-nonoverlapping dodgeballFromRugToBin) 3)
+)
+(:scoring maximize
+    (count-nonoverlapping dodgeballFromRugToBin)
+))
+
+(define (game 6172378d423fdf1acdc2d212) (:domain many-objects-room-v1)  ; 82
+(:setup )
+(:constraints (and 
+    (preference ballThrownToBin (exists (?b - ball ?h - hexagonal_bin)
+        (then 
+            (once (agent_holds ?b))
+            (hold (and (in_motion ?b) (not (agent_holds ?b))))
+            (once (and (not (in_motion ?b)) (in ?h ?b)))
+        )
+    ))
+))
+(:terminal 
+    (>= (total-time) 300)
+)
+(:scoring maximize
+    (count-nonoverlapping ballThrownToBin)
+))
+
+(define (game 5bdfb648484288000130dad0) (:domain many-objects-room-v1)  ; 83
+(:setup (and 
+    (exists (?h - hexagonal_bin ?c1 ?c2 - chair) (game-conserved (and 
+        (object_orientation ?h sideways)
+        (between ?c1 ?h ?c2)
+    )))
+))
+(:constraints (and
+    (forall (?b - (either dodgeball golfball))
+        (prefereance ballToBinFromBed (exists (?h - hexagonal_bin)
+            (then 
+                (once (and (agent_holds ?b) (adjacent bed agent)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and (not (in_motion ?b)) (in ?h ?b)))
+            )
+        ))
+    )
+))
+(:scoring maximize (+ 
+    (count-once-per-objects ballToBinFromBed:dodgeball)
+    (* (= (count-once-per-objects ballToBinFromBed:dodgeball) 3) (count-once-per-objects ballToBinFromBed:golfball))
+)))
+
+; 84 is a hiding game -- invalid
+
+(define (game 61272733b6c8fe076880e02c) (:domain few-objects-room-v1)  ; 85
+(:setup )
+(:constraints (and 
+    (forall (?c - color)
+        (preference cubeThrownToBin (exists (?h - hexagonal_bin ?b - cube_block)
+            (then 
+                (once (and 
+                    (agent_holds ?b) 
+                    (rug_color_under agent pink) 
+                    (= (color ?b) ?c)
+                    (not (exists (?ob - cube_block) (in ?h ?ob)))
+                ))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and (not (in_motion ?b)) (in ?h ?b)))
+            )
+        ))
+    )
+    (forall (?b - cube_block)
+        (preference throwAttempt 
+            (then 
+                (once (and 
+                    (agent_holds ?b) 
+                    (rug_color_under agent pink) 
+                    (not (exists (?ob - cube_block) (in ?h ?ob)))
+                ))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
+))
+(:terminal (or 
+    (>= (count-maximal-nonoverlapping throwAttempt) 2)
+    (>= (count-once-per-objects throwAttempt) 6)
+))
+(:scoring maximize (+ 
+    (count-once-per-objects cubeThrownToBin:yellow)
+    (* 2 (count-once-per-objects cubeThrownToBin:tan))
+    (* 3 (count-once-per-objects cubeThrownToBin:blue))
+    (* (- 1) (count-once-per-objects throwAttempt))
+)))
+
+; 86 is a dup of 84 -- and is aldo invalid
+
+(define (game 6158d01f302cf46b673dd597) (:domain few-objects-room-v1)  ; 87
+(:setup (and 
+    (exists (?h - hexagonal_bin ?w - wall) (game-conserved (and 
+        (on desk ?h)
+        (adjacent ?h ?w)
+    )))
+))
+(:constraints (and 
+    (forall (?o - (either dodgeball block)) 
+        (preference basketMadeFromRug (exists (?h - hexagonal_bin)
+            (then 
+                (once (and (agent_holds ?o) (on rug agent)))
+                (hold (and (in_motion ?o) (not (agent_holds ?o))))
+                (once (and (not (in_motion ?o)) (in ?h ?o)))
+            )
+        ))
+    )
+))
+(:scoring maximize (+ 
+    (count-nonoverlapping basketMadeFromRug:dodgeball)
+    (* 2 (count-nonoverlapping basketMadeFromRug:block))
+)))
+
+
+(define (game 5fefd5b2173bfbe890bc98ed) (:domain few-objects-room-v1)  ; 88
+(:setup (and 
+    (exists (?h - hexagonal_bin ?p - pillow ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
+        (game-conserved (and 
+            (on bed ?h)
+            (not (object_orientation ?p sideways))
+            (not (object_orientation ?p upright))
+            (not (object_orientation ?p upside_down))
+            (adjacent_side ?h left ?b1)
+            (on bed ?b1)
+            (on ?b1 ?b2)
+            (on ?b2 ?b3)
+            (adjacent_side ?h right ?b4)
+            (on bed ?b4)
+            (on ?b4 ?b5)
+            (on ?b5 ?b6)
+        ))
+    )
+))
+(:constraints (and 
+    (preference throwFromEdgeOfRug (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once (and 
+                (agent_holds ?d) 
+                (on floor agent)
+                (adjacent rug agent)
+                (> (distance agent bed) 2)
+            ))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+    (preference throwAttempt (exists (?d - dodgeball)
+        (then 
+            (once (and 
+                (agent_holds ?d) 
+                (on floor agent)
+                (adjacent rug agent)
+                (> (distance agent bed) 2)
+            ))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (not (in_motion ?d)))
+        )
+    ))
+    (preference throwAttemptKnocksBlock (exists (?d - dodgeball ?c - cube_block)
+        (then 
+            (once (and 
+                (agent_holds ?d) 
+                (on floor agent)
+                (adjacent rug agent)
+                (> (distance agent bed) 2)
+            ))
+            (hold-while 
+                (and (in_motion ?d) (not (agent_holds ?d)))
+                (touch ?d ?c)
+                (in_motion ?c)
+            )
+            (once (not (in_motion ?d)))
+        )
+    ))
+))
+(:terminal (or 
+    (>= (count-nonoverlapping throwAttempt) 10)
+    ; TODO: there's also a "streak of three misses ends the game" constraint that I'm currently omittting
+    (>= (count-once throwAttemptKnocksBlock) 1)
+    (>= (total-score) 5)
+))
+(:scoring maximize 
+    (count-nonoverlapping throwFromEdgeOfRug)
+))
+
+(define (game 6103ec2bf88328284fd894bc) (:domain medium-objects-room-v1)  ; 89
+(:setup (and 
+    (exists (?d - desktop ?h - hexagonal_bin) (game-conserved (and 
+        (on desk ?h)
+        (not (on desk ?d))
+    )))
+))
+(:constraints (and 
+    (forall (?b - ball)
+        (preference ballThrownFromRug (exists (?h - hexagonal_bin) 
+            (then
+                (once (and (agent_holds ?b) (on rug agent)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and (not (in_motion ?b)) (in ?h ?b)))
+            )
+        ))
+    )
+))
+(:terminal
+    (>= (total-time) 180)
+    (>= (total-score) 10)
+)
+(:scoring maximize (+ 
+    (count-nonoverlapping ballThrownFromRug:dodgeball)
+    (* 2 (count-nonoverlapping ballThrownFromRug:basketball))
+    (* 10 (count-nonoverlapping ballThrownFromRug:beachball))
+)))
+
+(define (game 5f511e9381da7d30c91a46a2) (:domain many-objects-room-v1)  ; 90
+(:setup )
+(:constraints (and 
+    (preference dodgeballBouncesOnceToDoggieBed (exists (?d - dodgeball ?b - doggie_bed)
+        (then
+            (once (agent_holds ?d))
+            (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
+            (once (touch floor ?d))
+            (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
+            (once (and (not (in_motion ?d)) (on ?b ?d)))
+        )
+    ))
+))
+(:scoring maximize
+    (count-nonoverlapping dodgeballBouncesOnceToDoggieBed)
+))
+
+; 91 is a dup of 89 wit slightly different scoring numbers
+
+; 92 is a hiding game -- invalid
+
+(define (game 60a6ba026f8bd75b67b23c97) (:domain many-objects-room-v1)  ; 93
+(:setup )
+(:constraints (and 
+    (preference throwBallToBin (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once (agent_holds ?d))
+            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+))
+(:scoring maximize
+    (count-nonoverlapping throwBallToBin)
+))
+
+
+(define (game 5cdad620eae6f70019d4e950) (:domain many-objects-room-v1)  ; 94
+(:setup )
+(:constraints (and 
+    (forall (?b - (either dodgeball golfball))
+        (preference ballThrownFromDoor (exists (?h - hexagonal_bin) 
+            (then
+                (once (and (agent_holds ?b) (adjacent door agent)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and (not (in_motion ?b)) (in ?h ?b)))
+            )
+        ))
+        (preference throwAttemptFromDoor 
+            (then
+                (once (and (agent_holds ?b) (adjacent door agent)))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count-nonoverlapping throwAttemptFromDoor) 8)
+)
+(:scoring maximize (+ 
+    (* 3 (count-nonoverlapping ballThrownFromDoor:dodgeball))
+    (* 6 (count-nonoverlapping ballThrownFromDoor:golfball))
+)))
+
+; 95 requires counting something that happens during a preference
+
+; 96 requires is underconstrainted -- I'm omitting it for now
+
+
+(define (game 5b6a87d2cda8590001db8e07) (:domain medium-objects-room-v1)  ; 97
+(:setup )
+(:constraints (and 
+    (preference ballThrownToRug (exists (?d - red_dodgeball)
+        (then
+            (once (and (agent_holds ?d) (not (on rug agent))))
+            (hold (and (in_motion ?d) (not (agent_holds ?d))))
+            (once (and (not (in_motion ?d)) (on rug ?d)))
+        )
+    ))
+))
+(:terminal 
+    (>= (total-time) 60)
+)
+(:scoring maximize
+    (count-nonoverlapping ballThrownToRug)
+))
+))
+
+(define (game 5f038dc85819b15b08840dfd) (:domain medium-objects-room-v1)  ; 98
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (not (exists (?s - shelf) (above ?h ?s)))))
+    (forall (?b - ball) (game-optional (on bed ?b)))
+))
+(:constraints (and 
+    (forall (?b - ball) 
+        (preference ballThrownToBin (exists (?h - hexagonal_bin)
+            (then
+                (once (and (agent_holds ?b) (or (on bed agent) (adjacent bed agent))))
+                (hold (and (in_motion ?b) (not (agent_holds ?b))))
+                (once (and (not (in_motion ?b)) (in ?h ?b)))
+            )  
+        ))
+    )
+))
+(:terminal
+    (>= (total-score) 6)
+)
+(:scoring maximize
+    (count-once-per-objects ballThrownToBin:beachball)
+    (* 2 (count-once-per-objects ballThrownToBin:basketball))
+    (* 3 (count-once-per-objects ballThrownToBin:dodgeball))
+))
+
+
+(define (game 5fbd9bcc54453f1b0b28d89a) (:domain few-objects-room-v1)  ; 99
+(:setup )
+(:constraints (and 
+    (preference cubeBlockFromBedToShelf (exists (?c - cube_block ?s - shelf)
+        (then 
+            (once (and (agent_holds ?c) (adjacent bed agent)))
+            (hold (and (in_motion ?c) (not (agent_holds ?c))))
+            (once (and (not (in_motion ?c)) (on ?s ?c)))
+        )
+    ))
+    (preference cubeBlockThrowAttempt (exists (?c - cube_block)
+        (then 
+            (once (and (agent_holds ?c) (adjacent bed agent)))
+            (hold (and (in_motion ?c) (not (agent_holds ?c))))
+            (once (not (in_motion ?c)))
+        )
+    ))
+))
+(:terminal 
+    (>= (count-nonoverlapping cubeBlockThrowAttempt) 3)
+)
+(:scoring maximize
+    (count-nonoverlapping cubeBlockFromBedToShelf)
+))
+

@@ -72,7 +72,8 @@
                     "to": { 
                         "type": "array",
                         "items": {"$ref": "#/$defs/objectWithPredicates"}
-                    }
+                    },
+                    "condition": { "enum": ["order"] }
                 },
                 "required": ["what", "to"]
             }

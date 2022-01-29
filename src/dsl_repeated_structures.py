@@ -23,17 +23,19 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/dsl_repeated_structures.csv'
+DEFAULT_OUTPUT_PATH ='./data/dsl_repeated_structures_pref_body.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 parser.add_argument('-p', '--replace-predicate-names', action='store_true')
+parser.add_argument('-b', '--build-function', default='build_preference_body_level_extractor')
 
 
-DEFAULT_STRUCTURE_STARTS = ('then', 'always', 'at-end')
+PREFERENCE_BODY_STRUCTURE_STARTS = ('then', 'always', 'at-end')
+TEMPORAL_OPERATOR_STRUCTURE_STARTS = ('once', 'hold', 'hold-while')
 DEFAULT_HEADERS = ('structure_start', 'structure', 'count')
 
 
 class RepeatedStructureExtractor(ASTParser):
-    def __init__(self, structure_starts=DEFAULT_STRUCTURE_STARTS, headers=DEFAULT_HEADERS):
+    def __init__(self, structure_starts, headers=DEFAULT_HEADERS):
         self.structure_starts = structure_starts
         self.headers = headers
 
@@ -72,12 +74,12 @@ class RepeatedStructureExtractor(ASTParser):
 
     def _extract_structures_from_str(self, ast_str):
         for structure_start in self.structure_starts:
-            structure_start_re = re.compile(structure_start)
+            structure_start_re = re.compile(f'\\({structure_start}')
             structure_start_matches = structure_start_re.finditer(ast_str)
 
             for structure_start_match in structure_start_matches:
-                structure_start_index = structure_start_match.start() - 1
-                n_open_parens = 1
+                structure_start_index = structure_start_match.start()
+                n_open_parens = 0
 
                 for end_index in range(structure_start_index, len(ast_str)):
                     if ast_str[end_index] == ')':
@@ -143,14 +145,22 @@ def _swap_fake_predicate(ast, key):
     update_ast(ast, key, fake_pred)
 
 
-def build_variables_and_objects_extractor(args, replace_predicate_names=False, 
+def build_temporal_operator_level_extractor(args):
+    return build_variables_and_objects_extractor(args, TEMPORAL_OPERATOR_STRUCTURE_STARTS)
+
+
+def build_preference_body_level_extractor(args):
+    return build_variables_and_objects_extractor(args, PREFERENCE_BODY_STRUCTURE_STARTS)
+
+
+def build_variables_and_objects_extractor(args, structure_starts, replace_predicate_names=False, 
     replace_non_variable_args=True, variable_replacement='?x', non_variable_replacement='?x',
     replace_comparison_numbers=True, number_replacement='0', type_replacement='object_type'):
 
     if args.replace_predicate_names:
         replace_predicate_names = args.replace_predicate_names
 
-    extractor = RepeatedStructureExtractor(DEFAULT_STRUCTURE_STARTS)
+    extractor = RepeatedStructureExtractor(structure_starts)
     
     def handle_predicate(ast, **kwargs):
         if replace_predicate_names and 'pred_name' in ast:
@@ -224,7 +234,7 @@ def build_variables_and_objects_extractor(args, replace_predicate_names=False,
     return extractor
 
 def build_oversimplified_structure_extractor(args):
-    extractor = RepeatedStructureExtractor(DEFAULT_STRUCTURE_STARTS)
+    extractor = RepeatedStructureExtractor(PREFERENCE_BODY_STRUCTURE_STARTS)
     
     # def handle_predicate(ast, **kwargs):
     #     if 'pred_name' in ast:
@@ -281,7 +291,11 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    extractor = build_variables_and_objects_extractor(args)
+    if args.build_function in globals():
+        extractor = globals()[args.build_function](args)
+    
+    else:
+        raise ValueError(f'Unknown build function: {args.build_function}')
 
     for test_file in args.test_files:
         test_cases = load_tests_from_file(test_file)

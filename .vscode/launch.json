@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-p"
+               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal"
         },

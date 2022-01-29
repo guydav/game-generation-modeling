@@ -989,6 +989,417 @@
                     "to": [{"object": "bed"}]
                 }
             ]
+        },
+        {
+            "metadata": {
+                "prolific_id": "5f806f22e8159d0913945e35",
+                "id": "sarF2f4w4geYW16PILR2",
+                "index": 66,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "doggie_bed", "predicates": [{"predicate": "on"}]}],
+                "goal": ["nearest"],
+                "to": [
+                    {"object": "cube_block", "predicates": [{"predicate": "same_color", "object": "cylindrical_block"}]},
+                    {"object": "cube_block", "predicates": [{"predicate": "same_color", "object": "tall_cylindrical_block"}]},
+                    {"object": "bridge_block", "predicates": [{"predicate": "same_color", "object": "cylindrical_block"}]},
+                    {"object": "bridge_block", "predicates": [{"predicate": "same_color", "object": "tall_cylindrical_block"}]}
+                ]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "61262b36d0426eaefdb70725",
+                "id": "I1OpGx1BtTByOehoxKDq",
+                "index": 69,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "on": [{"object": "curved_wooden_ramp", "predicates": [{"object": "hexagonal_bin",  "predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5fbbf3f438be4c025df6cdd4",
+                "id": "EeEZO5cBjEuKYTBYmfHX",
+                "index": 70,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["triangle_block", "pyramid_block", "dodgeball", "golfball"],
+                "from": [{"object": "bed", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [
+                    {"object": "desk", "predicate": "adjacent"},
+                    {"object": "curved_wooden_ramp", "predicate": "adjacent"}
+                ]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "60a696c3afad1b7f16b0c744",
+                "id": "XexzCkW95vUcVYAFhSA9",
+                "index": 71,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "golfball"],
+                "from": [{"object": "triangular_ramp", "predicates": [{ "predicate": "adjacent"}, {"object": "desk", "predicate": "near"}]}],
+                "goal": ["hit", "under"],
+                "to": [
+                    {"object": "pillow", "predicates": [{"object": "bed", "predicate": "on"}]},
+                    {"object": "bridge_block", "predicates": [{"object": "floor", "predicate": "on"}]}
+                ]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5fa23c9b64b18a4067cc842e",
+                "id": "gPJmGRgPdHSlBI7IMc3z",
+                "index": 72,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "golfball", "beachball"],
+                "from": [{"object": "chair", "predicates": [{"predicate": "on"}, {"object": "desk", "predicate": "adjacent"}]}],
+                "goal": ["knock_over"],
+                "to": [{"object": "teddy_bear", "predicates": [{"object": "bed", "predicate": "on"}, {"predicate": "upright"}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "60ef5b1cf52939a80af77543",
+                "id": "7r4cgxJHzLJooFaMG1Rd",
+                "index": 73,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "desk", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "room_center", "predicate": "near"}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "613bd3a683a2ac56a4119aa6",
+                "id": "1HOTuIZpRqk2u1nZI1v1",
+                "index": 74,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "pillow", "predicates": [{"predicate": "adjacent"}, {"object": "hexagonal_bin", "predicate": "near"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "612fc78547802a3f177e0d53",
+                "id": "QyX7AlBzBW8hZHsJeDWI",
+                "index": 75,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["ball"],
+                "from": [{"object": "hexagonal_bin", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5d0ba121619661001a7f4fe6",
+                "id": "vfh1MTEQorWXKy8jOP1x",
+                "index": 76,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["cube_block", "dodgeball"],
+                "from": [
+                    {"object": "rug", "predicates": [
+                        {"object": "pink", "predicate": "rug_color_under"}, 
+                        {"object": "yellow", "predicate": "rug_color_under"}
+                    ]},
+                    {"object": "rug", "predicates": [
+                        {"object": "yellow", "predicate": "rug_color_under"}
+                    ]}],
+                "goal": ["in", "knock_over"],
+                "to": [
+                    {"object": "hexagonal_bin"},
+                    {"object": "building", "predicates": [{"object": "hexagonal_bin", "predicate": "in"}]}
+                ]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "616da508e4014f74f43c8433",
+                "id": "f2WUeVzu41E9Lmqmr2FJ",
+                "index": 77,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5eeb326764eb142830aa5cfb",
+                "id": "Tcfpwc8v8HuKRyZr5Dyc",
+                "index": 78,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "doggie_bed", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["move"],
+                "to": [{"object": "beachball", "predicates": [{"object": "teddy_bear", "predicate": "upright"}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5ba855d47c0ebe0001272f70",
+                "id": "FyGQn1qJCLTLU1hfQfZ2",
+                "index": 79,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["golfball"],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5ea3a20ac30a773368592f9e",
+                "id": "9C0wMm4lzrJ5JeP0irIu",
+                "index": 80,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "organizing": [
+                {
+                    "what": ["pink_object", "blue_object", "brown_object", "pillow", "green_object", "tan_object"],
+                    "to": "room_center",
+                    "condition": "order"
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "prolific_id": "5fdee4d96a36576ca62e4518",
+                "id": "39PytL3fAMFkYXNoB5l6",
+                "index": 81,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "triangular_ramp", "predicate": "near"}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "6172378d423fdf1acdc2d212",
+                "id": "WtZpe3LQFZiztmh7pBBC",
+                "index": 82,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["ball"],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5bdfb648484288000130dad0",
+                "id": "79X7tsrbEIu5ffDGnY8q",
+                "index": 83,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "golfball"],
+                "from": [{"object": "bed", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [
+                    {"predicate": "sideways"},
+                    {"object": "chair", "predicate": "between"}
+                ]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "61272733b6c8fe076880e02c",
+                "id": "9dQSLmtxxIBy0Rsnc8uu",
+                "index": 85,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["cube_block"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}, {"object": "pink", "predicate": "rug_color_under"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "6158d01f302cf46b673dd597",
+                "id": "6ZjBeRCvHxG05ORmhInj",
+                "index": 87,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["cube_block", "dodgeball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5fefd5b2173bfbe890bc98ed",
+                "id": "SQErBa5s5TPVxmm8R6ks",
+                "index": 88,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in", "not_knock"],
+                "to": [{"object": "hexagonal_bin"}, {"object": "building", "predicates": {"predicate": "adjacent", "object": "hexagonal_bin"}}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "6103ec2bf88328284fd894bc",
+                "id": "ktwB7wT09sh4ivNme3Dw",
+                "index": 89,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["ball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "desktop", "predicate": "near", "negate": true}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5f511e9381da7d30c91a46a2",
+                "id": "xMUrxzK3fXjgitdzPKsm",
+                "index": 90,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball"],
+                "goal": ["on"],
+                "on": [{"object": "floor"}],
+                "to": [{"object": "doggie_bed"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "60a6ba026f8bd75b67b23c97",
+                "id": "R9nZAvDq7um7Sg49yf8T",
+                "index": 93,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": { 
+                "what": ["dodgeball"],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5cdad620eae6f70019d4e950",
+                "id": "IvoZWi01FO2uiNpNHyci",
+                "index": 94,
+                "room": "many_objects",
+                "notes": ""
+            },
+            "throwing": { 
+                "what": ["dodgeball"],
+                "from": [{"object": "door", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5b6a87d2cda8590001db8e07",
+                "id": "4WUtnD8W6PGVy0WBtVm4",
+                "index": 97,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": { 
+                "what": ["red_dodgeball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on", "negate": true}]}],
+                "goal": ["on"],
+                "to": [{"object": "rug"}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5f038dc85819b15b08840dfd",
+                "id": "5lTRHBueXsaOu9yhvOQo",
+                "index": 98,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": { 
+                "what": ["dodgeball"],
+                "from": [{"object": "bed", "predicates": [{"predicate": "on"}, {"predicate": "adjacent"}]}],
+                "goal": ["in"],
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "shelf", "predicate": "above", "negate": true}]}]
+            }
+        },
+        {
+            "metadata": {
+                "prolific_id": "5fbd9bcc54453f1b0b28d89a",
+                "id": "8cc9xnijzmS7uwGDaAoL",
+                "index": 99,
+                "room": "few_objects",
+                "notes": ""
+            },
+            "throwing": { 
+                "what": ["cube_block"],
+                "from": [{"object": "bed", "predicates": [{"predicate": "adjacent"}]}],
+                "goal": ["on"],
+                "to": [{"object": "shelf"}]
+            }
         }
     ]   
 }

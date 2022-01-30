@@ -31,7 +31,7 @@
                 },
                 "goal": {
                     "type": "array", 
-                    "items": {"enum": ["in", "over", "hit", "on"]}
+                    "items": {"enum": ["in", "over", "hit", "on", "nearest", "knock_over", "move", "not_knock", "under"]}
                 },
                 "to": {
                     "type": "array",
@@ -73,7 +73,7 @@
                         "type": "array",
                         "items": {"$ref": "#/$defs/objectWithPredicates"}
                     },
-                    "condition": { "enum": ["order"] }
+                    "condition": { "enum": ["order", "same_color"] }
                 },
                 "required": ["what", "to"]
             }
@@ -110,7 +110,7 @@
             {"const": "agent"}
         ]},
         "schemaReferences": {"enum": ["from"]},
-        "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door", "desk_shelf"]},
+        "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door", "desk_shelf", "side_table", "south_sliding_door", "top_shelf", "south_west_corner"]},
 
         "moveableObject": {"anyOf": [
             {"$ref": "#/$defs/throwingObject"}, 
@@ -118,10 +118,10 @@
             {"$ref": "#/$defs/otherObject"},
             {"const": ""}
         ]},
-        "throwingObject": {"enum": ["ball", "golfball", "dodgeball", "basketball", "beachball", "teddy_bear", "book", "cube_block", "laptop", "pink_dodgeball", "green_golfball", "alarm_clock", "cellphone", "mug", "key_chain", "cd", "game_object"]},
+        "throwingObject": {"enum": ["ball", "golfball", "dodgeball", "basketball", "beachball", "teddy_bear", "book", "cube_block", "laptop", "pink_dodgeball", "green_golfball", "alarm_clock", "cellphone", "mug", "key_chain", "cd", "game_object", "red_dodgeball", "blue_cube_block", "yellow_cube_block", "triangle_block", "pyramid_block", "pillow"]},
         "buildingObject": {"enum": ["any", "block", "pyramid_block", "bridge_block", "flat_block", "tall_cylindrical_block", "cube_block", "cylindrical_block", "triangular_block", "hexagonal_bin", "game_object"] },
-        "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_triangular_ramp", "desktop", "blinds", "pencil", "pen"]},
+        "otherObject": {"enum": ["doggie_bed", "curved_wooden_ramp",  "hexagonal_bin", "pillow", "chair", "triangular_ramp", "key_chain", "cellphone", "mug", "cd", "watch", "credit_card", "alarm_clock", "main_light_switch", "small_ramp", "green_triangular_ramp", "desktop", "blinds", "pencil", "pen", "pink", "yellow", "pink_object", "blue_object", "brown_object", "pillow", "green_object", "tan_object"]},
 
-        "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "faces", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in"]}
+        "predicate": {"enum": ["left", "right", "adjacent", "on", "open", "upside_down", "left", "near", "faces", "touch", "opposite", "equal", "equal_z_position", "toggled_on", "in", "sideways", "above", "behind", "rug_color_under", "between", "upright", "same_color", "equal_x_position", "greater_x_position"]}
     }
 } 

@@ -323,10 +323,10 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
                 _inline_format_function_eval(caller, ast.comp_func_2.rule, ast.comp_func_2, depth, increment, context)]
 
     elif 'comp_func_first' in ast:
-        args = [_inline_format_function_eval(caller, ast.comp_func_first.rule, ast.comp_func_first, depth, increment, context), ast.comp_num]
+        args = [_inline_format_function_eval(caller, ast.comp_func_first.rule, ast.comp_func_first, depth, increment, context), ast.comp_arg]
 
     elif 'comp_func_second' in ast:
-        args = [ast.comp_num, _inline_format_function_eval(caller, ast.comp_func_second.rule, ast.comp_func_second, depth, increment, context)]
+        args = [ast.comp_arg, _inline_format_function_eval(caller, ast.comp_func_second.rule, ast.comp_func_second, depth, increment, context)]
 
     else:
         args = [_inline_format_function_eval(caller, func.rule, func, depth, increment, context) for func in ast.equal_comp_funcs]

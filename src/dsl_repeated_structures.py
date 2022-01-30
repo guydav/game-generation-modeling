@@ -178,8 +178,14 @@ def build_variables_and_objects_extractor(args, structure_starts, replace_predic
     extractor.register('predicate', handle_predicate)
 
     def handle_function_comparison(ast, **kwargs):
-        if 'comp_num' in ast and replace_comparison_numbers:
-            update_ast(ast, 'comp_num', number_replacement)
+        if 'comp_arg' in ast and ast.comp_arg:
+            if ast.comp_arg.isnumeric() and replace_comparison_numbers:
+                update_ast(ast, 'comp_arg', number_replacement)
+            elif ast.comp_arg.startswith('?'):
+                update_ast(ast, 'comp_arg', variable_replacement)
+            elif replace_non_variable_args:
+                update_ast(ast, 'comp_arg', type_replacement)
+            
 
     extractor.register('function_comparison', handle_function_comparison)
 

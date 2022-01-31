@@ -1012,6 +1012,27 @@
         },
         {
             "metadata": {
+                "prolific_id": "60feca537ed1de34c8ddbbab",
+                "id": "vgtHV3viTuaAEBMr9m0t",
+                "index": 67,
+                "room": "medium_objects",
+                "notes": ""
+            },
+            "throwing": {
+                "what": ["dodgeball", "basketball", "beachball"],
+                "from": [{"object": "rug", "predicates": [{"predicate": "on"}]}],
+                "goal": ["knock_over"],
+                "to": [
+                    {"object": "tall_cylindrical_block", "predicates": [{"object": "desk", "predicate": "near"}]},
+                    {"object": "bridge_block", "predicates": [{"object": "desk", "predicate": "near"}]},
+                    {"object": "flat_block", "predicates": [{"object": "desk", "predicate": "near"}]},
+                    {"object": "cube_block", "predicates": [{"object": "desk", "predicate": "near"}]},
+                    {"object": "cylindrical_block", "predicates": [{"object": "desk", "predicate": "near"}]}
+                ]
+            }
+        },
+        {
+            "metadata": {
                 "prolific_id": "61262b36d0426eaefdb70725",
                 "id": "I1OpGx1BtTByOehoxKDq",
                 "index": 69,

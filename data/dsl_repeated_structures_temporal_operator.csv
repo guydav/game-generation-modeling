@@ -1,16 +1,16 @@
 Index,structure_start,structure,count
-0,once,(once (agent_holds ?x) ),29
+0,once,(once (agent_holds ?x) ),49
 1,once,(once (and (in ?x ?x) (not (in_motion ?x) ) ) ),5
-2,once,(once (not (object_orientation ?x ?x) ) ),1
-3,once,(once (and (agent_holds ?x) (adjacent ?x ?x) ) ),15
-4,once,(once (and (not (in_motion ?x) ) (in ?x ?x) ) ),26
-5,once,(once (not (in_motion ?x) ) ),22
+2,once,(once (not (object_orientation ?x ?x) ) ),2
+3,once,(once (and (agent_holds ?x) (adjacent ?x ?x) ) ),22
+4,once,(once (and (not (in_motion ?x) ) (in ?x ?x) ) ),53
+5,once,(once (not (in_motion ?x) ) ),37
 6,once,(once (and (agent_holds ?x) (= (distance ?x ?x) 0) ) ),1
-7,once,(once (and (not (in_motion ?x) ) (not (in ?x ?x) ) ) ),2
+7,once,(once (and (not (in_motion ?x) ) (not (in ?x ?x) ) ) ),3
 8,once,(once (and (agent_holds ?x) (< (distance_side ?x ?x ?x) (distance_side ?x ?x ?x)) ) ),1
 9,once,(once (and (not (in_motion ?x) ) (< (distance_side ?x ?x ?x) (distance_side ?x ?x ?x)) ) ),1
 10,once,(once (and (agent_holds ?x) (or (on ?x ?x) (exists (?x ?x - object_type) (and (adjacent ?x ?x) (adjacent ?x ?x) (opposite ?x ?x) ) ) ) ) ),2
-11,once,(once (and (not (in_motion ?x) ) (on ?x ?x) ) ),7
+11,once,(once (and (not (in_motion ?x) ) (on ?x ?x) ) ),12
 12,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (agent_crouches ) ) ),2
 13,once,(once (and (on ?x ?x) (agent_holds ?x) ) ),2
 14,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (on ?x ?x) (in ?x ?x) ) ),1
@@ -21,56 +21,115 @@ Index,structure_start,structure,count
 19,once,(once (and (not (in_motion ?x) ) (on ?x ?x) (< (distance ?x ?x) 0) ) ),1
 20,once,(once (and (not (in_motion ?x) ) (not (exists (?x - object_type) (in ?x ?x) ) ) (not (on ?x ?x) ) (not (exists (?x - object_type) (and (on ?x ?x) (< (distance ?x ?x) 0) ) ) ) ) ),1
 21,once,(once (and (agent_holds ?x) (on ?x ?x) (rug_color_under ?x ?x) ) ),2
-22,once,(once (and (agent_holds ?x) (on ?x ?x) ) ),1
-23,once,(once (and (agent_holds ?x) (not (on ?x ?x) ) ) ),3
+22,once,(once (and (agent_holds ?x) (on ?x ?x) ) ),6
+23,once,(once (and (agent_holds ?x) (not (on ?x ?x) ) ) ),4
 24,once,(once (and (on ?x ?x) (touch ?x ?x) (rug_color_under ?x ?x) ) ),1
 25,once,(once (or (touch ?x ?x) (touch ?x ?x) ) ),1
-26,once,(once (on ?x ?x) ),1
+26,once,(once (on ?x ?x) ),3
 27,once,(once (and (agent_holds ?x) (on ?x ?x) (in ?x ?x) ) ),1
-28,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (opposite ?x ?x) (adjacent ?x ?x) ) ),1
-29,once,(once (or (agent_holds ?x) (touch ?x ?x) ) ),1
-30,once,(once (and (not (in_motion ?x) ) (on ?x ?x) (rug_color_under ?x ?x) ) ),2
-31,once,(once (and (not (agent_holds ?x) ) (not (in_motion ?x) ) (not (type ?x ?x) ) (> (distance ?x ?x) (distance ?x ?x)) ) ),1
-32,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) (distance ?x ?x)) ) ),1
-33,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (adjacent ?x ?x) (equal_z_position ?x ?x) ) ),1
-34,once,(once (in_motion ?x) ),1
-35,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (adjacent ?x ?x) ) ),1
-36,once,(once (and (agent_holds ?x) (faces ?x ?x) ) ),2
-37,once,(once (and (touch ?x ?x) (not (agent_holds ?x) ) ) ),1
-38,once,(once (and (not (in_motion ?x) ) (or (in ?x ?x) (on ?x ?x) ) ) ),1
-39,once,(once (and (not (in_motion ?x) ) (not (type ?x ?x) ) (not (type ?x ?x) ) (not (type ?x ?x) ) ) ),1
-40,once,(once (and (adjacent ?x ?x) (adjacent ?x ?x) (agent_holds ?x) ) ),2
-41,once,(once (not (agent_holds ?x) ) ),3
-42,once,(once (and (agent_holds ?x) ) ),1
-43,once,(once (and (on ?x ?x) (on ?x ?x) (not (in_motion ?x) ) ) ),1
-44,once,(once (or (not (in ?x ?x) ) (game_over ) ) ),3
-45,once,(once (game_start ) ),2
+28,once,(once (game_start ) ),3
+29,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (opposite ?x ?x) (adjacent ?x ?x) ) ),1
+30,once,(once (or (agent_holds ?x) (touch ?x ?x) ) ),1
+31,once,(once (and (not (in_motion ?x) ) (on ?x ?x) (rug_color_under ?x ?x) ) ),2
+32,once,(once (and (not (agent_holds ?x) ) (not (in_motion ?x) ) (not (type ?x ?x) ) (> (distance ?x ?x) (distance ?x ?x)) ) ),1
+33,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) (distance ?x ?x)) ) ),1
+34,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (adjacent ?x ?x) (equal_z_position ?x ?x) ) ),1
+35,once,(once (in_motion ?x) ),1
+36,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (adjacent ?x ?x) ) ),1
+37,once,(once (and (agent_holds ?x) (faces ?x ?x) ) ),2
+38,once,(once (and (touch ?x ?x) (not (agent_holds ?x) ) ) ),1
+39,once,(once (and (not (in_motion ?x) ) (or (in ?x ?x) (on ?x ?x) ) ) ),3
+40,once,(once (and (not (in_motion ?x) ) (not (type ?x ?x) ) (not (type ?x ?x) ) (not (type ?x ?x) ) ) ),1
+41,once,(once (and (adjacent ?x ?x) (adjacent ?x ?x) (agent_holds ?x) ) ),2
+42,once,(once (not (agent_holds ?x) ) ),3
+43,once,(once (and (agent_holds ?x) ) ),2
+44,once,(once (and (on ?x ?x) (on ?x ?x) (not (in_motion ?x) ) ) ),1
+45,once,(once (or (not (in ?x ?x) ) (game_over ) ) ),3
 46,once,(once (and (in ?x ?x) (agent_holds ?x) (not (is_setup_object ?x) ) ) ),2
 47,once,(once (and (agent_holds ?x) (adjacent ?x ?x) (not (exists (?x - object_type) (= ?x ?x) ) ) ) ),1
 48,once,(once (and (not (in_motion ?x) ) (not (on ?x ?x) ) ) ),1
 49,once,(once (and (agent_holds ?x) (not (type ?x ?x) ) ) ),1
-50,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) ),7
-51,hold,(hold (and (not (touch ?x ?x) ) (not (agent_holds ?x) ) ) ),1
-52,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) ) ),45
-53,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) ),3
-54,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (or (touch ?x ?x) (exists (?x - object_type) (touch ?x ?x) ) ) (in_motion ?x) ),2
-55,hold,(hold (and (in ?x ?x) (not (agent_holds ?x) ) (in_motion ?x) ) ),1
-56,hold,(hold (in_motion ?x) ),2
-57,hold,(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) ),3
-58,hold,(hold (and (in_motion ?x) (not (agent_holds ?x) ) ) ),11
-59,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
-60,hold,(hold (and (agent_holds ?x) (on ?x ?x) ) ),1
-61,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) ),2
-62,hold,(hold (or (agent_holds ?x) (in_motion ?x) ) ),2
-63,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) ),4
-64,hold,(hold (and (on ?x ?x) (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (or (broken ?x) (in_motion ?x) ) ) ) ) ),1
-65,hold,(hold (in ?x ?x) ),3
-66,hold,(hold (agent_holds ?x) ),2
-67,hold,(hold (not (agent_holds ?x) ) ),2
-68,hold,(hold (not (exists (?x - object_type) (and (in ?x ?x) (is_setup_object ?x) ) ) ) ),1
-69,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) ),7
-70,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) ),3
-71,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (or (touch ?x ?x) (exists (?x - object_type) (touch ?x ?x) ) ) (in_motion ?x) ),2
-72,hold-while,(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) ),3
-73,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
-74,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) ),4
+50,once,(once (and (agent_holds ?x) (on ?x ?x) (on ?x ?x) (not (exists (?x - object_type) (and (not (= ?x ?x) ) (on ?x ?x) ) ) ) ) ),2
+51,once,(once (and (not (in_motion ?x) ) (not (exists (?x - object_type) (< (distance ?x ?x) (distance ?x ?x)) ) ) (= (color ?x) (color ?x)) ) ),1
+52,once,(once (and (not (in_motion ?x) ) (not (exists (?x - object_type) (< (distance ?x ?x) (distance ?x ?x)) ) ) (not (= (color ?x) (color ?x)) ) ) ),1
+53,once,(once (and (not (in_motion ?x) ) ) ),4
+54,once,(once (and (adjacent ?x ?x) (agent_holds ?x) ) ),6
+55,once,(once (touch ?x ?x) ),3
+56,once,(once (and (adjacent ?x ?x) (< (distance ?x ?x) 0) (agent_holds ?x) ) ),2
+57,once,(once (and (on ?x ?x) (adjacent ?x ?x) (agent_holds ?x) (object_orientation ?x ?x) ) ),1
+58,once,(once (and (adjacent ?x ?x) (agent_holds ?x) (is_setup_object ?x) ) ),1
+59,once,(once (and (agent_holds ?x) (rug_color_under ?x ?x) ) ),4
+60,once,(once (and (not (in_motion ?x) ) (or (in ?x ?x) (exists (?x - object_type) (and (in ?x ?x) (in ?x ?x) ) ) ) ) ),1
+61,once,(once (and (agent_holds ?x) (rug_color_under ?x ?x) (in ?x ?x) (in ?x ?x) ) ),1
+62,once,(once (and (not (in_motion ?x) ) (not (in_motion ?x) ) (not (in ?x ?x) ) ) ),1
+63,once,(once-measure (agent_holds ?x) (distance ?x ?x) ),1
+64,once,(once (and (agent_holds ?x) (< (distance ?x ?x) 0) (object_orientation ?x ?x) ) ),2
+65,once,(once (and (not (in_motion ?x) ) (not (in_motion ?x) ) (object_orientation ?x ?x) ) ),1
+66,once,(once (and (not (in_motion ?x) ) (not (in_motion ?x) ) (not (object_orientation ?x ?x) ) ) ),1
+67,once,(once (and (agent_holds ?x) (= (color ?x) object_type) ) ),5
+68,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) ) ),1
+69,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) (exists (?x - object_type) (and (= (color ?x) object_type) (< (distance ?x ?x) 0) ) ) ) ),1
+70,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) (exists (?x ?x - object_type) (and (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) ) ) ) ),1
+71,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) (exists (?x ?x ?x - object_type) (and (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) ) ) ) ),1
+72,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) (exists (?x ?x ?x ?x - object_type) (and (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (type ?x) object_type) (< (distance ?x ?x) 0) ) ) ) ),1
+73,once,(once (and (not (in_motion ?x) ) (< (distance ?x ?x) 0) (exists (?x ?x ?x ?x ?x - object_type) (and (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) (= (type ?x) object_type) (< (distance ?x ?x) 0) (= (color ?x) object_type) (< (distance ?x ?x) 0) ) ) ) ),1
+74,once,(once (and (agent_holds ?x) (rug_color_under ?x ?x) (= (color ?x) ?x) (not (exists (?x - object_type) (in ?x ?x) ) ) ) ),1
+75,once,(once (and (agent_holds ?x) (on ?x ?x) (adjacent ?x ?x) (> (distance ?x ?x) 0) ) ),3
+76,once,(once (and (agent_holds ?x) (or (on ?x ?x) (adjacent ?x ?x) ) ) ),1
+77,once,(once (and (agent_holds ?x) (is_setup_object ?x) (>= (distance ?x ?x) (distance ?x ?x)) ) ),2
+78,once,(once (in ?x ?x) ),1
+79,once,(once (and (forall (?x - object_type) (on ?x ?x) ) (on ?x ?x) ) ),1
+80,once,(once (above ?x ?x) ),1
+81,once,(once (or (> (distance ?x ?x) 0) (forall (?x - object_type) (and (not (in_motion ?x) ) (> (distance ?x ?x) 0) ) ) ) ),1
+82,once,(once (and (is_setup_object ?x) (agent_holds ?x) (<= (distance ?x ?x) 0) ) ),1
+83,once,(once (and (agent_holds ?x) (<= (distance ?x ?x) 0) ) ),1
+84,once,(once (and (agent_holds ?x) (forall (?x - object_type) (> (x_position ?x) (x_position ?x)) ) ) ),2
+85,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) ),8
+86,hold,(hold (and (not (touch ?x ?x) ) (not (agent_holds ?x) ) ) ),1
+87,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) ) ),63
+88,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) ),3
+89,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (or (touch ?x ?x) (exists (?x - object_type) (touch ?x ?x) ) ) (in_motion ?x) ),2
+90,hold,(hold (and (in ?x ?x) (not (agent_holds ?x) ) (in_motion ?x) ) ),1
+91,hold,(hold (in_motion ?x) ),2
+92,hold,(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) ),3
+93,hold,(hold (and (in_motion ?x) (not (agent_holds ?x) ) ) ),47
+94,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
+95,hold,(hold (and (agent_holds ?x) (on ?x ?x) ) ),1
+96,hold,(hold (not (agent_holds ?x) ) ),3
+97,hold,(hold (game_over ) ),1
+98,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) ),2
+99,hold,(hold (or (agent_holds ?x) (in_motion ?x) ) ),2
+100,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) ),6
+101,hold,(hold (and (on ?x ?x) (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (or (broken ?x) (in_motion ?x) ) ) ) ) ),1
+102,hold,(hold (in ?x ?x) ),3
+103,hold,(hold (agent_holds ?x) ),4
+104,hold,(hold (not (exists (?x - object_type) (and (in ?x ?x) (is_setup_object ?x) ) ) ) ),1
+105,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) (not (agent_holds ?x) ) ) ),2
+106,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) (in_motion ?x) ),1
+107,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (touch ?x ?x) ),1
+108,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
+109,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) ),3
+110,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) ),1
+111,hold,(hold (and (in_motion ?x) (not (agent_holds ?x) ) (not (agent_holds ?x) ) ) ),1
+112,hold,(hold (and (in_motion ?x) (not (agent_holds ?x) ) (not (touch ?x ?x) ) ) ),2
+113,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (in ?x ?x) ) ) (touch ?x ?x) ),1
+114,hold,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (in ?x ?x) ),1
+115,hold,(hold (forall (?x - object_type) (or (on ?x ?x) (agent_holds ?x) (in_motion ?x) (exists (?x - object_type) (and (not (= ?x ?x) ) (< (distance ?x ?x) object_type) (on ?x ?x) (on ?x ?x) ) ) ) ) ),1
+116,hold,(hold (forall (?x - object_type) (< (distance ?x ?x) 0) ) ),1
+117,hold,(hold (<= (distance ?x ?x) 0) ),1
+118,hold,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) (on ?x ?x) (on ?x ?x) ),1
+119,hold,(hold (and (not (agent_holds ?x) ) (in_motion ?x) (not (touch ?x ?x) ) ) ),1
+120,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) ),8
+121,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) ),3
+122,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (or (touch ?x ?x) (exists (?x - object_type) (touch ?x ?x) ) ) (in_motion ?x) ),2
+123,hold-while,(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) ),3
+124,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
+125,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) ),6
+126,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) (in_motion ?x) ),1
+127,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (touch ?x ?x) ),1
+128,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (exists (?x - object_type) (touch ?x ?x) ) ) ) (above ?x ?x) ),1
+129,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) ),3
+130,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) ),1
+131,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) (not (in ?x ?x) ) ) (touch ?x ?x) ),1
+132,hold-while,(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (in ?x ?x) ),1
+133,hold-while,(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) (on ?x ?x) (on ?x ?x) ),1

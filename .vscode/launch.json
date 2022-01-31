@@ -38,7 +38,7 @@
             "request": "launch",
             "program": "/Users/guydavidson/projects/game-generation-modeling/src/ast_to_latex_doc.py",
             "args": [
-               "-c", "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-n", "5c79bc94d454af00160e2eee",
+               "-c", "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-n", "61541833a06877a656163b10",
             ],
             "console": "integratedTerminal"
         },

@@ -1701,29 +1701,28 @@
     (count-maximal-overlapping blockPlacedInBuilding)
 )))
 
-; 55 is by the same participant as 54 -- dropping
 
-; (define (game 5f7654f879a4420e6d20971b) (:domain few-objects-room-v1)  ; 55
-; (:setup (and 
-;     (exists (?h - hexagonal_bin)
-;         (game-conserved (< (distance ?h room_center) 1))
-;     )
-; ))
-; (:constraints (and 
-;     (preference objectToBinOnFirstTry (exists (?o - game_object ?h - hexagonal_bin)
-;         (then 
-;             (once (game_start))
-;             (hold (not (agent_holds ?o)))
-;             (hold (agent_holds ?o))
-;             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-;             (once (and (not (in_motion ?o)) (in ?h ?o)))
-;             (hold (not (agent_holds ?o)))
-;         )
-;     ))
-; ))
-; (:scoring maximize
-;     (count-once-per-objects objectToBinOnFirstTry)
-; ))
+(define (game 5f7654f879a4420e6d20971b) (:domain few-objects-room-v1)  ; 55
+(:setup (and 
+    (exists (?h - hexagonal_bin)
+        (game-conserved (< (distance ?h room_center) 1))
+    )
+))
+(:constraints (and 
+    (preference objectToBinOnFirstTry (exists (?o - game_object ?h - hexagonal_bin)
+        (then 
+            (once (game_start))
+            (hold (not (agent_holds ?o)))
+            (hold (agent_holds ?o))
+            (hold (and (in_motion ?o) (not (agent_holds ?o))))
+            (once (and (not (in_motion ?o)) (in ?h ?o)))
+            (hold (not (agent_holds ?o)))
+        )
+    ))
+))
+(:scoring maximize
+    (count-once-per-objects objectToBinOnFirstTry)
+))
 
 (define (game 604a7e9f84bf0e7937200df5) (:domain few-objects-room-v1)  ; 56
 (:setup 
@@ -2846,7 +2845,7 @@
     (count-nonoverlapping dodgeballBouncesOnceToDoggieBed)
 ))
 
-; 91 is a dup of 89 wit slightly different scoring numbers
+; 91 is a dup of 89 with slightly different scoring numbers
 
 ; 92 is a hiding game -- invalid
 
@@ -3046,7 +3045,7 @@
 )))
 
 
-; 102 is almost a copy of 101 -- waiting for Todd and Brenden's intuition for what to do about it?
+; 102 is almost a copy of 101 and same participant -- omit
 
 
 (define (game 5b94d723839c0a00010f88d9) (:domain few-objects-room-v1)  ; 103

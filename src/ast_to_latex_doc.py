@@ -33,13 +33,13 @@ parser.add_argument('-u', '--omit-unused-rules', action='store_true')
 DEFAULT_PREFIX_LINES = [
     r'\section{DSL Docuemntation as of \today}',
     '',
-    r'\subsection*{Color-coding}',
-    r'\begin{itemize}',
-    r'\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for',
-    r'\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games',
-    r'\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated',
-    r'\end{itemize}',
-    ''
+    # r'\subsection*{Color-coding}',
+    # r'\begin{itemize}',
+    # r'\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for',
+    # r'\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games',
+    # r'\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated',
+    # r'\end{itemize}',
+    # ''
     r'\subsection{Game Definition}',
     r'\begin{grammar}',
     r'<game> ::= (define (game <name>) \\',
@@ -137,6 +137,7 @@ PREFERENCES_SECTION_KEY = 'constraints'
 TERMINAL_SECTION_KEY = 'terminal'
 SCORING_SECTION_KEY = 'scoring'
 PREDICATES_SECTION_KEY = 'predicates'
+FUNCTIONS_SECTION_KEY = 'functions'
 TYPES_SECTION_KEY = 'types'
 
 PRE_NOTES_KEY = 'pre'
@@ -146,44 +147,52 @@ NOTES = {
     SETUP_SECTION_KEY: {
         PRE_NOTES_KEY: r"""PDDL doesn't have any close equivalent of this, but when reading through the games participants specify, 
         they often require some transformation of the room from its initial state before the game can be played.
-        We could treat both as parts of the gameplay, but I thought there's quite a bit to be gained by splitting them -- for example,
+        We could treat both as parts of the gameplay, but we thought there's quite a bit to be gained by splitting them -- for example,
         the policies to setup a room are quite different from the policies to play a game (much more static). \\
 
-        The one nuance here came from the (game-conserved ...) and (game-optional ...) elements. It seemed to me that some setup elements should be maintained
+        The one nuance here came from the (game-conserved ...) and (game-optional ...) elements. It seemed to us that some setup elements should be maintained
         throughout gameplay (for example, if you place a bin somewhere to throw into, it shouldn't move unless specified otherwise).
         Other setup elements can, or often must change -- for example, if you set the balls on the desk to throw them, you'll have to pick them up off the desk to throw them.
         These elements provide that context, which could be useful for verifying that agents playing the game don't violate these conditions.
         """,
     },
     PREFERENCES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""PDDL calls their temporal preferences 'constraints', but that's not entirely the right name for us. Maybe we should rename? \\
-
-        Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
-        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR)
+        PRE_NOTES_KEY: r"""The gameplay preferences specify the core of a game's semantics, capturing how a game should be played by specifying temporal constraints over predicates. 
+        
+        PDDL calls their temporal preferences 'constraints', but that's not entirely the right name for us. Maybe we should rename? \\
+        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR) # Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
     },
     TERMINAL_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""There's always assumed to be a time limit after which the game is over if nothing else, but some participants specified other terminal conditions.
+        PRE_NOTES_KEY: r"""Some participants explicitly specify terminal conditions, but we consider this to be optional. 
         """,
         POST_NOTES_KEY: r"""For a full specification of the \textlangle scoring-expr\textrangle\ token, see the scoring section below.
         """
     },
     SCORING_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""PDDL calls their equivalent section (:metric ...), but I renamed because it made more sense to me. 
-
-        Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
-        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR)
+        PRE_NOTES_KEY: r"""Scoring rules specify how to count preferences (count once, once for each unique objects that fulfill the preference, each time a preference is satisfied, etc.), and the arithmetic to combine
+        counted preference statisfactions to get a final score.
+        
+        PDDL calls their equivalent section (:metric ...), but we renamed because it made more sense to in the context of games. 
+        """.format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR) # Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
     },
     PREDICATES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The predicates are not defined as part of the DSL, but rather I envision them is being specific to a domain and being specified to any model as an input or something to be conditioned on. \\
+        PRE_NOTES_KEY: r"""The predicates are not defined as part of the DSL, but rather we envision them is being specific to a domain and being specified to any model as an input or something to be conditioned on. \\
             
-            The following describes all predicates currently found in the interactive experiment games. Any predicates I forgot to provide a description for will appear in {{ \color{{{undescribed_color}}} {undescribed_color} }}.
-        """.format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR)
+            The following describes all predicates currently found in our game dataset:
+        """.format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any predicates I forgot to provide a description for will appear in {{ \color{{{undescribed_color}}} {undescribed_color} }}.
+    },
+    FUNCTIONS_SECTION_KEY: {
+        PRE_NOTES_KEY: r"""Functions operate simlarly to predicates, but rather than returning a boolean value, they return a numeric value or a type. 
+        Similarly to predicates, they are not parts of the DSL per se, but might vary by environment.
+
+        The following describes all functions currently found in our game dataset:
+        """,
     },
     TYPES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The types are also not defined as part of the DSL, but I envision them as operating similarly to the predicates. \\
+        PRE_NOTES_KEY: r"""The types are also not defined as part of the DSL, but we envision them as operating similarly to the predicates. \\
             
-            The following describes all types currently found in the interactive experiment games. Any types I forgot to provide a description for will appear in {{\color{{{undescribed_color}}}{undescribed_color} }}.
-        """.format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR)
+            The following describes all types currently found in our game dataset: 
+        """.format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any types we forgot to provide a description for will appear in {{\color{{{undescribed_color}}}{undescribed_color} }}.
     }
 }
 
@@ -324,9 +333,8 @@ def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptio
 
     for key in sorted(count_data.keys()):
         count = count_data[key]
-        n_args = set(additional_data[key]['n_args'])
-        n_args = list(n_args)[0] if len(n_args) == 1 else None
-        arg_str = ' '.join([f'<arg{i + 1}>' for i in range(n_args)]) if n_args is not None else '<ambiguous arguments>'
+        n_args = list(sorted(set(additional_data[key]['n_args'])))
+        arg_str = ' '.join([f'<arg{i + 1}>' for i in range(n_args[0])]) if len(n_args) == 1 else f'<{" or ".join([str(n) for n in n_args])} arguments>'
 
         line = f'({key} {arg_str}) [{count} reference{"s" if count != 1 else ""}] {"; " + descriptions[key] if key in descriptions else ""}'
         if key not in descriptions and not external_mode:
@@ -399,6 +407,7 @@ def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, e
 FUNCTION_COMPARISON = 'function_comparison'
 VARIABLE_LIST = 'variable_list'
 PREDICATE = 'predicate'
+FUNCTION = 'function_eval'
 SHARED_BLOCKS = {
     FUNCTION_COMPARISON: (r"""<f-comp> ::= (<comp-op> <function-eval-or-number> <function-eval-or-number>) \alt
     (= <function-eval-or-number>$^+$)
@@ -409,7 +418,7 @@ SHARED_BLOCKS = {
 
 <function-eval> ::= (<name> <function-term>$^+$)
 
-<function-term> ::= <name> | <variable> | <number> | <predicate>""", ('function_comparison', 'function_eval')),
+<function-term> ::= <name> | <variable> | <number> | <predicate>""", ('function_comparison', FUNCTION)),
 
     VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$)
 
@@ -423,7 +432,7 @@ SHARED_BLOCKS = {
 
     PREDICATE: (r"""<predicate> ::= (<name> <predicate-term>$^*$)
 
-<predicate-term> ::= <name> | <variable> | <predicate> "#" In at least one case, I wanted to have a predicate act on other predicates, but that doesn't really make sense. See the discussion of the (side ...) predicate below.""",
+<predicate-term> ::= <name> | <variable>""",
 ('predicate',)),
 }
 
@@ -466,26 +475,25 @@ PREFERENCES_BLOCKS = (
 
     (r'<at-end> ::= (at-end <pref-predicate>)', 'at_end'), 
 
-    (r'<always> ::= (always <pref-predicate>)', 'always'), 
+    # (r'<always> ::= (always <pref-predicate>)', 'always'), 
 
     (r"""<then> ::= (then <seq-func> <seq-func>$^+$) 
 
-<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while> | <hold-for> | <hold-to-end>
-\alt <forall-seq>""", 'then'),
+<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while>""", 'then'),  #  | <hold-for> | <hold-to-end> \alt <forall-seq>
 
-    (r'<once> ::= (once <pref-predicate>)', 'once'),
+    (r'<once> ::= (once <pref-predicate>) "#" The predicate specified must hold for a single world state', 'once'),
 
-    (r'<once-measure> ::= (once <pref-predicate> <f-exp>)', 'once-measure'),
+    (r'<once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation', 'once_measure'),
 
-    (r'<hold> ::= (hold <pref-predicate>)', 'hold'),
+    (r'<hold> ::= (hold <pref-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one', 'hold'),
 
-    (r'<hold-while> ::= (hold-while <pref-predicate> <pref-predicate>$^+$)', 'while_hold'),
+    (r'<hold-while> ::= (hold-while <pref-predicate> <pref-predicate>$^+$) "#" The predicate specified must hold for every state between the previous temporal operator and the next one. While it does, at least one state must satisfy each of the predicates specified in the second arumgnet onward'  , 'while_hold'),
 
-    (r'<hold-for> ::= (hold-for <number> <pref-predicate>)', 'hold_for'),
+    # (r'<hold-for> ::= (hold-for <number> <pref-predicate>)', 'hold_for'),
 
-    (r'<hold-to-end> ::= (hold-to-end <pref-predicate>)', 'hold_to_end'),
+    # (r'<hold-to-end> ::= (hold-to-end <pref-predicate>)', 'hold_to_end'),
 
-    (r'<forall-seq> ::= (forall-sequence (<variable-list>) <then>)', 'forall_seq'),
+    # (r'<forall-seq> ::= (forall-sequence (<variable-list>) <then>)', 'forall_seq'),
 
     (r"""<pref-predicate> ::= <pref_predicate_and> \alt
     <pref-predicate-or> \alt
@@ -503,7 +511,7 @@ PREFERENCES_BLOCKS = (
 
 <pref-predicate-exists> ::= (exists <variable-list> <pref-predicate>)
 
-<pref-predicate-forall> ::= (forall <variable-list> <pref-predicate>)""", ('pref_predicate_and', 'pref_predicate_or', 'pref_predicate_not', 'pref_predicate_exists', ))
+<pref-predicate-forall> ::= (forall <variable-list> <pref-predicate>)""", ('pref_predicate_and', 'pref_predicate_or', 'pref_predicate_not', 'pref_predicate_exists', 'pref_predicate_forall' ))
 )
 
 
@@ -530,7 +538,7 @@ SCORING_BLOCKS = (
         <scoring-comp> \alt
         <preference-eval> 
         
-    """, ('scoring_multi_expr', 'scoring_neg_expr')),
+    """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr')),
 
     (r"""<scoring-comp> ::=  (<comp-op> <scoring-expr> <scoring-expr>) \alt
         (= <scoring-expr>$^+$)
@@ -539,25 +547,33 @@ SCORING_BLOCKS = (
     (r"""<preference-eval> ::=  <count-nonoverlapping> \alt
         <count-once> \alt
         <count-once-per-objects> \alt
-        <count-longest> \alt
-        <count-shortest> \alt
-        <count-increasing-measure> \alt
-        <count-unique-positions>
+        <count-nonoverlapping-measure> \alt
+        <count-unique-positions> \alt
+        <count-same-positions> \alt
+        <count-maximal-nonoverlapping> \alt
+        <count-maximal-overlapping> \alt
+        <count-maximal-once-per-objects> \alt
+        <count-maximal-once> \alt        
+        <count-once-per-external-objects> 
+
     """, 'preference-eval'),
 
-    (r'<count-nonoverlapping> ::= (count-nonoverlapping <name>) "#" count how many times the preference is satisfied by non-overlapping sequences of states ', 'count_nonoverlapping'),
-    (r'<count-once> ::= (count-once <name>) "#" count whether or not this preference was satisfied at all', 'count_once'),
-    (r'<count-once-per-objects> ::= (count-once-per-objects <name>) "#" count once for each unique combination of objects quantified in the preference that satisfy it', 'count_once_per_objects'),
-    (r'<count-longest> ::= (count-longest <name>) "#" count the longest (by number of states) satisfication of this preference', 'count_longest'),
-    (r'<count-shortest> ::= (count-shortest <name>) "#" count the shortest satisfication of this preference ', 'count_shortest'),
-    (r'<count-total> ::= (count-total <name>) "#" count how many states in total satisfy this preference', 'count_total'),
-    (r'<count-increasing-measure> ::= (count-increasing-measure <name>) "#" currently unused, will clarify definition if it surfaces again', 'count_increasing_measure'),
-    (r'<count-unique-positions> ::= (count-unique-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
-    (r'<count-same-positions> ::= (count-same-positions <name>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
+    (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" count how many times the preference is satisfied by non-overlapping sequences of states ', 'count_nonoverlapping'),
+    (r'<count-once> ::= (count-once <pref-name-and-types>) "#" count whether or not this preference was satisfied at all', 'count_once'),
+    (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" count once for each unique combination of objects quantified in the preference that satisfy it', 'count_once_per_objects'),
+    # (r'<count-longest> ::= (count-longest <pref-name-and-types>) "#" count the longest (by number of states) satisfication of this preference', 'count_longest'),
+    # (r'<count-shortest> ::= (count-shortest <pref-name-and-types>) "#" count the shortest satisfication of this preference ', 'count_shortest'),
+    # (r'<count-total> ::= (count-total <pref-name-and-types>) "#" count how many states in total satisfy this preference', 'count_total'),
+    # (r'<count-increasing-measure> ::= (count-increasing-measure <pref-name-and-types>) "#" currently unused, will clarify definition if it surfaces again', 'count_increasing_measure'),
+    (r'<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>', 'count_nonoverlapping_measure'),
+    (r'<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
+    (r'<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
     (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
-    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <name>) "#" For the externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference', 'count_maximal_nonoverlapping'),
-    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <name>) "#" For the externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it', 'count_maximal_once_per_objects'),
-    (r'<count-maximal-once> ::= (count-maximal-once <name>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once', 'count_maximal_once'),
+    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference', 'count_maximal_nonoverlapping'),
+    (r'<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states', 'count_maximal_overlapping'),
+    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it', 'count_maximal_once_per_objects'),
+    (r'<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once', 'count_maximal_once'),
+    (r'<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference',  'count_once_per_external_objects'),
 
     (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
 
@@ -569,24 +585,40 @@ PREDICATE_DESCRIPTIONS = {
     '=': 'Are these two objects the same object?',
     'above': 'Is the first object above the second object?',
     'adjacent': 'Are the two objects adjacent? [will probably be implemented as distance below some threshold]',
+    'adjacent_side': 'Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>',
     'agent_crouches': 'Is the agent crouching?',
     'agent_holds': 'Is the agent holding the object?',
+    'between': 'Is the second object between the first object and the third object?',
     'broken': 'Is the object broken?',
-    'equal_z_position': 'Are these two objects (approximately) in the same z position? (in Unity x, z are spatial coordinates, y is the height)',
+    'equal_x_position': 'Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)',
+    'equal_z_position': 'Are these two objects (approximately) in the same z position? (in our environment, x, z are spatial coordinates, y is the height)',
     'faces': 'Is the front of the first object facing the front of the second object?',
+    'game_over': 'Is this the last state of gameplay?',
+    'game_start': 'Is this the first state of gameplay?',
     'in': 'Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]',
-    'in_building': 'Is the object part of a building? (* \\textbf I dislike this predicate, which I previously used as a crutch, and I am trying to find alternatives around it *)',
     'in_motion': 'Is the object in motion?',
+    'is_setup_object': 'Is this the object of the same type referenced in the setup?',
     'object_orientation': 'Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down',
     'on': 'Is the second object on the first one?',
     'open': 'Is the object open? Only valid for objects that can be opened, such as drawers.',
     'opposite': 'So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls',
     'rug_color_under': 'Is the color of the rug under the object (first argument) the color specified by the second argument?',
-    'side': '(* \\textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)',
+    'same_type': 'Are these two objects of the same type?',
+    # 'side': '(* \\textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)',
     'toggled_on': 'Is this object toggled on?',
     'touch': 'Are these two objects touching?',
     'type': 'Is the first argument, an object, an instance of the type specified by the second argument?',    
 }
+
+FUNCTION_DESCRIPTIONS = {
+    'building_size': 'Takes in an argument of type building, and returns how many objects comprise the building (as an integer)',
+    'color': 'Take in an argument of type object, and returns the color of the object (as a color type object)',
+    'distance': 'Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number)',
+    'distance_side': 'Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side)',
+    'type': 'Takes in an argument of type object, and returns the type of the object (as a string)',
+    'x_position': 'Takes in an argument of type object, and returns the x position of the object (as a floating point number)',
+}
+
 
 TYPE_DESCRIPTIONS = (
     TypeDesc('game_object', 'Parent type of all objects'),
@@ -596,8 +628,15 @@ TYPE_DESCRIPTIONS = (
 	TypeDesc('block', 'Parent type of all block types:'),
 	TypeDesc('bridge_block'),
 	TypeDesc('cube_block'),
+    TypeDesc('blue_cube_block'),
+    TypeDesc('tan_cube_block'),
+    TypeDesc('yellow_cube_block'),
 	TypeDesc('flat_block'),
 	TypeDesc('pyramid_block'),
+    TypeDesc('blue_pyramid_block'),
+    TypeDesc('red_pyramid_block'),
+    TypeDesc('triangle_block'),
+    TypeDesc('yellow_pyramid_block'),
 	TypeDesc('cylindrical_block'),
 	TypeDesc('tall_cylindrical_block'),
     section_separator_typedesc('Balls'),
@@ -605,23 +644,27 @@ TYPE_DESCRIPTIONS = (
 	TypeDesc('beachball'),
 	TypeDesc('basketball'),
 	TypeDesc('dodgeball'),
-    TypeDesc('blue_dodgeball', '(* \\textbf Do we want to specify colored objects or not? *)'),
-	TypeDesc('pink_dodgeball', '(* \\textbf Do we want to specify colored objects or not? *)'),
+    TypeDesc('blue_dodgeball'),
+    TypeDesc('red_dodgeball'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('pink_dodgeball'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
 	TypeDesc('golfball'),
-    TypeDesc('green_golfball', '(* \\textbf Do we want to specify colored objects or not? *)'),
+    TypeDesc('green_golfball'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
 	section_separator_typedesc('Colors'),
     TypeDesc('color', 'Likewise, not a real game object, mostly used to refer to the color of the rug under an object'),
-	TypeDesc('green'),
+	TypeDesc('blue'),
+    TypeDesc('brown'),
+    TypeDesc('green'),
 	TypeDesc('pink'),
     TypeDesc('orange'),
 	TypeDesc('purple'),
     TypeDesc('red'),
+    TypeDesc('tan'),
 	TypeDesc('white'),
 	TypeDesc('yellow'),
     section_separator_typedesc('Other moveable/interactable objects'),
 	TypeDesc('alarm_clock'),
 	TypeDesc('book'),
-	TypeDesc('blinds', 'The blinds on the windows (which for a while I did not know you could open and close)'),
+	TypeDesc('blinds', 'The blinds on the windows'),
 	TypeDesc('chair'),
 	TypeDesc('cellphone'),
 	TypeDesc('cd'),
@@ -636,22 +679,31 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('main_light_switch', 'The main light switch on the wall'),
 	TypeDesc('mug'),
 	TypeDesc('triangular_ramp'),
-	TypeDesc('green_triangular_ramp', '(* \\textbf Do we want to specify colored objects or not? *)'),
-	TypeDesc('pillow'),
+	TypeDesc('green_triangular_ramp'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('pen'),
+    TypeDesc('pencil'),
+    TypeDesc('pillow'),
 	TypeDesc('teddy_bear'),
 	TypeDesc('watch'),
     section_separator_typedesc('Immoveable objects'),
 	TypeDesc('bed'),
+    TypeDesc('corner', 'Any of the corners of the room'),
+    TypeDesc('south_west_corner', 'The corner of the room where the south and west walls meet'),
     TypeDesc('door', 'The door out of the room'),
 	TypeDesc('desk'),
+    TypeDesc('desk_shelf', 'The shelves under the desk'),
 	TypeDesc('drawer', 'Either drawer in the side table'),
-	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed. (* \\textbf Do we want to specify this differently? *)'),
+	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.'), # (* \\textbf Do we want to specify this differently? *)'),
 	TypeDesc('floor'),
     TypeDesc('rug'),
-	TypeDesc('shelf', '.'),
+	TypeDesc('shelf'),
+    TypeDesc('bottom_shelf'),
+    TypeDesc('top_shelf'),
 	TypeDesc('side_table', 'The side table/nightstand next to the bed'),
 	TypeDesc('sliding_door', 'The sliding doors on the south wall (big windows)'),
+    TypeDesc('east_sliding_door', 'The eastern of the two sliding doors (the one closer to the desk)'),
 	TypeDesc('wall', 'Any of the walls in the room'),
+    TypeDesc('north_wall', 'The wall with the door to the room'),
     TypeDesc('south_wall', 'The wall with the sliding doors'),
     TypeDesc('west_wall', 'The wall the bed is aligned to'),
     section_separator_typedesc('Non-object-type predicate arguments'),
@@ -659,8 +711,10 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('front'),
     TypeDesc('left'),
     TypeDesc('right'),
+    TypeDesc('sideways'),
     TypeDesc('upright'),
     TypeDesc('upside_down'),
+    TypeDesc('front_left_corner', 'The front-left corner of a specific object (as determined by its front)'),
 )
 
 
@@ -677,6 +731,10 @@ def extract_n_args(ast, key=None):
 
 PREDICATE_RULES = {
     PREDICATE: ('pred_name', (extract_n_args, ))
+}
+
+FUNCTION_RULES = {
+    FUNCTION: ('func_name', (extract_n_args, ))
 }
 
 
@@ -738,6 +796,14 @@ TYPE_RULES = {
     'predicate': (extract_types_from_predicates, None),
 }
 
+SCORING_CONSIDER_USED_RULES = (
+    'scoring_maximize', 'scoring_minimize',
+    'preference-eval', 'maximal_explainer', 'count_maximal_nonoverlapping', 
+    'count_once_per_external_objects', 'scoring_neg_expr', 'pref_object_type', 
+    'pref_name_and_types', 'count_nonoverlapping', 'count_once_per_objects',
+    'count_once', 'count_maximal_nonoverlapping',
+)
+
 
 def main(args):
     grammar = open(args.grammar_file).read()
@@ -746,12 +812,13 @@ def main(args):
     asts = load_asts(args, grammar_parser, should_print=args.print_dsls)
     parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
-    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]))
-    pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), section_name='Preferences')
-    terminal_translator = SectionTranslator(TERMINAL_SECTION_KEY, TERMINAL_BLOCKS, None, section_name='Terminal Conditions')
-    scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=['preference-eval','maximal_explainer','count_maximal_nonoverlapping'])
+    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), consider_used_rules=['setup_not', 'setup_statement'])
+    pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), section_name='Gameplay Preferences')
+    terminal_translator = SectionTranslator(TERMINAL_SECTION_KEY, TERMINAL_BLOCKS, None, section_name='Terminal Conditions', consider_used_rules=['terminal_not'])
+    scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=SCORING_CONSIDER_USED_RULES)
 
     predicate_translator = RuleTypeTranslator(PREDICATES_SECTION_KEY, PREDICATE_RULES, predicate_data_to_lines, descriptions=PREDICATE_DESCRIPTIONS)
+    function_translator = RuleTypeTranslator(FUNCTIONS_SECTION_KEY, FUNCTION_RULES, predicate_data_to_lines, descriptions=FUNCTION_DESCRIPTIONS)
     type_translator = RuleTypeTranslator(TYPES_SECTION_KEY, TYPE_RULES, type_data_to_lines, descriptions=TYPE_DESCRIPTIONS)
 
     # TODO: handle mathematical definitions and open question in code, rather than in template
@@ -762,6 +829,7 @@ def main(args):
     parser.register_processor(scoring_translator)
 
     parser.register_processor(predicate_translator)
+    parser.register_processor(function_translator)
     parser.register_processor(type_translator)
 
     for ast in asts:

@@ -110,7 +110,7 @@
             {"const": "agent"}
         ]},
         "schemaReferences": {"enum": ["from"]},
-        "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door", "desk_shelf", "side_table", "south_sliding_door", "top_shelf", "south_west_corner"]},
+        "immoveableObject": {"enum": ["desk", "room_corner", "floor", "room_center", "rug", "door", "shelf", "building", "bed", "drawer", "top_drawer", "west_wall", "south_wall", "wall", "room_side", "sliding_door", "desk_shelf", "side_table", "east_sliding_door", "top_shelf", "south_west_corner"]},
 
         "moveableObject": {"anyOf": [
             {"$ref": "#/$defs/throwingObject"}, 

@@ -115,8 +115,8 @@ points]}}}
 % \title{Homework 12} %  \vspace{-3cm} % before name to raise
 % \subtitle{MATH-GA 2110}
 % \vspace{-5cm} % before name to raise
-\title{Game Creation DSL}
-\author{Guy Davidson}
+\title{Goals as Reward-Generating Programs Domain Specific Language}
+% \author{Guy Davidson}
 % \date{\today}
 
 
@@ -139,7 +139,7 @@ I'm trying to translate from standard logic notation to something that makes sen
     \item \textbf{Until}, $\psi U \varphi$: $\psi$ will be true from the current timestep until a timestep at which $\varphi$ is true. If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$.
     \item \textbf{Strong release}, $\psi M \varphi$: the same as until, but demanding that both $\psi$ and $\varphi$ are true simultaneously: If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k \leq j: S_k \vdash \psi$, and $S_j \vdash \varphi$. 
     
-    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. I'm leaving those two as an aside since I don't know we'll need them. 
+    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. We're leaving those two as an aside since we don't know we'll need them. 
     
 \end{itemize}
 
@@ -181,10 +181,10 @@ If we translate each predicate to the letter appearing in blue at the end of the
 
 $\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
-\subsection{Satisfying (at-end ...) or (always ...) operators}
-Thankfully, the two other types of temporal specifications we find ourselves using as part of preferences are simpler to translate. 
+\subsection{Satisfying (at-end ...) operators}
+Thankfully, the other type of temporal specification we find ourselves using as part of preferences is much simpler to translate. 
 Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evauated at the terminal state of gameplay.
-The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
+% The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
 
 
 % I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 

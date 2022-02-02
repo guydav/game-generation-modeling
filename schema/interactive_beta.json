@@ -1490,7 +1490,7 @@
                 "what": ["dodgeball"],
                 "from": [{"object": "rug", "predicates": [{"predicate": "adjacent"}]}],
                 "goal": ["in"],
-                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "south_sliding_door", "predicate": "equal_x_position"}]}]
+                "to": [{"object": "hexagonal_bin", "predicates": [{"object": "east_sliding_door", "predicate": "equal_x_position"}]}]
             }
         },
         {

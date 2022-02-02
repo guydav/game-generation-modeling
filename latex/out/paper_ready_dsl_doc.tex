@@ -115,8 +115,8 @@ points]}}}
 % \title{Homework 12} %  \vspace{-3cm} % before name to raise
 % \subtitle{MATH-GA 2110}
 % \vspace{-5cm} % before name to raise
-\title{Game Creation DSL}
-\author{Guy Davidson}
+\title{Goals as Reward-Generating Programs Domain Specific Language}
+% \author{Guy Davidson}
 % \date{\today}
 
 
@@ -125,12 +125,6 @@ points]}}}
 
 \section{DSL Docuemntation as of \today}
 
-\subsection*{Color-coding}
-\begin{itemize}
-\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for
-\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games
-\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated
-\end{itemize}
 \subsection{Game Definition}
 \begin{grammar}
 <game> ::= (define (game <name>) \\
@@ -197,7 +191,7 @@ PDDL doesn't have any close equivalent of this, but when reading through the gam
 
 <predicate> ::= (<name> <predicate-term>$^*$)
 
-<predicate-term> ::= <name> | <variable> | <predicate> "#" In at least one case, I wanted to have a predicate act on other predicates, but that doesn't really make sense. See the discussion of the (side ...) predicate below.
+<predicate-term> ::= <name> | <variable>
 
 
 \end{grammar}
@@ -232,7 +226,7 @@ The gameplay preferences specify the core of a game's semantics, capturing how a
 
 <once> ::= (once <pref-predicate>) "#" The predicate specified must hold for a single world state
 
-{ \color{teal} <once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation }
+<once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation
 
 <hold> ::= (hold <pref-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one
 
@@ -280,7 +274,7 @@ The gameplay preferences specify the core of a game's semantics, capturing how a
 
 <predicate> ::= (<name> <predicate-term>$^*$)
 
-<predicate-term> ::= <name> | <variable> | <predicate> "#" In at least one case, I wanted to have a predicate act on other predicates, but that doesn't really make sense. See the discussion of the (side ...) predicate below.
+<predicate-term> ::= <name> | <variable>
 
 
 \end{grammar}
@@ -350,7 +344,7 @@ Scoring rules specify how to count preferences (count once, once for each unique
 
 <count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" count once for each unique combination of objects quantified in the preference that satisfy it
 
-{ \color{teal} <count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure> }
+<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>
 
 <count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.
 
@@ -360,13 +354,13 @@ Scoring rules specify how to count preferences (count once, once for each unique
 
 <count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference
 
-{ \color{teal} <count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states }
+<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states
 
 <count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it
 
 <count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once
 
-{ \color{teal} <count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference }
+<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference
 
 <pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
 
@@ -382,7 +376,7 @@ Scoring rules specify how to count preferences (count once, once for each unique
 \subsection{Predicates}
 The predicates are not defined as part of the DSL, but rather we envision them is being specific to a domain and being specified to any model as an input or something to be conditioned on. \\
             
-            The following describes all predicates currently found in our game dataset. 
+            The following describes all predicates currently found in our game dataset:
         
 \begin{lstlisting}
 (= <arg1> <arg2>) [7 references] ; Are these two objects the same object?
@@ -391,22 +385,22 @@ The predicates are not defined as part of the DSL, but rather we envision them i
 (adjacent_side <3 or 4 arguments>) [14 references] ; Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>
 (agent_crouches ) [2 references] ; Is the agent crouching?
 (agent_holds <arg1>) [327 references] ; Is the agent holding the object?
-(*\color{teal} (between <arg1> <arg2> <arg3>) [7 references] ; Is the second object between the first object and the third object?*)
+(between <arg1> <arg2> <arg3>) [7 references] ; Is the second object between the first object and the third object?
 (broken <arg1>) [2 references] ; Is the object broken?
-(*\color{teal} (equal_x_position <arg1> <arg2>) [2 references] ; Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)*)
+(equal_x_position <arg1> <arg2>) [2 references] ; Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)
 (equal_z_position <arg1> <arg2>) [5 references] ; Are these two objects (approximately) in the same z position? (in our environment, x, z are spatial coordinates, y is the height)
 (faces <arg1> <arg2>) [6 references] ; Is the front of the first object facing the front of the second object?
 (game_over ) [4 references] ; Is this the last state of gameplay?
 (game_start ) [3 references] ; Is this the first state of gameplay?
 (in <2 or 3 arguments>) [121 references] ; Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
 (in_motion <arg1>) [311 references] ; Is the object in motion?
-(*\color{teal} (is_setup_object <arg1>) [10 references] ; Is this the object of the same type referenced in the setup?*)
+(is_setup_object <arg1>) [10 references] ; Is this the object of the same type referenced in the setup?
 (object_orientation <arg1> <arg2>) [15 references] ; Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down
 (on <arg1> <arg2>) [165 references] ; Is the second object on the first one?
 (open <arg1>) [3 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
 (opposite <arg1> <arg2>) [4 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
 (rug_color_under <arg1> <arg2>) [11 references] ; Is the color of the rug under the object (first argument) the color specified by the second argument?
-(*\color{teal} (same_type <arg1> <arg2>) [3 references] ; Are these two objects of the same type?*)
+(same_type <arg1> <arg2>) [3 references] ; Are these two objects of the same type?
 (toggled_on <arg1>) [4 references] ; Is this object toggled on?
 (touch <arg1> <arg2>) [49 references] ; Are these two objects touching?
 (type <arg1> <arg2>) [9 references] ; Is the first argument, an object, an instance of the type specified by the second argument?
@@ -414,10 +408,27 @@ The predicates are not defined as part of the DSL, but rather we envision them i
 
 
 
+\subsection{Functions}
+Functions operate simlarly to predicates, but rather than returning a boolean value, they return a numeric value or a type. 
+        Similarly to predicates, they are not parts of the DSL per se, but might vary by environment.
+
+        The following describes all functions currently found in our game dataset:
+        
+\begin{lstlisting}
+(building_size ) [2 references] ; Takes in an argument of type building, and returns how many objects comprise the building (as an integer)
+(color ) [26 references] ; Take in an argument of type object, and returns the color of the object (as a color type object)
+(distance ) [114 references] ; Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number)
+(distance_side ) [5 references] ; Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side)
+(type ) [2 references] ; Takes in an argument of type object, and returns the type of the object (as a string)
+(x_position ) [4 references] ; Takes in an argument of type object, and returns the x position of the object (as a floating point number)
+\end{lstlisting}
+
+
+
 \subsection{Types}
 The types are also not defined as part of the DSL, but we envision them as operating similarly to the predicates. \\
             
-            The following describes all types currently found in our game dataset. 
+            The following describes all types currently found in our game dataset: 
         
 \begin{lstlisting}
 game_object [33 references] ; Parent type of all objects
@@ -427,14 +438,15 @@ building [21 references] ; Not a real game object, but rather, a way to refer to
 block [27 references] ; Parent type of all block types:
 bridge_block [11 references] 
 cube_block [40 references] 
-(*\color{teal} blue_cube_block [8 references] *)
-(*\color{teal} tan_cube_block [1 reference] *)
-(*\color{teal} yellow_cube_block [8 references] *)
+blue_cube_block [8 references] 
+tan_cube_block [1 reference] 
+yellow_cube_block [8 references] 
 flat_block [5 references] 
 pyramid_block [14 references] 
-(*\color{teal} red_pyramid_block [2 references] *)
-(*\color{teal} triangle_block [3 references] *)
-(*\color{teal} yellow_pyramid_block [2 references] *)
+blue_pyramid_block [3 references] 
+red_pyramid_block [2 references] 
+triangle_block [3 references] 
+yellow_pyramid_block [2 references] 
 cylindrical_block [12 references] 
 tall_cylindrical_block [7 references] 
 ---------- (* \textbf{Balls} *) ----------
@@ -443,26 +455,26 @@ beachball [23 references]
 basketball [18 references] 
 dodgeball [110 references] 
 blue_dodgeball [6 references] 
-(*\color{teal} red_dodgeball [4 references] *)
+red_dodgeball [4 references] 
 pink_dodgeball [18 references] 
 golfball [28 references] 
-green_golfball [2 references] ; (* \textbf Do we want to specify colored objects or not? *)
+green_golfball [2 references] 
 ---------- (* \textbf{Colors} *) ----------
 color [6 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object
-(*\color{teal} blue [1 reference] *)
-(*\color{teal} brown [1 reference] *)
+blue [1 reference] 
+brown [1 reference] 
 green [5 references] 
 pink [14 references] 
 orange [3 references] 
 purple [4 references] 
 red [8 references] 
-(*\color{teal} tan [1 reference] *)
+tan [1 reference] 
 white [1 reference] 
 yellow [14 references] 
 ---------- (* \textbf{Other moveable/interactable objects} *) ----------
 alarm_clock [8 references] 
 book [11 references] 
-blinds [2 references] ; The blinds on the windows (which for a while I did not know you could open and close)
+blinds [2 references] ; The blinds on the windows
 chair [17 references] 
 cellphone [6 references] 
 cd [6 references] 
@@ -477,30 +489,31 @@ laptop [7 references]
 main_light_switch [3 references] ; The main light switch on the wall
 mug [3 references] 
 triangular_ramp [10 references] 
-green_triangular_ramp [1 reference] ; (* \textbf Do we want to specify colored objects or not? *)
-(*\color{teal} pen [2 references] *)
-(*\color{teal} pencil [2 references] *)
+green_triangular_ramp [1 reference] 
+pen [2 references] 
+pencil [2 references] 
 pillow [12 references] 
 teddy_bear [14 references] 
 watch [2 references] 
 ---------- (* \textbf{Immoveable objects} *) ----------
 bed [48 references] 
 (*\color{gray} corner [N/A references] ; Any of the corners of the room*)
-(*\color{teal} south_west_corner [2 references] ; The corner of the room where the south and west walls meet*)
+south_west_corner [2 references] ; The corner of the room where the south and west walls meet
 door [9 references] ; The door out of the room
 desk [40 references] 
-(*\color{teal} desk_shelf [2 references] ; The shelves under the desk*)
+desk_shelf [2 references] ; The shelves under the desk
 drawer [5 references] ; Either drawer in the side table
-top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed. (* \textbf Do we want to specify this differently? *)
+top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed.
 floor [24 references] 
 rug [37 references] 
 shelf [10 references] 
-(*\color{teal} bottom_shelf [1 reference] *)
-(*\color{teal} top_shelf [5 references] *)
+bottom_shelf [1 reference] 
+top_shelf [5 references] 
 side_table [4 references] ; The side table/nightstand next to the bed
 sliding_door [2 references] ; The sliding doors on the south wall (big windows)
-(*\color{teal} east_sliding_door [1 reference] ; The eastern of the two sliding doors (the one closer to the desk)*)
+east_sliding_door [1 reference] ; The eastern of the two sliding doors (the one closer to the desk)
 wall [17 references] ; Any of the walls in the room
+north_wall [1 reference] ; The wall with the door to the room
 south_wall [1 reference] ; The wall with the sliding doors
 west_wall [2 references] ; The wall the bed is aligned to
 ---------- (* \textbf{Non-object-type predicate arguments} *) ----------
@@ -508,13 +521,10 @@ back [3 references]
 front [8 references] 
 left [2 references] 
 right [2 references] 
-(*\color{teal} sideways [3 references] *)
+sideways [3 references] 
 upright [10 references] 
 upside_down [2 references] 
-(*\color{teal} front_left_corner [1 reference] ; The front-left corner of a specific object (as determined by its front)*)
----------- (* \textbf{Undescribed types} *) ----------
-(*\color{red} north_wall [1 reference]*)
-(*\color{red} blue_pyramid_block [3 references]*)
+front_left_corner [1 reference] ; The front-left corner of a specific object (as determined by its front)
 \end{lstlisting}
 
 
@@ -534,7 +544,7 @@ I'm trying to translate from standard logic notation to something that makes sen
     \item \textbf{Until}, $\psi U \varphi$: $\psi$ will be true from the current timestep until a timestep at which $\varphi$ is true. If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$.
     \item \textbf{Strong release}, $\psi M \varphi$: the same as until, but demanding that both $\psi$ and $\varphi$ are true simultaneously: If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k \leq j: S_k \vdash \psi$, and $S_j \vdash \varphi$. 
     
-    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. I'm leaving those two as an aside since I don't know we'll need them. 
+    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. We're leaving those two as an aside since we don't know we'll need them. 
     
 \end{itemize}
 
@@ -576,10 +586,10 @@ If we translate each predicate to the letter appearing in blue at the end of the
 
 $\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
-\subsection{Satisfying (at-end ...) or (always ...) operators}
-Thankfully, the two other types of temporal specifications we find ourselves using as part of preferences are simpler to translate. 
+\subsection{Satisfying (at-end ...) operators}
+Thankfully, the other type of temporal specification we find ourselves using as part of preferences is much simpler to translate. 
 Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evauated at the terminal state of gameplay.
-The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
+% The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
 
 
 % I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 

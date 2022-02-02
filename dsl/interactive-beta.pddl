@@ -1607,7 +1607,7 @@
     (preference throwToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
             (then 
-                (once (and (agent_holds ?d)))
+                (once (agent_holds ?d))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
@@ -3096,7 +3096,7 @@
 (define (game 6106ac34408681f3b0d07396) (:domain few-objects-room-v1)  ; 104
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (and
-        (equal_x_position ?h south_sliding_door) 
+        (equal_x_position ?h east_sliding_door) 
     )))
 ))
 (:constraints (and 
@@ -3192,7 +3192,7 @@
                 (on ?b1 ?p1)
                 (on bed ?b2)
                 (on ?p2 ?b2)
-                (adjacent ?b1 east_wall)
+                (adjacent ?b1 north_wall)
                 (between ?b1 ?h ?b2)
                 (= (distance ?b1 ?h) (distance ?b2 ?h))
             ))

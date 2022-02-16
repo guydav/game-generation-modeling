@@ -25,7 +25,8 @@ class GPT2LanguageModel():
             learning_rate, 
             weight_decay, 
             warmup_proportion,
-            val_freq=20):
+            val_freq=20,
+            val_temperature=1):
 
         '''
         Fit the language model to the provided dataset
@@ -88,6 +89,10 @@ class GPT2LanguageModel():
 
                     perplexity = torch.exp(loss).item()
 
+                    # Clear some memory before the expensive gradient computation
+                    del token_ids
+                    del labels
+
                     # Perform optimization and update the scheduler
                     loss.backward()
                     optimizer.step()
@@ -98,9 +103,11 @@ class GPT2LanguageModel():
 
                     global_step += 1
                     if global_step%val_freq == 0:
-                        self.generate_continuation(sampler, generation_length=256)
+                        self.generate_continuation(sampler, generation_length=256, )
 
-    def generate_continuation(self, sampler, generation_length=200, condition="[SETUP]: "):
+                    del loss
+
+    def generate_continuation(self, sampler, generation_length=200, condition="[SETUP]: ", temperature=1):
         '''
         Generate a continution of the provided conditioning string of the specified length
         '''
@@ -108,7 +115,7 @@ class GPT2LanguageModel():
         # Switch to evaluation mode
         self.model.eval()
 
-        sample = sampler.generate(condition, length=generation_length)
+        sample = sampler.generate(condition, length=generation_length, temperature=temperature)
         print("\n\nSAMPLE | " + sample + "\n\n")
 
         # Return to trainign mode

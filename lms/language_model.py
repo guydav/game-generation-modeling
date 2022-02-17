@@ -4,19 +4,26 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
+from torch.optim import AdamW
 from lm_sampler import LMSampler
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from transformers import GPT2LMHeadModel
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup
 
 class GPT2LanguageModel():
-    def __init__(self):
+    def __init__(self,
+                 logdir="./logs"):
+
+        self.logdir = logdir
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.ngpu = torch.cuda.device_count()
 
         self.model = GPT2LMHeadModel.from_pretrained("gpt2")
         self.model.to(self.device)
+
+        self.log_writer = SummaryWriter(logdir, flush_secs=100)
 
     def fit(self,
             dataset,
@@ -99,15 +106,18 @@ class GPT2LanguageModel():
                     optimizer.zero_grad()
                     scheduler.step()
 
+                    self.log_writer.add_scalar("train/loss", loss, global_step)
+                    self.log_writer.add_scalar("train/perplexity", perplexity, global_step)
+
                     pbar.set_postfix({"pplx": perplexity})
 
                     global_step += 1
                     if global_step%val_freq == 0:
-                        self.generate_continuation(sampler, generation_length=256, )
+                        self.generate_continuation(sampler, global_step, generation_length=256, temperature=1.5)
 
                     del loss
 
-    def generate_continuation(self, sampler, generation_length=200, condition="[SETUP]: ", temperature=1):
+    def generate_continuation(self, sampler, global_step, generation_length=200, condition="[SETUP]: ", temperature=1):
         '''
         Generate a continution of the provided conditioning string of the specified length
         '''
@@ -116,8 +126,11 @@ class GPT2LanguageModel():
         self.model.eval()
 
         sample = sampler.generate(condition, length=generation_length, temperature=temperature)
-        print("\n\nSAMPLE | " + sample + "\n\n")
+        print("\nSample generated at step {global_step}")
+        print(sample)
 
-        # Return to trainign mode
+        self.log_writer.add_text("eval_sample", sample, global_step)
+
+        # Return to training mode
         self.model.train()
 

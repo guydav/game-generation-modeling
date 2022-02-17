@@ -43,5 +43,16 @@
             "console": "integratedTerminal",
             "notes": "\"-n\", \"61541833a06877a656163b10\"", 
         },
+        {
+            "name": "Python: room object types",
+            "type": "python",
+            "request": "launch",
+            "program": "/Users/guydavidson/projects/game-generation-modeling/src/room_and_object_types.py",
+            "args": [
+               "-b", "-m", "colors",
+            ],
+            "console": "integratedTerminal",
+            "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+        },
     ]
 }

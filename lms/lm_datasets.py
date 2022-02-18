@@ -1,4 +1,5 @@
 import os
+import sys
 import torch
 import pandas
 import numpy as np
@@ -8,11 +9,17 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from transformers import GPT2Tokenizer
 
+# Add src/ to our path so we can import from the scripts in room_and_object_types.py
+sys.path.insert(1, os.path.join(sys.path[0], '../src'))
+from room_and_object_types import get_room_contents
 
 class GameDescriptionGPT2Dataset(Dataset):
     def __init__(self,
-                 chunk_size=512,
+                 room_contents_mode="naive",
+                 chunk_size=1024,
                  csv_file="../data/interactive_beta.csv"):
+
+        self.room_contents = get_room_contents(room_contents_mode)
 
         self.chunk_size = chunk_size
 
@@ -24,15 +31,17 @@ class GameDescriptionGPT2Dataset(Dataset):
         game_token_ids = []
 
         game_data_df = pandas.read_csv(csv_file)
-        game_descriptions = list(zip(game_data_df["game_setup"], game_data_df["game_gameplay"], game_data_df["game_scoring"]))
+        game_descriptions = list(zip(game_data_df["scene"], game_data_df["game_setup"], game_data_df["game_gameplay"], 
+                                     game_data_df["game_scoring"]))
         
-        for idx, (setup, gameplay, scoring) in tqdm(enumerate(game_descriptions), desc="Tokenizing games", total=len(game_descriptions)):
+        for idx, (room, setup, gameplay, scoring) in tqdm(enumerate(game_descriptions), desc="Tokenizing games", total=len(game_descriptions)):
 
-            setup_tokens = self.tokenizer.encode("[SETUP]: " + ("None" if str(setup) == "nan" else setup))
+            contents_tokens = self.tokenizer.encode(self.room_contents[room])
+            setup_tokens = self.tokenizer.encode("\n[SETUP]: " + ("None" if str(setup) == "nan" else setup))
             gameplay_tokens = self.tokenizer.encode("\n[GAMEPLAY]: " + gameplay)
             scoring_tokens = self.tokenizer.encode("\n[SCORING]: " + scoring)
 
-            game_encoding = setup_tokens + gameplay_tokens + scoring_tokens
+            game_encoding = contents_tokens + setup_tokens + gameplay_tokens + scoring_tokens
             if len(game_encoding) < self.chunk_size:
                 game_encoding += [self.pad_token_id] * (self.chunk_size - len(game_encoding))
 
@@ -56,7 +65,7 @@ class GameDescriptionGPT2Dataset(Dataset):
         return len(self.game_token_ids) // self.chunk_size
 
 if __name__ == "__main__":
-    dataset = GameDescriptionGPT2Dataset()
+    dataset = GameDescriptionGPT2Dataset("colors")
     ids = dataset[22]
     decode = dataset.decode_ids(ids)
     print(decode)

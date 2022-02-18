@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import logging
 import numpy as np
 from tqdm import tqdm
@@ -113,7 +114,10 @@ class GPT2LanguageModel():
 
                     global_step += 1
                     if global_step%val_freq == 0:
-                        self.generate_continuation(sampler, global_step, generation_length=256, temperature=1.5)
+                        room = random.choice(["few_objects", "medium_objects", "many_objects"])
+                        contents = dataset.room_contents[room]
+                        self.generate_continuation(sampler, global_step, generation_length=256, condition=contents,
+                                                   temperature=val_temperature)
 
                     del loss
 

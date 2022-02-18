@@ -605,17 +605,6 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
 
 # print('}')
 
-parser = argparse.ArgumentParser()
-DEFAULT_START_TOKEN = '[CONTENTS]'
-parser.add_argument('-s', '--start-token', default=DEFAULT_START_TOKEN)
-DEFAULT_CATEGORIES_TO_SKIP = (FULL_ROOMS_UNCATEGORIZED_OBJECTS, COLORS)
-parser.add_argument('-c', '--skip-categories', nargs='+', default=DEFAULT_CATEGORIES_TO_SKIP)
-DEFAULT_TYPES_TO_SKIP = (BALL, BLOCK)
-parser.add_argument('-t', '--skip-types', nargs='+', default=DEFAULT_TYPES_TO_SKIP)
-parser.add_argument('--separator', default=', ')
-parser.add_argument('-b', '--break-after-category', action='store_true', default=False)
-parser.add_argument('-v', '--verbose', action='store_true')
-
 
 def get_room_objects_naive(start_token, skip_categories, skip_types, separator, break_after_category=False, verbose=False):
     room_object_strs = {}
@@ -775,12 +764,14 @@ MODES_TO_FUNCTIONS = {
     CATEGORY_MODE: get_room_objects_categories,
     COLOR_MODE: get_room_objects_colors,
 }
-parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
+DEFAULT_START_TOKEN = '[CONTENTS]'
+DEFAULT_CATEGORIES_TO_SKIP = (FULL_ROOMS_UNCATEGORIZED_OBJECTS, COLORS)
+DEFAULT_TYPES_TO_SKIP = (BALL, BLOCK)
     
-def get_room_contents(mode):
-    args = parser.parse_args()
-    delattr(args, 'mode')
-    out = MODES_TO_FUNCTIONS[mode](**args.__dict__)
+def get_room_contents(mode, start_token=DEFAULT_START_TOKEN, skip_categories=DEFAULT_CATEGORIES_TO_SKIP, 
+                      skip_types=DEFAULT_TYPES_TO_SKIP, separator=', ', break_after_category=False, verbose=False):
+
+    out = MODES_TO_FUNCTIONS[mode](start_token, skip_categories, skip_types, separator, break_after_category, verbose)
 
     return out
 
@@ -789,7 +780,16 @@ def foo(**kwargs):
     print(kwargs)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--start-token', default=DEFAULT_START_TOKEN)
+    parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
+    parser.add_argument('-c', '--skip-categories', nargs='+', default=DEFAULT_CATEGORIES_TO_SKIP)
+    parser.add_argument('-t', '--skip-types', nargs='+', default=DEFAULT_TYPES_TO_SKIP)
+    parser.add_argument('--separator', default=', ')
+    parser.add_argument('-b', '--break-after-category', action='store_true', default=False)
+    parser.add_argument('-v', '--verbose', action='store_true')
+
     args = parser.parse_args()
-    mode = args.mode
-    get_room_contents(mode)
+
+    get_room_contents(**args.__dict__)
 

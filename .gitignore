@@ -4,3 +4,5 @@ latex/out/dsl_doc.aux
 latex/out/dsl_doc.out
 latex/out/dsl_doc.pdf
 latex/out/pddl.aux
+
+*.pyc

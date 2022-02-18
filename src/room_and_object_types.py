@@ -704,50 +704,6 @@ def print_with_categories(start_token, skip_categories, skip_types, separator, b
         print(f'{start_token}: {" ".join(total_buffer)}')
 
 
-def print_with_categories(start_token, skip_categories, skip_types, separator, break_after_category=False):
-    for room, room_data in FULL_ROOMS_TO_OBJECTS.items():
-        print(f'{room}:')
-
-        total_buffer = []
-        for category, category_data in room_data.items():
-            if category in skip_categories:
-                continue
-
-            category_buffer = []
-
-            for obj_type, count in category_data.items():
-                if obj_type in skip_types:
-                    continue
-
-                if isinstance(count, int):
-                    if count == 1:
-                        category_buffer.append(obj_type)
-                    else:
-                        category_buffer.append(f'{count} {obj_type}')
-
-                elif isinstance(count, dict):
-                    for color, color_count in count.items():
-                        type_with_color = f'{color}_{obj_type}'
-                        if color_count == 1:
-                            category_buffer.append(type_with_color)
-                        else:
-                            category_buffer.append(f'{color_count} {type_with_color}')
-
-                else:
-                    raise ValueError(f'Unknown count type: {count}')
-
-            category_str = f'({category}): {separator.join(category_buffer)}'
-            if break_after_category:
-                category_str += '\n'
-
-            else:
-                category_str += ' '
-
-            total_buffer.append(category_str)
-
-        print(f'{start_token}: {" ".join(total_buffer)}')
-
-
 def print_with_colors(start_token, skip_categories, skip_types, separator, break_after_category=False):
     for room, room_data in FULL_ROOMS_TO_OBJECTS.items():
         print(f'{room}:')

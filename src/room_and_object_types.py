@@ -661,7 +661,7 @@ def get_room_objects_naive(start_token, skip_categories, skip_types, separator, 
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[room] = room_str
+        room_object_strs[f"{room.lower()}_objects"] = room_str
 
     return room_object_strs
 
@@ -710,7 +710,7 @@ def get_room_objects_categories(start_token, skip_categories, skip_types, separa
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[room] = room_str
+        room_object_strs[f"{room.lower()}_objects"] = room_str
 
     return room_object_strs
 
@@ -762,7 +762,7 @@ def get_room_objects_colors(start_token, skip_categories, skip_types, separator,
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[room] = room_str
+        room_object_strs[f"{room.lower()}_objects"] = room_str
 
     return room_object_strs
 
@@ -777,6 +777,13 @@ MODES_TO_FUNCTIONS = {
 }
 parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
     
+def get_room_contents(mode):
+    args = parser.parse_args()
+    delattr(args, 'mode')
+    out = MODES_TO_FUNCTIONS[mode](**args.__dict__)
+
+    return out
+
 
 def foo(**kwargs):
     print(kwargs)
@@ -784,6 +791,5 @@ def foo(**kwargs):
 if __name__ == '__main__':
     args = parser.parse_args()
     mode = args.mode
-    delattr(args, 'mode')
-    out = MODES_TO_FUNCTIONS[mode](**args.__dict__)
+    get_room_contents(mode)
 

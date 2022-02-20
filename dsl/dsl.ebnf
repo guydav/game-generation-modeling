@@ -7,7 +7,7 @@
 start = '(define' game_def domain_def setup_def constraints_def terminal_def scoring_def ')' $;
 game_def = '(game' game_name:id ')';
 domain_def = '(:domain' domain_name:id ')';
-setup_def = '(:setup' setup ')';
+setup_def = '(:setup' setup ')' | ();
 constraints_def = '(:constraints' preferences ')';
 terminal_def = '(:terminal' terminal ')' | ();  # TODO: do we want this to be optional?
 scoring_def = '(:scoring' scoring ')';

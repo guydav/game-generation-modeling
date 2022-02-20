@@ -43,14 +43,14 @@ DEFAULT_PREFIX_LINES = [
     r'\subsection{Game Definition}',
     r'\begin{grammar}',
     r'<game> ::= (define (game <name>) \\',
-    r'  (:domain <name>) \\',
-    r'  (:setup <setup>) \\',
-    r'  (:constraints <constraints>) \\',
-    r'  (:terminal <terminal>) \\',
-    r'  (:scoring <scoring>) \\'
+    r'  (:domain <name>) "#" A specification of the environment  \\',
+    r'  (:setup <setup>) | () "#" The optional setup conditions \\',
+    r'  (:constraints <constraints>) "#" The preferences that specify gameplay \\',
+    r'  (:terminal <terminal>) | () "#" Optional terminal conditions \\',
+    r'  (:scoring <scoring>) "#" The scoring rules that define how to arrive from preference specifications to a score \\'
     r')',
     '',
-    r'<name> ::= /[A-z]+(_[A-z0-9]+)*/ "#" a letter, optionally followed by letters, numbers, and underscores',
+    r'<name> ::= /[A-z]+(_[A-z0-9]+)*/ "#" Any name: a letter, optionally followed by letters, numbers, and underscores',
 r'\end{grammar}',
 '',
 ]
@@ -409,24 +409,25 @@ VARIABLE_LIST = 'variable_list'
 PREDICATE = 'predicate'
 FUNCTION = 'function_eval'
 SHARED_BLOCKS = {
-    FUNCTION_COMPARISON: (r"""<f-comp> ::= (<comp-op> <function-eval-or-number> <function-eval-or-number>) \alt
-    (= <function-eval-or-number>$^+$)
+    FUNCTION_COMPARISON: (r"""<f-comp> ::= "#" A function comparison: either comparing two function evaluations, or checking that two ore more functions evaluate to the same result.
+    \alt (<comp-op> <function-eval-or-number> <function-eval-or-number>) 
+    \alt (= <function-eval-or-number>$^+$)
     
-<comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =
+<comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle = "#" Any of the comparison operators.
 
-<function-eval-or-number> ::= <function-eval> | <number>
+<function-eval-or-number> ::= <function-eval> | <number> 
 
-<function-eval> ::= (<name> <function-term>$^+$)
+<function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
 
 <function-term> ::= <name> | <variable> | <number> | <predicate>""", ('function_comparison', FUNCTION)),
 
-    VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$)
+    VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
-<variable-type-def> ::= <variable>$^+$ - <type-def>
+<variable-type-def> ::= <variable>$^+$ - <type-def> "#" Each variable is defined by a variable (see next) and a type (see after).
 
-<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers
+<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers.
 
-<type-def> ::= <name> | <either-types>
+<type-def> ::= <name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
 
 <either-types> ::= (either <name>$^+$)""", ('variable_list', 'variable_type_def', 'either_types')),
 
@@ -438,56 +439,59 @@ SHARED_BLOCKS = {
 
 
 SETUP_BLOCKS = (
-    (r"""<setup> ::= (and <setup> <setup>$^+$) \alt
-    (or <setup> <setup>$^+$) \alt
-    (not <setup>) \alt
-    (exists (<typed list(variable)>) <setup>) \alt
-    (forall (<typed list(variable)>) <setup>) \alt
-    <setup-statement>""", ('setup_and', 'setup_or', 'setup_not', 'setup_exists', 'setup_forall', 'setup_statement')),
+    (r"""<setup> ::= (and <setup> <setup>$^+$) "#" A setup can be expanded to a conjunction, a disjunction, a quantification, or a setup statement (see below).
+    \alt (or <setup> <setup>$^+$) 
+    \alt (not <setup>)
+    \alt (exists (<typed list(variable)>) <setup>)
+    \alt (forall (<typed list(variable)>) <setup>) 
+    \alt <setup-statement>""", ('setup_and', 'setup_or', 'setup_not', 'setup_exists', 'setup_forall', 'setup_statement')),
 
-    (r"""<setup-statement> ::= (game-conserved <setup-predicate>) \alt
-    (game-optional <setup-predicate>)""", ('setup_game_conserved', 'setup_game_optional',)),
+    (r"""<setup-statement> ::= "#" A setup statement specifies that a predicate is either optional during gameplay or must be preserved during gameplay.
+    \alt (game-conserved <setup-predicate>) 
+    \alt (game-optional <setup-predicate>)""", ('setup_game_conserved', 'setup_game_optional',)),
 
-    (r"""<setup-predicate> ::= (and <setup-predidcate>$^+$) \alt
-    (or <setup-predicate>$^+$) \alt
-    (not <setup-predicate> \alt
-    (exists (<typed list(variable)>) <setup-predicate>) \alt
-    (forall (<typed list(variable)>) <setup-predicate>) \alt
-    <f-comp> \alt
-    <predicate>""", ('setup_and_predicate', 'setup_or_predicate', 'setup_not_predicate', 'setup_forall_predicate', 'setup_exists_predicate')),
+    (r"""<setup-predicate> ::= "#" A setup predicate can be a conjunction, disjunction, negation, quantification, function comparison, or a predicate.
+    \alt (and <setup-predidcate>$^+$) 
+    \alt (or <setup-predicate>$^+$) 
+    \alt (not <setup-predicate> 
+    \alt (exists (<typed list(variable)>) <setup-predicate>) 
+    \alt (forall (<typed list(variable)>) <setup-predicate>) 
+    \alt <f-comp> 
+    \alt <predicate>""", ('setup_and_predicate', 'setup_or_predicate', 'setup_not_predicate', 'setup_forall_predicate', 'setup_exists_predicate')),
 )
 
 
 PREFERENCES_BLOCKS = (
-    (r"""<constraints> ::= <pref-def> | (and <pref-def>$^+$)
+    (r"""<constraints> ::= <pref-def> | (and <pref-def>$^+$)  "#" One or more preferences.
     
-<pref-def> ::= <pref-forall> | <preference> 
+<pref-def> ::= <pref-forall> | <preference> "#" A preference definitions expands to either a forall quantification (see below) or to a preference.
 
 <pref-forall> ::= (forall <variable-list> <preference>) "#" this syntax is used to specify variants of the same preference for different object, which differ in their scoring. These are specified using the <pref-name-and-types> syntax element's optional types, see scoring below.
     
-<preference> ::= (preference <name> <preference-quantifier>)
+<preference> ::= (preference <name> <preference-quantifier>) "#" A preference is defined by a name and a quantifer that includes the preference body.
 
-<preference-quantifier> ::= (exists (<variable-list>) <preference-body> 
+<preference-quantifier> ::= "#" A preference can quantify exsistentially or universally over one or more variables, or none. 
+\alt (exists (<variable-list>) <preference-body> 
 \alt  (forall (<variable-list>) <preference-body>)
 \alt <preference-body>) 
 
-<preference-body> ::=  <then> | <at-end> | <always> """, ('preference', 'pref_forall', 'pref_body_exists')),
+<preference-body> ::=  <then> | <at-end>  "#" A preference body can be expanded to conditions over a sequence of states (<then>) or over the terminal state (<at-end>).  """, ('preference', 'pref_forall', 'pref_body_exists')), # | <always>
 
-    (r'<at-end> ::= (at-end <pref-predicate>)', 'at_end'), 
+    (r'<at-end> ::= (at-end <pref-predicate>) "#" Specifies a prediicate that should hold in the terminal state.', 'at_end'), 
 
     # (r'<always> ::= (always <pref-predicate>)', 'always'), 
 
-    (r"""<then> ::= (then <seq-func> <seq-func>$^+$) 
+    (r"""<then> ::= (then <seq-func> <seq-func>$^+$) "#" Specifies a series of conditions that should hold over a sequence of states -- see below for the specific operators (<seq-func>s), and Section 2 for translation of these definitions to linear temporal logicl (LTL).
 
-<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while>""", 'then'),  #  | <hold-for> | <hold-to-end> \alt <forall-seq>
+<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while> "#" Four of thse temporal sequence functions currently exist: """, 'then'),  #  | <hold-for> | <hold-to-end> \alt <forall-seq>
 
-    (r'<once> ::= (once <pref-predicate>) "#" The predicate specified must hold for a single world state', 'once'),
+    (r'<once> ::= (once <pref-predicate>) "#" The predicate specified must hold for a single world state.', 'once'),
 
-    (r'<once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation', 'once_measure'),
+    (r'<once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation, to be used in scoring.', 'once_measure'),
 
-    (r'<hold> ::= (hold <pref-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one', 'hold'),
+    (r'<hold> ::= (hold <pref-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one.', 'hold'),
 
-    (r'<hold-while> ::= (hold-while <pref-predicate> <pref-predicate>$^+$) "#" The predicate specified must hold for every state between the previous temporal operator and the next one. While it does, at least one state must satisfy each of the predicates specified in the second arumgnet onward'  , 'while_hold'),
+    (r'<hold-while> ::= (hold-while <pref-predicate> <pref-predicate>$^+$) "#" The predicate specified must hold for every state between the previous temporal operator and the next one. While it does, at least one state must satisfy each of the predicates specified in the second arumgnet onward.'  , 'while_hold'),
 
     # (r'<hold-for> ::= (hold-for <number> <pref-predicate>)', 'hold_for'),
 
@@ -495,89 +499,84 @@ PREFERENCES_BLOCKS = (
 
     # (r'<forall-seq> ::= (forall-sequence (<variable-list>) <then>)', 'forall_seq'),
 
-    (r"""<pref-predicate> ::= <pref_predicate_and> \alt
-    <pref-predicate-or> \alt
-    <pref-predicate-not> \alt
-    <pref-predicate-exists> \alt
-    <pref-predicate-forall> \alt
-    <predicate>
-    <f-comp>
-
-<pref-predicate-and> ::= (and <pref-predicate>$^+$)
-
-<pref-predicate-or> ::= (or <pref-predicate>$^+$)
-
-<pref-predicate-not> ::= (not <pref-predicate>)
-
-<pref-predicate-exists> ::= (exists <variable-list> <pref-predicate>)
-
-<pref-predicate-forall> ::= (forall <variable-list> <pref-predicate>)""", ('pref_predicate_and', 'pref_predicate_or', 'pref_predicate_not', 'pref_predicate_exists', 'pref_predicate_forall' ))
+    (r"""<pref-predicate> ::= "#" A preference predicate can be a conjunction, disjunction, negation, quantification, function comparison, or a predicate.
+    \alt (and <pref-predicate>$^+$)
+    \alt (or <pref-predicate>$^+$)
+    \alt (not <pref-predicate>)
+    \alt (exists <variable-list> <pref-predicate>) 
+    \alt (forall <variable-list> <pref-predicate>)
+    \alt <f-comp>
+    \alt <predicate>""", ('pref_predicate_and', 'pref_predicate_or', 'pref_predicate_not', 'pref_predicate_exists', 'pref_predicate_forall' ))
 )
 
 
 TERMINAL_BLOCKS = (
-    (r"""<terminal> ::= (and <terminal>$^+$) \alt
-        (or <terminal>$+$) \alt
-        (not <terminal>) \alt
-        <terminal-comp>""", ('terminal_and', 'terminal_or', 'terminal_not')),
+    (r"""<terminal> ::= "#" The terminal condition is specified by a conjunction, disjunction, negation, or comparson (see below).
+        \alt (and <terminal>$^+$)
+        \alt (or <terminal>$+$)
+        \alt (not <terminal>) 
+        \alt <terminal-comp>""", ('terminal_and', 'terminal_or', 'terminal_not')),
 
-    (r"""<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) 
-    
+    (r"""<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) "#" A comparison operator is used to compare two scoring expressions (see next section).
+
     <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =""", 'terminal_comp'),
 )
 
 
 SCORING_BLOCKS = (
-    (r"""<scoring> ::= (maximize <scoring-expr>) \alt (minimize <scoring-expr>)""", ('scoring_maximize', 'scoring_minimize')),
+    (r"""<scoring> ::= (maximize <scoring-expr>) \alt (minimize <scoring-expr>) "#" The scoring conditions maximize or minimize a scoring expression. """, ('scoring_maximize', 'scoring_minimize')),
 
-    (r"""<scoring-expr> ::= (<multi-op> <scoring-expr>$^+$) \alt
-        (<binary-op> <scoring-expr> <scoring-expr>) \alt
-        (- <scoring-expr>) \alt
-        (total-time) \alt
-        (total-score) \alt
-        <scoring-comp> \alt
-        <preference-eval> 
+    (r"""<scoring-expr> ::= "#" A scoring expression can be an arithmetic operation over other scoring expressions, a reference to the total time or score, a comparison, or a preference scoring evaluation.
+        \alt (<multi-op> <scoring-expr>$^+$) "#" Either addition or multiplication.
+        \alt (<binary-op> <scoring-expr> <scoring-expr>) "#" Either division or subtraction.
+        \alt (- <scoring-expr>)
+        \alt (total-time) 
+        \alt (total-score) 
+        \alt <scoring-comp>
+        \alt <preference-eval> 
         
     """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr')),
 
-    (r"""<scoring-comp> ::=  (<comp-op> <scoring-expr> <scoring-expr>) \alt
-        (= <scoring-expr>$^+$)
+    (r"""<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
+        \alt (<comp-op> <scoring-expr> <scoring-expr>) 
+        \alt (= <scoring-expr>$^+$)
     """, 'scoring_comp'),
 
-    (r"""<preference-eval> ::=  <count-nonoverlapping> \alt
-        <count-once> \alt
-        <count-once-per-objects> \alt
-        <count-nonoverlapping-measure> \alt
-        <count-unique-positions> \alt
-        <count-same-positions> \alt
-        <count-maximal-nonoverlapping> \alt
-        <count-maximal-overlapping> \alt
-        <count-maximal-once-per-objects> \alt
-        <count-maximal-once> \alt        
-        <count-once-per-external-objects> 
+    (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
+        \alt <count-nonoverlapping>
+        \alt <count-once> 
+        \alt <count-once-per-objects> 
+        \alt <count-nonoverlapping-measure> 
+        \alt <count-unique-positions> 
+        \alt <count-same-positions> 
+        \alt <count-maximal-nonoverlapping> 
+        \alt <count-maximal-overlapping> 
+        \alt <count-maximal-once-per-objects> 
+        \alt <count-maximal-once> 
+        \alt <count-once-per-external-objects> 
 
     """, 'preference-eval'),
 
-    (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" count how many times the preference is satisfied by non-overlapping sequences of states ', 'count_nonoverlapping'),
-    (r'<count-once> ::= (count-once <pref-name-and-types>) "#" count whether or not this preference was satisfied at all', 'count_once'),
-    (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" count once for each unique combination of objects quantified in the preference that satisfy it', 'count_once_per_objects'),
+    (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count_nonoverlapping'),
+    (r'<count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.', 'count_once'),
+    (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.', 'count_once_per_objects'),
     # (r'<count-longest> ::= (count-longest <pref-name-and-types>) "#" count the longest (by number of states) satisfication of this preference', 'count_longest'),
     # (r'<count-shortest> ::= (count-shortest <pref-name-and-types>) "#" count the shortest satisfication of this preference ', 'count_shortest'),
     # (r'<count-total> ::= (count-total <pref-name-and-types>) "#" count how many states in total satisfy this preference', 'count_total'),
     # (r'<count-increasing-measure> ::= (count-increasing-measure <pref-name-and-types>) "#" currently unused, will clarify definition if it surfaces again', 'count_increasing_measure'),
-    (r'<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>', 'count_nonoverlapping_measure'),
-    (r'<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
-    (r'<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
+    (r'<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.', 'count_nonoverlapping_measure'),
+    (r'<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
+    (r'<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
     (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
-    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference', 'count_maximal_nonoverlapping'),
-    (r'<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states', 'count_maximal_overlapping'),
-    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it', 'count_maximal_once_per_objects'),
-    (r'<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once', 'count_maximal_once'),
-    (r'<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference',  'count_once_per_external_objects'),
+    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference.', 'count_maximal_nonoverlapping'),
+    (r'<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states.', 'count_maximal_overlapping'),
+    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it.', 'count_maximal_once_per_objects'),
+    (r'<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once.', 'count_maximal_once'),
+    (r'<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference.',  'count_once_per_external_objects'),
 
-    (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
+    (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
 
-    <pref-object-type> ::= : <name>
+    <pref-object-type> ::= : <name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
     """, ('pref_name_and_types', 'pref_object_type')),
 )
 
@@ -611,12 +610,12 @@ PREDICATE_DESCRIPTIONS = {
 }
 
 FUNCTION_DESCRIPTIONS = {
-    'building_size': 'Takes in an argument of type building, and returns how many objects comprise the building (as an integer)',
-    'color': 'Take in an argument of type object, and returns the color of the object (as a color type object)',
-    'distance': 'Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number)',
-    'distance_side': 'Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side)',
-    'type': 'Takes in an argument of type object, and returns the type of the object (as a string)',
-    'x_position': 'Takes in an argument of type object, and returns the x position of the object (as a floating point number)',
+    'building_size': 'Takes in an argument of type building, and returns how many objects comprise the building (as an integer).',
+    'color': 'Take in an argument of type object, and returns the color of the object (as a color type object).',
+    'distance': 'Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).',
+    'distance_side': 'Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side).',
+    'type': 'Takes in an argument of type object, and returns the type of the object (as a string).',
+    'x_position': 'Takes in an argument of type object, and returns the x position of the object (as a floating point number).',
 }
 
 

@@ -614,11 +614,13 @@ DEFAULT_TYPES_TO_SKIP = (BALL, BLOCK)
 parser.add_argument('-t', '--skip-types', nargs='+', default=DEFAULT_TYPES_TO_SKIP)
 parser.add_argument('--separator', default=', ')
 parser.add_argument('-b', '--break-after-category', action='store_true', default=False)
+parser.add_argument('-v', '--verbose', action='store_true')
 
 
-def naive_mode_print(start_token, skip_categories, skip_types, separator, break_after_category=False):
+def get_room_objects_naive(start_token, skip_categories, skip_types, separator, break_after_category=False, verbose=False):
+    room_object_strs = {}
     for room, room_data in FULL_ROOMS_TO_OBJECTS.items():
-        print(f'{room}:')
+        if verbose: print(f'\nRoom type {room}:')
 
         total_buffer = []
         for category, category_data in room_data.items():
@@ -657,12 +659,17 @@ def naive_mode_print(start_token, skip_categories, skip_types, separator, break_
 
             total_buffer.append(category_str)
 
-        print(f'{start_token}: {" ".join(total_buffer)}')
+        room_str = f'{start_token}: {" ".join(total_buffer)}'
+        if verbose: print(room_str)
+        room_object_strs[room] = room_str
+
+    return room_object_strs
 
 
-def print_with_categories(start_token, skip_categories, skip_types, separator, break_after_category=False):
+def get_room_objects_categories(start_token, skip_categories, skip_types, separator, break_after_category=False, verbose=False):
+    room_object_strs = {}
     for room, room_data in FULL_ROOMS_TO_OBJECTS.items():
-        print(f'{room}:')
+        if verbose: print(f'\nRoom type {room}:')
 
         total_buffer = []
         for category, category_data in room_data.items():
@@ -701,12 +708,17 @@ def print_with_categories(start_token, skip_categories, skip_types, separator, b
 
             total_buffer.append(category_str)
 
-        print(f'{start_token}: {" ".join(total_buffer)}')
+        room_str = f'{start_token}: {" ".join(total_buffer)}'
+        if verbose: print(room_str)
+        room_object_strs[room] = room_str
+
+    return room_object_strs
 
 
-def print_with_colors(start_token, skip_categories, skip_types, separator, break_after_category=False):
+def get_room_objects_colors(start_token, skip_categories, skip_types, separator, break_after_category=False, verbose=False):
+    room_object_strs = {}
     for room, room_data in FULL_ROOMS_TO_OBJECTS.items():
-        print(f'{room}:')
+        print(f'\nRoom type {room}:')
 
         total_buffer = []
         for category, category_data in room_data.items():
@@ -748,16 +760,20 @@ def print_with_colors(start_token, skip_categories, skip_types, separator, break
 
             total_buffer.append(category_str)
 
-        print(f'{start_token}: {" ".join(total_buffer)}')
+        room_str = f'{start_token}: {" ".join(total_buffer)}'
+        if verbose: print(room_str)
+        room_object_strs[room] = room_str
+
+    return room_object_strs
 
 
 NAIVE_MODE = 'naive'
 CATEGORY_MODE = 'categories'
 COLOR_MODE = 'colors'
 MODES_TO_FUNCTIONS = {
-    NAIVE_MODE: naive_mode_print,
-    CATEGORY_MODE: print_with_categories,
-    COLOR_MODE: print_with_colors,
+    NAIVE_MODE: get_room_objects_naive,
+    CATEGORY_MODE: get_room_objects_categories,
+    COLOR_MODE: get_room_objects_colors,
 }
 parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
     
@@ -769,6 +785,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     mode = args.mode
     delattr(args, 'mode')
-    MODES_TO_FUNCTIONS[mode](**args.__dict__)
-    
+    out = MODES_TO_FUNCTIONS[mode](**args.__dict__)
 

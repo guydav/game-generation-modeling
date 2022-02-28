@@ -5,4 +5,4 @@ latex/out/dsl_doc.out
 latex/out/dsl_doc.pdf
 latex/out/pddl.aux
 
-*.pyc
+lms/logs

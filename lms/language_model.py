@@ -116,7 +116,7 @@ class GPT2LanguageModel():
                     if global_step%val_freq == 0:
                         room = random.choice(["few_objects", "medium_objects", "many_objects"])
                         contents = dataset.room_contents[room]
-                        self.generate_continuation(sampler, global_step, generation_length=256, condition=contents,
+                        self.generate_continuation(sampler, global_step, generation_length=512, condition=contents,
                                                    temperature=val_temperature)
 
                     del loss

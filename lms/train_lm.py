@@ -1,5 +1,7 @@
 import os
+import shutil
 import argparse
+from datetime import datetime
 from lm_sampler import LMSampler
 from language_model import GPT2LanguageModel
 from torch.utils.tensorboard import SummaryWriter
@@ -38,13 +40,16 @@ class CustomLoggingTrainer(Trainer):
 
         if self.state.global_step % self.generation_freq == 0:
             self.model.eval()
-            sample = self.sampler.generate(self.generation_context, self.generation_length, self.generation_temp)
+            sample = self.sampler.generate(condition_text=self.generation_context, length=self.generation_length,
+                                           temperature=self.generation_temp)
             self.log_writer.add_text("eval_sample", sample, self.state.global_step)
             self.model.train()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2"])
+    parser.add_argument('--dataset', type=str, default="dsl", choices=["dsl", "descs"])
     parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument('--chunk_size', type=int, default=512)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -52,27 +57,44 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
-    parser.add_argument('--gen_freq', type=int, default=10)
+    parser.add_argument('--gen_freq', type=int, default=98)
     parser.add_argument('--gen_len', type=int, default=100)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
 
     args = parser.parse_args()
 
+    # Map from model names to the load string transformers expects
+    model_mapping = {"CodeBERTa": "huggingface/CodeBERTa-small-v1",
+                     "gpt2": "gpt2"}
+
+    # Map from dataset names to the class for that dataset
+    dataset_mapping = {"dsl": DomainSpecificLanguageLMDataset,
+                       "descs": GameDescriptionGPT2Dataset}
+
     # Set parallelism to false to silence deadlock warnings
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-    tokenizer = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
-    model = AutoModelForMaskedLM.from_pretrained("huggingface/CodeBERTa-small-v1")
+    # Instantiate the tokenizer and the model based on the name
+    model_name = model_mapping[args.model]
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForMaskedLM.from_pretrained(model_name)
     
-    dataset = DomainSpecificLanguageLMDataset(tokenizer, args.chunk_size)
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    # Instantiate the dataset and data collator
+    dataset = dataset_mapping[args.dataset](tokenizer, args.chunk_size)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15) # todo -- should be modular based on the model
 
+    # Create the output directory
+    datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    output_dir_name = f"./logs/{datetime_str}-{args.model}-{args.dataset}"
+    if not os.path.exists(output_dir_name):
+        os.mkdir(output_dir_name)
 
     training_args = TrainingArguments(
-        output_dir="./logs",
+        output_dir=output_dir_name,
+        logging_dir=output_dir_name,
         overwrite_output_dir=True,
         num_train_epochs=args.epochs,
         learning_rate=args.learning_rate,

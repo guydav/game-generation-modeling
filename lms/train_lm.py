@@ -9,14 +9,6 @@ from transformers import DataCollatorForLanguageModeling
 from transformers import Trainer, TrainingArguments, TrainerCallback
 from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
 
-
-class GenerateSampleCallback(TrainerCallback):
-    def on_log(self, args, state, control, **kwargs):
-        print("Starting sample generation...")
-        sampler = LMSampler(model, tokenizer, device="cpu")
-        sample = sampler.generate("(define", length=100, temperature=1)
-        print("\nSample: ", sample)
-
 class CustomLoggingTrainer(Trainer):
     '''
     Subclass of the standard transformers Trainer class that adds custom logging behavior: namely logging
@@ -54,12 +46,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
-    parser.add_argument('--chunk_size', type=int, default=1024)
+    parser.add_argument('--chunk_size', type=int, default=512)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--warmup_proportion', type=float, default=0.0002)
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--max_grad_norm', type=int, default=1)
-    parser.add_argument('--learning_rate', type=float, default=1e4)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
     parser.add_argument('--gen_freq', type=int, default=10)

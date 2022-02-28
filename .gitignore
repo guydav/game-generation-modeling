@@ -6,3 +6,5 @@ latex/out/dsl_doc.pdf
 latex/out/pddl.aux
 
 lms/logs
+__pycache__/
+*.pyc

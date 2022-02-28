@@ -12,6 +12,7 @@ from transformers import GPT2Tokenizer
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
 from room_and_object_types import get_room_contents
+from ast_utils import load_tests_from_file
 
 class GameDescriptionGPT2Dataset(Dataset):
     def __init__(self,
@@ -64,8 +65,34 @@ class GameDescriptionGPT2Dataset(Dataset):
     def __len__(self):
         return len(self.game_token_ids) // self.chunk_size
 
+class DomainSpecificLanguageLMDataset(Dataset):
+    '''
+    Dataset wrapper for DSL example generation using masked LMs. Because we are testing a
+    variety of different pre-trained models, the code here takes a passed in tokenizer and
+    makes no assumptions about masking
+    '''
+    def __init__(self,
+                 tokenizer,
+                 chunk_size=1024,
+                 dsl_info_path="../dsl/interactive-beta.pddl"):
+
+        self.programs = []
+        for program in load_tests_from_file(dsl_info_path):
+            encoded_program = tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
+            self.programs.append(encoded_program)
+
+    def __len__(self):
+        return len(self.programs)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.programs[idx], dtype=torch.long)
+
+
 if __name__ == "__main__":
-    dataset = GameDescriptionGPT2Dataset("colors")
-    ids = dataset[22]
-    decode = dataset.decode_ids(ids)
-    print(decode)
+    from transformers import AutoTokenizer
+    t = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
+    d = DomainSpecificLanguageLMDataset(t)
+    # dataset = GameDescriptionGPT2Dataset("colors")
+    # ids = dataset[22]
+    # decode = dataset.decode_ids(ids)
+    # print(decode)

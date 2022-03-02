@@ -82,7 +82,7 @@ class GPT2LanguageModel():
                 for idx, batch in pbar:
                     token_ids = batch.to(self.device)
 
-                    # By default, the ignore index is -100, and we want ot ignore all of the pad tokens
+                    # By default, the ignore index is -100, and we want to ignore all of the pad tokens
                     labels = token_ids.clone().detach()
                     labels[labels == pad_token_id] = -100
 

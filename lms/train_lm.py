@@ -45,10 +45,12 @@ class CustomLoggingTrainer(Trainer):
             self.log_writer.add_text("eval_sample", sample, self.state.global_step)
             self.model.train()
 
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2"])
+    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot"])
     parser.add_argument('--dataset', type=str, default="dsl", choices=["dsl", "descs"])
     parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument('--chunk_size', type=int, default=512)
@@ -68,7 +70,8 @@ if __name__ == "__main__":
 
     # Map from model names to the load string transformers expects
     model_mapping = {"CodeBERTa": "huggingface/CodeBERTa-small-v1",
-                     "gpt2": "gpt2"}
+                     "gpt2": "gpt2",
+                     "codeparrot": "lvwerra/codeparrot"}
 
     # Map from dataset names to the class for that dataset
     dataset_mapping = {"dsl": DomainSpecificLanguageLMDataset,
@@ -77,14 +80,24 @@ if __name__ == "__main__":
     # Set parallelism to false to silence deadlock warnings
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-    # Instantiate the tokenizer and the model based on the name
+    # Instantiate the tokenizer and dataset based on the model's name
     model_name = model_mapping[args.model]
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForMaskedLM.from_pretrained(model_name)
-    
-    # Instantiate the dataset and data collator
+    tokenizer.add_special_tokens({"pad_token": "PAD"})
+
+    # # Special pad token for GPT2:
+    # if args.model == "gpt2":
+
     dataset = dataset_mapping[args.dataset](tokenizer, args.chunk_size)
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15) # todo -- should be modular based on the model
+
+    # Instantiate the model and data collator depending on whether the model uses masked or causal LMs
+    uses_mlm = (args.model in ["CodeBERTa"])
+    if uses_mlm:
+        model = AutoModelForMaskedLM.from_pretrained(model_name)
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     # Create the output directory
     datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")

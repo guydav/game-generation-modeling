@@ -76,16 +76,18 @@ class DomainSpecificLanguageLMDataset(Dataset):
                  chunk_size=1024,
                  dsl_info_path="../dsl/interactive-beta.pddl"):
 
+        self.tokenizer = tokenizer
         self.programs = []
         for program in load_tests_from_file(dsl_info_path):
-            encoded_program = tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
+            encoded_program = self.tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
             self.programs.append(encoded_program)
 
     def __len__(self):
         return len(self.programs)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.programs[idx], dtype=torch.long)
+        tensor = torch.tensor(self.programs[idx], dtype=torch.long)
+        return tensor
 
 
 if __name__ == "__main__":

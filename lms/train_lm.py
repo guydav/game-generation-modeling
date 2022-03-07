@@ -1,51 +1,87 @@
 import os
+import torch
 import shutil
 import argparse
+from tqdm import tqdm
 from datetime import datetime
 from lm_sampler import LMSampler
-from language_model import GPT2LanguageModel
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from lm_datasets import GameDescriptionGPT2Dataset, DomainSpecificLanguageLMDataset
 
+from transformers import pipeline
+from transformers import get_linear_schedule_with_warmup
 from transformers import DataCollatorForLanguageModeling
-from transformers import Trainer, TrainingArguments, TrainerCallback
 from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
 
-class CustomLoggingTrainer(Trainer):
-    '''
-    Subclass of the standard transformers Trainer class that adds custom logging behavior: namely logging
-    the loss and learning rate at every step and then sampling a generation every k steps
-    '''
-    def __init__(self, model=None, args=None, data_collator=None, train_dataset=None, eval_dataset=None, tokenizer=None,
-                 model_init=None, compute_metrics=None, callbacks=None, optimizers=(None, None), generation_freq=None, 
-                 generation_length=None, generation_context=None, generation_temp=None):
+def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        super().__init__(model, args, data_collator, train_dataset, eval_dataset, tokenizer, model_init,
-                         compute_metrics, callbacks, optimizers)
+    # Map the model to the available device
+    model.to(device)
 
-        self.log_writer = SummaryWriter(args.output_dir)
-        self.sampler = LMSampler(model, data_collator.tokenizer, device="cpu")
+    # Initialize the log writer
+    log_writer = SummaryWriter(output_dir, flush_secs=100)
 
-        self.generation_freq = generation_freq
-        self.generation_length = generation_length
-        self.generation_context = generation_context
-        self.generation_temp = generation_temp
+    # Create the sampler to generate continuations during training
+    sampler = LMSampler(model, tokenizer, device=device)
 
-    def log(self, logs):
-        '''
-        Write the logs to tensorboard, including less frequent sample logs
-        '''
-        self.log_writer.add_scalar("train/loss", logs["loss"], self.state.global_step)
-        self.log_writer.add_scalar("train/lr", logs["learning_rate"], self.state.global_step)
+    # Calculate the total number of training steps to initialize the scheduler
+    num_train_steps = (len(data_loader) // args.batch_size) * args.epochs
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer=optimizer,
+        num_warmup_steps=int(args.warmup_proportion * num_train_steps),
+        num_training_steps=num_train_steps)
 
-        if self.state.global_step % self.generation_freq == 0:
-            self.model.eval()
-            sample = self.sampler.generate(condition_text=self.generation_context, length=self.generation_length,
-                                           temperature=self.generation_temp)
-            self.log_writer.add_text("eval_sample", sample, self.state.global_step)
-            self.model.train()
+    # Set up for training
+    model.train()
+    global_step = 0
+    progress_bar = tqdm(total=num_train_steps, desc=f"Training {args.model} model")
 
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+    try:
+        for epoch in range(args.epochs):
+            for batch in data_loader:
+                global_step += 1
+
+                token_ids = batch["input_ids"].to(device)
+
+                # By default, the ignore index is -100, and we want to ignore all of the pad tokens
+                labels = token_ids.clone().detach()
+                labels[labels == tokenizer.pad_token_id] = -100
+
+                loss = model(token_ids, labels=labels)[0]
+                perplexity = torch.exp(loss).item()
+
+                # Clear some memory before the expensive gradient computation
+                del token_ids
+                del labels
+
+                # Perform optimization and update the scheduler
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                scheduler.step()
+
+                log_writer.add_scalar("train/loss", loss, global_step)
+                log_writer.add_scalar("train/perplexity", perplexity, global_step)
+
+                progress_bar.update(1)
+                progress_bar.set_postfix({"loss": loss.item()})
+
+                if global_step%args.gen_freq == 0:
+                    model.eval()
+                    sample = sampler.generate(condition_text=args.gen_context, length=args.gen_len, temperature=args.gen_temp)
+                    print("Sample: ", sample)
+                    log_writer.add_text("eval_sample", sample, global_step)
+                    model.train()
+
+    except KeyboardInterrupt:
+        print("Stopping early due to user input!")
+        progress_bar.close()
+        exit()
+
+    print("Finished training.")
+    progress_bar.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -61,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
-    parser.add_argument('--gen_freq', type=int, default=98)
+    parser.add_argument('--gen_freq', type=int, default=10)
     parser.add_argument('--gen_len', type=int, default=100)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
@@ -85,9 +121,6 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.add_special_tokens({"pad_token": "PAD"})
 
-    # # Special pad token for GPT2:
-    # if args.model == "gpt2":
-
     dataset = dataset_mapping[args.dataset](tokenizer, args.chunk_size)
 
     # Instantiate the model and data collator depending on whether the model uses masked or causal LMs
@@ -97,7 +130,11 @@ if __name__ == "__main__":
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name)
+        model.resize_token_embeddings(len(tokenizer))
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    data_loader = DataLoader(dataset, collate_fn=data_collator, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # Create the output directory
     datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
@@ -105,37 +142,5 @@ if __name__ == "__main__":
     if not os.path.exists(output_dir_name):
         os.mkdir(output_dir_name)
 
-    training_args = TrainingArguments(
-        output_dir=output_dir_name,
-        logging_dir=output_dir_name,
-        overwrite_output_dir=True,
-        num_train_epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        per_device_train_batch_size=args.batch_size,
-        save_strategy="epoch",
-        logging_steps=1,
-        save_total_limit=1)
 
-    trainer = CustomLoggingTrainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=dataset,
-        generation_freq=args.gen_freq,
-        generation_length=args.gen_len,
-        generation_context=args.gen_context,
-        generation_temp=args.gen_temp)
-
-    trainer.train()
-
-    # dataset = GameDescriptionGPT2Dataset(chunk_size=args.chunk_size)
-    # model = GPT2LanguageModel(args.room_mode)
-
-    # model.fit(dataset=dataset,
-    #           batch_size=args.batch_size,
-    #           num_epochs=args.epochs,
-    #           learning_rate=args.learning_rate,
-    #           weight_decay=args.weight_decay,
-    #           warmup_proportion=args.warmup_proportion,
-    #           val_temperature=args.val_temperature)
+    train_loop(model, tokenizer, optimizer, data_loader, output_dir_name, args)

@@ -71,7 +71,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
                 if global_step%args.gen_freq == 0:
                     model.eval()
                     sample = sampler.generate(condition_text=args.gen_context, length=args.gen_len, temperature=args.gen_temp)
-                    print("Sample: ", sample)
+                    print("\nSample: ", sample, "\n")
                     log_writer.add_text("eval_sample", sample, global_step)
                     model.train()
 
@@ -97,8 +97,8 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
-    parser.add_argument('--gen_freq', type=int, default=10)
-    parser.add_argument('--gen_len', type=int, default=100)
+    parser.add_argument('--gen_freq', type=int, default=200)
+    parser.add_argument('--gen_len', type=int, default=256)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
 

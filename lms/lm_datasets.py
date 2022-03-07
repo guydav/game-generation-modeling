@@ -74,11 +74,20 @@ class DomainSpecificLanguageLMDataset(Dataset):
     def __init__(self,
                  tokenizer,
                  chunk_size=1024,
-                 dsl_info_path="../dsl/interactive-beta.pddl"):
+                 dsl_info_path="../dsl/interactive-beta.pddl",
+                 csv_file="../data/interactive_beta.csv"):
+
+
+        game_data_df = pandas.read_csv(csv_file)
+        participant_ids = game_data_df["participantID"]
 
         self.tokenizer = tokenizer
         self.programs = []
         for program in load_tests_from_file(dsl_info_path):
+            for pid in participant_ids:
+                if pid in program:
+                    program = program.replace(pid, "[ID]")
+
             encoded_program = self.tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
             self.programs.append(encoded_program)
 

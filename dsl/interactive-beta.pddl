@@ -1,5 +1,5 @@
 
-(define (game 6172feb1665491d1efbce164) (:domain medium-objects-room-v1)  ; 0
+(define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
 (:setup (and 
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
         (game-conserved (< (distance ?h ?r) 1))
@@ -35,7 +35,7 @@
 ; 1 is invalid
 
 
-(define (game 5f77754ba932fb2c4ba181d8) (:domain many-objects-room-v1)  ; 2
+(define (game 5f77754ba932fb2c4ba181d8-2) (:domain many-objects-room-v1)  ; 2
 (:setup (and 
     (game-conserved (open top_drawer))
 ))
@@ -69,7 +69,7 @@
 )))
 
 ; 3 says "figures", but their demonstration only uses blocks, so I'm guessing that's what they meant
-(define (game 614b603d4da88384282967a7) (:domain many-objects-room-v1)  ; 3
+(define (game 614b603d4da88384282967a7-3) (:domain many-objects-room-v1)  ; 3
 (:setup 
 )
 (:constraints (and 
@@ -85,7 +85,7 @@
 
 ; 4 is invalid -- woefully underconstrained
 
-(define (game 5bc79f652885710001a0e82a) (:domain few-objects-room-v1)  ; 5
+(define (game 5bc79f652885710001a0e82a-5) (:domain few-objects-room-v1)  ; 5
 (:setup
 )
 (:constraints (and 
@@ -102,7 +102,7 @@
 (:scoring maximize (count-nonoverlapping throwBallToBin)
 ))
 
-(define (game 614dec67f6eb129c3a77defd) (:domain medium-objects-room-v1)  ; 6
+(define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)  ; 6
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (adjacent ?h bed)))
     (forall (?x - (either teddy_bear pillow)) (game-conserved (not (on bed ?x))))
@@ -138,7 +138,7 @@
 
 ; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
 
-(define (game 615b40bb6cdb0f1f6f291f45) (:domain few-objects-room-v1)  ; 8
+(define (game 615b40bb6cdb0f1f6f291f45-8) (:domain few-objects-room-v1)  ; 8
 (:setup (and 
     (exists (?c - curved_wooden_ramp)
         (game-conserved (on floor ?c))
@@ -182,7 +182,7 @@
 )))
 
 ; Taking the first game this participant provided
-(define (game 615452aaabb932ada88ef3ca) (:domain many-objects-room-v1)  ; 9
+(define (game 615452aaabb932ada88ef3ca-9) (:domain many-objects-room-v1)  ; 9
 (:setup (and 
     (exists (?h - hexagonal_bin)
         (game-conserved (or
@@ -235,7 +235,7 @@
     (* 3 (count-nonoverlapping throwBallToBin))
 )))
 
-(define (game 57aa430b4cda6e00018420e9) (:domain medium-objects-room-v1)  ; 10
+(define (game 57aa430b4cda6e00018420e9-10) (:domain medium-objects-room-v1)  ; 10
 (:setup 
 )
 (:constraints (and 
@@ -264,7 +264,7 @@
 (:scoring maximize (count-nonoverlapping throwTeddyOntoPillow)
 ))
 
-(define (game 5d29412ab711e9001ab74ece) (:domain many-objects-room-v1)  ; 11
+(define (game 5d29412ab711e9001ab74ece-11) (:domain many-objects-room-v1)  ; 11
 (:setup 
 )
 (:constraints (and 
@@ -305,7 +305,7 @@
 
 ; 12 requires quantifying based on position -- something like
 
-(define (game 613bb29f16252362f4dc11a3) (:domain medium-objects-room-v1)  ; 12
+(define (game 613bb29f16252362f4dc11a3-12) (:domain medium-objects-room-v1)  ; 12
 (:setup (and 
     (exists (?h - hexagonal_bin)
         (game-conserved (< (distance ?h room_center) 1))
@@ -329,7 +329,7 @@
     (count-unique-positions throwToRampToBin)
 ))
 
-(define (game 616e5ae706e970fe0aff99b6) (:domain many-objects-room-v1)  ; 13
+(define (game 616e5ae706e970fe0aff99b6-13) (:domain many-objects-room-v1)  ; 13
 (:setup (and 
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved 
         (and
@@ -359,7 +359,7 @@
     (* 3 (count-nonoverlapping throwToRampToBin:golfball))
 )))
 
-(define (game 609c15fd6888b88a23312c42) (:domain medium-objects-room-v1)  ; 14
+(define (game 609c15fd6888b88a23312c4-14) (:domain medium-objects-room-v1)  ; 14
 (:setup
 )
 (:constraints (and 
@@ -389,7 +389,7 @@
     ; TODO: how do we want to quantify streaks? some number of one preference without another preference?
 ))
 
-(define (game 5f5d6c3cbacc025bf0a03440) (:domain few-objects-room-v1)  ; 15
+(define (game 5f5d6c3cbacc025bf0a03440-15) (:domain few-objects-room-v1)  ; 15
 (:setup (and
     (exists (?h - hexagonal_bin ?b - building) (and 
         (game-conserved (adjacent ?h bed))
@@ -444,7 +444,7 @@
 ))
 
 
-(define (game 616e4f7a16145200573161a6) (:domain few-objects-room-v1)  ; 16
+(define (game 616e4f7a16145200573161a6-16) (:domain few-objects-room-v1)  ; 16
 (:setup (and
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin ?b1 ?b2 ?b3 ?b4 - block) 
         (game-conserved (and
@@ -478,7 +478,7 @@
 ; 18 is a dup of 17
 
 
-(define (game 613e4bf960ca68f8de00e5e7) (:domain medium-objects-room-v1)  ; 17/18
+(define (game 613e4bf960ca68f8de00e5e7-17) (:domain medium-objects-room-v1)  ; 17/18
 (:setup
 )
 (:constraints (and 
@@ -527,7 +527,7 @@
     ; (* 3 (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))) 
 )))
 
-(define (game 60e93f64ec69ecdac3107555) (:domain medium-objects-room-v1)  ; 19
+(define (game 60e93f64ec69ecdac3107555-19) (:domain medium-objects-room-v1)  ; 19
 (:setup (and
     (forall (?b - ball)
         (game-optional (< (distance ?b door) 1))
@@ -580,7 +580,7 @@
 )))
 
 
-(define (game 5e2df2855e01ef3e5d01ab58) (:domain medium-objects-room-v1) ; 20
+(define (game 5e2df2855e01ef3e5d01ab58-20) (:domain medium-objects-room-v1) ; 20
 (:setup 
 )
 (:constraints (and 
@@ -631,7 +631,7 @@
     (* (- 1) (count-nonoverlapping towerFallsWhileBuilding))
 )))
 
-(define (game 5c79bc94d454af00160e2eee) (:domain few-objects-room-v1)  ; 21
+(define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)  ; 21
 (:setup (and 
     (exists (?c - chair) (game-conserved (and 
         (< (distance ?c room_center) 1)
@@ -692,7 +692,7 @@
     (* (- 1) (count-nonoverlapping ballThrownMissesEverything))
 )))
 
-(define (game 60d432ce6e413e7509dd4b78) (:domain medium-objects-room-v1)  ; 22
+(define (game 60d432ce6e413e7509dd4b78-22) (:domain medium-objects-room-v1)  ; 22
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (adjacent bed ?h)))
     (forall (?b - ball) (game-optional (on rug ?b)))
@@ -736,7 +736,7 @@
 )))
 
 
-(define (game 61267978e96853d3b974ca53) (:domain few-objects-room-v1)  ; 23
+(define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)  ; 23
 (:setup 
 )
 (:constraints (and 
@@ -765,7 +765,7 @@
 )))
 
 
-(define (game 5996d2256b939900012d9f22) (:domain few-objects-room-v1)  ; 24
+(define (game 5996d2256b939900012d9f22-24) (:domain few-objects-room-v1)  ; 24
 (:setup (and 
     (exists (?c - chair ?h - hexagonal_bin) (game-conserved (on ?c ?h)))
 ))
@@ -802,7 +802,7 @@
 
 ; 25 and 26 are the same participant and are invalid -- hiding games
 
-(define (game 606e4eb2a56685e5593304cd) (:domain few-objects-room-v1)  ; 27
+(define (game 606e4eb2a56685e5593304cd-27) (:domain few-objects-room-v1)  ; 27
 (:setup (and 
     (forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
     (game-optional (toggled_on main_light_switch))
@@ -856,7 +856,7 @@
 )))
 
 
-(define (game 610aaf651f5e36d3a76b199f) (:domain few-objects-room-v1)  ; 28
+(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects-room-v1)  ; 28
 (:setup (and 
     (forall (?c - cube_block) (game-conserved (on rug ?c)))
 ))
@@ -902,7 +902,7 @@
     (* (- 1) (count-nonoverlapping thrownBallHitsBlock:purple))
 )))
 
-(define (game 5bb511c6689fc5000149c703) (:domain few-objects-room-v1)  ; 29
+(define (game 5bb511c6689fc5000149c703-29) (:domain few-objects-room-v1)  ; 29
 (:setup
 )
 (:constraints (and 
@@ -923,7 +923,7 @@
 ; 30 is invalid --  rather underdetermined, I could try, but it would take some guesswork
 
 
-(define (game 5b8c8e7d0c740e00019d55c3) (:domain few-objects-room-v1)  ; 31
+(define (game 5b8c8e7d0c740e00019d55c3-31) (:domain few-objects-room-v1)  ; 31
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (and 
         (adjacent desk ?h)
@@ -956,7 +956,7 @@
 )))
 
 
-(define (game 56cb8858edf8da000b6df354) (:domain many-objects-room-v1)  ; 32
+(define (game 56cb8858edf8da000b6df354-32) (:domain many-objects-room-v1)  ; 32
 (:setup (and 
     (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - (either cube_block cylindrical_block pyramid_block)) (game-optional (and ; specifying the pyramidal structure
         (on desk ?b1)
@@ -1041,7 +1041,7 @@
 )))
 
 
-(define (game 614e1599db14d8f3a5c1486a) (:domain many-objects-room-v1)  ; 33
+(define (game 614e1599db14d8f3a5c1486a-33) (:domain many-objects-room-v1)  ; 33
 (:setup (and 
     (forall (?g - game_object) (game-optional 
         (not (in top_drawer ?g))   
@@ -1062,7 +1062,7 @@
 ; 34 is invalid, another hiding game
 
 
-(define (game 615dd68523c38ecff40b29b4) (:domain few-objects-room-v1)  ; 35
+(define (game 615dd68523c38ecff40b29b4-35) (:domain few-objects-room-v1)  ; 35
 (:setup
 )
 (:constraints (and 
@@ -1111,7 +1111,7 @@
 )))
 
 
-(define (game 5ef4c07dc8437809ba661613) (:domain few-objects-room-v1)  ; 36
+(define (game 5ef4c07dc8437809ba661613-36) (:domain few-objects-room-v1)  ; 36
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
     (forall (?d - dodgeball) (game-optional (on desk ?d)))
@@ -1145,7 +1145,7 @@
 ))
 
 
-(define (game 5fa45dc96da3af0b7dcba9a8) (:domain many-objects-room-v1)  ; 37
+(define (game 5fa45dc96da3af0b7dcba9a8-37) (:domain many-objects-room-v1)  ; 37
 (:setup 
 )
 (:constraints (and 
@@ -1182,7 +1182,7 @@
 
 ; projected 38 onto the space of feasible games, but could also ignore
 
-(define (game 616abb33ebe1d6112545f76d) (:domain medium-objects-room-v1)  ; 38
+(define (game 616abb33ebe1d6112545f76d-38) (:domain medium-objects-room-v1)  ; 38
 (:setup 
 )
 (:constraints (and 
@@ -1201,7 +1201,7 @@
 ))
 
 
-(define (game 614fb15adc48d3f9ffcadd41) (:domain many-objects-room-v1)  ; 39
+(define (game 614fb15adc48d3f9ffcadd41-39) (:domain many-objects-room-v1)  ; 39
 (:setup 
 )
 (:constraints (and 
@@ -1223,7 +1223,7 @@
 ))
 
 
-(define (game 5c71bdec87f8cd0001b458f5) (:domain many-objects-room-v1)  ; 40
+(define (game 5c71bdec87f8cd0001b458f5-40) (:domain many-objects-room-v1)  ; 40
 (:setup (and 
     (exists (?r - curved_wooden_ramp) (game-conserved (adjacent ?r rug)))
 ))
@@ -1253,7 +1253,7 @@
 )))
 
 
-(define (game 5f8d77f0b348950659f1919e) (:domain many-objects-room-v1)  ; 41
+(define (game 5f8d77f0b348950659f1919e-41) (:domain many-objects-room-v1)  ; 41
 (:setup (and 
     (exists (?w1 ?w2 - wall) (and  
         (game-conserved (opposite ?w1 ?w2))
@@ -1297,7 +1297,7 @@
 ))
 
 
-(define (game 5edc195a95d5090e1c3f91b2) (:domain few-objects-room-v1)  ; 42
+(define (game 5edc195a95d5090e1c3f91b-42) (:domain few-objects-room-v1)  ; 42
 (:setup (and 
     (exists (?h - hexagonal_bin) (and 
         (forall (?g - game_object) (game-optional (or
@@ -1338,7 +1338,7 @@
 ))
 
 
-(define (game 617378aeffbba11d8971051c) (:domain medium-objects-room-v1)  ; 43
+(define (game 617378aeffbba11d8971051c-43) (:domain medium-objects-room-v1)  ; 43
 (:setup (and 
     (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 1)))
 ))
@@ -1378,7 +1378,7 @@
 
 ; 44 is another find the hidden object game
 
-(define (game 60e7044ddc2523fab6cbc0cd) (:domain many-objects-room-v1)  ; 45
+(define (game 60e7044ddc2523fab6cbc0cd-45) (:domain many-objects-room-v1)  ; 45
 (:setup (and 
     (exists (?t1 ?t2 - teddy_bear) (game-optional (and 
         (on floor ?t1)
@@ -1424,7 +1424,7 @@
     (* 2 (count-once-per-objects throwKnocksOverBear:golfball))   
 )))
 
-(define (game 5d5b0dd7c032a2001ad7cf5d) (:domain few-objects-room-v1)  ; 46
+(define (game 5d5b0dd7c032a2001ad7cf5d-46) (:domain few-objects-room-v1)  ; 46
 (:setup (and 
     (exists (?c - curved_wooden_ramp) (game-conserved
         (< (distance ?c room_center) 3)  
@@ -1458,7 +1458,7 @@
 )))
 
 
-(define (game 5d470786da637a00014ba26f) (:domain many-objects-room-v1)  ; 47
+(define (game 5d470786da637a00014ba26f-47) (:domain many-objects-room-v1)  ; 47
 (:setup 
 )
 (:constraints (and 
@@ -1485,7 +1485,7 @@
 
 ; TODO: this is a crude approximation of 48 -- let's hope it's reasonable?
 
-(define (game 61254c5a6facc8ed023a64de) (:domain medium-objects-room-v1)  ; 48
+(define (game 61254c5a6facc8ed023a64de-48) (:domain medium-objects-room-v1)  ; 48
 (:setup (and 
     (exists (?b - building ?h - hexagonal_bin) (game-conserved (and 
         (in ?b ?h)
@@ -1544,7 +1544,7 @@
     (* (- 5) (count-nonoverlapping objectMoved))
 )))
 
-(define (game 60ddfb3db6a71ad9ba75e387) (:domain many-objects-room-v1)  ; 49
+(define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
 (:setup (and 
     (game-conserved (< (distance green_golfball door) 0.5))
     (forall (?d - dodgeball) (game-optional (< (distance green_golfball ?d) 1)))
@@ -1583,7 +1583,7 @@
     (* 10 (count-once-per-objects dodgeballThrownToBin))
 ))
 
-(define (game 5f3aee04e30eac7cb73b416e) (:domain medium-objects-room-v1)  ; 50
+(define (game 5f3aee04e30eac7cb73b416e-50) (:domain medium-objects-room-v1)  ; 50
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (< (distance room_center ?h) 1)))
 ))
@@ -1600,7 +1600,7 @@
     (count-once-per-objects gameObjectToBin)
 ))
 
-(define (game 5ff4a242cbe069bc27d9278b) (:domain few-objects-room-v1)  ; 51
+(define (game 5ff4a242cbe069bc27d9278b-51) (:domain few-objects-room-v1)  ; 51
 (:setup
 )
 (:constraints (and 
@@ -1619,7 +1619,7 @@
 ))
 
 
-(define (game 602d84f17cdd707e9caed37a) (:domain few-objects-room-v1)  ; 52
+(define (game 602d84f17cdd707e9caed37a-52) (:domain few-objects-room-v1)  ; 52
 (:setup 
 )
 (:constraints (and 
@@ -1641,7 +1641,7 @@
 ))
 
 
-(define (game 5f0cc31363e0816c1b0db7e1) (:domain few-objects-room-v1)  ; 53
+(define (game 5f0cc31363e0816c1b0db7e1-53) (:domain few-objects-room-v1)  ; 53
 (:setup 
 )
 (:constraints (and 
@@ -1670,7 +1670,7 @@
 )))
 
 
-(define (game 61541833a06877a656163b10) (:domain few-objects-room-v1)  ; 54
+(define (game 61541833a06877a656163b10-54) (:domain few-objects-room-v1)  ; 54
 (:setup
 )
 (:constraints (and 
@@ -1702,7 +1702,7 @@
 )))
 
 
-(define (game 5f7654f879a4420e6d20971b) (:domain few-objects-room-v1)  ; 55
+(define (game 5f7654f879a4420e6d20971b-55) (:domain few-objects-room-v1)  ; 55
 (:setup (and 
     (exists (?h - hexagonal_bin)
         (game-conserved (< (distance ?h room_center) 1))
@@ -1724,7 +1724,7 @@
     (count-once-per-objects objectToBinOnFirstTry)
 ))
 
-(define (game 604a7e9f84bf0e7937200df5) (:domain few-objects-room-v1)  ; 56
+(define (game 604a7e9f84bf0e7937200df5-56) (:domain few-objects-room-v1)  ; 56
 (:setup 
 )
 (:constraints (and 
@@ -1752,7 +1752,7 @@
     (count-nonoverlapping throwFromDoorToBin)
 ))
 
-(define (game 61623853a4ccad551beeb11a) (:domain medium-objects-room-v1)  ; 57
+(define (game 61623853a4ccad551beeb11a-57) (:domain medium-objects-room-v1)  ; 57
 (:setup 
 )
 (:constraints (and 
@@ -1790,7 +1790,7 @@
     (count-once-per-objects watchOnShelf)
 )))
     
-(define (game 5f0a5a99dbbf721316f118e2) (:domain medium-objects-room-v1)  ; 58
+(define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
 (:setup (and 
     (exists (?b - building) (and 
         (game-conserved (= (building_size ?b) 6))
@@ -1861,7 +1861,7 @@
     (* (-10) (count-nonoverlapping towerFallsWhileBuilding))
 )))
 
-(define (game 602a1735bf92e79a5e7cb632) (:domain many-objects-room-v1)  ; 59
+(define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (< (distance ?h door) 1)))
 ))
@@ -1885,7 +1885,7 @@
 ; 60 is invalid
 
 
-(define (game 6086efbd71dc51bb8d6a1a5e) (:domain many-objects-room-v1)  ; 61
+(define (game 6086efbd71dc51bb8d6a1a5e-61) (:domain many-objects-room-v1)  ; 61
 (:setup (game-conserved (and 
     (exists (?f - flat_block) (on rug ?f))
     (forall (?p - pyramid_block) (on floor ?p))
@@ -1923,7 +1923,7 @@
     (* 100 (= (count-once-per-objects cubeBlockInBuilding) 3))
 )))
 
-(define (game 601c84e07ab4907ded068d0d) (:domain medium-objects-room-v1)  ; 62
+(define (game 601c84e07ab4907ded068d0d-62) (:domain medium-objects-room-v1)  ; 62
 (:setup
 )
 (:constraints (and 
@@ -1961,7 +1961,7 @@
 
 
 
-(define (game 60bb3b463887c2f9d1385cce) (:domain medium-objects-room-v1)  ; 63
+(define (game 60bb3b463887c2f9d1385cce-63) (:domain medium-objects-room-v1)  ; 63
 (:setup
 )
 (:constraints (and 
@@ -2014,7 +2014,7 @@
 )))
 
 
-(define (game 5aeb24e22bd17300018779f2) (:domain many-objects-room-v1)  ; 64
+(define (game 5aeb24e22bd17300018779f2-64) (:domain many-objects-room-v1)  ; 64
 (:setup 
 )
 (:constraints (and 
@@ -2035,7 +2035,7 @@
 )))
 
 
-(define (game 56cf6e8d31a5bc0006e1cdf5) (:domain many-objects-room-v1)  ; 65
+(define (game 56cf6e8d31a5bc0006e1cdf5-65) (:domain many-objects-room-v1)  ; 65
 (:setup
 )
 (:constraints (and 
@@ -2049,7 +2049,7 @@
 ))
 
  
-(define (game 5f806f22e8159d0913945e35) (:domain medium-objects-room-v1)  ; 66
+(define (game 5f806f22e8159d0913945e35-66) (:domain medium-objects-room-v1)  ; 66
 (:setup (and 
     (forall (?b - (either bridge_block cube_block)) 
         (game-conserved (< (distance ?b door) 1))    
@@ -2116,7 +2116,7 @@
     ( * 100 (>= (count-once-per-external-objects blockCorrectlyPicked) 4))
 )))
 
-(define (game 60feca537ed1de34c8ddbbab) (:domain medium-objects-room-v1)  ; 67
+(define (game 60feca537ed1de34c8ddbbab-67) (:domain medium-objects-room-v1)  ; 67
 (:setup (and 
     (exists (?b1 ?b2 ?b3 ?b4 ?b5 ?b6 ?b7 ?b8 ?b9 ?b10 - (either tall_cylindrical_block bridge_block flat_block cube_block cylindrical_block))
         (game-optional (and 
@@ -2163,7 +2163,7 @@
 
 ; 68 has subjective scoring -- I could attempt to objectify, but it's hard
 
-(define (game 61262b36d0426eaefdb70725) (:domain many-objects-room-v1)  ; 69
+(define (game 61262b36d0426eaefdb70725-69) (:domain many-objects-room-v1)  ; 69
 (:setup (and 
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) (game-conserved (adjacent ?c ?h)))
 ))
@@ -2183,7 +2183,7 @@
     (count-nonoverlapping ballThrownThroughRampToBin)
 ))
 
-(define (game 5fbbf3f438be4c025df6cdd4) (:domain many-objects-room-v1)  ; 70
+(define (game 5fbbf3f438be4c025df6cdd4-70) (:domain many-objects-room-v1)  ; 70
 (:setup (and 
     (forall (?c - chair) (game-conserved (not (adjacent_side desk front ?c))))
     (exists (?h - hexagonal_bin ?c - curved_wooden_ramp ) 
@@ -2233,7 +2233,7 @@
     (* (- 1) (count-nonoverlapping thrownObjectHitsComputer))
 )))
 
-(define (game 60a696c3afad1b7f16b0c744) (:domain many-objects-room-v1)  ; 71
+(define (game 60a696c3afad1b7f16b0c744-71) (:domain many-objects-room-v1)  ; 71
 (:setup (and 
     (forall (?p - pillow) (game-conserved (on bed ?p)))
     (forall (?b - bridge_block) (game-conserved (on floor ?b)))
@@ -2266,7 +2266,7 @@
     (count-nonoverlapping golfballUnderBridgeWithoutTouchingBlock)
 )))
 
-(define (game 5fa23c9b64b18a4067cc842e) (:domain many-objects-room-v1)  ; 72
+(define (game 5fa23c9b64b18a4067cc842e-72) (:domain many-objects-room-v1)  ; 72
 (:setup (and 
     (exists (?t - teddy_bear) (game-optional (and (on bed ?t) (object_orientation ?t upright))))
     (forall (?b - ball) (game-optional (< (distance ?b desk) 1)))
@@ -2295,7 +2295,7 @@
     (count-nonoverlapping ballKnocksTeddy)
 ))
 
-(define (game 60ef5b1cf52939a80af77543) (:domain many-objects-room-v1)  ; 73
+(define (game 60ef5b1cf52939a80af77543-73) (:domain many-objects-room-v1)  ; 73
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (< (distance ?h room_center) 1)))
     (forall (?d - dodgeball) (game-optional (on desk ?d)))
@@ -2313,7 +2313,7 @@
     (count-nonoverlapping dodgeballThrownToBinFromDesk)
 ))
 
-(define (game 613bd3a683a2ac56a4119aa6) (:domain many-objects-room-v1)  ; 74
+(define (game 613bd3a683a2ac56a4119aa6-74) (:domain many-objects-room-v1)  ; 74
 (:setup (and 
     (game-conserved (exists (?h - hexagonal_bin ?p - pillow) (< (distance ?h ?p) 3)))
 ))
@@ -2341,7 +2341,7 @@
 ))
 
 
-(define (game 612fc78547802a3f177e0d53) (:domain few-objects-room-v1)  ; 75
+(define (game 612fc78547802a3f177e0d53-75) (:domain few-objects-room-v1)  ; 75
 (:setup )
 (:constraints (and 
     (preference ballDroppedInBin (exists (?b - ball ?h - hexagonal_bin) 
@@ -2368,7 +2368,7 @@
 ))
 
 
-(define (game 5d0ba121619661001a7f4fe6) (:domain few-objects-room-v1)  ; 76
+(define (game 5d0ba121619661001a7f4fe6-76) (:domain few-objects-room-v1)  ; 76
 (:setup )
 (:constraints (and 
     (forall (?c - (either pink yellow)) (and 
@@ -2436,7 +2436,7 @@
 )))
 
 
-(define (game 616da508e4014f74f43c8433) (:domain many-objects-room-v1)  ; 77
+(define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)  ; 77
 (:setup 
 )
 (:constraints (and 
@@ -2452,7 +2452,7 @@
 ))
 
 
-(define (game 5eeb326764eb142830aa5cfb) (:domain medium-objects-room-v1)  ; 78
+(define (game 5eeb326764eb142830aa5cfb-78) (:domain medium-objects-room-v1)  ; 78
 (:setup (and 
     (exists (?t - teddy_bear) (game-optional (and 
         (adjacent_side bed front_left_corner ?t)
@@ -2492,7 +2492,7 @@
 )))
 
 
-(define (game 5ba855d47c0ebe0001272f70) (:domain many-objects-room-v1)  ; 79
+(define (game 5ba855d47c0ebe0001272f70-79) (:domain many-objects-room-v1)  ; 79
 (:setup )
 (:constraints (and 
     (preference throwGolfballToBin (exists (?g - golfball ?h - hexagonal_bin)
@@ -2507,7 +2507,7 @@
 ))
 
 
-(define (game 5ea3a20ac30a773368592f9e) (:domain few-objects-room-v1)  ; 80
+(define (game 5ea3a20ac30a773368592f9e-80) (:domain few-objects-room-v1)  ; 80
 (:setup )
 (:constraints (and 
     (preference pinkObjectMovedToRoomCenter (exists (?o - game_object)
@@ -2592,7 +2592,7 @@
     (count-once tanObjectMovedToRoomCenter)
 )))
 
-(define (game 5fdee4d96a36576ca62e4518) (:domain many-objects-room-v1)  ; 81
+(define (game 5fdee4d96a36576ca62e4518-81) (:domain many-objects-room-v1)  ; 81
 (:setup (and 
     (exists (?h - hexagonal_bin ?r1 ?r2 - (either triangular_ramp curved_wooden_ramp)) 
         (game-conserved (and 
@@ -2619,7 +2619,7 @@
     (count-nonoverlapping dodgeballFromRugToBin)
 ))
 
-(define (game 6172378d423fdf1acdc2d212) (:domain many-objects-room-v1)  ; 82
+(define (game 6172378d423fdf1acdc2d212-82) (:domain many-objects-room-v1)  ; 82
 (:setup )
 (:constraints (and 
     (preference ballThrownToBin (exists (?b - ball ?h - hexagonal_bin)
@@ -2637,7 +2637,7 @@
     (count-nonoverlapping ballThrownToBin)
 ))
 
-(define (game 5bdfb648484288000130dad0) (:domain many-objects-room-v1)  ; 83
+(define (game 5bdfb648484288000130dad0-83) (:domain many-objects-room-v1)  ; 83
 (:setup (and 
     (exists (?h - hexagonal_bin ?c1 ?c2 - chair) (game-conserved (and 
         (object_orientation ?h sideways)
@@ -2662,7 +2662,7 @@
 
 ; 84 is a hiding game -- invalid
 
-(define (game 61272733b6c8fe076880e02c) (:domain few-objects-room-v1)  ; 85
+(define (game 61272733b6c8fe076880e02c-85) (:domain few-objects-room-v1)  ; 85
 (:setup )
 (:constraints (and 
     (forall (?c - color)
@@ -2705,7 +2705,7 @@
 
 ; 86 is a dup of 84 -- and is aldo invalid
 
-(define (game 6158d01f302cf46b673dd597) (:domain few-objects-room-v1)  ; 87
+(define (game 6158d01f302cf46b673dd597-87) (:domain few-objects-room-v1)  ; 87
 (:setup (and 
     (exists (?h - hexagonal_bin ?w - wall) (game-conserved (and 
         (on desk ?h)
@@ -2729,7 +2729,7 @@
 )))
 
 
-(define (game 5fefd5b2173bfbe890bc98ed) (:domain few-objects-room-v1)  ; 88
+(define (game 5fefd5b2173bfbe890bc98ed-88) (:domain few-objects-room-v1)  ; 88
 (:setup (and 
     (exists (?h - hexagonal_bin ?p - pillow ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
         (game-conserved (and 
@@ -2800,7 +2800,7 @@
     (count-nonoverlapping throwFromEdgeOfRug)
 ))
 
-(define (game 6103ec2bf88328284fd894bc) (:domain medium-objects-room-v1)  ; 89
+(define (game 6103ec2bf88328284fd894bc-89) (:domain medium-objects-room-v1)  ; 89
 (:setup (and 
     (exists (?d - desktop ?h - hexagonal_bin) (game-conserved (and 
         (on desk ?h)
@@ -2828,7 +2828,7 @@
     (* 10 (count-nonoverlapping ballThrownFromRug:beachball))
 )))
 
-(define (game 5f511e9381da7d30c91a46a2) (:domain many-objects-room-v1)  ; 90
+(define (game 5f511e9381da7d30c91a46a2-90) (:domain many-objects-room-v1)  ; 90
 (:setup )
 (:constraints (and 
     (preference dodgeballBouncesOnceToDoggieBed (exists (?d - dodgeball ?b - doggie_bed)
@@ -2849,7 +2849,7 @@
 
 ; 92 is a hiding game -- invalid
 
-(define (game 60a6ba026f8bd75b67b23c97) (:domain many-objects-room-v1)  ; 93
+(define (game 60a6ba026f8bd75b67b23c97-93) (:domain many-objects-room-v1)  ; 93
 (:setup )
 (:constraints (and 
     (preference throwBallToBin (exists (?d - dodgeball ?h - hexagonal_bin)
@@ -2865,7 +2865,7 @@
 ))
 
 
-(define (game 5cdad620eae6f70019d4e950) (:domain many-objects-room-v1)  ; 94
+(define (game 5cdad620eae6f70019d4e950-94) (:domain many-objects-room-v1)  ; 94
 (:setup )
 (:constraints (and 
     (forall (?b - (either dodgeball golfball)) (and 
@@ -2898,7 +2898,7 @@
 ; 96 requires is underconstrainted -- I'm omitting it for now
 
 
-(define (game 5b6a87d2cda8590001db8e07) (:domain medium-objects-room-v1)  ; 97
+(define (game 5b6a87d2cda8590001db8e07097) (:domain medium-objects-room-v1)  ; 97
 (:setup )
 (:constraints (and 
     (preference ballThrownToRug (exists (?d - red_dodgeball)
@@ -2917,7 +2917,7 @@
 ))
 
 
-(define (game 5f038dc85819b15b08840dfd) (:domain medium-objects-room-v1)  ; 98
+(define (game 5f038dc85819b15b08840dfd0-98) (:domain medium-objects-room-v1)  ; 98
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (not (exists (?s - shelf) (above ?h ?s)))))
     (forall (?b - ball) (game-optional (on bed ?b)))
@@ -2943,7 +2943,7 @@
 )))
 
 
-(define (game 5fbd9bcc54453f1b0b28d89a) (:domain few-objects-room-v1)  ; 99
+(define (game 5fbd9bcc54453f1b0b28d89a-99) (:domain few-objects-room-v1)  ; 99
 (:setup )
 (:constraints (and 
     (preference cubeBlockFromBedToShelf (exists (?c - cube_block ?s - shelf)
@@ -2968,7 +2968,7 @@
     (count-nonoverlapping cubeBlockFromBedToShelf)
 ))
 
-(define (game 5c7ceda01d2afc0001f4ad1d) (:domain medium-objects-room-v1)  ; 100
+(define (game 5c7ceda01d2afc0001f4ad1d-100) (:domain medium-objects-room-v1)  ; 100
 (:setup (and 
     (exists (?h - hexagonal_bin ?d - doggie_bed) (game-conserved (and 
         (on floor ?d)
@@ -2994,7 +2994,7 @@
 )))
 
 
-(define (game 61093eae2bc2e47e6f26c7d7) (:domain few-objects-room-v1)  ; 101
+(define (game 61093eae2bc2e47e6f26c7d7-101) (:domain few-objects-room-v1)  ; 101
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
     (exists (?r - curved_wooden_ramp) (game-conserved (and (adjacent bed ?r) (faces ?r desk))))
@@ -3048,7 +3048,7 @@
 ; 102 is almost a copy of 101 and same participant -- omit
 
 
-(define (game 5b94d723839c0a00010f88d9) (:domain few-objects-room-v1)  ; 103
+(define (game 5b94d723839c0a00010f88d9-103) (:domain few-objects-room-v1)  ; 103
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (and
         (on bed ?h) 
@@ -3093,7 +3093,7 @@
 )))
 
 
-(define (game 6106ac34408681f3b0d07396) (:domain few-objects-room-v1)  ; 104
+(define (game 6106ac34408681f3b0d07396-104) (:domain few-objects-room-v1)  ; 104
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (and
         (equal_x_position ?h east_sliding_door) 
@@ -3116,7 +3116,7 @@
 ))  
 
 
-(define (game 61015f63f9a351d3171a0f98) (:domain few-objects-room-v1)  ; 105
+(define (game 61015f63f9a351d3171a0f98-105) (:domain few-objects-room-v1)  ; 105
 (:setup (and 
     (forall (?c - cube_block) (game-optional (on rug ?c)))
     (game-optional (not (exists (?o - game_object) (above ?o desk))))
@@ -3152,7 +3152,7 @@
 ))
 
 
-(define (game 5d67b6d92b7448000173d95a) (:domain few-objects-room-v1)  ; 106
+(define (game 5d67b6d92b7448000173d95a-106) (:domain few-objects-room-v1)  ; 106
 (:setup (and 
 
 ))
@@ -3182,7 +3182,7 @@
 
 ; 107 and 109 are by the same participant, and 109 is actually mostly valid
 
-(define (game 5f0af097e7d15b3bf7734642) (:domain medium-objects-room-v1)  ; 108
+(define (game 5f0af097e7d15b3bf7734642-108) (:domain medium-objects-room-v1)  ; 108
 (:setup (and 
     (exists (?h - hexagonal_bin ?b1 ?b2 - tall_cylindrical_block ?p1 ?p2 - pyramid_block ?b3 - cylindrical_block) 
         (and 
@@ -3261,7 +3261,7 @@
     (* 4 (count-once-per-external-objects ballInOrOnBin:beachball))
 )))
 
-(define (game 5f9aba6600cdf11f1c9b915c) (:domain many-objects-room-v1)  ; 109
+(define (game 5f9aba6600cdf11f1c9b915c-109) (:domain many-objects-room-v1)  ; 109
 (:setup (and 
 
 ))
@@ -3294,7 +3294,7 @@
     (count-once-per-objects pillowThrownToDoggieBed)
 )))
 
-(define (game 6123dcdd95e4f8afd71928a3) (:domain few-objects-room-v1)  ; 110
+(define (game 6123dcdd95e4f8afd71928a3-110) (:domain few-objects-room-v1)  ; 110
 (:setup (and 
     (forall (?c - chair) (game-conserved (equal_x_position ?c door)))
     (exists (?h - hexagonal_bin) (game-conserved (and 
@@ -3344,7 +3344,7 @@
 
 ; 112 is definitely invalid and underdefined
 
-(define (game 6005e777d1d8768d5808b5fd) (:domain few-objects-room-v1)  ; 113
+(define (game 6005e777d1d8768d5808b5fd-113) (:domain few-objects-room-v1)  ; 113
 (:setup (and 
     (exists (?h - hexagonal_bin ?c1 ?c2 ?c3 ?c4 - cube_block ?r - curved_wooden_ramp) (game-conserved (and 
         (adjacent_side ?h front ?c1)
@@ -3374,7 +3374,7 @@
     (count-nonoverlapping ballThrownThroughRampAndBlocksToBin)
 ))
 
-(define (game 61087e4fc006ee7d6be38641) (:domain medium-objects-room-v1)  ; 114
+(define (game 61087e4fc006ee7d6be38641-114) (:domain medium-objects-room-v1)  ; 114
 (:setup (and 
     (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 0.5)))
 ))
@@ -3394,7 +3394,7 @@
     (count-once-per-objects objectInBuilding)
 ))
 
-(define (game 5e606b1eaf84e83c728748d7) (:domain medium-objects-room-v1)  ; 115
+(define (game 5e606b1eaf84e83c728748d7-115) (:domain medium-objects-room-v1)  ; 115
 (:setup (and 
     (exists (?c - chair ?r - triangular_ramp ?t - teddy_bear ?h - hexagonal_bin) (and 
         (game-conserved (and 
@@ -3431,7 +3431,7 @@
     (count-nonoverlapping teddyBearHitsBall)
 )))
 
-(define (game 60bb404e01d599dfb1c3d71c) (:domain medium-objects-room-v1)  ; 116
+(define (game 60bb404e01d599dfb1c3d71c-116) (:domain medium-objects-room-v1)  ; 116
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (or (on bed ?h) (on desk ?h))))
 ))
@@ -3461,7 +3461,7 @@
 ))
 
 
-(define (game 613e18e92e4ed15176362aa2) (:domain medium-objects-room-v1)  ; 117
+(define (game 613e18e92e4ed15176362aa2-117) (:domain medium-objects-room-v1)  ; 117
 (:setup (and 
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved (< (distance ?h ?r) 2)))
 ))
@@ -3505,7 +3505,7 @@
     (* 5 (count-once redDodgeballThrownToBin))
 )))
 
-(define (game 5e73ded1027e893642055f86) (:domain medium-objects-room-v1)  ; 118
+(define (game 5e73ded1027e893642055f86-118) (:domain medium-objects-room-v1)  ; 118
 (:setup )
 (:constraints (and 
     (forall (?c - color) 

@@ -104,9 +104,10 @@ points]}}}
 \newcommand{\yy}{{\bf y}}
 \newcommand{\real}{\ensuremath{\mathbb{R}}}
 
+\newcommand{\dsl}[1]{{\it $\langle$#1$\rangle$}}
+\newcommand*{\fullref}[1]{\hyperref[{#1}]{\autoref*{#1} (\nameref*{#1})}} % One single link
 
 \newcommand{\eat}[1]{}
-
 \newcommand{\CInd}[3]{({#1} \perp {#2} \mid {#3})}
 \newcommand{\Ind}[2]{({#1} \perp {#2})}
 
@@ -183,7 +184,7 @@ $\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
 \subsection{Satisfying (at-end ...) operators}
 Thankfully, the other type of temporal specification we find ourselves using as part of preferences is much simpler to translate. 
-Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evauated at the terminal state of gameplay.
+Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evaluated at the terminal state of gameplay.
 % The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
 
 

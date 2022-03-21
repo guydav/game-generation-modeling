@@ -98,11 +98,37 @@ class DomainSpecificLanguageLMDataset(Dataset):
         tensor = torch.tensor(self.programs[idx], dtype=torch.long)
         return tensor
 
+class DescriptionToDSLDataset(Dataset):
+    '''
+    Dataset wrapper for sequence-to-sequence modeling mapping the natural language descriptions to the DSL
+    '''
+    def __init__(self,
+                 tokenizer,
+                 chunk_size=1024,
+                 room_contents_mode="naive",
+                 dsl_info_path="../dsl/interactive-beta.pddl",
+                 csv_file="../data/interactive_beta.csv"):
+
+
+        game_data_df = pandas.read_csv(csv_file)
+        game_descriptions = list(zip(game_data_df["scene"], game_data_df["game_setup"], game_data_df["game_gameplay"], 
+                                     game_data_df["game_scoring"]))
+        participant_ids = game_data_df["participantID"]
+
+        for pid in participant_ids:
+            print("PID:", pid)
+            for program in load_tests_from_file(dsl_info_path):
+                if pid in program:
+                    print("\tFound a matching program!")
+
+        # print(len(load_tests_from_file(dsl_info_path)))
+        # print(len(game_descriptions))
+
 
 if __name__ == "__main__":
     from transformers import AutoTokenizer
     t = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
-    d = DomainSpecificLanguageLMDataset(t)
+    d = DescriptionToDSLDataset(t)
     # dataset = GameDescriptionGPT2Dataset("colors")
     # ids = dataset[22]
     # decode = dataset.decode_ids(ids)

@@ -75,6 +75,11 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
                     log_writer.add_text("eval_sample", sample, global_step)
                     model.train()
 
+                    print("Another generation?")
+                    inputs = tokenizer(args.gen_context, return_tensors="pt").input_ids
+                    outputs = model.generate(inputs, max_length=args.gen_len, num_beams=5)[0]
+                    print(tokenizer.decode(outputs, skip_special_tokens=True))
+
     except KeyboardInterrupt:
         print("Stopping early due to user input!")
         progress_bar.close()
@@ -86,7 +91,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot"])
+    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot", "java-gpt2"])
     parser.add_argument('--dataset', type=str, default="dsl", choices=["dsl", "descs"])
     parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument('--chunk_size', type=int, default=512)
@@ -107,7 +112,8 @@ if __name__ == "__main__":
     # Map from model names to the load string transformers expects
     model_mapping = {"CodeBERTa": "huggingface/CodeBERTa-small-v1",
                      "gpt2": "gpt2",
-                     "codeparrot": "lvwerra/codeparrot"}
+                     "codeparrot": "lvwerra/codeparrot",
+                     "java-gpt2": "microsoft/CodeGPT-small-java-adaptedGPT2"}
 
     # Map from dataset names to the class for that dataset
     dataset_mapping = {"dsl": DomainSpecificLanguageLMDataset,

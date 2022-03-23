@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import torch
 import pandas
@@ -105,24 +106,56 @@ class DescriptionToDSLDataset(Dataset):
     def __init__(self,
                  tokenizer,
                  chunk_size=1024,
-                 room_contents_mode="naive",
+                 room_contents_mode=None,
                  dsl_info_path="../dsl/interactive-beta.pddl",
                  csv_file="../data/interactive_beta.csv"):
 
+
+        self.tokenizer = tokenizer
+
+        if room_contents_mode is not None:
+            self.room_contents = get_room_contents(room_contents_mode)
 
         game_data_df = pandas.read_csv(csv_file)
         game_descriptions = list(zip(game_data_df["scene"], game_data_df["game_setup"], game_data_df["game_gameplay"], 
                                      game_data_df["game_scoring"]))
         participant_ids = game_data_df["participantID"]
 
-        for pid in participant_ids:
-            print("PID:", pid)
-            for program in load_tests_from_file(dsl_info_path):
-                if pid in program:
-                    print("\tFound a matching program!")
+        self.paired_data = []
+        for program in load_tests_from_file(dsl_info_path):
+            # Find the PID / corresponding index into the game info dataframe
+            pid, index = re.search("\(game(.*)\) \(", program).group(1).strip().split("-")
+            
+            # Mask out that information before tokenizing
+            program = program.replace(f"{pid}-{index}", "[ID]")
 
-        # print(len(load_tests_from_file(dsl_info_path)))
-        # print(len(game_descriptions))
+            # Collect the natural language game information
+            room, setup, gameplay, scoring = game_descriptions[int(index)]
+
+            encoded_program = self.tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
+
+            description_text = ""
+            if room_contents_mode is not None:
+                description_text += "[ROOM] " + self.room_contents[room] + "\n"
+
+            if str(setup) != "nan":
+                description_text += "[SETUP]: " + setup + "\n"
+
+            description_text += "[GAMEPLAY]: " + gameplay + "\n"
+            description_text += "[SCORING]: " + scoring
+
+            encoded_description = self.tokenizer.encode(description_text, max_length=chunk_size, truncation=True, padding="max_length")
+
+            self.paired_data.append((encoded_description, encoded_program))
+
+    def __len__(self):
+        return len(self.paired_data)
+
+    def __getitem__(self, idx):
+        description, program = self.paired_data[idx]
+        tensor = torch.tensor(self.programs[idx], dtype=torch.long)
+        
+        return tensor
 
 
 if __name__ == "__main__":

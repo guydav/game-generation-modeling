@@ -153,9 +153,10 @@ class DescriptionToDSLDataset(Dataset):
 
     def __getitem__(self, idx):
         description, program = self.paired_data[idx]
-        tensor = torch.tensor(self.programs[idx], dtype=torch.long)
-        
-        return tensor
+        combined_tensor = torch.stack([torch.tensor(description, dtype=torch.long),
+                                       torch.tensor(program, dtype=torch.long)], dim=0)
+
+        return combined_tensor
 
 
 if __name__ == "__main__":

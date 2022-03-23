@@ -2898,7 +2898,7 @@
 ; 96 requires is underconstrainted -- I'm omitting it for now
 
 
-(define (game 5b6a87d2cda8590001db8e07097) (:domain medium-objects-room-v1)  ; 97
+(define (game 5b6a87d2cda8590001db8e070-97) (:domain medium-objects-room-v1)  ; 97
 (:setup )
 (:constraints (and 
     (preference ballThrownToRug (exists (?d - red_dodgeball)

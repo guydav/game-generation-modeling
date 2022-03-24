@@ -78,16 +78,12 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
                 progress_bar.set_postfix({"loss": loss.item()})
 
                 if global_step%args.gen_freq == 0:
-                    model.eval()
-                    sample = sampler.generate(condition_text=args.gen_context, length=args.gen_len, temperature=args.gen_temp)
-                    print("\nSample: ", sample, "\n")
-                    if not args.no_log: log_writer.add_text("eval_sample", sample, global_step)
-                    model.train()
-
-                    print("Another generation?")
                     inputs = tokenizer(args.gen_context, return_tensors="pt").input_ids
-                    outputs = model.generate(inputs, max_length=args.gen_len, num_beams=5)[0]
-                    print(tokenizer.decode(outputs, skip_special_tokens=True))
+                    outputs = model.generate(inputs, max_length=args.gen_len, num_beams=args.gen_beams,
+                                             temperature=args.gen_temp)[0]
+                    sample = tokenizer.decode(outputs, skip_special_tokens=True)
+                    if not args.no_log: log_writer.add_text("eval_sample", sample, global_step)
+                    print("\nSample:", sample, "\n")
 
     except KeyboardInterrupt:
         print("Stopping early due to user input!")
@@ -115,6 +111,7 @@ if __name__ == "__main__":
     parser.add_argument('--gen_len', type=int, default=256)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
+    parser.add_argument('--gen_beams', type=int, default=5)
     parser.add_argument('--no-log', action='store_true')
 
     args = parser.parse_args()

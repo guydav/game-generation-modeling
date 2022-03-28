@@ -234,18 +234,26 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
     _indent_print(_out_str_to_span(f'({rule}', context), depth, increment, context)
     context['continue_line'] = True
 
-    var_node = ast[f'{rule}_vars']
-    if var_node is not None:
-        formatted_vars = _parse_variable_list(caller, rule, var_node.variables, depth, increment, context)
+    vars_key = None
+    args_key = None
+    vars_node = None
+    var_str = ''
+    vars_keys_list = list(filter(lambda k: k.endswith('_vars'), ast.keys()))
+    if len(vars_keys_list) > 1:
+         raise ValueError(f'Multiple quantifier variables: {ast}')
+
+    if len(vars_keys_list) == 1:
+        vars_key = vars_keys_list[0]
+        args_key = vars_key.replace('_vars', '_args')
+        vars_node = ast[vars_key]
+        formatted_vars = _parse_variable_list(caller, rule, vars_node.variables, depth, increment, context)
         var_str = f'({" ".join(formatted_vars)})'
-    else:
-        var_str = ''
     
-    if var_node is not None and 'mutation' in var_node:
+    if vars_node is not None and 'mutation' in vars_node:
         prev_mutation = None
         if 'mutation' in context:
             prev_mutation = context['mutation']
-        context['mutation'] = var_node['mutation']
+        context['mutation'] = vars_node['mutation']
         context = preprocess_context(context)
 
         _indent_print(_out_str_to_span(var_str, context), depth, increment, context)
@@ -263,11 +271,17 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
     context['continue_line'] = prev_continue_line
 
     found_args = False
-    for key in QUANTIFIER_KEYS:
-        key_str = f'{rule}_{key}'
-        if key_str in ast:
-            found_args = True
-            caller(ast[key_str], depth + 1, increment, context)
+
+    if args_key is not None and args_key in ast:
+        found_args = True
+        caller(ast[args_key], depth + 1, increment, context)
+
+    if not found_args:
+        for key in QUANTIFIER_KEYS:
+            key_str = f'{rule}_{key}'
+            if key_str in ast:
+                found_args = True
+                caller(ast[key_str], depth + 1, increment, context)
     
     if not found_args:
         print(ast.keys())
@@ -283,8 +297,18 @@ def _handle_logical(caller, rule, ast, depth, increment, context=None):
     if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
         _indent_print(f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">', depth, increment, context)
         
-    _indent_print(f'({rule}', depth, increment, context)
-    caller(ast[f'{rule}_args'], depth + 1, increment, context)
+    if f'{rule}_args' in ast:
+        _indent_print(f'({rule}', depth, increment, context)
+        caller(ast[f'{rule}_args'], depth + 1, increment, context)
+    else:
+        rule_fragment = rule.split('_')[0]
+        key = f'{rule_fragment}_args'
+        if key in ast:
+            _indent_print(f'({rule_fragment}', depth, increment, context)
+            caller(ast[key], depth + 1, increment, context)
+        else:
+            raise ValueError(f'Found logical with unknown arguments: {ast}')
+
     _indent_print(f')', depth, increment, context)
 
     if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
@@ -353,7 +377,7 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
 
 
 def build_setup_printer():
-    printer = ASTPrinter('(:setup', ('setup_', '_predicate'))
+    printer = ASTPrinter('(:setup', ('setup_', 'super_', 'predicate_'))
     printer.register_exact_matches(
         _handle_function_comparison, _handle_predicate, _handle_function_eval)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
@@ -476,7 +500,7 @@ def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
 
 
 def build_constraints_printer():
-    printer = ASTPrinter('(:constraints', ('pref_body_', 'pref_', 'predicate_'))
+    printer = ASTPrinter('(:constraints', ('pref_body_', 'pref_', 'super_', 'predicate_'))
     printer.register_exact_matches(
         _handle_preference, _handle_function_comparison, _handle_predicate,
         _handle_at_end, _handle_always, _handle_then, _handle_any, _handle_once, _handle_once_measure,

@@ -66,24 +66,24 @@ setup_forall = '(forall' forall_vars:variable_list forall_args:setup ')';
     
 setup_statement = setup_game_conserved | setup_game_optional;
     
-setup_game_conserved = '(game-conserved' {conserved_pred:setup_predicate}+ ')';
-setup_game_optional = '(game-optional' {optional_pred:setup_predicate}+ ')';
+setup_game_conserved = '(game-conserved' {conserved_pred:super_predicate}+ ')';
+setup_game_optional = '(game-optional' {optional_pred:super_predicate}+ ')';
 
-setup_predicate = 
-    setup_and_predicate |
-    setup_or_predicate |
-    setup_not_predicate | 
-    setup_exists_predicate |
-    setup_forall_predicate |
+super_predicate = 
+    super_predicate_and |
+    super_predicate_or |
+    super_predicate_not | 
+    super_predicate_exists |
+    super_predicate_forall |
     function_comparison |
     predicate
     ;
     
-setup_and_predicate = '(and' {and_args:setup_predicate}+ ')'; # TODO: do we want to enforce more than one?
-setup_or_predicate = '(or' {or_args:setup_predicate}+ ')';  # TODO: do we want to enforce more than one?
-setup_not_predicate = '(not' not_args:setup_predicate ')';
-setup_exists_predicate = '(exists' exists_vars:variable_list exists_args:setup_predicate ')';
-setup_forall_predicate = '(forall' forall_vars:variable_list forall_args:setup_predicate ')';
+super_predicate_and = '(and' {and_args:super_predicate}+ ')'; # TODO: do we want to enforce more than one?
+super_predicate_or = '(or' {or_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
+super_predicate_not = '(not' not_args:super_predicate ')';
+super_predicate_exists = '(exists' exists_vars:variable_list exists_args:super_predicate ')';
+super_predicate_forall = '(forall' forall_vars:variable_list forall_args:super_predicate ')';
 
 # Constraints/Preferences
 preferences = 
@@ -109,8 +109,8 @@ pref_body =
 
 pref_body_exists = '(exists' exists_vars:variable_list exists_args:pref_body ')';
 pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
-at_end = '(at-end' at_end_pred:pref_predicate')';
-# always = '(always' always_pred:pref_predicate')';
+at_end = '(at-end' at_end_pred:super_predicate')';
+# always = '(always' always_pred:super_predicate')';
 then = '(then' {then_funcs:seq_funq}+ ')';
 
 seq_funq = 
@@ -125,29 +125,29 @@ seq_funq =
     ;
 
 any = '(any)';
-once = '(once ' once_pred:pref_predicate ')';
-once_measure = '(once-measure' once_measure_pred:pref_predicate measurement:function_eval ')';
-hold = '(hold' hold_pred:pref_predicate ')';
-while_hold = '(hold-while' hold_pred:pref_predicate {while_preds:pref_predicate}+ ')';
-hold_for = '(hold-for' num_to_hold:number hold_pred:pref_predicate ')';
-hold_to_end = '(hold-to-end' hold_pred:pref_predicate ')';
+once = '(once ' once_pred:super_predicate ')';
+once_measure = '(once-measure' once_measure_pred:super_predicate measurement:function_eval ')';
+hold = '(hold' hold_pred:super_predicate ')';
+while_hold = '(hold-while' hold_pred:super_predicate {while_preds:super_predicate}+ ')';
+hold_for = '(hold-for' num_to_hold:number hold_pred:super_predicate ')';
+hold_to_end = '(hold-to-end' hold_pred:super_predicate ')';
 forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')'; 
 
-pref_predicate = 
-    pref_predicate_and |
-    pref_predicate_or |
-    pref_predicate_not |
-    pref_predicate_exists |
-    pref_predicate_forall |
-    predicate |
-    function_comparison 
-    ;
+# super_predicate = 
+#     super_predicate_and |
+#     super_predicate_or |
+#     super_predicate_not |
+#     super_predicate_exists |
+#     super_predicate_forall |
+#     predicate |
+#     function_comparison 
+#     ;
 
-pref_predicate_and = '(and' {and_args:pref_predicate}+ ')';  # TODO: do we want to enforce more than one?
-pref_predicate_or = '(or' {or_args:pref_predicate}+ ')';  # TODO: do we want to enforce more than one?
-pref_predicate_not = '(not' not_args:pref_predicate ')';
-pref_predicate_exists = '(exists' exists_vars:variable_list exists_pred:pref_predicate ')';
-pref_predicate_forall = '(forall' forall_vars:variable_list forall_pred:pref_predicate ')';
+# super_predicate_and = '(and' {and_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
+# super_predicate_or = '(or' {or_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
+# super_predicate_not = '(not' not_args:super_predicate ')';
+# super_predicate_exists = '(exists' exists_vars:variable_list exists_pred:super_predicate ')';
+# super_predicate_forall = '(forall' forall_vars:variable_list forall_pred:super_predicate ')';
 
 # Terminal conditions
 

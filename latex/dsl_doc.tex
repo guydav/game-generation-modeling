@@ -104,9 +104,10 @@ points]}}}
 \newcommand{\yy}{{\bf y}}
 \newcommand{\real}{\ensuremath{\mathbb{R}}}
 
+\newcommand{\dsl}[1]{{\it $\langle$#1$\rangle$}}
+\newcommand*{\fullref}[1]{\hyperref[{#1}]{\autoref*{#1} (\nameref*{#1})}} % One single link
 
 \newcommand{\eat}[1]{}
-
 \newcommand{\CInd}[3]{({#1} \perp {#2} \mid {#3})}
 \newcommand{\Ind}[2]{({#1} \perp {#2})}
 
@@ -115,23 +116,21 @@ points]}}}
 % \title{Homework 12} %  \vspace{-3cm} % before name to raise
 % \subtitle{MATH-GA 2110}
 % \vspace{-5cm} % before name to raise
-\title{Game Creation DSL}
-\author{Guy Davidson}
+\title{Goals as Reward-Generating Programs Domain Specific Language}
+% \author{Guy Davidson}
 % \date{\today}
 
 
 \begin{document}
 \maketitle
 
-\section{DSL Docuemntation as of \today}
+\section{DSL Grammar Definitions}
 
-\subsection*{Color-coding}
-\begin{itemize}
-\item {\color{red} \textbf{Undefined terms (red)}}: a term that appears somewhere that I forgot to provide a definition for
-\item {\color{gray} \textbf{Unused terms (gray)}}: a term that appears in the definitions I documented but does not appear in any games
-\item {\color{teal} \textbf{New terms (teal)}}: a term that appears for the first time in the newest batch of games I translated
-\end{itemize}
-\subsection{Game Definition}
+A game is defined by a name, and is expected to be valid in a particular domain, also referenced by a name. 
+A game is defined by four elements, two of them mandatory, and two optional.
+The mandatory ones are the \dsl{constraints} section, which defines gameplay preferences, and the \dsl{scoring} section, which defines how gameplay preferences are counted to arrive at a score for the player in the game.
+The optional ones are the \dsl{setup} section, which defines how the environment must be prepared before gameplay can begin, and the \dsl{terminal} conditions, which specify when and how the game ends. 
+
 \begin{grammar}
 <game> ::= (define (game <name>) \\
   (:domain <name>) \\
@@ -143,234 +142,254 @@ points]}}}
 <name> ::= /[A-z]+(_[A-z0-9]+)*/ "#" a letter, optionally followed by letters, numbers, and underscores
 \end{grammar}
 
-\subsection{Setup}
-PDDL doesn't have any close equivalent of this, but when reading through the games participants specify, 
-        they often require some transformation of the room from its initial state before the game can be played.
-        We could treat both as parts of the gameplay, but we thought there's quite a bit to be gained by splitting them -- for example,
-        the policies to setup a room are quite different from the policies to play a game (much more static). \\
+We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types. 
+Finally, we provide a mapping between some aspects of our gameplay preference specification and linear temporal logic (LTL) operators. 
 
-        The one nuance here came from the (game-conserved ...) and (game-optional ...) elements. It seemed to us that some setup elements should be maintained
-        throughout gameplay (for example, if you place a bin somewhere to throw into, it shouldn't move unless specified otherwise).
-        Other setup elements can, or often must change -- for example, if you set the balls on the desk to throw them, you'll have to pick them up off the desk to throw them.
-        These elements provide that context, which could be useful for verifying that agents playing the game don't violate these conditions.
+\subsection{Setup} \label{sec:setup}
+The setup section specifies how the environment must be transformed from its deterministic initial conditions to a state gameplay can begin at. 
+Currently, a particular environment room always appears in the same initial conditions, in terms of which objects exist and where they are placed.
+Participants in our experiment could, but did not have to, specify how the room must be setup so that their game could be played.
+
+The initial \dsl{setup} element can expand to conjunctions, disjunctions, negations, or quantifications of itself, and then to the \dsl{setup-statement} rule.
+\dsl{setup-statement} elements specify two different types of setup conditions: either those that must be conserved through gameplay (`game-conserved'), or those that are optional through gameplay (`game-optional').
+These different conditions arise as some setup elements must be maintain through gameplay (for example, a participant specified to place a bin on the bed to throw balls into, it shouldn't move unless specified otherwise), while other setup elements can or must change (if a participant specified to set the balls on the desk to throw them, an agent will have to pick them up (and off the desk) in order to throw them). 
+
+Inside the \dsl{setup-statement} tags we find \dsl{setup-predicate} elements, which can again resolve into logical conditions and quantifications of other \dsl{setup-predicate} elements, but also to function comparisons (\dsl{f-comp}) and predicates (\dsl{predicate}). 
+Function comparisons usually consist of a comparison operator and two arguments, which can either be the evaluation of a function or a number. 
+The one exception is the case where the comparison operator is the equality operator (=), in which case any number of arguments can be provided. 
+Finally, the \dsl{predicate} element expands to a predicate acting on one or more objects or variables. 
+We assume the list of predicate existing in a domain will be provided to any models as part of their inputs rather than hard-coded into the grammar.
+For a full list of the predicates we found ourselves using so far, see \fullref{sec:predicates}.
         
 \begin{grammar}
-<setup> ::= (and <setup> <setup>$^+$) \alt
-    (or <setup> <setup>$^+$) \alt
-    (not <setup>) \alt
-    (exists (<typed list(variable)>) <setup>) \alt
-    (forall (<typed list(variable)>) <setup>) \alt
-    <setup-statement>
+<setup> ::= (and <setup> <setup>$^+$) "#" A setup can be expanded to a conjunction, a disjunction, a quantification, or a setup statement (see below).
+    \alt (or <setup> <setup>$^+$) 
+    \alt (not <setup>)
+    \alt (exists (<typed list(variable)>) <setup>)
+    \alt (forall (<typed list(variable)>) <setup>) 
+    \alt <setup-statement>
 
-<setup-statement> ::= (game-conserved <setup-predicate>) \alt
-    (game-optional <setup-predicate>)
+<setup-statement> ::= "#" A setup statement specifies that a predicate is either optional during gameplay or must be preserved during gameplay.
+    \alt (game-conserved <super-predicate>) 
+    \alt (game-optional <super-predicate>)
 
-<setup-predicate> ::= (and <setup-predidcate>$^+$) \alt
-    (or <setup-predicate>$^+$) \alt
-    (not <setup-predicate> \alt
-    (exists (<typed list(variable)>) <setup-predicate>) \alt
-    (forall (<typed list(variable)>) <setup-predicate>) \alt
-    <f-comp> \alt
-    <predicate>
+<super-predicate> ::= "#" A super-predicate is a conjunction, disjunction, negation, or quantification over another super-predicate. It can also be directly a function comparison or a predicate.
+    \alt (and <super-predicate>$^+$) 
+    \alt (or <super-predicate>$^+$) 
+    \alt (not <super-predicate> 
+    \alt (exists (<typed list(variable)>) <super-predicate>) 
+    \alt (forall (<typed list(variable)>) <super-predicate>) 
+    \alt <f-comp> 
+    \alt <predicate>
 
 
-<f-comp> ::= (<comp-op> <function-eval-or-number> <function-eval-or-number>) \alt
-    (= <function-eval-or-number>$^+$)
+<f-comp> ::= "#" A function comparison: either comparing two function evaluations, or checking that two ore more functions evaluate to the same result.
+    \alt (<comp-op> <function-eval-or-number> <function-eval-or-number>) 
+    \alt (= <function-eval-or-number>$^+$)
     
-<comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =
+<comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle = "#" Any of the comparison operators.
 
-<function-eval-or-number> ::= <function-eval> | <number>
+<function-eval-or-number> ::= <function-eval> | <number> 
 
-<function-eval> ::= (<name> <function-term>$^+$)
+<function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
 
 <function-term> ::= <name> | <variable> | <number> | <predicate>
 
-<variable-list> ::= (<variable-type-def>$^+$)
+<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
-<variable-type-def> ::= <variable>$^+$ - <type-def>
+<variable-type-def> ::= <variable>$^+$ - <type-def> "#" Each variable is defined by a variable (see next) and a type (see after).
 
-<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers
+<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers.
 
-<type-def> ::= <name> | <either-types>
+<type-def> ::= <name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
 
 <either-types> ::= (either <name>$^+$)
 
 <predicate> ::= (<name> <predicate-term>$^*$)
 
-<predicate-term> ::= <name> | <variable> | <predicate> "#" In at least one case, I wanted to have a predicate act on other predicates, but that doesn't really make sense. See the discussion of the (side ...) predicate below.
+<predicate-term> ::= <name> | <variable>
 
 
 \end{grammar}
 
 
 
-\subsection{Gameplay Preferences}
+\subsection{Gameplay Preferences} \label{sec:constraints}
 The gameplay preferences specify the core of a game's semantics, capturing how a game should be played by specifying temporal constraints over predicates. 
-        
-        PDDL calls their temporal preferences 'constraints', but that's not entirely the right name for us. Maybe we should rename? \\
+The name for the overall element, \dsl{constraints}, is inherited from the PDDL element with the same name. 
+
+The \dsl{constraints} elements expands into one or more preference definitions, which are defined using the \dsl{pref-def} element. 
+A \dsl{pref-def} either expands to a single preference (\dsl{preference}), or to a \dsl{pref-forall} element, which specifies variants of the same preference for different objects, which can be treated differently in the scoring section. 
+A \dsl{preference} is defined by a name and a \dsl{preference-quantifier}, which expands to an optional quantification (exists, forall, or neither), inside of which we find the \dsl{preference-body}.
+
+A \dsl{preference-body} expands into one of two options:
+The first is a set of conditions that should be true at the end of gameplay, using the \dsl{at-end} operator. 
+Inside an \dsl{at-end} we find a \dsl{pref-predicate}, which like the \dsl{setup-predicate} term, can expand to logical operations over predicates, quantifications over predicates, a function comparison, or a predicate.
+
+The second option is specified using the \dsl{then} syntax, which defines a series of temporal conditions that should hold over a sequence of states. 
+Under a \dsl{then} operator, we find two or more sequence functions (\dsl{seq-func}), which define the specific conditions that must hold and how many states we expect them to hold for. 
+We assume that there are no unaccounted states between the states accounted for by the different operators -- in other words, the \dsl{then} operators expects to find a sequence of contiguous states that satisfy the different sequence functions. 
+The operators under a \dsl{then} operator map onto linear temporal logic (LTL) operators, see \fullref{sec:LTL} for the mapping and examples. 
+
+
+The \dsl{once} operator specifies a predicate that must hold for a single world state. 
+If a \dsl{once} operators appears as the first operator of a \dsl{then} definition, and a sequence of states $S_a, S_{a+1}, \cdots, S_b$ satisfy the \dsl{then} operator, it could be the case that the predicate is satisfied before this sequence of states (e.g. by $S_{a-1}, S_{a-2}$, and so forth). 
+However, only the final such state, $S_a$, is required for the preference to be satisfied.
+The same could be true at the end of the sequence: if a \dsl{then} operator ends with a \dsl{once} term, there could be other states after the final state ($S_{b+1}, S_{b+2}$, etc.) that satisfy the predicate in the \dsl{once} operator, but only one is required. 
+The \dsl{once-measure} operator is a slight variation of the \dsl{once} operator, which in addition to a predicate, takes in a function evaluation, and measures the value of the function evaluated at the state that satisfies the preference.
+This function value can then be used in the scoring definition, see \fullref{sec:scoring}.
+
+A second type of operator that exists is the \dsl{hold} operator.
+It specifies that a predicate must hold true in every state between the one in which the previous operator is satisfied, and until one in which the next operator is satisfied. 
+If a \dsl{hold} operator appears at the beginning or an end of a \dsl{then} sequence, it can be satisfied by a single state, 
+Otherwise, it must be satisfied until the next operator is satisfied. 
+For example, in the minimal definition below: 
+\begin{lstlisting}
+(then
+    (once (pred_a))
+    (hold (pred_b)) 
+    (once (pred_c))
+)
+\end{lstlisting}
+To find a sequence of states $S_a, S_{a+1}, \cdots, S_b$ that satisfy this \dsl{then} operator, the following conditions must hold true: (1) pred_a is true at state $S_a$, (2) pred_b is true in all states $S_{a+1}, S_{a+2}, \cdots, S_{b-2}, S_{b-1}$, and (3) pred_c is true in state $S_b$.
+There is no minimal number of states that the hold predicate must hold for. 
+
+The last operator is \dsl{hold-while}, which offers a variation of the \dsl{hold} operator.
+A \dsl{hold-while} receives at least two predicates. 
+The first acts the same as predicate in a \dsl{hold} operator. 
+The second (and third, and any subsequent ones), must hold true for at least state while the first predicate holds, and must occur in the order specified. 
+In the example above, if we substitute \lstinline{(hold (pred_b))} for \lstinline{(hold-while (pred_b) (pred_d) (pred_e))}, we now expect that in addition to ped_b being true in all states $S_{a+1}, S_{a+2}, \cdots, S_{b-2}, S_{b-1}$, that there is some state $S_d, d \in [a+1, b-1]$ where pred_d holds, and another state, $S_e, e \in [d+1, b-1]$ where pred_e holds. 
         
 \begin{grammar}
-<constraints> ::= <pref-def> | (and <pref-def>$^+$)
+<constraints> ::= <pref-def> | (and <pref-def>$^+$)  "#" One or more preferences.
     
-<pref-def> ::= <pref-forall> | <preference> 
+<pref-def> ::= <pref-forall> | <preference> "#" A preference definitions expands to either a forall quantification (see below) or to a preference.
 
-<pref-forall> ::= (forall <variable-list> <preference>) "#" this syntax is used to specify variants of the same preference for different object, which differ in their scoring. These are specified using the <pref-name-and-types> syntax element's optional types, see scoring below.
+<pref-forall> ::= (forall <variable-list> <preference>) "#" this syntax is used to specify variants of the same preference for different objects, which differ in their scoring. These are specified using the <pref-name-and-types> syntax element's optional types, see scoring below.
     
-<preference> ::= (preference <name> <preference-quantifier>)
+<preference> ::= (preference <name> <preference-quantifier>) "#" A preference is defined by a name and a quantifer that includes the preference body.
 
-<preference-quantifier> ::= (exists (<variable-list>) <preference-body> 
+<preference-quantifier> ::= "#" A preference can quantify exsistentially or universally over one or more variables, or none. 
+\alt (exists (<variable-list>) <preference-body> 
 \alt  (forall (<variable-list>) <preference-body>)
 \alt <preference-body>) 
 
-<preference-body> ::=  <then> | <at-end> | <always> 
+<preference-body> ::=  <then> | <at-end>
 
-<at-end> ::= (at-end <pref-predicate>)
+<at-end> ::= (at-end <super-predicate>) "#" Specifies a prediicate that should hold in the terminal state.
 
-<then> ::= (then <seq-func> <seq-func>$^+$) 
+<then> ::= (then <seq-func> <seq-func>$^+$) "#" Specifies a series of conditions that should hold over a sequence of states -- see below for the specific operators (<seq-func>s), and Section 2 for translation of these definitions to linear temporal logicl (LTL).
 
-<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while>
+<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while> "#" Four of thse temporal sequence functions currently exist: 
 
-<once> ::= (once <pref-predicate>) "#" The predicate specified must hold for a single world state
+<once> ::= (once <super-predicate>) "#" The predicate specified must hold for a single world state.
 
-{ \color{teal} <once-measure> ::= (once <pref-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation }
+<once-measure> ::= (once <super-predicate> <function-eval>) "#" The predicate specified must hold for a single world state, and record the value of the function evaluation, to be used in scoring.
 
-<hold> ::= (hold <pref-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one
+<hold> ::= (hold <super-predicate>) "#" The predicate specified must hold for every state between the previous temporal operator and the next one.
 
-<hold-while> ::= (hold-while <pref-predicate> <pref-predicate>$^+$) "#" The predicate specified must hold for every state between the previous temporal operator and the next one. While it does, at least one state must satisfy each of the predicates specified in the second arumgnet onward
+<hold-while> ::= (hold-while <super-predicate> <super-predicate>$^+$) "#" The first predicate specified must hold for every state between the previous temporal operator and the next one. While it does, at least one state must satisfy each of the predicates specified in the second argument onward
 
-<pref-predicate> ::= <pref_predicate_and> \alt
-    <pref-predicate-or> \alt
-    <pref-predicate-not> \alt
-    <pref-predicate-exists> \alt
-    <pref-predicate-forall> \alt
-    <predicate>
-    <f-comp>
-
-<pref-predicate-and> ::= (and <pref-predicate>$^+$)
-
-<pref-predicate-or> ::= (or <pref-predicate>$^+$)
-
-<pref-predicate-not> ::= (not <pref-predicate>)
-
-<pref-predicate-exists> ::= (exists <variable-list> <pref-predicate>)
-
-<pref-predicate-forall> ::= (forall <variable-list> <pref-predicate>)
-
-
-<f-comp> ::= (<comp-op> <function-eval-or-number> <function-eval-or-number>) \alt
-    (= <function-eval-or-number>$^+$)
-    
-<comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =
-
-<function-eval-or-number> ::= <function-eval> | <number>
-
-<function-eval> ::= (<name> <function-term>$^+$)
-
-<function-term> ::= <name> | <variable> | <number> | <predicate>
-
-<variable-list> ::= (<variable-type-def>$^+$)
-
-<variable-type-def> ::= <variable>$^+$ - <type-def>
-
-<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers
-
-<type-def> ::= <name> | <either-types>
-
-<either-types> ::= (either <name>$^+$)
-
-<predicate> ::= (<name> <predicate-term>$^*$)
-
-<predicate-term> ::= <name> | <variable> | <predicate> "#" In at least one case, I wanted to have a predicate act on other predicates, but that doesn't really make sense. See the discussion of the (side ...) predicate below.
 
 
 \end{grammar}
 
 
 
-\subsection{Terminal Conditions}
-Some participants explicitly specify terminal conditions, but we consider this to be optional. 
+\subsection{Terminal Conditions} \label{sec:terminal}
+Specifying explicit terminal conditions is optional, and while some of our participants chose to do so, many did not. 
+Conditions explicitly specified in this section terminate the game.
+If none are specified, a game is assumed to terminate whenever the player chooses to end the game. 
+
+The terminal conditions expand from the \dsl{terminal} element, which can expand to logical conditions on nested \dsl{terminal} elements, or to a terminal comparison. 
+The terminal comparison (\dsl{terminal-comp}) compares two scoring expressions (\dsl{scoring-expr}; see \fullref{sec:scoring}), where in most cases, the scoring expressions are either a preference counting operation or a number literal. 
         
 \begin{grammar}
-<terminal> ::= (and <terminal>$^+$) \alt
-        (or <terminal>$+$) \alt
-        (not <terminal>) \alt
-        <terminal-comp>
+<terminal> ::= "#" The terminal condition is specified by a conjunction, disjunction, negation, or comparson (see below).
+        \alt (and <terminal>$^+$)
+        \alt (or <terminal>$+$)
+        \alt (not <terminal>) 
+        \alt <terminal-comp>
 
-<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) 
-    
+<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) "#" A comparison operator is used to compare two scoring expressions (see next section).
+
     <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =
 
 
 
 \end{grammar}
-For a full specification of the \textlangle scoring-expr\textrangle\ token, see the scoring section below.
+For a full specification of the \dsl{scoring-expr} element, see \fullref{sec:scoring} below.
         
 
 
-\subsection{Scoring}
-Scoring rules specify how to count preferences (count once, once for each unique objects that fulfill the preference, each time a preference is satisfied, etc.), and the arithmetic to combine
-        counted preference statisfactions to get a final score.
-        
-        PDDL calls their equivalent section (:metric ...), but we renamed because it made more sense to in the context of games. 
+\subsection{Scoring} \label{sec:scoring}
+Scoring rules specify how to count preferences (count once, once for each unique objects that fulfill the preference, each time a preference is satisfied, etc.), and the arithmetic to combine preference counts to a final score in the game.
+
+The \dsl{scoring} tag is defined by the maximization or minimization of a particular scoring expression, defined by the \dsl{scoring-expr} rule.
+A \dsl{scoring-expr} can be defined by arithmetic operations on other scoring expressions, references to the total time or total score (for instance, to provide a bonus if a certain score is reached), comparisons between scoring expressions (\dsl{scoring-comp}), or by preference evaluation rules.
+Various preference evaluation modes can expand the \dsl{preference-eval} rule, see the full list and descriptions below.
         
 \begin{grammar}
-<scoring> ::= (maximize <scoring-expr>) \alt (minimize <scoring-expr>)
+<scoring> ::= (maximize <scoring-expr>) \alt (minimize <scoring-expr>) "#" The scoring conditions maximize or minimize a scoring expression. 
 
-<scoring-expr> ::= (<multi-op> <scoring-expr>$^+$) \alt
-        (<binary-op> <scoring-expr> <scoring-expr>) \alt
-        (- <scoring-expr>) \alt
-        (total-time) \alt
-        (total-score) \alt
-        <scoring-comp> \alt
-        <preference-eval> 
+<scoring-expr> ::= "#" A scoring expression can be an arithmetic operation over other scoring expressions, a reference to the total time or score, a comparison, or a preference scoring evaluation.
+        \alt (<multi-op> <scoring-expr>$^+$) "#" Either addition or multiplication.
+        \alt (<binary-op> <scoring-expr> <scoring-expr>) "#" Either division or subtraction.
+        \alt (- <scoring-expr>)
+        \alt (total-time) 
+        \alt (total-score) 
+        \alt <scoring-comp>
+        \alt <preference-eval> 
         
     
 
-<scoring-comp> ::=  (<comp-op> <scoring-expr> <scoring-expr>) \alt
-        (= <scoring-expr>$^+$)
+<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
+        \alt (<comp-op> <scoring-expr> <scoring-expr>) 
+        \alt (= <scoring-expr>$^+$)
     
 
-<preference-eval> ::=  <count-nonoverlapping> \alt
-        <count-once> \alt
-        <count-once-per-objects> \alt
-        <count-nonoverlapping-measure> \alt
-        <count-unique-positions> \alt
-        <count-same-positions> \alt
-        <count-maximal-nonoverlapping> \alt
-        <count-maximal-overlapping> \alt
-        <count-maximal-once-per-objects> \alt
-        <count-maximal-once> \alt        
-        <count-once-per-external-objects> 
+<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
+        \alt <count-nonoverlapping>
+        \alt <count-once> 
+        \alt <count-once-per-objects> 
+        \alt <count-nonoverlapping-measure> 
+        \alt <count-unique-positions> 
+        \alt <count-same-positions> 
+        \alt <count-maximal-nonoverlapping> 
+        \alt <count-maximal-overlapping> 
+        \alt <count-maximal-once-per-objects> 
+        \alt <count-maximal-once> 
+        \alt <count-once-per-external-objects> 
 
     
 
-<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" count how many times the preference is satisfied by non-overlapping sequences of states 
+<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.
 
-<count-once> ::= (count-once <pref-name-and-types>) "#" count whether or not this preference was satisfied at all
+<count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.
 
-<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" count once for each unique combination of objects quantified in the preference that satisfy it
+<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.
 
-{ \color{teal} <count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure> }
+<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.
 
-<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.
+<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.
 
-<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.
+<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.
 
 <note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.
 
-<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference
+<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference.
 
-{ \color{teal} <count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states }
+<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states.
 
-<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it
+<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it.
 
-<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once
+<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once.
 
-{ \color{teal} <count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference }
+<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference.
 
-<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" the optional <pref-object-type>s are used to specify a particular variant of the preference for a given object, see the <pref-forall> syntax above.
+<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
 
-    <pref-object-type> ::= : <name>
+    <pref-object-type> ::= : <name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
     
 
 
@@ -379,11 +398,15 @@ Scoring rules specify how to count preferences (count once, once for each unique
 
 
 
-\subsection{Predicates}
-The predicates are not defined as part of the DSL, but rather we envision them is being specific to a domain and being specified to any model as an input or something to be conditioned on. \\
+\section{Non-Grammar Definitions}
+
+
+\subsection{Predicates} \label{sec:predicates}
+The predicates are not defined as part of the grammar, but rather, we envision them is being specific to a domain and being specified to any model as part of the model inputs. 
+Predicates can act on any number of arguments, and return a Boolean value.
             
-            The following describes all predicates currently found in our game dataset. 
-        
+The following enumerates all predicates currently found in our game dataset:
+
 \begin{lstlisting}
 (= <arg1> <arg2>) [7 references] ; Are these two objects the same object?
 (above <arg1> <arg2>) [5 references] ; Is the first object above the second object?
@@ -391,22 +414,22 @@ The predicates are not defined as part of the DSL, but rather we envision them i
 (adjacent_side <3 or 4 arguments>) [14 references] ; Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>
 (agent_crouches ) [2 references] ; Is the agent crouching?
 (agent_holds <arg1>) [327 references] ; Is the agent holding the object?
-(*\color{teal} (between <arg1> <arg2> <arg3>) [7 references] ; Is the second object between the first object and the third object?*)
+(between <arg1> <arg2> <arg3>) [7 references] ; Is the second object between the first object and the third object?
 (broken <arg1>) [2 references] ; Is the object broken?
-(*\color{teal} (equal_x_position <arg1> <arg2>) [2 references] ; Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)*)
+(equal_x_position <arg1> <arg2>) [2 references] ; Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)
 (equal_z_position <arg1> <arg2>) [5 references] ; Are these two objects (approximately) in the same z position? (in our environment, x, z are spatial coordinates, y is the height)
 (faces <arg1> <arg2>) [6 references] ; Is the front of the first object facing the front of the second object?
 (game_over ) [4 references] ; Is this the last state of gameplay?
 (game_start ) [3 references] ; Is this the first state of gameplay?
 (in <2 or 3 arguments>) [121 references] ; Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
 (in_motion <arg1>) [311 references] ; Is the object in motion?
-(*\color{teal} (is_setup_object <arg1>) [10 references] ; Is this the object of the same type referenced in the setup?*)
+(is_setup_object <arg1>) [10 references] ; Is this the object of the same type referenced in the setup?
 (object_orientation <arg1> <arg2>) [15 references] ; Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down
 (on <arg1> <arg2>) [165 references] ; Is the second object on the first one?
 (open <arg1>) [3 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
 (opposite <arg1> <arg2>) [4 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
 (rug_color_under <arg1> <arg2>) [11 references] ; Is the color of the rug under the object (first argument) the color specified by the second argument?
-(*\color{teal} (same_type <arg1> <arg2>) [3 references] ; Are these two objects of the same type?*)
+(same_type <arg1> <arg2>) [3 references] ; Are these two objects of the same type?
 (toggled_on <arg1>) [4 references] ; Is this object toggled on?
 (touch <arg1> <arg2>) [49 references] ; Are these two objects touching?
 (type <arg1> <arg2>) [9 references] ; Is the first argument, an object, an instance of the type specified by the second argument?
@@ -414,10 +437,26 @@ The predicates are not defined as part of the DSL, but rather we envision them i
 
 
 
-\subsection{Types}
-The types are also not defined as part of the DSL, but we envision them as operating similarly to the predicates. \\
+\subsection{Functions} \label{sec:functions}
+Functions operate similarly to predicates, but rather than returning a Boolean value, they return a numeric value or a type. 
+Similarly to predicates, functions are not a part of the grammar, and may vary by problem domain. 
+
+The following describes all functions currently found in our game dataset:
+\begin{lstlisting}
+(building_size ) [2 references] ; Takes in an argument of type building, and returns how many objects comprise the building (as an integer).
+(color ) [26 references] ; Take in an argument of type object, and returns the color of the object (as a color type object).
+(distance ) [114 references] ; Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).
+(distance_side ) [5 references] ; Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side).
+(type ) [2 references] ; Takes in an argument of type object, and returns the type of the object (as a string).
+(x_position ) [4 references] ; Takes in an argument of type object, and returns the x position of the object (as a floating point number).
+\end{lstlisting}
+
+
+
+\subsection{Types} \label{sec:types}
+The types are also not defined as part of the grammar, and we envision them operating similarly to the predicates and functions, varying by domain and provided to any models as part of its inputs .
             
-            The following describes all types currently found in our game dataset. 
+The following describes all types currently found in our game dataset: 
         
 \begin{lstlisting}
 game_object [33 references] ; Parent type of all objects
@@ -427,14 +466,15 @@ building [21 references] ; Not a real game object, but rather, a way to refer to
 block [27 references] ; Parent type of all block types:
 bridge_block [11 references] 
 cube_block [40 references] 
-(*\color{teal} blue_cube_block [8 references] *)
-(*\color{teal} tan_cube_block [1 reference] *)
-(*\color{teal} yellow_cube_block [8 references] *)
+blue_cube_block [8 references] 
+tan_cube_block [1 reference] 
+yellow_cube_block [8 references] 
 flat_block [5 references] 
 pyramid_block [14 references] 
-(*\color{teal} red_pyramid_block [2 references] *)
-(*\color{teal} triangle_block [3 references] *)
-(*\color{teal} yellow_pyramid_block [2 references] *)
+blue_pyramid_block [3 references] 
+red_pyramid_block [2 references] 
+triangle_block [3 references] 
+yellow_pyramid_block [2 references] 
 cylindrical_block [12 references] 
 tall_cylindrical_block [7 references] 
 ---------- (* \textbf{Balls} *) ----------
@@ -443,26 +483,26 @@ beachball [23 references]
 basketball [18 references] 
 dodgeball [110 references] 
 blue_dodgeball [6 references] 
-(*\color{teal} red_dodgeball [4 references] *)
+red_dodgeball [4 references] 
 pink_dodgeball [18 references] 
 golfball [28 references] 
-green_golfball [2 references] ; (* \textbf Do we want to specify colored objects or not? *)
+green_golfball [2 references] 
 ---------- (* \textbf{Colors} *) ----------
 color [6 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object
-(*\color{teal} blue [1 reference] *)
-(*\color{teal} brown [1 reference] *)
+blue [1 reference] 
+brown [1 reference] 
 green [5 references] 
 pink [14 references] 
 orange [3 references] 
 purple [4 references] 
 red [8 references] 
-(*\color{teal} tan [1 reference] *)
+tan [1 reference] 
 white [1 reference] 
 yellow [14 references] 
 ---------- (* \textbf{Other moveable/interactable objects} *) ----------
 alarm_clock [8 references] 
 book [11 references] 
-blinds [2 references] ; The blinds on the windows (which for a while I did not know you could open and close)
+blinds [2 references] ; The blinds on the windows
 chair [17 references] 
 cellphone [6 references] 
 cd [6 references] 
@@ -477,30 +517,31 @@ laptop [7 references]
 main_light_switch [3 references] ; The main light switch on the wall
 mug [3 references] 
 triangular_ramp [10 references] 
-green_triangular_ramp [1 reference] ; (* \textbf Do we want to specify colored objects or not? *)
-(*\color{teal} pen [2 references] *)
-(*\color{teal} pencil [2 references] *)
+green_triangular_ramp [1 reference] 
+pen [2 references] 
+pencil [2 references] 
 pillow [12 references] 
 teddy_bear [14 references] 
 watch [2 references] 
 ---------- (* \textbf{Immoveable objects} *) ----------
 bed [48 references] 
 (*\color{gray} corner [N/A references] ; Any of the corners of the room*)
-(*\color{teal} south_west_corner [2 references] ; The corner of the room where the south and west walls meet*)
+south_west_corner [2 references] ; The corner of the room where the south and west walls meet
 door [9 references] ; The door out of the room
 desk [40 references] 
-(*\color{teal} desk_shelf [2 references] ; The shelves under the desk*)
+desk_shelf [2 references] ; The shelves under the desk
 drawer [5 references] ; Either drawer in the side table
-top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed. (* \textbf Do we want to specify this differently? *)
+top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed.
 floor [24 references] 
 rug [37 references] 
 shelf [10 references] 
-(*\color{teal} bottom_shelf [1 reference] *)
-(*\color{teal} top_shelf [5 references] *)
+bottom_shelf [1 reference] 
+top_shelf [5 references] 
 side_table [4 references] ; The side table/nightstand next to the bed
 sliding_door [2 references] ; The sliding doors on the south wall (big windows)
-(*\color{teal} east_sliding_door [1 reference] ; The eastern of the two sliding doors (the one closer to the desk)*)
+east_sliding_door [1 reference] ; The eastern of the two sliding doors (the one closer to the desk)
 wall [17 references] ; Any of the walls in the room
+north_wall [1 reference] ; The wall with the door to the room
 south_wall [1 reference] ; The wall with the sliding doors
 west_wall [2 references] ; The wall the bed is aligned to
 ---------- (* \textbf{Non-object-type predicate arguments} *) ----------
@@ -508,13 +549,10 @@ back [3 references]
 front [8 references] 
 left [2 references] 
 right [2 references] 
-(*\color{teal} sideways [3 references] *)
+sideways [3 references] 
 upright [10 references] 
 upside_down [2 references] 
-(*\color{teal} front_left_corner [1 reference] ; The front-left corner of a specific object (as determined by its front)*)
----------- (* \textbf{Undescribed types} *) ----------
-(*\color{red} north_wall [1 reference]*)
-(*\color{red} blue_pyramid_block [3 references]*)
+front_left_corner [1 reference] ; The front-left corner of a specific object (as determined by its front)
 \end{lstlisting}
 
 
@@ -522,8 +560,10 @@ upside_down [2 references]
 
 \section{Modal Definitions in Linear Temporal Logic}
 \subsection{Linear Temporal Logic definitions}
-Linear Temporal Logic (LTL) offers the following operators, and using $\varphi$ and $\psi$ as the symbols (in our case, predicates). 
-I'm trying to translate from standard logic notation to something that makes sense in our case, where we're operating sequence of states $S_0, S_1, \cdots, S_n$. 
+We offer a mapping between the temporal sequence functions defined in \fullref{sec:constraints} and linear temporal logic (LTL) operators. 
+As we were creating this DSL, we found that the syntax of the \dsl{then} operator felt more convenient than directly writing down LTL, but we hope the mapping helps reason about how we see our temporal operators functioning. 
+LTL offers the following operators, using $\varphi$ and $\psi$ as the symbols (in our case, predicates). 
+Assume the following formulas operate sequence of states $S_0, S_1, \cdots, S_n$: 
 \begin{itemize}
     \item \textbf{Next}, $X \psi$: at the next timestep, $\psi$ will be true. If we are at timestep $i$, then $S_{i+1} \vdash \psi$
     
@@ -534,13 +574,13 @@ I'm trying to translate from standard logic notation to something that makes sen
     \item \textbf{Until}, $\psi U \varphi$: $\psi$ will be true from the current timestep until a timestep at which $\varphi$ is true. If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$.
     \item \textbf{Strong release}, $\psi M \varphi$: the same as until, but demanding that both $\psi$ and $\varphi$ are true simultaneously: If we are at timestep $i$, then $\exists j > i: \forall k: i \leq k \leq j: S_k \vdash \psi$, and $S_j \vdash \varphi$. 
     
-    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. I'm leaving those two as an aside since I don't know we'll need them. 
+    \textit{Aside:} there's also a \textbf{weak until}, $\psi W \varphi$, which allows for the case where the second is never true, in which case the first must hold for the rest of the sequence. Formally, if we are at timestep $i$, \textit{if} $\exists j > i: \forall k: i \leq k < j: S_k \vdash \psi$, and $S_j \vdash \varphi$, and otherwise, $\forall k \geq i: S_k \vdash \psi$. Similarly there's \textbf{release}, which is the similar variant of strong release. We're leaving those two as an aside since we don't know we'll need them. 
     
 \end{itemize}
 
-\subsection{Satisfying a (then ...) operator}
-Formally, to satisfy a preference using a (then ...) operator, we're looking to find a sub-sequence of $S_0, S_1, \cdots, S_n$ that satisfies the formula we translate to. 
-We translate a (then ...) operator by translating the constituent sequence-functions (once, hold, while-hold)\footnote{These are the ones we've used so far in the interactive experiment dataset, even if we previously defined other ones, too.} to LTL. 
+\subsection{Satisfying a \dsl{then} operator}
+Formally, to satisfy a preference using a \dsl{then} operator, we're looking to find a sub-sequence of $S_0, S_1, \cdots, S_n$ that satisfies the formula we translate to. 
+We translate a \dsl{then} operator by translating the constituent sequence-functions (\dsl{once}, \dsl{hold}, \dsl{while-hold})\footnote{These are the ones we've used so far in the interactive experiment dataset, even if we previously defined other ones, too.} to LTL. 
 Since the translation of each individual sequence function leaves the last operand empty, we append a `true' ($\top$) as the final operand, since we don't care what happens in the state after the sequence is complete. 
 
 (once $\psi$) := $\psi X \cdots$
@@ -576,10 +616,10 @@ If we translate each predicate to the letter appearing in blue at the end of the
 
 $\alpha X (\beta M \gamma) X \beta U \delta X \top$
 
-\subsection{Satisfying (at-end ...) or (always ...) operators}
-Thankfully, the two other types of temporal specifications we find ourselves using as part of preferences are simpler to translate. 
-Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evauated at the terminal state of gameplay.
-The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
+% \subsection{Satisfying (at-end ...) operators}
+% Thankfully, the other type of temporal specification we find ourselves using as part of preferences is much simpler to translate. 
+% Satisfying an (at-end ...) operator does not require any temporal logic, since the predicate it operates over is evaluated at the terminal state of gameplay.
+% The (always ...) operator is equivalent to the LTL globally operator: (always $\psi$) := $G \psi$, with the added constraint that we begin at the first timestep of gameplay. 
 
 
 % I'll attempt to check slightly more formally at some point, but I don't think we end up with many structures that are more complex than this. 

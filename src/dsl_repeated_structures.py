@@ -105,8 +105,6 @@ class RepeatedStructureExtractor(ASTParser):
         super().__call__(ast, **kwargs)
 
         if is_root:
-            # TODO: think about how to do the second part, of actually extracting the motifs
-
             ast_printer.reset_buffers(True)
             ast_printer.pretty_print_ast(ast)
             ast_str = ''.join(ast_printer.BUFFER)

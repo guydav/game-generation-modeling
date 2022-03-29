@@ -499,10 +499,17 @@ def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
     _indent_print(')', depth, increment, context)
 
 
+@mutation_context
+def _handle_preferences(caller, rule, ast, depth, increment, context=None):
+    _indent_print('(and', depth, increment, context)
+    caller(ast.preferences, depth + 1, increment, context)
+    _indent_print(')', depth, increment, context)
+
+
 def build_constraints_printer():
     printer = ASTPrinter('(:constraints', ('pref_body_', 'pref_', 'super_', 'predicate_'))
     printer.register_exact_matches(
-        _handle_preference, _handle_function_comparison, _handle_predicate,
+        _handle_preferences, _handle_preference, _handle_function_comparison, _handle_predicate,
         _handle_at_end, _handle_always, _handle_then, _handle_any, _handle_once, _handle_once_measure,
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end, 
         _handle_forall_seq, _handle_function_eval
@@ -616,9 +623,22 @@ def build_terminal_printer():
     return printer
 
 
+@mutation_context
+def _handle_maximize(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'maximize', depth, increment, context)
+    caller(ast.expr, depth + 1, increment, context)
+
+
+@mutation_context
+def _handle_minimize(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'minimize', depth, increment, context)
+    caller(ast.expr, depth + 1, increment, context)
+
+
 def build_scoring_printer():
     printer = ASTPrinter('(:scoring', ('scoring_',))
     printer.register_exact_matches(
+        _handle_maximize, _handle_minimize,
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
         _handle_equals_comp, _handle_function_eval, _handle_with,
     )

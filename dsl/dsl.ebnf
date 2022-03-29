@@ -87,7 +87,7 @@ super_predicate_forall = '(forall' forall_vars:variable_list forall_args:super_p
 
 # Constraints/Preferences
 preferences = 
-    '(and' {pref_def}+ ')' | # TODO: do we want to enforce more than one?
+    '(and' {preferences:pref_def}+ ')' | # TODO: do we want to enforce more than one?
     pref_def;
 
 pref_def = 
@@ -249,5 +249,5 @@ scoring =
     scoring_maximize |
     scoring_minimize;
     
-scoring_maximize = 'maximize' scoring_expr;
-scoring_minimize = 'minimize' scoring_expr;
+scoring_maximize = 'maximize' expr:scoring_expr;
+scoring_minimize = 'minimize' expr:scoring_expr;

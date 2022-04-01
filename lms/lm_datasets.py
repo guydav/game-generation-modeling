@@ -85,9 +85,11 @@ class DomainSpecificLanguageLMDataset(Dataset):
         self.tokenizer = tokenizer
         self.programs = []
         for program in load_tests_from_file(dsl_info_path):
-            for pid in participant_ids:
-                if pid in program:
-                    program = program.replace(pid, "[ID]")
+            # Find the PID / corresponding index into the game info dataframe
+            pid, index = re.search("\(game(.*)\) \(", program).group(1).strip().split("-")
+            
+            # Mask out that information before tokenizing
+            program = program.replace(f"{pid}-{index}", "[ID]")
 
             encoded_program = self.tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
             self.programs.append(encoded_program)

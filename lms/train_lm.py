@@ -108,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
     parser.add_argument('--gen_freq', type=int, default=200)
-    parser.add_argument('--gen_len', type=int, default=256)
+    parser.add_argument('--gen_len', type=int, default=1024)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
     parser.add_argument('--gen_beams', type=int, default=5)

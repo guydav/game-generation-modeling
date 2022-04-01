@@ -79,8 +79,11 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
 
                 if global_step%args.gen_freq == 0:
                     inputs = tokenizer(args.gen_context, return_tensors="pt").input_ids
+                    inputs = inputs.to(device)
+
                     outputs = model.generate(inputs, max_length=args.gen_len, num_beams=args.gen_beams,
                                              temperature=args.gen_temp)[0]
+                    
                     sample = tokenizer.decode(outputs, skip_special_tokens=True)
                     if not args.no_log: log_writer.add_text("eval_sample", sample, global_step)
                     print("\nSample:", sample, "\n")

@@ -91,6 +91,8 @@ class DomainSpecificLanguageLMDataset(Dataset):
             # Mask out that information before tokenizing
             program = program.replace(f"{pid}-{index}", "[ID]")
 
+            program = "[START] " + program + " [END]"
+
             encoded_program = self.tokenizer.encode(program, max_length=chunk_size, truncation=True, padding="max_length")
             self.programs.append(encoded_program)
 

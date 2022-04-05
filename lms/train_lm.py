@@ -7,6 +7,7 @@ from datetime import datetime
 from lm_sampler import LMSampler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from eval_lm import Evaluator
 from lm_datasets import GameDescriptionGPT2Dataset, DomainSpecificLanguageLMDataset, DescriptionToDSLDataset
 
 from transformers import pipeline
@@ -14,7 +15,7 @@ from transformers import get_linear_schedule_with_warmup
 from transformers import DataCollatorForLanguageModeling
 from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
-def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
+def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     is_seq_to_seq = (args.model in ["codet5"])
 
@@ -88,6 +89,12 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, args):
                     if not args.no_log: log_writer.add_text("eval_sample", sample, global_step)
                     print("\nSample:", sample, "\n")
 
+                if global_step%args.eval_freq == 0:
+                    if args.dataset == "dsl":
+                        evaluator.evaluate_dsl_generation(model, tokenizer, args.num_eval_samples, args.gen_len,
+                                                          args.gen_beams, args.gen_temp, args.eval_sim_threshold)
+
+
     except KeyboardInterrupt:
         print("Stopping early due to user input!")
         progress_bar.close()
@@ -109,6 +116,9 @@ if __name__ == "__main__":
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--eval_freq', type=int, default=500)
+    parser.add_argument('--num_eval_samples', type=int, default=100)
+    parser.add_argument('--eval_sim_threshold', type=float, default=0.9)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
     parser.add_argument('--gen_freq', type=int, default=200)
     parser.add_argument('--gen_len', type=int, default=1024)
@@ -161,6 +171,9 @@ if __name__ == "__main__":
     data_loader = DataLoader(dataset, collate_fn=data_collator, batch_size=args.batch_size, shuffle=True, num_workers=4)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
+    # Instantiate the model evaluator
+    evaluator = Evaluator()
+
     # Create the output directory
     output_dir_name = None
     if not args.no_log:
@@ -169,4 +182,4 @@ if __name__ == "__main__":
         if not os.path.exists(output_dir_name):
             os.mkdir(output_dir_name)
 
-    train_loop(model, tokenizer, optimizer, data_loader, output_dir_name, args)
+    train_loop(model, tokenizer, optimizer, data_loader, output_dir_name, evaluator, args)

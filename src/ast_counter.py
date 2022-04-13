@@ -116,6 +116,27 @@ class ASTRuleValueCounter(ASTParser):
         return super()._handle_tuple(ast, **kwargs)
 
 
+class ASTSampler:
+    """
+    Other than a counter, right now it would have to take in:
+    - The root fields to generate, and what they can be resolved by 
+    (unless I rewrite the EBNF for each section to return a AST, not a tuple,
+    but that requires rewriting the section handling logic in the `ASTCounter`
+    and `ASTPrinter` classes as well)
+    - Which objects/types are in a room, to filter?
+    - A prior? Presumably Dirichlet over the valid tokens? 
+    - That means we need lists of valid tokens for some of the rules:
+        - Predicates, function calls
+        - Named objects (desk, bed, etc.)
+        - Object types
+    - Actually, it means we need a list of valid expansions for each rule, right?
+
+
+    """
+    def __init__(self):
+        pass
+
+
 def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)

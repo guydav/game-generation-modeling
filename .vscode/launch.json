@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "Python: Current File",
             "type": "python",
@@ -18,7 +19,8 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
+               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-p", "-v"
+               // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal"
         },

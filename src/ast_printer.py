@@ -45,26 +45,28 @@ class ASTPrinter(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule
+        depth, increment, context = kwargs['depth'], kwargs['increment'], kwargs['context']
+        # check for exact matches before rule substitutions
+
+        if rule in self.exact_matches:
+            self.exact_matches[rule](self, rule, ast, depth, increment, context)
+            return
+
+        # if that didn't work, apply rule substitutions
         for sub in self.rule_name_substitutions:
             rule = rule.replace(sub, '')
 
-        found_match = False
-
-        depth, increment, context = kwargs['depth'], kwargs['increment'], kwargs['context']
-
         if rule in self.exact_matches:
-            found_match  = True
             self.exact_matches[rule](self, rule, ast, depth, increment, context)
+            return
 
         else:
             for keywords, handler in self.keyword_matches:
                 if any([keyword in rule for keyword in keywords]):
-                    found_match = True
                     handler(self, rule, ast, depth, increment, context)
-                    break
+                    return
 
-        if not found_match:
-            raise ValueError(f'No match found in {self.ast_key} for: {ast}')
+        raise ValueError(f'No match found in {self.ast_key} for: {ast}')
 
 
     def __call__(self, ast, depth=0, increment=DEFAULT_INCREMENT, context=None):
@@ -363,6 +365,7 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
     name = ast.pred_name
     args = []
     for arg in ast.pred_args:
+        # TODO: check that this still works
         if isinstance(arg, str):
             args.append(arg)
         else:
@@ -376,9 +379,25 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
     _indent_print(out, depth, increment, context)
 
 
+@mutation_context
+def _handle_setup(caller, rule, ast, depth, increment, context=None):
+    caller(ast.setup, depth, increment, context)
+
+
+@mutation_context
+def _handle_statement(caller, rule, ast, depth, increment, context=None):
+    caller(ast.statement, depth, increment, context)
+
+
+@mutation_context
+def _handle_super_predicate(caller, rule, ast, depth, increment, context=None):
+    caller(ast.pred, depth, increment, context)
+
+
 def build_setup_printer():
     printer = ASTPrinter('(:setup', ('setup_', 'super_', 'predicate_'))
     printer.register_exact_matches(
+        _handle_setup, _handle_statement, _handle_super_predicate,
         _handle_function_comparison, _handle_predicate, _handle_function_eval)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('game',), _handle_game)
@@ -506,14 +525,33 @@ def _handle_preferences(caller, rule, ast, depth, increment, context=None):
     _indent_print(')', depth, increment, context)
 
 
+@mutation_context
+def _handle_pref_def(caller, rule, ast, depth, increment, context=None):
+    caller(ast.definition, depth, increment, context)
+    
+
+@mutation_context
+def _handle_pref_body(caller, rule, ast, depth, increment, context=None):
+    caller(ast.body, depth, increment, context)
+
+
+@mutation_context
+def _handle_seq_func(caller, rule, ast, depth, increment, context=None):
+    caller(ast.seq_func, depth, increment, context)
+
+
 def build_constraints_printer():
     printer = ASTPrinter('(:constraints', ('pref_body_', 'pref_', 'super_', 'predicate_'))
     printer.register_exact_matches(
-        _handle_preferences, _handle_preference, _handle_function_comparison, _handle_predicate,
-        _handle_at_end, _handle_always, _handle_then, _handle_any, _handle_once, _handle_once_measure,
+        _handle_preferences, _handle_pref_def, _handle_pref_body, _handle_seq_func,
+        _handle_preference, _handle_super_predicate,
+        _handle_function_comparison, _handle_predicate,
+        _handle_at_end, _handle_always, _handle_then, 
+        _handle_any, _handle_once, _handle_once_measure,
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end, 
         _handle_forall_seq, _handle_function_eval
     )
+    printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
     return printer
@@ -601,7 +639,7 @@ def _handle_with(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
-def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
+def _handle_count_method(caller, rule, ast, depth, increment, context=None):
     type_str = ''
     if ast.name_and_types.object_types:
         if isinstance(ast.name_and_types.object_types, tatsu.ast.AST):
@@ -611,14 +649,30 @@ def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
     _indent_print(_out_str_to_span(f'({ast.parseinfo.rule.replace("_", "-")} {ast.name_and_types.pref_name}{type_str})', context), depth, increment, context)
     
 
+@mutation_context
+def _handle_terminal(caller, rule, ast, depth, increment, context=None):
+    caller(ast.terminal, depth, increment, context)
+
+
+@mutation_context
+def _handle_scoring_expr(caller, rule, ast, depth, increment, context=None):
+    caller(ast.expr, depth, increment, context)
+
+
+@mutation_context
+def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
+    caller(ast.count_method, depth, increment, context)
+
 def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
     printer.register_exact_matches(
-        _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
-        _handle_equals_comp, _handle_function_eval, _handle_with
+        _handle_terminal, _handle_scoring_expr, _handle_preference_eval,
+        _handle_multi_expr, _handle_binary_expr, 
+        _handle_neg_expr, _handle_equals_comp, 
+        _handle_function_eval, _handle_with
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
-    printer.register_keyword_match(('count',), _handle_preference_eval)
+    printer.register_keyword_match(('count',), _handle_count_method)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
     return printer
 
@@ -635,15 +689,26 @@ def _handle_minimize(caller, rule, ast, depth, increment, context=None):
     caller(ast.expr, depth + 1, increment, context)
 
 
+@mutation_context
+def _handle_scoring(caller, rule, ast, depth, increment, context=None):
+    caller(ast.scoring, depth, increment, context)
+
+
+@mutation_context
+def _handle_scoring_comparison(caller, rule, ast, depth, increment, context=None):
+    caller(ast.comp, depth, increment, context)
+
+
 def build_scoring_printer():
     printer = ASTPrinter('(:scoring', ('scoring_',))
     printer.register_exact_matches(
-        _handle_maximize, _handle_minimize,
+        _handle_scoring, _handle_maximize, _handle_minimize, 
+        _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
         _handle_equals_comp, _handle_function_eval, _handle_with,
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
-    printer.register_keyword_match(('count',), _handle_preference_eval)
+    printer.register_keyword_match(('count',), _handle_count_method)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
     return printer
 

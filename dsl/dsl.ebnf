@@ -19,32 +19,26 @@ name = /[A-z]+(_[A-z0-9]+)*/;
 number = /\d*\.?\d+/;
 
 variable = /\?[a-z][a-z0-9]*/;
-variable_list = '(' variables:{variable_type_def}+ ')';
-variable_type_def = var_names:{variable}+ '-' var_type:type_definition;
-type_definition = name | either_types;  # TODO: see if I need to add a name for this
-either_types = '(either' {type_names:name}+ ')'; # TODO: do we want to enforce more than one?
+variable_list = '(' {variables:variable_type_def}+ ')';
+variable_type_def = {var_names:variable}+ '-' var_type:type_definition;
+type_definition = type:(type_name | either_types);  # TODO: see if I need to add a name for this
+either_types = '(either' {type_names:type_name}+ ')'; # TODO: do we want to enforce more than one?
+type_name = name;
+
+function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
     
+two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
+multiple_args_equal_comparison = '(=' {equal_comp_funcs:comparison_arg}+ ')';
 
-function_comparison = 
-    '(' comp_op:binary_comp comp_func_1:function_eval comp_func_2:function_eval ')' |
-    '(' comp_op:binary_comp comp_func_first:function_eval comp_arg:comparison_arg ')' |
-    '(' comp_op:binary_comp comp_arg:comparison_arg comp_func_second:function_eval ')' |
-    '(' '=' {equal_comp_funcs:function_eval}+ ')' 
-    ;
-# function_comparison = fc1 | fc2 | fc3 | fc4;
-# fc1 = '(' binary_comp function_eval function_eval ')';
-# fc2 = '(' binary_comp function_eval number ')';
-# fc3 = '(' binary_comp number function_eval ')';
-# fc4 = '(' '=' {function_eval}+ ')' ;
-comparison_arg = number | name | variable;
+comparison_arg = arg:(function_eval | number | type_name | variable);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
-function_eval = '(' func_name:name func_args:{function_term}* ')';
-function_term = comparison_arg | predicate; # TODO: verify this (function calling on a predicate) ever happens
+function_eval = '(' func_name:func_name {func_args:function_term}* ')';
+func_name = name;
+function_term = term:(comparison_arg | predicate); # TODO: verify this (function calling on a predicate) ever happens
 
-predicate = '(' pred_name:predicate_name pred_args:{predicate_term}* ')';
+predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
 predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
-# predicate_term = name | variable | predicate:predicate;
-predicate_term = name | variable;
+predicate_term = term:(type_name | variable);
 # predicate_function = predicate;
 
 # Game Setup
@@ -56,7 +50,6 @@ setup = setup:(setup_and |
     setup_forall |
     setup_statement
     ) 
-    | ()
     ;
     
 setup_and = '(and' {and_args:setup}+ ')';  # TODO: do we want to enforce more than one?
@@ -67,8 +60,8 @@ setup_forall = '(forall' forall_vars:variable_list forall_args:setup ')';
     
 setup_statement = statement:(setup_game_conserved | setup_game_optional);
     
-setup_game_conserved = '(game-conserved' {conserved_pred:super_predicate}+ ')';
-setup_game_optional = '(game-optional' {optional_pred:super_predicate}+ ')';
+setup_game_conserved = '(game-conserved' conserved_pred:super_predicate ')';
+setup_game_optional = '(game-optional' optional_pred:super_predicate ')';
 
 super_predicate = pred:(
     super_predicate_and |
@@ -93,15 +86,14 @@ preferences =
     preferences:pref_def
     ;
 
-pref_def = 
-    definition:(preference |
-    pref_forall);
+pref_def = definition:(preference | pref_forall);
 
-preference = '(preference' pref_name:name pref_body:pref_body ')';
+preference = '(preference' pref_name:preference_name pref_body:pref_body ')';
+preference_name = name;
 pref_forall = '(forall' forall_vars:variable_list forall_pref:pref_forall_prefs ')';
 
-pref_forall_prefs = '(and' preferences:{preference}+ ')' |  # to allow multiple preferences in a forall
-    preferences:{preference};
+pref_forall_prefs = '(and' {preferences:preference}+ ')' |  # to allow multiple preferences in a forall
+    {preferences:preference};
 
 pref_body = body:(
     pref_body_exists |
@@ -168,7 +160,7 @@ terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')'
 
 # alternatively, if we don't want scoring to be able to refer to '(total-score)''
 # we recreate the definition from above, and add '(total-score)' as a separate literal option 
-terminal_expr = scoring_expr;
+terminal_expr = expr:scoring_expr;
 
 scoring_expr = expr:(
     scoring_multi_expr |
@@ -244,9 +236,9 @@ count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_nam
 count_once_per_external_objects = '(count-once-per-external-objects' name_and_types:pref_name_and_types ')';
 count_nonoverlapping_measure = '(count-nonoverlapping-measure' name_and_types:pref_name_and_types ')';
 
-pref_name_and_types = pref_name:name {object_types:pref_object_type}*;
+pref_name_and_types = pref_name:preference_name {object_types:pref_object_type}*;
 
-pref_object_type = ':' type_name:name;
+pref_object_type = ':' type_name:type_name;
 
 # Scoring
 scoring = scoring:(

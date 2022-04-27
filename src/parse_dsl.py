@@ -6,7 +6,7 @@ import ast_printer
 from ast_utils import load_tests_from_file
 
 parser = argparse.ArgumentParser()
-DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
+DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('-s', '--stop-tokens', action='append')
 parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')

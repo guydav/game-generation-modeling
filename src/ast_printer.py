@@ -180,6 +180,10 @@ def mutation_context(func):
 @mutation_context
 def _parse_variable_list(caller, rule, var_list, depth, increment, context=None):
     formatted_vars = []
+
+    if not isinstance(var_list, list):
+        var_list = [var_list]
+
     for var_def in var_list:
         prev_mutation = None
         if 'mutation' in var_def:
@@ -190,17 +194,22 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
 
         context = preprocess_context(context)
 
-        if isinstance(var_def.var_type, str):
-            var_str = f'{" ".join(var_def.var_names)} - {var_def.var_type}'
-        elif var_def.var_type.parseinfo.rule == 'either_types':
-            var_type_str = f'(either {" ".join(var_def.var_type.type_names)})'
+        var_names = f'{" ".join(var_def.var_names) if isinstance(var_def.var_names, list) else var_def.var_names}'
+
+        var_type = var_def.var_type.type
+
+        if isinstance(var_type, str):
+            var_str = f'{var_names} - {var_type}'
+        
+        elif var_type.parseinfo.rule == 'either_types':
+            var_type_str = f'(either {" ".join(var_type.type_names)})'
 
             inner_prev_mutation = None
-            if 'html' in context and context['html'] and 'mutation' in var_def.var_type:
+            if 'html' in context and context['html'] and 'mutation' in var_type:
                 if 'mutation' in context:
                     inner_prev_mutation = context['mutation']
 
-                context['mutation'] = var_def.var_type['mutation']
+                context['mutation'] = var_type['mutation']
                 context = preprocess_context(context)
                 var_type_str = _out_str_to_span(var_type_str, context)
 
@@ -210,7 +219,7 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
                     del context['mutation']                 
                 context = preprocess_context(context)
 
-            var_str = f'{" ".join(var_def.var_names)} - {var_type_str}'
+            var_str = f'{var_names} - {var_type_str}'
 
         else:
             raise ValueError(f'Unrecognized quantifier variables: {var_def[2]}')
@@ -326,36 +335,58 @@ def _handle_game(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
-    _indent_print(f'({ast.func_name} {" ".join(ast.func_args)})', depth, increment, context)
+    _indent_print(f'({ast.func_name} {" ".join(_format_func_args(ast, depth, increment, context))})', 
+        depth, increment, context)
 
 
 @mutation_context
 def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
-    formatted_args = [
-        arg if isinstance(arg, str) 
-        else _handle_predicate(None, arg.parseinfo.rule, arg, depth, increment, context, return_str=True) 
-        for arg in ast.func_args]
+    formatted_args = _format_func_args(ast, depth, increment, context)
     return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
+
+def _format_func_args(ast, depth, increment, context):
+    func_args = ast.func_args
+    if func_args is None:
+        formatted_args = []
+
+    else:
+        if not isinstance(func_args, list):
+            func_args = [func_args]
+
+        formatted_args = [
+            arg if isinstance(arg, str) 
+            else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context) 
+            for arg in func_args]
+            
+    return formatted_args
+
+
+@mutation_context
+def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None):
+    arg = ast.arg
+
+    if isinstance(arg, tatsu.ast.AST): 
+        if  arg.parseinfo.rule == 'function_eval':
+            return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
+        else:
+            raise ValueError(f'Unexpected comparison argument: {arg}')
+    return arg
 
 
 @mutation_context
 def _handle_function_comparison(caller, rule, ast, depth, increment, context=None):
+    ast = ast.comp
+
     comp_op = '='
     if 'comp_op' in ast:
         comp_op = ast.comp_op
 
-    if 'comp_func_1' in ast:
-        args = [_inline_format_function_eval(caller, ast.comp_func_1.rule, ast.comp_func_1, depth, increment, context), 
-                _inline_format_function_eval(caller, ast.comp_func_2.rule, ast.comp_func_2, depth, increment, context)]
-
-    elif 'comp_func_first' in ast:
-        args = [_inline_format_function_eval(caller, ast.comp_func_first.rule, ast.comp_func_first, depth, increment, context), ast.comp_arg]
-
-    elif 'comp_func_second' in ast:
-        args = [ast.comp_arg, _inline_format_function_eval(caller, ast.comp_func_second.rule, ast.comp_func_second, depth, increment, context)]
+    if 'arg_1' in ast:
+        args = [_inline_format_comparison_arg(caller, ast.arg_1.rule, ast.arg_1, depth, increment, context), 
+            _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]    
 
     else:
-        args = [_inline_format_function_eval(caller, func.rule, func, depth, increment, context) for func in ast.equal_comp_funcs]
+        args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) for arg in ast.equal_comp_funcs]
 
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
     
@@ -363,13 +394,24 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
 @mutation_context
 def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False):
     name = ast.pred_name
+    pred_args = ast.pred_args
     args = []
-    for arg in ast.pred_args:
-        # TODO: check that this still works
-        if isinstance(arg, str):
-            args.append(arg)
-        else:
-            args.append(_handle_predicate(caller, rule, arg, depth + 1, increment, context, return_str=True))
+
+    if pred_args is not None:
+        if not isinstance(pred_args, list):
+            pred_args = [pred_args]
+
+        for arg in pred_args:
+            if isinstance(arg, str):
+                args.append(arg)
+            elif isinstance(arg, tatsu.ast.AST):
+                term = arg.term
+                if isinstance(term, str):
+                    args.append(term)    
+                else:
+                    args.append(_handle_predicate(caller, rule, term, depth + 1, increment, context, return_str=True))
+            else:
+                raise ValueError(f'Unexpected predicate argument: {arg}')
 
     out = _out_str_to_span(f'({name} {" ".join(args)})', context)
 
@@ -655,6 +697,11 @@ def _handle_terminal(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
+def _handle_terminal_expr(caller, rule, ast, depth, increment, context=None):
+    caller(ast.expr, depth, increment, context)
+
+
+@mutation_context
 def _handle_scoring_expr(caller, rule, ast, depth, increment, context=None):
     caller(ast.expr, depth, increment, context)
 
@@ -666,7 +713,8 @@ def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
 def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
     printer.register_exact_matches(
-        _handle_terminal, _handle_scoring_expr, _handle_preference_eval,
+        _handle_terminal, _handle_terminal_expr,
+        _handle_scoring_expr, _handle_preference_eval,
         _handle_multi_expr, _handle_binary_expr, 
         _handle_neg_expr, _handle_equals_comp, 
         _handle_function_eval, _handle_with

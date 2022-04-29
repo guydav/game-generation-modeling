@@ -43,6 +43,9 @@ class ASTPrinter(ASTParser):
     def _handle_str(self, ast, **kwargs):
         return _indent_print(ast, kwargs['depth'], kwargs['increment'], kwargs['context'])
 
+    def _handle_int(self, ast, **kwargs):
+        return self._handle_str(str(ast), **kwargs)
+
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule
         depth, increment, context = kwargs['depth'], kwargs['increment'], kwargs['context']
@@ -714,7 +717,7 @@ def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
     printer.register_exact_matches(
         _handle_terminal, _handle_terminal_expr,
-        _handle_scoring_expr, _handle_preference_eval,
+        _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
         _handle_multi_expr, _handle_binary_expr, 
         _handle_neg_expr, _handle_equals_comp, 
         _handle_function_eval, _handle_with

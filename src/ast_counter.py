@@ -35,6 +35,8 @@ DEFAULT_OUTPUT_PATH ='./data/ast_counter.pickle'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 parser.add_argument('-c', '--parse-counter', action='store_true')
 parser.add_argument('-n', '--num-samples', type=int, default=10)
+parser.add_argument('-p', '--print-samples', action='store_true')
+parser.add_argument('-v', '--validate-samples', action='store_true')
 
 
 class RuleKeyValueCounter:
@@ -144,12 +146,16 @@ def generate_domain_name(global_context=None, local_context=None):
     return 'domain-name'
     
 
+def _preference_name(i):
+    return f'preference{chr(ord("A") + i - 1)}'
+
+
 def sample_new_preference_name(global_context=None, local_context=None):
     if 'preference_count' not in global_context:
         global_context['preference_count'] = 0
 
     global_context['preference_count'] += 1
-    return f'preference{global_context["preference_count"]}'
+    return _preference_name(global_context['preference_count'])
 
 
 def sample_existing_preference_name(global_context=None, local_context=None):
@@ -163,7 +169,7 @@ def sample_existing_preference_name(global_context=None, local_context=None):
         rng = global_context['rng']
 
     pref_count = global_context['preference_count']
-    return f'preference{rng.integers(1, pref_count + 1)}'
+    return _preference_name(rng.integers(1, pref_count + 1))
 
 
 def generate_number(global_context=None, local_context=None):
@@ -190,7 +196,7 @@ def sample_new_variable(global_context=None, local_context=None):
 def sample_existing_variable(global_context=None, local_context=None):
     if 'variables' not in local_context:
         # TODO: decide if we should return a nonsensical value here or an error
-        return '?XXX'
+        return '?xxx'
 
     if 'rng' not in global_context:
         rng = np.random.default_rng()
@@ -748,15 +754,38 @@ def main(args):
             counter = pickle.load(pickle_file)
 
     sampler = ASTSampler(grammar_parser, counter)
+    samples = []
+
     for _ in range(args.num_samples):
-        s = sampler.sample()
-        ast_printer.BUFFER = None
-        ast_printer.pretty_print_ast(s)
-        print()
+        try:     
+            ast = sampler.sample()
+            samples.append(ast)
+
+            if args.print_samples:
+                ast_printer.BUFFER = None
+                ast_printer.pretty_print_ast(ast)
+                print()
+
+            if args.validate_samples:
+                ast_printer.BUFFER = []
+                ast_printer.pretty_print_ast(ast)
+                first_print_out = ''.join(ast_printer.BUFFER)
+
+                second_ast = grammar_parser.parse(first_print_out)
+                ast_printer.BUFFER = []
+                ast_printer.pretty_print_ast(second_ast)
+                second_print_out = ''.join(ast_printer.BUFFER)
+
+                if first_print_out != second_print_out:
+                    print('Mismatch found')
+
+        except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
+            print(f'Parse failed: at position {e.pos} expected {e.item}:')
+            print(first_print_out[e.pos:])
 
     # TODO: conceptual issue: in places where the expansion is recursive 
     # (e.g. `setup`` expands to rules that all contain setup, or 
-    # `preference`` expand to exists/forall that contain preferences)
+    # `preference`` expand to exists/forall that contain preferences) 
     # the inner rules (`setup_game_conserved` / `setup_game_optional`), 
     # or `then` for preferences) are overrepreesnted, and more likely
     # to be sampled at the root of this expression than they are in the corpus

@@ -205,7 +205,11 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
             var_str = f'{var_names} - {var_type}'
         
         elif var_type.parseinfo.rule == 'either_types':
-            var_type_str = f'(either {" ".join(var_type.type_names)})'
+            type_names = var_type.type_names
+            if isinstance(type_names, list):
+                type_names = ' '.join(type_names)
+
+            var_type_str = f'(either {type_names})'
 
             inner_prev_mutation = None
             if 'html' in context and context['html'] and 'mutation' in var_type:

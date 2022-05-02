@@ -1,5 +1,6 @@
 import os
 import torch
+import wandb
 import shutil
 import argparse
 from tqdm import tqdm
@@ -75,6 +76,8 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                     log_writer.add_scalar("train/loss", loss, global_step)
                     log_writer.add_scalar("train/perplexity", perplexity, global_step)
 
+                    wandb.log({"train_loss": loss})
+
                 progress_bar.update(1)
                 progress_bar.set_postfix({"loss": loss.item()})
 
@@ -86,12 +89,12 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                                              temperature=args.gen_temp)[0]
                     
                     sample = tokenizer.decode(outputs, skip_special_tokens=True)
-                    if not args.no_log: log_writer.add_text("eval_sample", sample, global_step)
+                    if not args.no_log: log_writer.add_text("eval/random_sample", sample, global_step)
                     print("\nSample:", sample, "\n")
 
                 if global_step%args.eval_freq == 0:
                     if args.dataset == "dsl":
-                        evaluator.evaluate_dsl_generation(model, tokenizer, args.num_eval_samples, args.gen_len,
+                        evaluator.evaluate_dsl_generation(model, tokenizer, log_writer, global_step, args.num_eval_samples, args.gen_len,
                                                           args.gen_beams, args.gen_temp, args.eval_sim_threshold)
 
 
@@ -106,7 +109,8 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot", "java-gpt2", "codet5"])
+    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot", "java-gpt2", "codet5",
+                                                                           "incoder-1B", "incoder-6B"])
     parser.add_argument('--dataset', type=str, default="dsl", choices=["dsl", "descs", "seq2seq"])
     parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument('--chunk_size', type=int, default=512)
@@ -117,10 +121,10 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--eval_freq', type=int, default=500)
-    parser.add_argument('--num_eval_samples', type=int, default=100)
+    parser.add_argument('--num_eval_samples', type=int, default=20)
     parser.add_argument('--eval_sim_threshold', type=float, default=0.9)
     parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
-    parser.add_argument('--gen_freq', type=int, default=200)
+    parser.add_argument('--gen_freq', type=int, default=500)
     parser.add_argument('--gen_len', type=int, default=1024)
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
@@ -129,6 +133,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    run_name = f"{datetime_str}-{args.model}-{args.dataset}"
+
+    wandb.init(project="game-generation-modeling", entity="gdrtodd", config={}, name=run_name)
+    wandb.config.update(args)
+
     if args.model == "codet5": assert args.dataset == "seq2seq"
 
     # Map from model names to the load string transformers expects
@@ -136,7 +146,9 @@ if __name__ == "__main__":
                      "gpt2": "gpt2",
                      "codeparrot": "lvwerra/codeparrot",
                      "java-gpt2": "microsoft/CodeGPT-small-java-adaptedGPT2",
-                     "codet5": "Salesforce/codet5-base"}
+                     "codet5": "Salesforce/codet5-base",
+                     "incoder-1B": "facebook/incoder-1B",
+                     "incoder-6B": "facebook/incoder-6B"}
 
     # Map from dataset names to the class for that dataset
     dataset_mapping = {"dsl": DomainSpecificLanguageLMDataset,
@@ -178,7 +190,7 @@ if __name__ == "__main__":
     output_dir_name = None
     if not args.no_log:
         datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        output_dir_name = f"./logs/{datetime_str}-{args.model}-{args.dataset}"
+        output_dir_name = f"./logs/{run_name}"
         if not os.path.exists(output_dir_name):
             os.mkdir(output_dir_name)
 

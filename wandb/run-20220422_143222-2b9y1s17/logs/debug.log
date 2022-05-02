@@ -1,0 +1,38 @@
+2022-04-22 14:32:22,893 INFO    MainThread:8336 [wandb_setup.py:_flush():75] Loading settings from /home/gray/.config/wandb/settings
+2022-04-22 14:32:22,893 INFO    MainThread:8336 [wandb_setup.py:_flush():75] Loading settings from /home/gray/Projects/game-generation-modeling/wandb/settings
+2022-04-22 14:32:22,894 INFO    MainThread:8336 [wandb_setup.py:_flush():75] Loading settings from environment variables: {}
+2022-04-22 14:32:22,894 INFO    MainThread:8336 [wandb_setup.py:_flush():75] Inferring run settings from compute environment: {'program_relpath': 'lms/train_lm.py', 'program': 'lms/train_lm.py'}
+2022-04-22 14:32:22,894 INFO    MainThread:8336 [wandb_init.py:_log_setup():437] Logging user logs to /home/gray/Projects/game-generation-modeling/wandb/run-20220422_143222-2b9y1s17/logs/debug.log
+2022-04-22 14:32:22,894 INFO    MainThread:8336 [wandb_init.py:_log_setup():438] Logging internal logs to /home/gray/Projects/game-generation-modeling/wandb/run-20220422_143222-2b9y1s17/logs/debug-internal.log
+2022-04-22 14:32:22,895 INFO    MainThread:8336 [wandb_init.py:init():471] calling init triggers
+2022-04-22 14:32:22,895 INFO    MainThread:8336 [wandb_init.py:init():474] wandb.init called with sweep_config: {}
+config: {}
+2022-04-22 14:32:22,895 INFO    MainThread:8336 [wandb_init.py:init():524] starting backend
+2022-04-22 14:32:22,896 INFO    MainThread:8336 [backend.py:_multiprocessing_setup():97] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2022-04-22 14:32:22,925 INFO    MainThread:8336 [backend.py:ensure_launched():217] starting backend process...
+2022-04-22 14:32:22,931 INFO    MainThread:8336 [backend.py:ensure_launched():222] started backend process with pid: 8355
+2022-04-22 14:32:22,933 INFO    MainThread:8336 [wandb_init.py:init():533] backend started and connected
+2022-04-22 14:32:22,940 INFO    MainThread:8336 [wandb_init.py:init():597] updated telemetry
+2022-04-22 14:32:22,949 INFO    MainThread:8336 [wandb_init.py:init():628] communicating run to backend with 30 second timeout
+2022-04-22 14:32:23,495 INFO    MainThread:8336 [wandb_run.py:_on_init():1923] communicating current version
+2022-04-22 14:32:23,632 INFO    MainThread:8336 [wandb_run.py:_on_init():1927] got version response 
+2022-04-22 14:32:23,632 INFO    MainThread:8336 [wandb_init.py:init():659] starting run threads in backend
+2022-04-22 14:32:25,297 WARNING MainThread:8336 [wandb_init.py:init():1016] interrupted
+Traceback (most recent call last):
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/wandb_init.py", line 995, in init
+    run = wi.init()
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/wandb_init.py", line 670, in init
+    _ = backend.interface.communicate_run_start(run_obj)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/interface/interface.py", line 221, in communicate_run_start
+    result = self._communicate_run_start(run_start)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/interface/interface_shared.py", line 440, in _communicate_run_start
+    result = self._communicate(rec)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/interface/interface_shared.py", line 226, in _communicate
+    return self._communicate_async(rec, local=local).get(timeout=timeout)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/site-packages/wandb/sdk/interface/router.py", line 37, in get
+    is_set = self._object_ready.wait(timeout)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/threading.py", line 558, in wait
+    signaled = self._cond.wait(timeout)
+  File "/home/gray/anaconda3/envs/game-gen/lib/python3.8/threading.py", line 306, in wait
+    gotit = waiter.acquire(True, timeout)
+KeyboardInterrupt

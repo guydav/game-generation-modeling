@@ -1,0 +1,2 @@
+
+{'model': 'CodeBERTa', 'dataset': 'dsl', 'seed': 42, 'chunk_size': 512, 'batch_size': 1, 'warmup_proportion': 0.0002, 'weight_decay': 0.01, 'max_grad_norm': 1, 'learning_rate': 0.0001, 'epochs': 100, 'eval_freq': 500, 'num_eval_samples': 100, 'eval_sim_threshold': 0.9, 'room_mode': 'naive', 'gen_freq': 500, 'gen_len': 1024, 'gen_context': '(define', 'gen_temp': 1, 'gen_beams': 5, 'no_log': False}

@@ -70,7 +70,6 @@
 
 ; 3 says "figures", but their demonstration only uses blocks, so I'm guessing that's what they meant
 (define (game 614b603d4da88384282967a7-3) (:domain many-objects-room-v1)  ; 3
-
 (:constraints (and 
     (forall (?b - building) 
         (preference blockInTowerAtEnd (exists (?l - block)

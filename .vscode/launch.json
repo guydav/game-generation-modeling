@@ -4,8 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-
         {
             "name": "Python: Current File",
             "type": "python",
@@ -21,7 +19,7 @@
             "args": [
                "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl",  
                "-p", "-v",
-            //    "-c",
+               "-c",
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal"

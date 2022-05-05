@@ -13,7 +13,6 @@ import copy
 import re
 import typing
 import string
-from uritemplate import variables
 
 from parse_dsl import load_tests_from_file
 from ast_parser import ASTParser
@@ -65,6 +64,9 @@ def empty_defaultdict_dict():
     return defaultdict(dict)
 
 
+SECTION_RULES = ('setup_def', 'constraints_def', 'terminal_def', 'scoring_def')
+
+
 class ASTRuleValueCounter(ASTParser):
     """
     This class counts the values appearing for each rule in the AST.
@@ -74,7 +76,10 @@ class ASTRuleValueCounter(ASTParser):
     - If the child is a tuple, TBD, we probably only count some of the elements, 
         but need to figure out which ones, which might vary by rule
     """
-    def __init__(self):
+    def __init__(self, section_rules=SECTION_RULES):
+        self.section_rules = section_rules
+        
+        self.rule_counts = defaultdict(int)
         self.counters = defaultdict(dict)
         self.counters_by_section = defaultdict(empty_defaultdict_dict)
         self.section_counts = defaultdict(int)
@@ -97,6 +102,12 @@ class ASTRuleValueCounter(ASTParser):
     def _handle_ast(self, ast, **kwargs):
         self._handle_value(ast, **kwargs)
         rule = ast.parseinfo.rule
+        self.rule_counts[rule] += 1
+
+        if rule in self.section_rules:
+            section = rule.replace('_def', '')
+            kwargs['section'] = section
+            self.section_counts[section] += 1
 
         for key in ast:
             if key != 'parseinfo':
@@ -120,14 +131,6 @@ class ASTRuleValueCounter(ASTParser):
     def _handle_list(self, ast, **kwargs):
         self._handle_value(ast, **kwargs)
         super()._handle_list(ast, **kwargs)
-
-    def _handle_tuple(self, ast, **kwargs):
-        if ast[0].startswith('(:'):
-            section = ast[0][2:]
-            kwargs['section'] = section
-            self.section_counts[section] += 1
-
-        return super()._handle_tuple(ast, **kwargs)
 
 # TODO: populate the below with actual values, and consider splitting type names by rooms
 BINARY_OPERATORS = ['-', '/']
@@ -233,10 +236,25 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
-    ('type_definition', 'type'): 'type_name',
-    ('comparison_arg', 'arg'): ('number', 'type_name', 'variable'),
-    ('predicate_term', 'term'): ('type_name', 'variable'),
+    ('variable_type_def', 'var_type'): 'type_name',
+    ('two_arg_comparison', 'arg_1'): ('number', 'type_name', 'variable'),
+    ('two_arg_comparison', 'arg_2'): ('number', 'type_name', 'variable'),
+    ('multiple_args_equal_comparison', 'equal_comp_args'): ('number', 'type_name', 'variable'),
+    ('function_eval', 'func_args'): ('number', 'type_name', 'variable'),
+    ('predicate', 'pred_args'): ('type_name', 'variable'),
     ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
+    ('terminal_comp', 'expr_1'): ('number', 'total_time', 'total_score'),
+    ('terminal_comp', 'expr_2'): ('number', 'total_time', 'total_score'),
+    ('scoring_multi_expr', 'expr'): ('number', 'total_time', 'total_score'),
+    ('scoring_binary_expr', 'expr_1'): ('number', 'total_time', 'total_score'),
+    ('scoring_binary_expr', 'expr_2'): ('number', 'total_time', 'total_score'),
+    ('scoring_neg_expr', 'expr'): ('number', 'total_time', 'total_score'),
+    ('scoring_and', 'and_args'): ('number', 'total_time', 'total_score'),
+    ('scoring_or', 'or_args'): ('number', 'total_time', 'total_score'),
+    ('scoring_not', 'not_args'): ('number', 'total_time', 'total_score'),
+    ('scoring_comp', 'expr_1'): ('number', 'total_time', 'total_score'),
+    ('scoring_comp', 'expr_2'): ('number', 'total_time', 'total_score'),
+    ('scoring_equals_comp', 'expr'): ('number', 'total_time', 'total_score'),
 }
 
 PATTERN_TYPE_MAPPINGS = {
@@ -290,6 +308,7 @@ class ASTSampler:
                  rule_field_value_types=SPECIAL_RULE_FIELD_VALUE_TYPES,
                  pattern_type_mappings=PATTERN_TYPE_MAPPINGS,
                  local_context_propagating_rules=LOCAL_CONTEXT_PROPAGATING_RULES,
+                 section_rules=SECTION_RULES,
                  prior_rule_count=PRIOR_COUNT, 
                  prior_token_count=PRIOR_COUNT, 
                  length_prior=LENGTH_PRIOR, rng=None, seed=DEFAULT_RANDOM_SEED):
@@ -300,6 +319,7 @@ class ASTSampler:
         self.pattern_rule_options = pattern_rule_options
         self.rule_field_value_types = rule_field_value_types
         self.pattern_type_mappings = pattern_type_mappings
+        self.section_rules = section_rules
         self.local_context_propagating_rules = local_context_propagating_rules
 
         self.prior_rule_count = prior_rule_count
@@ -310,13 +330,16 @@ class ASTSampler:
             rng = np.random.default_rng(seed)
         self.rng = rng
 
-        self.rules = {}
+        self.prior = {}
+        self.posterior = {}
+        self.passthrough_rule_choice_rules = set()
         self.value_patterns = dict(
             any=re.compile(re.escape('(any)')),
             total_time=re.compile(re.escape('(total-time)')),
             total_score=re.compile(re.escape('(total-score)'))
         )
-        self.parse_prior_to_posterior()
+        self.parse_prior()
+        self.parse_posterior()
 
     def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: RuleKeyValueCounter):
         rule_counter = self.ast_counter.counters[rule_name]
@@ -432,10 +455,33 @@ class ASTSampler:
         else:
             raise ValueError(f'Unknown field_default type: {field_default}')
 
+    def _recursively_expand_replacement_rules(self, rules: typing.List[str]):
+        final_rules = set()
+        frontier = rules[:]
+
+        while frontier:
+            rule = frontier.pop(0)
+            if rule not in self.prior:
+                continue
+
+            rule_prior = self.prior[rule]
+            if isinstance(rule_prior, str):
+                frontier.append(rule_prior)
+
+            elif isinstance(rule_prior, list):
+                frontier.extend(rule_prior)
+
+            else:
+                final_rules.add(rule) 
+
+        return list(final_rules)
+
     def _create_rule_posterior(self, rule_name: str, field_name: str, 
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
         options: typing.Sequence[str], field_counter: RuleKeyValueCounter):
 
+        options = self._recursively_expand_replacement_rules(options)
+        field_prior['options'] = options
         field_prior[RULE_POSTERIOR] = {value: self.prior_token_count for value in options}
 
         if field_counter is not None:
@@ -466,7 +512,7 @@ class ASTSampler:
         if len(field_prior[RULE_POSTERIOR]) == 0:
             del field_prior[RULE_POSTERIOR]
         
-    def parse_prior_to_posterior(self):
+    def parse_prior(self):
         all_rules = set([rule.name for rule in self.grammar_parser.rules])
 
         for rule in self.grammar_parser.rules:
@@ -478,35 +524,31 @@ class ASTSampler:
             child = children[0]
             rule_name = rule.name
             rule_prior = self.parse_rule_prior(child)
+            rule_posterior = None
 
             # Special cases
+            # TODO: is predicate_name a special case?
             if rule_name in ('preferences', 'pref_forall_prefs'):
                 rule_prior = rule_prior[0]
+
+            self.prior[rule_name] = rule_prior
 
             if rule_name == START:
                 pass
 
+            # TODO: approach to resolving the extra token nonsense
+            # (X) change all section definition rules to named rules
+            # (X) rewerite the section counting logic to look for the section definition rule names in the parseinfo
+            # (X) rewrite the main prior to posterior loop to split the prior and posterior components
+            # (X) Prior component should handle the edge cases and mark them handled, so the posterior loop doesn't have to
+            # (X) The posterior loop should remap rules that directly map to another rule into the rule they map to
+            # (X) Excise middle nodes one at a time, reweriting the ASTPrinter and verifying that this doesn't break here
+            # (7) rewrite the ASTPrinter logic to account for the fact that the root nodes are no longer tuples
+            
+
             elif isinstance(rule_prior, dict):
-                for field_name, field_prior in rule_prior.items():
-                    production = None
-                    if field_name == PRODUCTION:
-                        continue
-
-                    if field_name == PATTERN and isinstance(field_prior, str):
-                        production = [(PATTERN, field_prior)]
-                        self.value_patterns[rule_name] = re.compile(field_prior)
-                        continue
-
-                    if not isinstance(field_prior, dict): 
-                        print(f'Encountered non-dict prior for {rule_name}.{field_name}: {field_prior}')
-                        continue
-                    self._update_prior_to_posterior(rule_name, field_name, field_prior)
-
-                if PRODUCTION not in rule_prior:
-                    if production is None:
-                        production = [(NAMED, key) for key in rule_prior.keys()]
-                    
-                    rule_prior[PRODUCTION] = production
+                # handled in self.parse_posterior
+                continue
 
             elif isinstance(rule_prior, list):
                 # The sections that optionally exist
@@ -518,31 +560,66 @@ class ASTSampler:
                     section_prob = self.ast_counter.section_counts[section_name] / max(self.ast_counter.section_counts.values())
                     child = list(filter(lambda x: x is not None, rule_prior))[0]
                     child[PRODUCTION_PROBABILITY] = section_prob
-                    rule_prior = child
+                    self.prior[rule_name] = child
 
                 else:
+                    self.passthrough_rule_choice_rules.add(rule_name)
                     if rule_name == 'predicate_name':
-                        rule_prior = dict(rule_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('rule', SAMPLE)])
+                        rule_posterior = dict(rule_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('rule', SAMPLE)])
                     else:
-                        rule_prior = dict(token_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('token', SAMPLE)])
+                        rule_posterior = dict(token_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('token', SAMPLE)])
                         
 
             elif isinstance(rule_prior, str):
                 # This is a rule that expands only to a single other rule
                 if rule_prior in all_rules:
-                    rule_prior = dict(rule_posterior={rule_prior: 1}, production=[(RULE, rule_prior)])
+                    rule_posterior = dict(rule_posterior={rule_prior: 1}, production=[(RULE, rule_prior)])
 
                 # This is a rule that expands directly to a token
                 else:
                     token = rule_prior
-                    rule_prior = dict(token_posterior={token: 1}, production=[(TOKEN, token)])
+                    rule_posterior = dict(token_posterior={token: 1}, production=[(TOKEN, token)])
                     self.value_patterns[rule_name] = re.compile(re.escape(token))
                     print(f'String token rule for {rule_name}: {rule_prior}')
 
             else:
                 print(f'Encountered rule with unknown prior or no special case: {rule.name}\n{rule_prior}')
 
-            self.rules[rule.name] = rule_prior
+            if rule_posterior is not None:
+                self.posterior[rule.name] = rule_posterior
+
+    def parse_posterior(self):
+        for rule_name, rule_prior in self.prior.items():
+            if rule_name in self.posterior:
+                continue
+
+            if not isinstance(rule_prior, dict):
+                raise ValueError(f'Non-dict rule {rule_name} should have a posterior but doesn\'t')
+
+            posterior = copy.deepcopy(rule_prior)
+
+            for field_name, field_prior in posterior.items():
+                production = None
+                if field_name == PRODUCTION:
+                    continue
+
+                if field_name == PATTERN and isinstance(field_prior, str):
+                    production = [(PATTERN, field_prior)]
+                    self.value_patterns[rule_name] = re.compile(field_prior)
+                    continue
+
+                if not isinstance(field_prior, dict): 
+                    print(f'Encountered non-dict prior for {rule_name}.{field_name}: {field_prior}')
+                    continue
+                self._update_prior_to_posterior(rule_name, field_name, field_prior)
+
+            if PRODUCTION not in posterior:
+                if production is None:
+                    production = [(NAMED, key) for key in posterior.keys()]
+                
+                posterior[PRODUCTION] = production
+
+            self.posterior[rule_name] = posterior
 
     def parse_rule_prior(self, rule: tatsu.grammars.Node):
         if isinstance(rule, grammars.EOF):
@@ -677,7 +754,7 @@ class ASTSampler:
         else:
             local_context = copy.deepcopy(local_context)
 
-        rule_dict = self.rules[rule]
+        rule_dict = self.posterior[rule]
         production = rule_dict[PRODUCTION]
         output = []
         return_ast = False

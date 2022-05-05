@@ -393,7 +393,7 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
             _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]    
 
     else:
-        args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) for arg in ast.equal_comp_funcs]
+        args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) for arg in ast.equal_comp_args]
 
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
     

@@ -24,7 +24,7 @@ class Evaluator():
 
 
     def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature=1,
-                                similarity_threshold=0.9):
+                                top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9):
         '''
         Generate a number of samples from the model and evaluate their grammaticality and 
         novelty. Returns the proportion of samples that are valid under the grammar, as well
@@ -41,8 +41,9 @@ class Evaluator():
         inputs = tokenizer(context, return_tensors="pt").input_ids
         inputs = inputs.to(self.device)
 
-        outputs = model.generate(inputs, max_length=max_length, num_return_sequences=num_evals, do_sample=True,
-                                 typical_p=0.5)
+        outputs = model.generate(inputs, max_length=max_length, num_return_sequences=num_evals, do_sample=do_sample,
+                                 num_beams=num_beams, temperature=temperature, top_k=top_k, top_p=top_p,
+                                 typical_p=typical_p)
         
         all_samples = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         novel_valid_samples = []

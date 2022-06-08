@@ -97,7 +97,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                     if args.dataset == "dsl":
                         prop_novel, prop_valid, prop_novel_valid, novel_valid_samples = evaluator.evaluate_dsl_generation(
                             model, tokenizer, args.num_eval_samples, args.gen_len, args.gen_beams, args.gen_temp, 
-                            args.eval_sim_threshold)
+                            args.gen_top_k, args.gen_top_p, args.gen_typical_p, args.eval_sim_threshold)
 
                         log_writer.add_scalar("eval/prop_novel", prop_novel, global_step)
                         log_writer.add_scalar("eval/prop_valid", prop_valid, global_step)
@@ -143,6 +143,9 @@ if __name__ == "__main__":
     parser.add_argument('--gen_context', type=str, default="(define")
     parser.add_argument('--gen_temp', type=float, default=1)
     parser.add_argument('--gen_beams', type=int, default=5)
+    parser.add_argument('--gen_top_k', type=int, default=50)
+    parser.add_argument('--gen_top_p', type=float, default=1.0)
+    parser.add_argument('--gen_typical_p', type=float, default=1.0)
     parser.add_argument('--no-log', action='store_true')
 
     args = parser.parse_args()

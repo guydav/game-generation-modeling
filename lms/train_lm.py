@@ -9,7 +9,7 @@ from datetime import datetime
 from lm_sampler import LMSampler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from eval_lm import Evaluator
+from evaluator import Evaluator
 from lm_datasets import GameDescriptionGPT2Dataset, DomainSpecificLanguageLMDataset, DescriptionToDSLDataset
 
 from transformers import pipeline

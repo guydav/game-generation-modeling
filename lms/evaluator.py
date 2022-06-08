@@ -23,7 +23,7 @@ class Evaluator():
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-    def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature=1,
+    def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature,
                                 top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9):
         '''
         Generate a number of samples from the model and evaluate their grammaticality and 

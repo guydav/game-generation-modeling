@@ -20,9 +20,6 @@ class Evaluator():
         self.grammar_parser = tatsu.compile(grammar)
         self.programs = load_tests_from_file(dsl_info_path)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
     def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature,
                                 top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9):
         '''
@@ -39,7 +36,7 @@ class Evaluator():
                                        "invalid": 0}}
 
         inputs = tokenizer(context, return_tensors="pt").input_ids
-        inputs = inputs.to(self.device)
+        inputs = inputs.to(model.device)
 
         # Doing generations one at a time lets us use tqdm, setting pad_token_id necessary to supress warnings
         outputs = torch.stack([model.generate(inputs, max_length=max_length, do_sample=do_sample, num_beams=num_beams,

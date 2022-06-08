@@ -41,7 +41,9 @@ class Evaluator():
         inputs = tokenizer(context, return_tensors="pt").input_ids
         inputs = inputs.to(self.device)
 
-        outputs = model.generate(inputs, max_length=max_length, num_return_sequences=num_evals, do_sample=True)
+        outputs = model.generate(inputs, max_length=max_length, num_return_sequences=num_evals, do_sample=True,
+                                 typical_p=0.5)
+        
         all_samples = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         for sample in all_samples:
@@ -73,9 +75,15 @@ class Evaluator():
         print(f"Of the {num_novel} novel generations, {output_results['novel']['valid']} were valid")
         print(f"Similarly, of the {num_valid} valid generations, {output_results['novel']['valid']} were novel")
 
-        log_writer.add_scalar("eval/prop_novel", num_novel / num_evals, global_step)
-        log_writer.add_scalar("eval/prop_valid", num_valid / num_evals, global_step)
-        log_writer.add_scalar("eval/prop_novel_valid", output_results['novel']['valid'] / num_evals, global_step)
+        prop_novel = num_novel / num_evals
+        prop_valid = num_valid / num_evals
+        prop_novel_valid = output_results["novel"]["valid"] / num_evals
+
+        log_writer.add_scalar("eval/prop_novel", prop_novel, global_step)
+        log_writer.add_scalar("eval/prop_valid", prop_valid, global_step)
+        log_writer.add_scalar("eval/prop_novel_valid", prop_novel_valid, global_step)
+
+        return prop_novel, prop_valid, prop_novel_valid
 
 
 

@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import wandb
 import shutil
@@ -76,7 +77,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                     log_writer.add_scalar("train/loss", loss, global_step)
                     log_writer.add_scalar("train/perplexity", perplexity, global_step)
 
-                    wandb.log({"train_loss": loss})
+                    # wandb.log({"train_loss": loss})
 
                 progress_bar.update(1)
                 progress_bar.set_postfix({"loss": loss.item()})
@@ -97,6 +98,9 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                         evaluator.evaluate_dsl_generation(model, tokenizer, log_writer, global_step, args.num_eval_samples, args.gen_len,
                                                           args.gen_beams, args.gen_temp, args.eval_sim_threshold)
 
+                if global_step%args.save_freq == 0:
+                    torch.save(model.state_dict(), os.path.join(output_dir_name, f"model_weights_{global_step}.pth"))
+
 
     except KeyboardInterrupt:
         print("Stopping early due to user input!")
@@ -105,6 +109,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
 
     print("Finished training.")
     progress_bar.close()
+    torch.save(model.state_dict(), os.path.join(output_dir_name, f"model_weights_{global_step}.pth"))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -120,6 +125,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--save_freq', type=int, default=1000)
     parser.add_argument('--eval_freq', type=int, default=500)
     parser.add_argument('--num_eval_samples', type=int, default=20)
     parser.add_argument('--eval_sim_threshold', type=float, default=0.9)
@@ -136,8 +142,8 @@ if __name__ == "__main__":
     datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     run_name = f"{datetime_str}-{args.model}-{args.dataset}"
 
-    wandb.init(project="game-generation-modeling", entity="gdrtodd", config={}, name=run_name)
-    wandb.config.update(args)
+    # wandb.init(project="game-generation-modeling", entity="gdrtodd", config={}, name=run_name)
+    # wandb.config.update(args)
 
     if args.model == "codet5": assert args.dataset == "seq2seq"
 
@@ -189,9 +195,11 @@ if __name__ == "__main__":
     # Create the output directory
     output_dir_name = None
     if not args.no_log:
-        datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         output_dir_name = f"./logs/{run_name}"
         if not os.path.exists(output_dir_name):
             os.mkdir(output_dir_name)
+
+        with open(os.path.join(output_dir_name, "config.json"), "w") as file:
+            json.dump(vars(args), file)
 
     train_loop(model, tokenizer, optimizer, data_loader, output_dir_name, evaluator, args)

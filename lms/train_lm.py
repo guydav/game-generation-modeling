@@ -95,8 +95,16 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
 
                 if global_step%args.eval_freq == 0:
                     if args.dataset == "dsl":
-                        evaluator.evaluate_dsl_generation(model, tokenizer, log_writer, global_step, args.num_eval_samples, args.gen_len,
-                                                          args.gen_beams, args.gen_temp, args.eval_sim_threshold)
+                        prop_novel, prop_valid, prop_novel_valid, novel_valid_samples = evaluator.evaluate_dsl_generation(
+                            model, tokenizer, args.num_eval_samples, args.gen_len, args.gen_beams, args.gen_temp, 
+                            args.eval_sim_threshold)
+
+                        log_writer.add_scalar("eval/prop_novel", prop_novel, global_step)
+                        log_writer.add_scalar("eval/prop_valid", prop_valid, global_step)
+                        log_writer.add_scalar("eval/prop_novel_valid", prop_novel_valid, global_step)
+
+                        for sample in novel_valid_samples:
+                            log_writer.add_text("eval/novel_valid_sample", sample, global_step)
 
                 if global_step%args.save_freq == 0:
                     torch.save(model.state_dict(), os.path.join(output_dir_name, f"model_weights_{global_step}.pth"))

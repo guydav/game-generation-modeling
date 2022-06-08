@@ -41,14 +41,16 @@ class Evaluator():
         inputs = tokenizer(context, return_tensors="pt").input_ids
         inputs = inputs.to(self.device)
 
-        outputs = model.generate(inputs, max_length=max_length, num_return_sequences=num_evals, do_sample=do_sample,
-                                 num_beams=num_beams, temperature=temperature, top_k=top_k, top_p=top_p,
-                                 typical_p=typical_p)
+        # Doing generations one at a time lets us use tqdm, setting pad_token_id necessary to supress warnings
+        outputs = torch.stack([model.generate(inputs, max_length=max_length, do_sample=do_sample, num_beams=num_beams,
+                               temperature=temperature, top_k=top_k, top_p=top_p, typical_p=typical_p,
+                               pad_token_id=tokenizer.eos_token_id)[0] 
+                               for _ in tqdm(range(num_evals), desc="Generating samples")], dim=0)
         
         all_samples = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         novel_valid_samples = []
 
-        for sample in all_samples:
+        for sample in tqdm(all_samples, desc="Evaluating samples"):
 
             # Keep up until the first time [END] is produced, and remove the [START] tokens
             sample = sample[:sample.find("[END]")].replace("[START]", "").replace("[ID]", "id-1").strip()

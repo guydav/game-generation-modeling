@@ -6,7 +6,6 @@ import shutil
 import argparse
 from tqdm import tqdm
 from datetime import datetime
-from lm_sampler import LMSampler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from evaluator import Evaluator
@@ -26,9 +25,6 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
 
     # Initialize the log writer
     log_writer = SummaryWriter(output_dir, flush_secs=100)
-
-    # Create the sampler to generate continuations during training
-    sampler = LMSampler(model, tokenizer, device=device)
 
     # Calculate the total number of training steps to initialize the scheduler
     num_train_steps = (len(data_loader) // args.batch_size) * args.epochs
@@ -87,7 +83,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                     inputs = inputs.to(device)
 
                     outputs = model.generate(inputs, max_length=args.gen_len, num_beams=args.gen_beams,
-                                             temperature=args.gen_temp)[0]
+                                             temperature=args.gen_temp, pad_token_id=tokenizer.eos_token_id)[0]
                     
                     sample = tokenizer.decode(outputs, skip_special_tokens=True)
                     if not args.no_log: log_writer.add_text("eval/random_sample", sample, global_step)
@@ -97,7 +93,7 @@ def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, 
                     if args.dataset == "dsl":
                         prop_novel, prop_valid, prop_novel_valid, novel_valid_samples = evaluator.evaluate_dsl_generation(
                             model, tokenizer, args.num_eval_samples, args.gen_len, args.gen_beams, args.gen_temp, 
-                            args.gen_top_k, args.gen_top_p, args.gen_typical_p, args.eval_sim_threshold)
+                            args.gen_top_k, args.gen_top_p, args.gen_typical_p, True, args.eval_sim_threshold)
 
                         log_writer.add_scalar("eval/prop_novel", prop_novel, global_step)
                         log_writer.add_scalar("eval/prop_valid", prop_valid, global_step)

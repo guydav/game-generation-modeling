@@ -21,7 +21,8 @@ class Evaluator():
         self.programs = load_tests_from_file(dsl_info_path)
 
     def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature,
-                                top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9):
+                                top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9, 
+                                verbose=False):
         '''
         Generate a number of samples from the model and evaluate their grammaticality and 
         novelty. Returns the proportion of samples that are valid under the grammar, as well
@@ -42,12 +43,12 @@ class Evaluator():
         outputs = torch.stack([model.generate(inputs, max_length=max_length, do_sample=do_sample, num_beams=num_beams,
                                temperature=temperature, top_k=top_k, top_p=top_p, typical_p=typical_p,
                                pad_token_id=tokenizer.eos_token_id)[0] 
-                               for _ in tqdm(range(num_evals), desc="Generating samples")], dim=0)
+                               for _ in tqdm(range(num_evals), desc="Generating samples", leave=verbose)], dim=0)
         
         all_samples = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         novel_valid_samples = []
 
-        for sample in tqdm(all_samples, desc="Evaluating samples"):
+        for sample in tqdm(all_samples, desc="Evaluating samples", leave=verbose):
 
             # Keep up until the first time [END] is produced, and remove the [START] tokens
             sample = sample[:sample.find("[END]")].replace("[START]", "").replace("[ID]", "id-1").strip()
@@ -72,9 +73,10 @@ class Evaluator():
         num_valid = output_results["novel"]["valid"] + output_results["existing"]["valid"]
         num_invalid = num_evals - num_valid
 
-        print(f"\nOut of {num_evals} generations, {num_novel} were novel (sim. threshold = {similarity_threshold}) and (independently) {num_valid} were valid")
-        print(f"Of the {num_novel} novel generations, {output_results['novel']['valid']} were valid")
-        print(f"Similarly, of the {num_valid} valid generations, {output_results['novel']['valid']} were novel")
+        if verbose:
+            print(f"\nOut of {num_evals} generations, {num_novel} were novel (sim. threshold = {similarity_threshold}) and (independently) {num_valid} were valid")
+            print(f"Of the {num_novel} novel generations, {output_results['novel']['valid']} were valid")
+            print(f"Similarly, of the {num_valid} valid generations, {output_results['novel']['valid']} were novel")
 
         prop_novel = num_novel / num_evals
         prop_valid = num_valid / num_evals

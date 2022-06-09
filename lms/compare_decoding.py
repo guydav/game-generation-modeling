@@ -3,6 +3,7 @@ import glob
 import json
 import torch
 import argparse
+import itertools
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM, AutoModelForSeq2SeqLM
@@ -21,6 +22,13 @@ model_mapping = {"CodeBERTa": "huggingface/CodeBERTa-small-v1",
 # Instantiate the evaluator
 evaluator = Evaluator()
 
+hyperparam_sweep = {"num_beams": [1, 5, 10],
+                    "temperature": [1.0, 1.5, 2.0],
+                    "top_k": [50, 100, 200],
+                    "top_p": [0.2, 0.5, 0.95, 1],
+                    "typical_p": [0.2, 0.5, 0.95, 1],
+                    "do_sample": [True, False]}
+
 log_dir = "./logs"
 model_log_dirs = os.listdir(log_dir)
 
@@ -33,6 +41,10 @@ for model_log_dir in model_log_dirs:
 
     # Check to make sure the model was trained on just the DSL (for now)
     if not config["dataset"] == "dsl":
+        continue
+
+    # Check if a full sweep has already been performed on this model
+    if os.path.exists(os.path.join(log_dir, model_log_dir, "full_eval_sweep.pt")):
         continue
 
     # Check if the run has saved checkpoints, and collect the latest one if so
@@ -64,5 +76,17 @@ for model_log_dir in model_log_dirs:
     print(f"Loading model weights from {final_checkpoint}...")
     model.load_state_dict(torch.load(final_checkpoint))
 
-    evaluator.evaluate_dsl_generation(model, tokenizer, 10, max_length=1024, num_beams=5, temperature=1, top_k=50,
-                                      top_p=1.0, typical_p=1.0, do_sample=True, similarity_threshold=0.9)
+    hyperparameter_combinations = list(itertools.product(*list(hyperparam_sweep.values())))
+    
+    results = []
+    for combo in tqdm(hyperparameter_combinations, desc="Running eval hyperparameter sweep"):
+        arg_dict = dict(zip(list(hyperparam_sweep.keys()), combo))
+
+        prop_novel, prop_valid, prop_novel_valid, novel_valid_samples = evaluator.evaluate_dsl_generation(
+            model, tokenizer, num_evals=10, max_length=1024, similarity_threshold=0.9, **arg_dict)
+
+        results.append([prop_novel_valid, prop_valid, prop_novel, arg_dict, novel_valid_samples])
+        torch.save(results, os.path.join(log_dir, model_log_dir, "partial_eval_sweep.pt"))
+
+    torch.save(results, os.path.join(log_dir, model_log_dir, "full_eval_sweep.pt"))
+    os.remove(os.path.join(log_dir, model_log_dir, "partial_eval_sweep.pt"))

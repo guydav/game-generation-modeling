@@ -2,13 +2,16 @@ import os
 import sys
 import tatsu
 
+import numpy as np
+
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
 from ast_parser import ASTParser
 
 # This dictionary maps from the names of base-level predicates to their functional representations (i.e.
 # a function that computes the predicate on a given state)
-PREDICATE_LIBRARY = {"test": lambda x: x}
+PREDICATE_LIBRARY = {"in_motion": lambda state, obj: (np.linalg.norm(obj["velocity"]) > 0),
+                     "agent_holds": lambda state, obj: (state["types"]["agent"]["holding"] == obj["name"])}
 
 
 def _not(func):
@@ -52,7 +55,48 @@ def _comparison(arg_1, arg_2, comp_type):
             return arg_1(x) <= arg_2(x)
         return comp
 
+def build_predicate(predicate_name, *args):
+    '''
+    Takes a predicate name and its necessary arguments, for instance "(in_motion ?b)", where
+    ?b quantifies a specific beach ball, and returns a function which takes in a simulator state 
+    and evaluates the specified predicate on that state.
 
+    In this example, the returned function would evaluate as True for any state in which the beach
+    ball is in motion, and False otherwise. 
+    '''
+
+    if predicate_name in PREDICATE_LIBRARY:
+        print(f"Building '{predicate_name}' with arguments: {args}")
+        def _predicate(state):
+            arguments = [state["types"][arg] for arg in args]
+            return PREDICATE_LIBRARY[predicate_name](state, *arguments)
+
+        return _predicate
+
+    else:
+        print(f"Predicate '{predicate_name}' has not been defined, returning dummy predicate")
+        def dummy(state):
+            return True
+
+        return dummy
+
+DUMMY_STATE = {"types": {"agent": {"position": [0, 0, 0],
+                                   "velocity": [0, 0, 0],
+                                   "crouching": False,
+                                   "holding": None},
+
+                         "?d": {"position": [6, 0, 0],
+                                "velocity": [0, 0, 0],
+                                "name": "beachball"},
+
+
+                         "?h": {"position": [10, 10, 0],
+                                "velocity": [0, 0, 0],
+                                "name": "bin"}
+
+                        }
+
+              }
 
 class PreferenceParser(ASTParser):
 
@@ -85,7 +129,9 @@ class PreferenceParser(ASTParser):
                         # Case A: once
                         if operators[0] == "once_pred":
                             predicate = self._handle_predicate(function["once_pred"]["pred"])
-                            print(predicate(1))
+
+                            evaled = predicate(DUMMY_STATE)
+                            print(evaled)
                             exit()
 
                         # Case B: once-measure
@@ -125,10 +171,23 @@ class PreferenceParser(ASTParser):
             print("Handling key =", key)
             # Base case: return the functional form of the referenced predicate
             if key == "pred_name":
-                def foo(x):
-                    return True
+                pred_name = predicate["pred_name"]
 
-                return foo
+                # Case: no arguments
+                if predicate["pred_args"] is None:
+                    pred_args = []
+
+                # Case: exactly one argument
+                elif isinstance(predicate["pred_args"], tatsu.ast.AST):
+                    pred_args = [predicate["pred_args"]["term"]]
+
+                # Case: more than one argument
+                else:
+                    pred_args = [parg["term"] for parg in predicate["pred_args"]]
+
+                sub_predicate = build_predicate(pred_name, *pred_args)
+
+                return sub_predicate
 
             elif key == "and_args":
                 sub_predicates = []
@@ -217,8 +276,8 @@ if __name__ == "__main__":
     (:constraints (and 
         (preference throwBallToBin
             (exists (?d - dodgeball ?h - hexagonal_bin)
-                (then 
-                    (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?b) 5)) ))
+                (then
+                    (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
                     (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h))
                     (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (distance agent ?h))
                 )

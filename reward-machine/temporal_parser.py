@@ -136,6 +136,8 @@ class PreferenceParser(ASTParser):
             name = preference["definition"]["pref_name"]
             body = preference["definition"]["pref_body"]["body"]
 
+            print(f"\nBuilding the preference '{name}'")
+
             variables = self._extract_variables(body["exists_vars"]["variables"])
 
             arguments = body["exists_args"]["body"]
@@ -153,22 +155,34 @@ class PreferenceParser(ASTParser):
                         if operators[0] == "once_pred":
                             predicate = self._handle_predicate(function["once_pred"]["pred"])
 
-                            # evaled = predicate(DUMMY_STATE)
-                            # print(evaled)
-                            # exit()
-
                         # Case B: once-measure
                         elif operators[0] == "once_measure_pred":
-                            pass
+                            predicate = self._handle_predicate(function["once_measure_pred"]["pred"])
+
+                            function_name = function["measurement"]["func_name"]
+
+                            if isinstance(function["measurement"]["func_args"], tatsu.ast.AST):
+                                function_arguments = [function["measurement"]["func_args"]["term"]["arg"]]
+                            else:
+                                function_arguments = [farg["term"]["arg"] for farg in function["measurement"]["func_args"]]
+
+                            measurement = build_function(function_name, *function_arguments)                            
 
                         elif operators[0] == "hold_pred":
                             # Case C: hold-while
                             if operators[1] == "while_preds":
                                 hold_predicate = self._handle_predicate(function["hold_pred"]["pred"])
 
+                                # Only one while predicate
+                                if isinstance(function["while_preds"], tatsu.ast.AST):
+                                    while_preds = [self._handle_predicate(function["while_preds"]["pred"])]
+                                # More than one while predicate
+                                else:
+                                    while_preds = [self._handle_predicate(pred["pred"]) for pred in function["while_preds"]]
+
                             # Case D: hold
                             else:
-                                pass
+                                hold_predicate = self._handle_predicate(function["hold_pred"]["pred"])
 
                         else:
                             exit("Unknown operator type!")
@@ -178,8 +192,6 @@ class PreferenceParser(ASTParser):
                 else:
                     pass
 
-            # print(functions)
-            exit()
 
     def _extract_variables(self, variable_list):
         variables = []
@@ -190,7 +202,7 @@ class PreferenceParser(ASTParser):
 
     def _handle_predicate(self, predicate):
         for key in predicate:
-            print("Handling key =", key)
+            
             # Base case: return the functional form of the referenced predicate
             if key == "pred_name":
                 pred_name = predicate["pred_name"]
@@ -234,7 +246,11 @@ class PreferenceParser(ASTParser):
                 arg_1 = predicate[key]["arg_1"]["arg"]
                 if isinstance(arg_1, tatsu.ast.AST):
                     function_name = arg_1["func_name"]
-                    function_arguments = [farg["term"]["arg"] for farg in arg_1["func_args"]]
+
+                    if isinstance(arg_1["func_args"], tatsu.ast.AST):
+                        function_arguments = [arg_1["func_args"]["term"]["arg"]]
+                    else:
+                        function_arguments = [farg["term"]["arg"] for farg in arg_1["func_args"]]
 
                     arg_1 = build_function(function_name, *function_arguments)
 
@@ -248,7 +264,11 @@ class PreferenceParser(ASTParser):
                 arg_2 = predicate[key]["arg_2"]["arg"]
                 if isinstance(arg_2, tatsu.ast.AST):
                     function_name = arg_2["func_name"]
-                    function_arguments = [farg["term"]["arg"] for farg in arg_2["func_args"]]
+                    
+                    if isinstance(arg_2["func_args"], tatsu.ast.AST):
+                        function_arguments = [arg_2["func_args"]["term"]["arg"]]
+                    else:
+                        function_arguments = [farg["term"]["arg"] for farg in arg_2["func_args"]]
 
                     arg_2 = build_function(function_name, *function_arguments)
 
@@ -290,8 +310,8 @@ if __name__ == "__main__":
             (exists (?d - dodgeball ?h - hexagonal_bin)
                 (then
                     (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
-                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h))
-                    (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (distance agent ?h))
+                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
+                    (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
                 )
             )
         )

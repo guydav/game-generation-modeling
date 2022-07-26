@@ -14,6 +14,9 @@ PREDICATE_LIBRARY = {"in_motion": lambda state, obj: (np.linalg.norm(obj["veloci
                      "agent_holds": lambda state, obj: (state["types"]["agent"]["holding"] == obj["name"])}
 
 
+FUNCTION_LIBRARY = {"distance": lambda obj1, obj2: np.linalg.norm(np.array(obj1["position"]) - np.array(obj2["position"]))}
+
+
 def _not(func):
     def inverted(x):
         return not func(x)
@@ -77,6 +80,26 @@ def build_predicate(predicate_name, *args):
         print(f"Predicate '{predicate_name}' has not been defined, returning dummy predicate")
         def dummy(state):
             return True
+
+        return dummy
+
+def build_function(function_name, *args):
+    '''
+    The mirror of build_predicate (above), takes a function name and its arguments and returns
+    a new function which takes in a simulator state and returns the function evaluated on that
+    state
+    '''
+
+    if function_name in FUNCTION_LIBRARY:
+        def _function(state):
+            arguments = [state["types"][arg] for arg in args]
+            return FUNCTION_LIBRARY[function_name](*arguments)
+
+        return _function
+
+    else:
+        def dummy(state):
+            return 1
 
         return dummy
 
@@ -211,13 +234,7 @@ class PreferenceParser(ASTParser):
                     function_name = arg_1["func_name"]
                     function_arguments = [farg["term"]["arg"] for farg in arg_1["func_args"]]
 
-                    # Should return a function which takes in a state and computes the specified
-                    # function on the specified arguments
-                    # arg_1 = build_function(function_name, function_arguments)
-                    def foo(x):
-                        return 100
-
-                    arg_1 = foo
+                    arg_1 = build_function(function_name, *function_arguments)
 
                 else:
                     arg_copy = arg_1
@@ -231,12 +248,7 @@ class PreferenceParser(ASTParser):
                     function_name = arg_2["func_name"]
                     function_arguments = [farg["term"]["arg"] for farg in arg_2["func_args"]]
 
-                    # arg_2 = build_function(function_name, function_arguments)
-
-                    def foo2(x):
-                        return 100
-
-                    arg_2 = foo2
+                    arg_2 = build_function(function_name, *function_arguments)
 
                 else:
                     arg_copy = arg_2
@@ -247,8 +259,6 @@ class PreferenceParser(ASTParser):
              
                 return _comparison(arg_1, arg_2, comparison_operator)
                 
-
-
 
 
 class StateMachine():

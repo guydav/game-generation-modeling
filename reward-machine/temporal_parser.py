@@ -194,6 +194,9 @@ class PreferenceParser(ASTParser):
 
 
     def _extract_variables(self, variable_list):
+        if isinstance(variable_list, tatsu.ast.AST):
+            variable_list = [variable_list]
+
         variables = []
         for var_info in variable_list:
             variables.append([var_info["var_names"], var_info["var_type"]["type"]])
@@ -202,7 +205,7 @@ class PreferenceParser(ASTParser):
 
     def _handle_predicate(self, predicate):
         for key in predicate:
-            
+
             # Base case: return the functional form of the referenced predicate
             if key == "pred_name":
                 pred_name = predicate["pred_name"]
@@ -337,3 +340,7 @@ if __name__ == "__main__":
     
     parser = PreferenceParser()
     parser(ast)
+
+
+    # TODOs
+    # 1. refactor parser to better handle cases where we have one / many arguments (AST vs. iterable)

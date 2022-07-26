@@ -108,13 +108,13 @@ DUMMY_STATE = {"types": {"agent": {"position": [0, 0, 0],
                                    "crouching": False,
                                    "holding": None},
 
-                         "?d": {"position": [6, 0, 0],
+                         "?d": {"position": [4, 0, 0],
                                 "velocity": [0, 0, 0],
                                 "name": "beachball"},
 
 
                          "?h": {"position": [10, 10, 0],
-                                "velocity": [0, 0, 0],
+                                "velocity": [1.0, 0, 0],
                                 "name": "bin"}
 
                         }
@@ -153,9 +153,9 @@ class PreferenceParser(ASTParser):
                         if operators[0] == "once_pred":
                             predicate = self._handle_predicate(function["once_pred"]["pred"])
 
-                            evaled = predicate(DUMMY_STATE)
-                            print(evaled)
-                            exit()
+                            # evaled = predicate(DUMMY_STATE)
+                            # print(evaled)
+                            # exit()
 
                         # Case B: once-measure
                         elif operators[0] == "once_measure_pred":
@@ -164,7 +164,7 @@ class PreferenceParser(ASTParser):
                         elif operators[0] == "hold_pred":
                             # Case C: hold-while
                             if operators[1] == "while_preds":
-                                pass
+                                hold_predicate = self._handle_predicate(function["hold_pred"]["pred"])
 
                             # Case D: hold
                             else:
@@ -173,13 +173,12 @@ class PreferenceParser(ASTParser):
                         else:
                             exit("Unknown operator type!")
 
-                        print(function.keys())
                 
                 # Case 2: preference does not contain temporal relations
                 else:
                     pass
 
-            print(functions)
+            # print(functions)
             exit()
 
     def _extract_variables(self, variable_list):
@@ -225,6 +224,9 @@ class PreferenceParser(ASTParser):
                     sub_predicates.append(self._handle_predicate(sub_predicate["pred"]))
 
                 return _or(*sub_predicates)
+
+            elif key == "not_args":
+                return _not(self._handle_predicate(predicate[key]["pred"]))
 
             elif key == "comp":
                 comparison_operator = predicate[key]["comp_op"]

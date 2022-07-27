@@ -176,6 +176,7 @@ class PreferenceParser(ASTParser):
                                 # Only one while predicate
                                 if isinstance(function["while_preds"], tatsu.ast.AST):
                                     while_preds = [self._handle_predicate(function["while_preds"]["pred"])]
+
                                 # More than one while predicate
                                 else:
                                     while_preds = [self._handle_predicate(pred["pred"]) for pred in function["while_preds"]]
@@ -344,3 +345,45 @@ if __name__ == "__main__":
 
     # TODOs
     # 1. refactor parser to better handle cases where we have one / many arguments (AST vs. iterable)
+    # 2. implement temporal relations
+
+
+
+    # We proceed iteratively through each of the predicates inside the (then) operator.
+    # We begin the [PRE] state
+    #
+    # We look at the first predicate, and determine all of the arguments it specifies. For instance,
+    # the first predicate might use the variable ?b. We can tell from the preference definition that
+    # ?b refers to an object of type "ball". So what we do is create a copy of the predicate for each
+    # object in the scene that matches the type ball. This could be a pink dodgeball and a blue dodge-
+    # ball, for instance.
+    #
+    # Now we proceed through the trajectory, evaluating *each* of the copies of the predicate on every
+    # state. As long as *all* of the predicates evaluate to False, we continue. As soon as one of the
+    # predicates is satisfied, we create an instance of the StateMachine and put it in [STATE 1], and
+    # lock in whichever object was used to satisfy the preference. For instance, when the blue dodgeball
+    # is picked up, we create a StateMachine and force ?b to refer to the *blue* dodgeball for that machine.
+    # The other instances of the first predicate continue tracking their respective objects.
+    #
+    # When we create the StateMachine, we then examine the next predicate inside the (then) operator. Say
+    # that this predicate references both ?b and ?w. In this example, we've already locked in ?b to refer
+    # to the blue dodgeball. However, ?w remains unspecified. We can again tell from the preference definition
+    # that ?w is an object of type "wall". So we create copies of each of the predicates (as we did before) for
+    # each of the objects that match the type wall in the current scene. The StateMachine continues to evaluate
+    # each of the states in the trajectory. Depending on the type of the current predicate (i.e. once, hold, or
+    # hold-while), the StateMachine is also responsible for handling the transition logic. For instance, in the
+    # case of a hold-while, the StateMachine should wait until the hold condition is no longer satisfied. During
+    # this time, it should also monitor whether the while condition has been met. When the hold is no longer
+    # satisfied, the StateMachine should either proceed to the next predicate (if the while condition was met)
+    # or transition to a failure state and, probably, destroy itself (if the while condition wasn't met).
+    #
+    # There are a couple of edge cases we need to consider:
+    # 1. What happens when a new predicate involves more than one previously uninstantiated variables?
+    #    It might be necessary to create a new instance of the predicate for every possible combination
+    #    of those objects, but this has the potential to get very expensive if many objects are quantified
+    #    and they each have many different instances in the scene.
+    #
+    # 2. When one of the "interior predicates" (i.e. not the first or last) gets satisfied, what happens to
+    #    the other copies? In our example, once the dodgeball has bounced off of one of the walls, how do we
+    #    indicate that the other predicates (those monitoring other walls) should be shut off? Perhaps one
+    #    option is to include a flag which indicates whether a predicate is "exclusive" or "non-exclusive"

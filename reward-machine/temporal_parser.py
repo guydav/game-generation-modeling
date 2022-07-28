@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tatsu
 
@@ -121,6 +122,46 @@ DUMMY_STATE = {"types": {"agent": {"position": [0, 0, 0],
 
               }
 
+DUMMY_STATE = {"objects": [{"name": "Ball_12345", "position": [4, 0, 0], "velocity": [0, 0, 0],
+                            "objectId": "Ball|+04.00|+00.00|+00.00", "objectType": "ball"},
+
+                            {"name": "Bin_54321", "position": [10, 10, 0], "velocity": [0, 0, 0],
+                            "objectId": "Bin|+10.00|+10.00|+00.00", "objectType": "bin"}
+                          ],
+
+               "agent": {"position": [0, 0, 0], "velocity": [0, 0, 0], "croucing": False,
+                         "holding": None},
+
+               "game_start": True,
+               "game_over": False
+
+              }
+
+ALL_OBJECTS = []
+
+class PreferenceParserV2(ASTParser):
+    def _handle_ast(self, ast, **kwargs):
+        for key in ast:
+            if key == "definition":
+                # Identify the preference's name and variable -> type mapping
+                # Store those values in "current_pref" and "current_variables"
+                # Continue recursively
+                pass
+
+            elif key == "once_pred":
+                # Start a new "once" predicate inside the current preference
+                # Continue recursively
+                pass
+
+            elif key == "once_measure_pred":
+                pass
+
+            # Continue elif's for measurement, hold_pred, while_pred
+
+            elif key == "term":
+                # Add the variable to the list of variables in the current preference
+                pass
+
 class PreferenceParser(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
@@ -139,6 +180,7 @@ class PreferenceParser(ASTParser):
             print(f"\nBuilding the preference '{name}'")
 
             variables = self._extract_variables(body["exists_vars"]["variables"])
+            print("Variables:", variables)
 
             arguments = body["exists_args"]["body"]
             for key in arguments:
@@ -153,10 +195,14 @@ class PreferenceParser(ASTParser):
                        
                         # Case A: once
                         if operators[0] == "once_pred":
+                            arguments = self._extract_arguments(function["once_pred"]["pred"])
+                            print("Args:", arguments)
                             predicate = self._handle_predicate(function["once_pred"]["pred"])
 
                         # Case B: once-measure
                         elif operators[0] == "once_measure_pred":
+                            arguments = self._extract_arguments(function["once_measure_pred"]["pred"])
+                            print("Args:", arguments)
                             predicate = self._handle_predicate(function["once_measure_pred"]["pred"])
 
                             function_name = function["measurement"]["func_name"]
@@ -169,6 +215,9 @@ class PreferenceParser(ASTParser):
                             measurement = build_function(function_name, *function_arguments)                            
 
                         elif operators[0] == "hold_pred":
+                            arguments = self._extract_arguments(function["hold_pred"]["pred"])
+                            print("Args:", arguments)
+
                             # Case C: hold-while
                             if operators[1] == "while_preds":
                                 hold_predicate = self._handle_predicate(function["hold_pred"]["pred"])
@@ -198,11 +247,44 @@ class PreferenceParser(ASTParser):
         if isinstance(variable_list, tatsu.ast.AST):
             variable_list = [variable_list]
 
-        variables = []
+        variables = {}
         for var_info in variable_list:
-            variables.append([var_info["var_names"], var_info["var_type"]["type"]])
+            variables[var_info["var_names"]] = var_info["var_type"]["type"]
 
         return variables
+
+    def _extract_arguments(self, predicate):
+        '''
+        Recursive extract every variable referenced in the predicate (including inside functions 
+        used within the predicate)
+        '''
+
+        if isinstance(predicate, list) or isinstance(predicate, tuple):
+            pred_args = []
+            for sub_predicate in predicate:
+                pred_args += self._extract_arguments(sub_predicate)
+
+            return list(set(pred_args))
+
+        elif isinstance(predicate, tatsu.ast.AST):
+            pred_args = []
+            for key in predicate:
+                if key == "term":
+
+                    # Different structure for predicate args vs. function args
+                    if isinstance(predicate["term"], tatsu.ast.AST):
+                        pred_args += [predicate["term"]["arg"]]
+                    else:
+                        pred_args += [predicate["term"]]
+
+                elif key != "parseinfo":
+                    pred_args += self._extract_arguments(predicate[key])
+
+            return list(set(pred_args))
+
+        else:
+            return []
+
 
     def _handle_predicate(self, predicate):
         for key in predicate:

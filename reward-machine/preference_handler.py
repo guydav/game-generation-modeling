@@ -1,3 +1,4 @@
+import ast as pyast
 import itertools
 import os
 import re
@@ -6,7 +7,7 @@ import tatsu
 
 import numpy as np
 
-from config import OBJECTS_BY_TYPE, PREDICATE_LIBRARY
+from config import OBJECTS_BY_TYPE, PREDICATE_LIBRARY, FUNCTION_LIBRARY
 
 class PreferenceHandler():
     def __init__(self, preference):
@@ -152,6 +153,44 @@ class PreferenceHandler():
             elif key == "or_args":
                 return any([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate[key]])
 
+            elif key == "comp":
+                comparison_operator = predicate[key]["comp_op"]
+
+                # For each comparison argument, evaluate it if it's a function or convert to an int if not
+                comp_arg_1 = predicate[key]["arg_1"]["arg"]
+                if isinstance(comp_arg_1, tatsu.ast.AST):
+                    function = FUNCTION_LIBRARY[comp_arg_1["func_name"]]
+                    function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_1)]
+
+                    comp_arg_1 = function(*function_args)
+
+                else:
+                    comp_arg_1 = int(comp_arg_1)
+
+                comp_arg_2 = predicate[key]["arg_2"]["arg"]
+                if isinstance(comp_arg_1, tatsu.ast.AST):
+                    function = FUNCTION_LIBRARY[comp_arg_2["func_name"]]
+                    function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_2)]
+
+                    comp_arg_2 = function(*function_args)
+
+                else:
+                    comp_arg_2 = int(comp_arg_2)
+
+                if comparison_operator == "=":
+                    return comp_arg_1 == comp_arg_2
+                elif comparison_operator == "<":
+                    return comp_arg_1 < comp_arg_2
+                elif comparison_operator == "<=":
+                    return comp_arg_1 <= comp_arg_2
+                elif comparison_operator == ">":
+                    return comp_arg_1 > comp_arg_2
+                elif comparison_operator == ">=":
+                    return comp_arg_1 >= comp_arg_2
+                else:
+                    exit("Error: unknown comparison operator")
+
+
 
 if __name__ == "__main__":
     grammar_path= "../dsl/dsl.ebnf"
@@ -165,8 +204,6 @@ if __name__ == "__main__":
         (preference throwBallToBin
             (exists (?d - ball ?h - bin)
                 (then
-                    (once (and (agent_holds ?d) (in_motion ?d)))
-                    (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
                     (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
                     (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
                     (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
@@ -189,6 +226,10 @@ if __name__ == "__main__":
     )))
     """
 
+    # Extra predicates
+    # (once (and (agent_holds ?d) (in_motion ?d)))
+    # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
+
     DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -202,13 +243,13 @@ if __name__ == "__main__":
                                                     "color": "red"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [15, 10, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "bin"},
+                                                    "velocity": [1.0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
+                                         "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
                    "game_start": True,

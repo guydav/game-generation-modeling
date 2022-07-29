@@ -16,7 +16,8 @@ def _in_motion(state, obj):
 
 # ====================================== FUNCTION DEFINITIONS =======================================
 
-# TODO
+def _distance(obj1, obj2):
+    return np.linalg.norm(np.array(obj1["position"]) - np.array(obj2["position"]))
 
 # ===================================================================================================
 
@@ -30,3 +31,4 @@ PREDICATE_LIBRARY = {"agent_crouches": _agent_crouches,
                      "in": _in,
                      "in_motion": _in_motion}
 
+FUNCTION_LIBRARY = {"distance": _distance}

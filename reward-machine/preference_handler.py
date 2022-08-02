@@ -26,21 +26,26 @@ class PreferenceHandler():
 
         # A list of tuples, containing the state of the preference evaluated on partial sets of arguments. 
         # To begin, the list contains an entry for every possible assignment of objects to the arguments 
-        # in the first temporal predicate, each set to the START state (0).
-        # E.X. [({?d : blue-dodgeball-1}, 0),
-        #       ({?d : red-dodgeball-1}, 0),
-        #       ({?d : pink-dodgeball-1, ?w: left-wall}, 1),
-        #       ({?d : pink-dodgeball-1, ?w: right-wall}, 1)
+        # in the first temporal predicate. In addition, each entry includes the current state, and the index
+        # of current predicate (these are potentially distinct because a hold-while generates 2 states)
+        #
+        # State info: (current_predicate: None or ast.AST, next_predicate: None or ast.AST, while_sat: Boolean)
+        #
+        # EXAMPLE:
+        #      [({?d : blue-dodgeball-1}, None, _once, False),
+        #       ({?d : red-dodgeball-1}, None, _once, False),
+        #       ({?d : pink-dodgeball-1, ?w: left-wall}, _once, _hold_while, False),
+        #       ({?d : pink-dodgeball-1, ?w: right-wall}, _once", _hold_while, False)
         #      ]
-        self.predicate_states = []
+        self.partial_preference_satisfactions = []
 
         initial_variables = self._extract_variables(self.temporal_predicates[0])
-        initial_arg_types = [self.variable_mapping[arg] for arg in initial_variables]
-        object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[arg_type] for arg_type in initial_arg_types]))
+        initial_var_types = [self.variable_mapping[var] for var in initial_variables]
+        object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in initial_var_types]))
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
-            self.predicate_states.append((mapping, 0))
+            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], False))
 
 
     def _extract_variable_mapping(self, variable_list):
@@ -111,24 +116,84 @@ class PreferenceHandler():
         satisfcation of predicates and the rules of the temporal logic operators
         '''
 
-        for mapping, internal_state in self.predicate_states:
-            current_predicate = self.temporal_predicates[internal_state]
-            pred_type = self._type(current_predicate)
-            
-            print(f"Running a predicate of type '{pred_type}' with mapping: {mapping}")
+        print("\n\n================================PROCESSING A NEW STATE================================")
 
-            if pred_type == "once":
-                # Evaluate the predicate on the current state. By construction, "mapping" will 
-                # include the assignment for all arguments needed by this particular predicate
-                pred_eval = self.evaluate_predicate(current_predicate["once_pred"]["pred"], traj_state, mapping)
-                print("Overall evaluation:", pred_eval)
+        new_preference_satisfactions = []
+
+        for mapping, current_predicate, next_predicate, while_sat in self.partial_preference_satisfactions:
+            cur_predicate_type = None if current_predicate is None else self._type(current_predicate)
+            next_predicate_type = None if next_predicate is None else self._type(next_predicate)
+
+            print("\nEvaluating a new partial satisfaction:")
+            print("\tMapping:", mapping)
+            print("\tCurrent predicate type:", cur_predicate_type)
+            print("\tNext predicate type:", next_predicate_type)
+
+            # The "Start" state: transition forward if the basic condition of the next predicate is met
+            if cur_predicate_type is None:
+                if next_predicate_type == "once":
+                    pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
+                elif next_predicate_type in ["hold", "hold-while"]:
+                    pred_eval = self.evaluate_predicate(next_predicate["hold_pred"]["pred"], traj_state, mapping)
+
+                print("\n\tEvaluating a preference in the [START] state!")
+                print("\tEvaluation of next predicate:", pred_eval)
+
+                # If the basic condition of the next predicate is met, we'll advance the predicates through the (then) operator
+                if pred_eval:
+                    next_pred_idx = self.temporal_predicates.index(next_predicate)
+                    new_cur_predicate = next_predicate
+                    new_next_predicate = self.temporal_predicates[next_pred_idx+1] # TODO: make sure this doesn't go off the end of the list
+
+                    # Determine all of the variables referenced in the new predicate that aren't referenced already
+                    new_variables = [var for var in self._extract_variables(new_next_predicate) if var not in mapping]
+
+                    print("\n\tNew variables required by the next predicate:", new_variables)
+
+                    # If there are new variables, then we iterate overall all possible assignments for them, add them to the
+                    # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
+                    if len(new_variables) > 0:
+                        new_var_types = [self.variable_mapping[var] for var in new_variables]
+                        object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in new_var_types]))
+
+                        for object_assignment in object_assignments:
+                            new_mapping = dict(zip(new_variables, object_assignment))
+                            new_mapping.update(mapping)
+
+                            new_preference_satisfactions.append((new_mapping, new_cur_predicate, new_next_predicate, False))
+
+                    # Otherwise, just advance the predicates but keep the mapping the same
+                    else:
+                        new_preference_satisfactions.append((mapping, new_cur_predicate, new_next_predicate, False))
+
+                # If not, then just add the same predicates back to the list
+                else:
+                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, False))
 
 
+            elif cur_predicate_type == "once":
+                pass
+
+            elif cur_predicate_type == "hold":
+                pass
+
+            elif cur_predicate_type == "hold-while":
+                if while_sat:
+                    pass
+
+                else:
+                    pass
+
+        self.partial_preference_satisfactions = new_preference_satisfactions
 
     def evaluate_predicate(self, predicate, state, mapping):
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
+
+        TODO: predicates always include a key called "parseinfo", which in turn includes a child
+              called "rule". So we can do the if / elif / elif switching on that instead, which
+              is more robust / clean.
         '''
         for key in predicate:
             if key == "pred_name":
@@ -141,7 +206,6 @@ class PreferenceHandler():
                 # Evaluate the predicate
                 evaluation = predicate_fn(state, *predicate_args)
 
-                # print(f"Evaluation of predicate '{predicate['pred_name']}' with args = {predicate_args}: {evaluation}")
                 return evaluation
 
             elif key == "not_args":
@@ -197,6 +261,35 @@ if __name__ == "__main__":
     grammar = open(grammar_path).read()
     grammar_parser = tatsu.compile(grammar)
 
+    # test_game = """
+    # (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+
+    # (:constraints (and 
+    #     (preference throwBallToBin
+    #         (exists (?d - ball ?h - bin)
+    #             (then
+    #                 (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
+    #                 (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
+    #                 (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
+    #             )
+    #         )
+    #     )
+    #     (preference throwAttempt
+    #         (exists (?d - ball)
+    #             (then 
+    #                 (once (agent_holds ?d))
+    #                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+    #                 (once (not (in_motion ?d)))
+    #             )
+    #         )
+    #     )
+    # ))
+    # (:scoring maximize (+
+    #     (count-nonoverlapping throwBallToBin)
+    #     (- (/ (count-nonoverlapping throwAttempt) 5))
+    # )))
+    # """
+
     test_game = """
     (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
 
@@ -204,9 +297,9 @@ if __name__ == "__main__":
         (preference throwBallToBin
             (exists (?d - ball ?h - bin)
                 (then
-                    (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
-                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
-                    (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
+                    (once (agent_holds ?d))
+                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_holds ?h))
+                    (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )
             )
         )
@@ -249,7 +342,7 @@ if __name__ == "__main__":
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": None, "objectType": "agent"},
+                                         "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
                               },
 
                    "game_start": True,
@@ -263,4 +356,5 @@ if __name__ == "__main__":
     
     pref1 = preferences[0]
     handler1 = PreferenceHandler(pref1)
+    handler1.process(DUMMY_STATE)
     handler1.process(DUMMY_STATE)

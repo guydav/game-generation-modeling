@@ -17,6 +17,15 @@ class PreferenceHandler():
         self.preference_name = preference["definition"]["pref_name"]
         body = preference["definition"]["pref_body"]["body"]
 
+        # BIG TODO: currently we are only handling (exists) quantifications at the top level, but we need to
+        # be able to do (forall) as well. Intuitively, the way to do this is to not treat these predicates
+        # differently just for being at the top of the function.
+        #
+        # Just like when we do an (exists) within a preference or predicate, we use that to split into all
+        # possible assignments of the variables and do an (or) operator over the different "universes". The
+        # (forall) operator is the same, but with (and). We need to restructure this init to handle this
+        # recursion.
+
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = self._extract_variable_type_mapping(body["exists_vars"]["variables"])
         self.variable_type_mapping["agent"] = "agent"
@@ -48,6 +57,11 @@ class PreferenceHandler():
             self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], False))
 
     def _extract_variable_type_mapping(self, variable_list):
+        '''
+        Given a list of variables, extract the mapping from variable names to variable types.
+
+        TODO: handle cases where (either) is used to specify multiple possible types
+        '''
         if isinstance(variable_list, tatsu.ast.AST):
             variable_list = [variable_list]
 
@@ -84,6 +98,9 @@ class PreferenceHandler():
                 # We don't want to capture any variables within an (exists) that's inside the
                 # preference, since those are not globally required -- see evaluate_predicate()
                 elif key == "exists_args":
+                    continue
+
+                elif key == "forall_args":
                     continue
 
                 elif key != "parseinfo":
@@ -344,9 +361,13 @@ class PreferenceHandler():
             return any([self.evaluate_predicate(predicate["exists_args"]["pred"], state, {**sub_mapping, **mapping}) for 
                         sub_mapping in sub_mappings])
 
-        # TODO
         elif predicate_rule == "super_predicate_forall":
-            pass
+            variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])
+            object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in variable_type_mapping.values()]))
+
+            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
+            return all([self.evaluate_predicate(predicate["forall_args"]["pred"], state, {**sub_mapping, **mapping}) for 
+                        sub_mapping in sub_mappings])
 
         elif predicate_rule == "function_comparison":
             comparison_operator = predicate["comp"]["comp_op"]
@@ -432,7 +453,7 @@ if __name__ == "__main__":
             (exists (?d - ball ?h - bin)
                 (then
                     (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (exists (?w - wall) (touch ?w ?d)))))
+                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
                     (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )
             )

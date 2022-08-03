@@ -61,7 +61,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_start": True,
                       "game_over": False},
 
-                     # State 2: no changes
+                     # State 2: agent moves closer to red ball
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -80,7 +80,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
@@ -106,7 +106,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
                               },
 
@@ -132,7 +132,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
                               },
 
@@ -158,7 +158,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
@@ -184,7 +184,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
@@ -210,7 +210,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": True, "holding": "hexagonal-bin-1", "objectType": "agent"},
                               },
 
@@ -236,7 +236,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "pink-dodgeball-1", "objectType": "agent"},
                               },
 
@@ -262,7 +262,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 

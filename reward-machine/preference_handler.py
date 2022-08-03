@@ -306,69 +306,67 @@ class PreferenceHandler():
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
-
-        TODO: predicates always include a key called "parseinfo", which in turn includes a child
-              called "rule". So we can do the if / elif / elif switching on that instead, which
-              is more robust / clean.
         '''
-        for key in predicate:
-            if key == "pred_name":
-                # Obtain the functional representation of the base predicate
-                predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]
 
-                # Map the variables names to the object names, and extract them from the state
-                predicate_args = [state["objects"][mapping[var]] for var in self._extract_variables(predicate)]
-                
-                # Evaluate the predicate
-                evaluation = predicate_fn(state, *predicate_args)
+        predicate_rule = predicate["parseinfo"].rule
 
-                return evaluation
+        if predicate_rule == "predicate":
+            # Obtain the functional representation of the base predicate
+            predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]
 
-            elif key == "not_args":
-                return not self.evaluate_predicate(predicate[key]["pred"], state, mapping)
+            # Map the variables names to the object names, and extract them from the state
+            predicate_args = [state["objects"][mapping[var]] for var in self._extract_variables(predicate)]
+            
+            # Evaluate the predicate
+            evaluation = predicate_fn(state, *predicate_args)
 
-            elif key == "and_args":
-                return all([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate[key]])
+            return evaluation
 
-            elif key == "or_args":
-                return any([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate[key]])
+        elif predicate_rule == "super_predicate_not":
+            return not self.evaluate_predicate(predicate["not_args"]["pred"], state, mapping)
 
-            elif key == "comp":
-                comparison_operator = predicate[key]["comp_op"]
+        elif predicate_rule == "super_predicate_and":
+            return all([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate["and_args"]])
 
-                # For each comparison argument, evaluate it if it's a function or convert to an int if not
-                comp_arg_1 = predicate[key]["arg_1"]["arg"]
-                if isinstance(comp_arg_1, tatsu.ast.AST):
-                    function = FUNCTION_LIBRARY[comp_arg_1["func_name"]]
-                    function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_1)]
+        elif predicate_rule == "super_predicate_or":
+            return any([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate["or_args"]])
 
-                    comp_arg_1 = function(*function_args)
+        elif predicate_rule == "function_comparison":
+            comparison_operator = predicate["comp"]["comp_op"]
 
-                else:
-                    comp_arg_1 = int(comp_arg_1)
+            # For each comparison argument, evaluate it if it's a function or convert to an int if not
+            comp_arg_1 = predicate["comp"]["arg_1"]["arg"]
+            if isinstance(comp_arg_1, tatsu.ast.AST):
+                function = FUNCTION_LIBRARY[comp_arg_1["func_name"]]
+                function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_1)]
 
-                comp_arg_2 = predicate[key]["arg_2"]["arg"]
-                if isinstance(comp_arg_1, tatsu.ast.AST):
-                    function = FUNCTION_LIBRARY[comp_arg_2["func_name"]]
-                    function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_2)]
+                comp_arg_1 = function(*function_args)
 
-                    comp_arg_2 = function(*function_args)
+            else:
+                comp_arg_1 = int(comp_arg_1)
 
-                else:
-                    comp_arg_2 = int(comp_arg_2)
+            comp_arg_2 = predicate["comp"]["arg_2"]["arg"]
+            if isinstance(comp_arg_1, tatsu.ast.AST):
+                function = FUNCTION_LIBRARY[comp_arg_2["func_name"]]
+                function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_2)]
 
-                if comparison_operator == "=":
-                    return comp_arg_1 == comp_arg_2
-                elif comparison_operator == "<":
-                    return comp_arg_1 < comp_arg_2
-                elif comparison_operator == "<=":
-                    return comp_arg_1 <= comp_arg_2
-                elif comparison_operator == ">":
-                    return comp_arg_1 > comp_arg_2
-                elif comparison_operator == ">=":
-                    return comp_arg_1 >= comp_arg_2
-                else:
-                    exit("Error: unknown comparison operator")
+                comp_arg_2 = function(*function_args)
+
+            else:
+                comp_arg_2 = int(comp_arg_2)
+
+            if comparison_operator == "=":
+                return comp_arg_1 == comp_arg_2
+            elif comparison_operator == "<":
+                return comp_arg_1 < comp_arg_2
+            elif comparison_operator == "<=":
+                return comp_arg_1 <= comp_arg_2
+            elif comparison_operator == ">":
+                return comp_arg_1 > comp_arg_2
+            elif comparison_operator == ">=":
+                return comp_arg_1 >= comp_arg_2
+            else:
+                exit("Error: unknown comparison operator")
 
 
 
@@ -413,7 +411,7 @@ if __name__ == "__main__":
         (preference throwBallToBin
             (exists (?d - ball ?h - bin)
                 (then
-                    (once (agent_holds ?d))
+                    (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
                     (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_holds ?h))
                     (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )

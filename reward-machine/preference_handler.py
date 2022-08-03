@@ -28,7 +28,7 @@ class PreferenceHandler():
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = self._extract_variable_type_mapping(body["exists_vars"]["variables"])
-        self.variable_type_mapping["agent"] = "agent"
+        self.variable_type_mapping["agent"] = ["agent"]
 
         # Extract the ordered list of temporal predicates
         self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
@@ -50,7 +50,8 @@ class PreferenceHandler():
 
         initial_variables = self._extract_variables(self.temporal_predicates[0])
         initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
-        object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in initial_var_types]))
+        object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
+                                  for var_types in initial_var_types]))
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
@@ -58,16 +59,19 @@ class PreferenceHandler():
 
     def _extract_variable_type_mapping(self, variable_list):
         '''
-        Given a list of variables, extract the mapping from variable names to variable types.
-
-        TODO: handle cases where (either) is used to specify multiple possible types
+        Given a list of variables, extract the mapping from variable names to variable types. Variable types are
+        stored in lists, even in cases where there is only one possible for the variable in order to handle cases
+        where multiple types are linked together with an (either) clause
         '''
         if isinstance(variable_list, tatsu.ast.AST):
             variable_list = [variable_list]
 
         variables = {}
         for var_info in variable_list:
-            variables[var_info["var_names"]] = var_info["var_type"]["type"]
+            if isinstance(var_info["var_type"]["type"], tatsu.ast.AST):
+                variables[var_info["var_names"]] = var_info["var_type"]["type"]["type_names"]
+            else:
+                variables[var_info["var_names"]] = [var_info["var_type"]["type"]]
 
         return variables
 
@@ -95,8 +99,8 @@ class PreferenceHandler():
                     else:
                         pred_vars += [predicate["term"]]
 
-                # We don't want to capture any variables within an (exists) that's inside the
-                # preference, since those are not globally required -- see evaluate_predicate()
+                # We don't want to capture any variables within an (exists) or (forall) that's inside 
+                # the preference, since those are not globally required -- see evaluate_predicate()
                 elif key == "exists_args":
                     continue
 
@@ -164,7 +168,8 @@ class PreferenceHandler():
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
             new_var_types = [self.variable_type_mapping[var] for var in new_variables]
-            object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in new_var_types]))
+            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
+                                  for var_types in new_var_types]))
 
             for object_assignment in object_assignments:
                 new_mapping = dict(zip(new_variables, object_assignment))
@@ -270,6 +275,9 @@ class PreferenceHandler():
                 else:
                     self.revert_preference(mapping, new_preference_satisfactions)
 
+
+            # BIG TODO: hold-while can have many "while" conditions that need to be satisfied *in order*. We will need to
+            # change while_sat to be an integer representing how many of the conditions have been met instead of a bool
             elif cur_predicate_type == "hold-while":
                 # If the while condition has already been met, then we can treat this exactly like a normal hold
                 if while_sat:
@@ -355,7 +363,8 @@ class PreferenceHandler():
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])
-            object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in variable_type_mapping.values()]))
+            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
+                                      for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             return any([self.evaluate_predicate(predicate["exists_args"]["pred"], state, {**sub_mapping, **mapping}) for 
@@ -363,7 +372,8 @@ class PreferenceHandler():
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])
-            object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in variable_type_mapping.values()]))
+            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
+                                      for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             return all([self.evaluate_predicate(predicate["forall_args"]["pred"], state, {**sub_mapping, **mapping}) for 

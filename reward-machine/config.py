@@ -8,10 +8,13 @@ def _agent_holds(state, obj):
     return state["objects"]["agent"]["holding"] == obj["name"]
 
 def _in(state, obj1, obj2):
-    return all([obj1["position"][i] == obj2["position"][i] for i in range(3)]) 
+    return all([obj1["position"][i] == obj2["position"][i] for i in range(3)])
 
 def _in_motion(state, obj):
     return np.linalg.norm(obj["velocity"]) > 0
+
+def _touch(state, obj1, obj2):
+    return any([obj1["position"][i] == obj2["position"][i] for i in range(3)])
 # ===================================================================================================
 
 # ====================================== FUNCTION DEFINITIONS =======================================
@@ -29,7 +32,8 @@ OBJECTS_BY_TYPE = {"ball": ["blue-dodgeball-1", "red-dodgeball-1", "pink-dodgeba
 PREDICATE_LIBRARY = {"agent_crouches": _agent_crouches,
                      "agent_holds": _agent_holds,
                      "in": _in,
-                     "in_motion": _in_motion}
+                     "in_motion": _in_motion,
+                     "touch": _touch}
 
 FUNCTION_LIBRARY = {"distance": _distance}
 
@@ -48,11 +52,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
@@ -74,11 +90,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
@@ -100,11 +128,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
@@ -126,11 +166,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
@@ -152,11 +204,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
@@ -178,11 +242,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
@@ -204,11 +280,23 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": True, "holding": "hexagonal-bin-1", "objectType": "agent"},
@@ -226,15 +314,27 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "pink"},
 
-                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [10, 10, 0],
+                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [9, 9, 0],
                                                     "velocity": [0.2, 0.2, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "pink-dodgeball-1", "objectType": "agent"},
@@ -252,15 +352,27 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "pink"},
 
-                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [10, 10, 0],
+                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [10, 10, 0],
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},

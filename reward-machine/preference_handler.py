@@ -18,8 +18,8 @@ class PreferenceHandler():
         body = preference["definition"]["pref_body"]["body"]
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
-        self.variable_mapping = self._extract_variable_mapping(body["exists_vars"]["variables"])
-        self.variable_mapping["agent"] = "agent"
+        self.variable_type_mapping = self._extract_variable_type_mapping(body["exists_vars"]["variables"])
+        self.variable_type_mapping["agent"] = "agent"
 
         # Extract the ordered list of temporal predicates
         self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
@@ -40,14 +40,14 @@ class PreferenceHandler():
         self.partial_preference_satisfactions = []
 
         initial_variables = self._extract_variables(self.temporal_predicates[0])
-        initial_var_types = [self.variable_mapping[var] for var in initial_variables]
+        initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
         object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in initial_var_types]))
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
             self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], False))
 
-    def _extract_variable_mapping(self, variable_list):
+    def _extract_variable_type_mapping(self, variable_list):
         if isinstance(variable_list, tatsu.ast.AST):
             variable_list = [variable_list]
 
@@ -80,6 +80,11 @@ class PreferenceHandler():
                         pred_vars += [predicate["term"]["arg"]]
                     else:
                         pred_vars += [predicate["term"]]
+
+                # We don't want to capture any variables within an (exists) that's inside the
+                # preference, since those are not globally required -- see evaluate_predicate()
+                elif key == "exists_args":
+                    continue
 
                 elif key != "parseinfo":
                     pred_vars += self._extract_variables(predicate[key])
@@ -141,7 +146,7 @@ class PreferenceHandler():
         # If there are new variables, then we iterate overall all possible assignments for them, add them to the
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
-            new_var_types = [self.variable_mapping[var] for var in new_variables]
+            new_var_types = [self.variable_type_mapping[var] for var in new_variables]
             object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in new_var_types]))
 
             for object_assignment in object_assignments:
@@ -331,6 +336,18 @@ class PreferenceHandler():
         elif predicate_rule == "super_predicate_or":
             return any([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate["or_args"]])
 
+        elif predicate_rule == "super_predicate_exists":
+            variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])
+            object_assignments = list(itertools.product(*[OBJECTS_BY_TYPE[var_type] for var_type in variable_type_mapping.values()]))
+
+            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
+            return any([self.evaluate_predicate(predicate["exists_args"]["pred"], state, {**sub_mapping, **mapping}) for 
+                        sub_mapping in sub_mappings])
+
+        # TODO
+        elif predicate_rule == "super_predicate_forall":
+            pass
+
         elif predicate_rule == "function_comparison":
             comparison_operator = predicate["comp"]["comp_op"]
 
@@ -366,7 +383,10 @@ class PreferenceHandler():
             elif comparison_operator == ">=":
                 return comp_arg_1 >= comp_arg_2
             else:
-                exit("Error: unknown comparison operator")
+                exit(f"Error: Unknown comparison operator '{comparison_operator}'")
+
+        else:
+            exit(f"Error: Unknown rule '{predicate_rule}'")
 
 
 
@@ -412,7 +432,7 @@ if __name__ == "__main__":
             (exists (?d - ball ?h - bin)
                 (then
                     (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_holds ?h))
+                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (exists (?w - wall) (touch ?w ?d)))))
                     (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )
             )
@@ -436,6 +456,7 @@ if __name__ == "__main__":
     # Extra predicates
     # (once (and (agent_holds ?d) (in_motion ?d)))
     # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
+    # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_holds ?h))
 
     DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 

@@ -229,7 +229,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_start": False,
                       "game_over": False},
 
-                     # State 6: ball travels towards bin-1
+                     # State 6: ball travels towards bin-1, agent crouches
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -261,13 +261,13 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                 "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": None, "objectType": "agent"},
+                                         "is_crouching": True, "holding": None, "objectType": "agent"},
                               },
 
                       "game_start": False,
                       "game_over": False},
 
-                     # State 7: ball travels towards bin-1, agent crouches and picks up bin-1
+                     # State 7: ball travels towards bin-1, agent picks up bin-1
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -305,7 +305,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_start": False,
                       "game_over": False},
 
-                     # State 8: ball reaches bin-1 but has velocity still, agent stands up and picks up pink ball
+                     # State 8: ball reaches bin-1 but has velocity still, agent stands up and drops bin-1
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -337,7 +337,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                 "velocity": [0, 0, 0], "objectType": "wall"},
 
                                "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": "pink-dodgeball-1", "objectType": "agent"},
+                                         "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
                       "game_start": False,

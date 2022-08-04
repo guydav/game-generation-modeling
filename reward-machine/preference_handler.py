@@ -33,18 +33,18 @@ class PreferenceHandler():
         # Extract the ordered list of temporal predicates
         self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
 
-        # A list of tuples, containing the state of the preference evaluated on partial sets of arguments. 
-        # To begin, the list contains an entry for every possible assignment of objects to the arguments 
-        # in the first temporal predicate. In addition, each entry includes the current state, and the index
-        # of current predicate (these are potentially distinct because a hold-while generates 2 states)
+        # A list of tuples, containing the state of the preference evaluated on partial sets of arguments.
+        # Each tuple includes a partial mapping from variables to specific objects, the current predicate,
+        # the next predicate, and the number of while conditions satisfied at the current state, which is
+        # only important for hold-while predicates.
         #
-        # State info: (current_predicate: None or ast.AST, next_predicate: None or ast.AST, while_sat: Boolean)
+        # State info: (current_predicate: None or ast.AST, next_predicate: None or ast.AST, while_sat: int)
         #
         # EXAMPLE:
-        #      [({?d : blue-dodgeball-1}, None, _once, False),
-        #       ({?d : red-dodgeball-1}, None, _once, False),
-        #       ({?d : pink-dodgeball-1, ?w: left-wall}, _once, _hold_while, False),
-        #       ({?d : pink-dodgeball-1, ?w: right-wall}, _once", _hold_while, False)
+        #      [({?d : blue-dodgeball-1}, None, _once, 0),
+        #       ({?d : red-dodgeball-1}, None, _once, 0),
+        #       ({?d : pink-dodgeball-1, ?w: left-wall}, _once, _hold_while, 0),
+        #       ({?d : pink-dodgeball-1, ?w: right-wall}, _once", _hold_while, 0)
         #      ]
         self.partial_preference_satisfactions = []
 
@@ -55,7 +55,7 @@ class PreferenceHandler():
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
-            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], False))
+            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], 0))
 
     def _extract_variable_type_mapping(self, variable_list):
         '''
@@ -175,11 +175,11 @@ class PreferenceHandler():
                 new_mapping = dict(zip(new_variables, object_assignment))
                 new_mapping.update(mapping)
 
-                new_preference_satisfactions.append((new_mapping, new_cur_predicate, new_next_predicate, False))
+                new_preference_satisfactions.append((new_mapping, new_cur_predicate, new_next_predicate, 0))
 
         # Otherwise, just advance the predicates but keep the mapping the same
         else:
-            new_preference_satisfactions.append((mapping, new_cur_predicate, new_next_predicate, False))
+            new_preference_satisfactions.append((mapping, new_cur_predicate, new_next_predicate, 0))
 
     def revert_preference(self, mapping, new_preference_satisfactions):
         '''
@@ -191,7 +191,7 @@ class PreferenceHandler():
         initial_variables = self._extract_variables(self.temporal_predicates[0])
         new_mapping = {key: val for key, val in mapping.items() if key in initial_variables}
         
-        new_preference_satisfactions.append((new_mapping, None, self.temporal_predicates[0], False))
+        new_preference_satisfactions.append((new_mapping, None, self.temporal_predicates[0], 0))
 
     def process(self, traj_state):
         '''
@@ -209,7 +209,7 @@ class PreferenceHandler():
             print("\tMapping:", mapping)
             print("\tCurrent predicate type:", cur_predicate_type)
             print("\tNext predicate type:", next_predicate_type)
-            print("\tWhile-condition satisfied?", while_sat)
+            print("\tWhile-conditions satisfied:", while_sat)
 
             # The "Start" state: transition forward if the basic condition of the next predicate is met
             if cur_predicate_type is None:
@@ -226,7 +226,7 @@ class PreferenceHandler():
 
                 # If not, then just add the same predicates back to the list
                 else:
-                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, False))
+                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
 
 
             elif cur_predicate_type == "once":
@@ -246,7 +246,7 @@ class PreferenceHandler():
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, False))
+                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
 
                 # If neither are satisfied, we return to the start
                 else:
@@ -269,18 +269,17 @@ class PreferenceHandler():
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, False))
+                    new_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
 
                 # If neither are satisfied, we return to the start
                 else:
                     self.revert_preference(mapping, new_preference_satisfactions)
 
-
-            # BIG TODO: hold-while can have many "while" conditions that need to be satisfied *in order*. We will need to
-            # change while_sat to be an integer representing how many of the conditions have been met instead of a bool
             elif cur_predicate_type == "hold-while":
-                # If the while condition has already been met, then we can treat this exactly like a normal hold
-                if while_sat:
+                num_while_conditions = 1 if isinstance(current_predicate["while_preds"], tatsu.ast.AST) else len(current_predicate["while_preds"])
+
+                # If all of the while condition has already been met, then we can treat this exactly like a normal hold
+                if while_sat == num_while_conditions:
                     if next_predicate_type == "once":
                         next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
                     elif next_predicate_type in ["hold", "hold-while"]:
@@ -297,7 +296,7 @@ class PreferenceHandler():
 
                     # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                     elif cur_pred_eval:
-                        new_preference_satisfactions.append((mapping, current_predicate, next_predicate, True))
+                        new_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat))
 
                     # If neither are satisfied, we return to the start
                     else:
@@ -307,18 +306,21 @@ class PreferenceHandler():
                 else:
                     cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"]["pred"], traj_state, mapping)
 
-                    # TODO: there can be more than one while predicate, and they all need to be evaluated in sequence :(
-                    cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"]["pred"], traj_state, mapping)
+                    # Determine whether the next while condition is satisfied in the current state
+                    if num_while_conditions == 1:
+                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"]["pred"], traj_state, mapping)
+                    else:
+                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"][while_sat]["pred"], traj_state, mapping)
 
                     print("\n\tEvaluation of current predicate:", cur_pred_eval)
                     print("\tEvaluation of current while pred:", cur_while_eval)
 
                     if cur_pred_eval:
                         if cur_while_eval:
-                            new_preference_satisfactions.append((mapping, current_predicate, next_predicate, True))
+                            new_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat + 1))
 
                         else:
-                            new_preference_satisfactions.append((mapping, current_predicate, next_predicate, False))
+                            new_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat))
 
                     else:
                         self.revert_preference(mapping, new_preference_satisfactions)
@@ -463,7 +465,7 @@ if __name__ == "__main__":
             (exists (?d - ball ?h - bin)
                 (then
                     (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
+                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
                     (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )
             )
@@ -487,7 +489,8 @@ if __name__ == "__main__":
     # Extra predicates
     # (once (and (agent_holds ?d) (in_motion ?d)))
     # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
-    # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_holds ?h))
+    # 
+    # (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
 
     DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 

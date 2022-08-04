@@ -12,19 +12,18 @@ from config import OBJECTS_BY_TYPE, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_
 class PreferenceHandler():
     def __init__(self, preference):
         # Validity check
-        assert isinstance(preference, tatsu.ast.AST) and "definition" in preference
+        assert isinstance(preference, tatsu.ast.AST) and preference["parseinfo"].rule == "preference"
 
-        self.preference_name = preference["definition"]["pref_name"]
-        body = preference["definition"]["pref_body"]["body"]
+        self.preference_name = preference["pref_name"]
+        body = preference["pref_body"]["body"]
 
         # BIG TODO: currently we are only handling (exists) quantifications at the top level, but we need to
-        # be able to do (forall) as well. Intuitively, the way to do this is to not treat these predicates
-        # differently just for being at the top of the function.
+        # be able to do (forall) as well.
         #
-        # Just like when we do an (exists) within a preference or predicate, we use that to split into all
-        # possible assignments of the variables and do an (or) operator over the different "universes". The
-        # (forall) operator is the same, but with (and). We need to restructure this init to handle this
-        # recursion.
+        # I think the way to do this is to have each PreferenceHandler() optionally except an "initial_mapping"
+        # argument. In the case of a (forall ?d - dodgeball) around a preference, we would construct a different
+        # PreferenceHandler() object for each dodgeball, and pass each of them a variant of {"?d": "dodgeball-1"}
+        # This partial mapping gets added to all other partial mappings monitored by the PreferenceHandler
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = self._extract_variable_type_mapping(body["exists_vars"]["variables"])
@@ -79,6 +78,10 @@ class PreferenceHandler():
         '''
         Recursively extract every variable referenced in the predicate (including inside functions 
         used within the predicate)
+
+        BIG TODO: some objects (like 'desk') are just referred to directly inside of predicates, and
+        are never quantified over (i.e. we never see (exists ?d - desk)). We need to be able to detect
+        and handle these kinds of variables
         '''
 
         if isinstance(predicate, list) or isinstance(predicate, tuple):
@@ -157,7 +160,7 @@ class PreferenceHandler():
             return
 
         else:
-            new_next_predicate = self.temporal_predicates[next_pred_idx+1] # TODO: make sure this doesn't go off the end of the list
+            new_next_predicate = self.temporal_predicates[next_pred_idx+1]
 
             # Determine all of the variables referenced in the new predicate that aren't referenced already
             new_variables = [var for var in self._extract_variables(new_next_predicate) if var not in mapping]
@@ -329,8 +332,8 @@ class PreferenceHandler():
         # specific assignment is represented by a different string.
         # TODO: figure out if this will ever break down
         keyfunc = lambda pref_sat: "_".join(pref_sat[0].values())
-        new_preference_satisfactions = [list(g)[0] for k, g in itertools.groupby(
-                                        sorted(new_preference_satisfactions, key=keyfunc), keyfunc)]
+        new_preference_satisfactions = [list(g)[0] for k, g in itertools.groupby(sorted(
+                                        new_preference_satisfactions, key=keyfunc), keyfunc)]
 
         self.partial_preference_satisfactions = new_preference_satisfactions
 
@@ -386,6 +389,8 @@ class PreferenceHandler():
 
         elif predicate_rule == "function_comparison":
             comparison_operator = predicate["comp"]["comp_op"]
+
+            # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
 
             # For each comparison argument, evaluate it if it's a function or convert to an int if not
             comp_arg_1 = predicate["comp"]["arg_1"]["arg"]
@@ -526,7 +531,7 @@ if __name__ == "__main__":
 
     preferences = ast[3][1]["preferences"]
     
-    pref1 = preferences[0]
+    pref1 = preferences[0]["definition"]
     handler1 = PreferenceHandler(pref1)
     
     for idx, state in enumerate(SAMPLE_TRAJECTORY):

@@ -214,9 +214,9 @@ class PreferenceHandler():
             # The "Start" state: transition forward if the basic condition of the next predicate is met
             if cur_predicate_type is None:
                 if next_predicate_type == "once":
-                    pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
+                    pred_eval = self.evaluate_predicate(next_predicate["once_pred"], traj_state, mapping)
                 elif next_predicate_type in ["hold", "hold-while"]:
-                    pred_eval = self.evaluate_predicate(next_predicate["hold_pred"]["pred"], traj_state, mapping)
+                    pred_eval = self.evaluate_predicate(next_predicate["hold_pred"], traj_state, mapping)
 
                 print("\n\tEvaluation of next predicate:", pred_eval)
 
@@ -231,11 +231,11 @@ class PreferenceHandler():
 
             elif cur_predicate_type == "once":
                 if next_predicate_type == "once":
-                    next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
+                    next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"], traj_state, mapping)
                 elif next_predicate_type in ["hold", "hold-while"]:
-                    next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"]["pred"], traj_state, mapping)
+                    next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"], traj_state, mapping)
 
-                cur_pred_eval = self.evaluate_predicate(current_predicate["once_pred"]["pred"], traj_state, mapping)
+                cur_pred_eval = self.evaluate_predicate(current_predicate["once_pred"], traj_state, mapping)
 
                 print("\n\tEvaluation of next predicate:", next_pred_eval)
                 print("\tEvaluation of current predicate:", cur_pred_eval)
@@ -254,11 +254,11 @@ class PreferenceHandler():
 
             elif cur_predicate_type == "hold":
                 if next_predicate_type == "once":
-                    next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
+                    next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"], traj_state, mapping)
                 elif next_predicate_type in ["hold", "hold-while"]:
-                    next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"]["pred"], traj_state, mapping)
+                    next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"], traj_state, mapping)
 
-                cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"]["pred"], traj_state, mapping)
+                cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
 
                 print("\n\tEvaluation of next predicate:", next_pred_eval)
                 print("\tEvaluation of current predicate:", cur_pred_eval)
@@ -281,11 +281,11 @@ class PreferenceHandler():
                 # If all of the while condition has already been met, then we can treat this exactly like a normal hold
                 if while_sat == num_while_conditions:
                     if next_predicate_type == "once":
-                        next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"]["pred"], traj_state, mapping)
+                        next_pred_eval = self.evaluate_predicate(next_predicate["once_pred"], traj_state, mapping)
                     elif next_predicate_type in ["hold", "hold-while"]:
-                        next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"]["pred"], traj_state, mapping)
+                        next_pred_eval = self.evaluate_predicate(next_predicate["hold_pred"], traj_state, mapping)
 
-                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"]["pred"], traj_state, mapping)
+                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
 
                     print("\n\tEvaluation of next predicate:", next_pred_eval)
                     print("\tEvaluation of current predicate:", cur_pred_eval)
@@ -304,13 +304,13 @@ class PreferenceHandler():
 
                 # If not, then we only care about the while condition and the current hold
                 else:
-                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"]["pred"], traj_state, mapping)
+                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
 
                     # Determine whether the next while condition is satisfied in the current state
                     if num_while_conditions == 1:
-                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"]["pred"], traj_state, mapping)
+                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"], traj_state, mapping)
                     else:
-                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"][while_sat]["pred"], traj_state, mapping)
+                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"][while_sat], traj_state, mapping)
 
                     print("\n\tEvaluation of current predicate:", cur_pred_eval)
                     print("\tEvaluation of current while pred:", cur_while_eval)
@@ -354,14 +354,17 @@ class PreferenceHandler():
 
             return evaluation
 
+        elif predicate_rule == "super_predicate":
+            return self.evaluate_predicate(predicate["pred"], state, mapping)
+
         elif predicate_rule == "super_predicate_not":
-            return not self.evaluate_predicate(predicate["not_args"]["pred"], state, mapping)
+            return not self.evaluate_predicate(predicate["not_args"], state, mapping)
 
         elif predicate_rule == "super_predicate_and":
-            return all([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate["and_args"]])
+            return all([self.evaluate_predicate(sub, state, mapping) for sub in predicate["and_args"]])
 
         elif predicate_rule == "super_predicate_or":
-            return any([self.evaluate_predicate(sub["pred"], state, mapping) for sub in predicate["or_args"]])
+            return any([self.evaluate_predicate(sub, state, mapping) for sub in predicate["or_args"]])
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])
@@ -369,7 +372,7 @@ class PreferenceHandler():
                                       for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return any([self.evaluate_predicate(predicate["exists_args"]["pred"], state, {**sub_mapping, **mapping}) for 
+            return any([self.evaluate_predicate(predicate["exists_args"], state, {**sub_mapping, **mapping}) for 
                         sub_mapping in sub_mappings])
 
         elif predicate_rule == "super_predicate_forall":
@@ -378,7 +381,7 @@ class PreferenceHandler():
                                       for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return all([self.evaluate_predicate(predicate["forall_args"]["pred"], state, {**sub_mapping, **mapping}) for 
+            return all([self.evaluate_predicate(predicate["forall_args"], state, {**sub_mapping, **mapping}) for 
                         sub_mapping in sub_mappings])
 
         elif predicate_rule == "function_comparison":

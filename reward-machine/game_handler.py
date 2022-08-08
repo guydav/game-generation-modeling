@@ -1,3 +1,4 @@
+import itertools
 import os
 import sys
 import tatsu
@@ -200,8 +201,24 @@ class GameHandler():
 
             satisfactions = self.preference_satisfactions[preference_name]
 
-            print(preference_name, object_types)
-            exit()
+            # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and
+            # count the total number of satisfactions that satisfy those criteria
+            count = 0
+
+            # TODO: validate this function works for more complicated inputs
+
+            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            for key, group in itertools.groupby(satisfactions, keyfunc):
+                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+
+                prev_end = -1
+                for mapping, start, end in group:
+                    if start >= prev_end:
+                        prev_end = end
+                        count += 1
+
+
+            return count
 
         elif rule == "count_once":
             pass # TODO
@@ -356,4 +373,8 @@ if __name__ == "__main__":
     game_handler = GameHandler(test_game_1)
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
-        game_handler.process(state)
+        score = game_handler.process(state)
+        if score is not None:
+            break
+
+    print("\n\nSCORE ACHIEVED:", score)

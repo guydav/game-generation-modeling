@@ -38,16 +38,16 @@ class PreferenceHandler():
         # only important for hold-while predicates.
         #
         # State info: (current_predicate: None or ast.AST, next_predicate: None or ast.AST, while_sat: int,
-        #              start: int, end: int)
+        #              start: int)
         #
         # TODO: should add data for the first and last state number used in satisfying the preference, to allow
         # for computing things like count-nonoverlapping
         #
         # EXAMPLE:
-        #      [({?d : blue-dodgeball-1}, None, _once, 0, -1, -1),
-        #       ({?d : red-dodgeball-1}, None, _once, 0, -1, -1),
-        #       ({?d : pink-dodgeball-1, ?w: left-wall}, _once, _hold_while, 0, 2, -1),
-        #       ({?d : pink-dodgeball-1, ?w: right-wall}, _once", _hold_while, 0, 2, -1)
+        #      [({?d : blue-dodgeball-1}, None, _once, 0, -1),
+        #       ({?d : red-dodgeball-1}, None, _once, 0, -1),
+        #       ({?d : pink-dodgeball-1, ?w: left-wall}, _once, _hold_while, 0, 2),
+        #       ({?d : pink-dodgeball-1, ?w: right-wall}, _once", _hold_while, 0, 2)
         #      ]
         self.partial_preference_satisfactions = []
 
@@ -58,10 +58,12 @@ class PreferenceHandler():
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
-            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], 0))
+            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], 0, -1))
 
         # A list of all versions of the predicate satisfied at a particular step, updated during self.process()
         self.satisfied_this_step = []
+
+        self.cur_step = 1
 
     def _extract_variable_type_mapping(self, variable_list):
         '''
@@ -145,7 +147,7 @@ class PreferenceHandler():
         else:
             exit("Error: predicate does not have a temporal logic type")
 
-    def advance_preference(self, mapping, current_predicate, next_predicate, new_partial_preference_satisfactions):
+    def advance_preference(self, mapping, current_predicate, next_predicate, start, new_partial_preference_satisfactions):
         '''
         Called when a predicate inside a (then) operator has been fully satisfied and we are moving to the
         next predicate. This function adds new partial object mappings and predicates to the provided list
@@ -165,7 +167,7 @@ class PreferenceHandler():
         # and add the reverted mapping back to new_partial_preference_satisfactions
         if next_pred_idx+1 == len(self.temporal_predicates):
             print("\n\tPREFERENCE SATISFIED!")
-            self.satisfied_this_step.append((mapping, None, None))
+            self.satisfied_this_step.append((mapping, start, self.cur_step))
             self.revert_preference(mapping, new_partial_preference_satisfactions)
             return
 
@@ -188,11 +190,11 @@ class PreferenceHandler():
                 new_mapping = dict(zip(new_variables, object_assignment))
                 new_mapping.update(mapping)
 
-                new_partial_preference_satisfactions.append((new_mapping, new_cur_predicate, new_next_predicate, 0))
+                new_partial_preference_satisfactions.append((new_mapping, new_cur_predicate, new_next_predicate, 0, start))
 
         # Otherwise, just advance the predicates but keep the mapping the same
         else:
-            new_partial_preference_satisfactions.append((mapping, new_cur_predicate, new_next_predicate, 0))
+            new_partial_preference_satisfactions.append((mapping, new_cur_predicate, new_next_predicate, 0, start))
 
     def revert_preference(self, mapping, new_partial_preference_satisfactions):
         '''
@@ -204,7 +206,7 @@ class PreferenceHandler():
         initial_variables = self._extract_variables(self.temporal_predicates[0])
         new_mapping = {key: val for key, val in mapping.items() if key in initial_variables}
         
-        new_partial_preference_satisfactions.append((new_mapping, None, self.temporal_predicates[0], 0))
+        new_partial_preference_satisfactions.append((new_mapping, None, self.temporal_predicates[0], 0, -1))
 
     def process(self, traj_state):
         '''
@@ -218,7 +220,7 @@ class PreferenceHandler():
 
         new_partial_preference_satisfactions = []
 
-        for mapping, current_predicate, next_predicate, while_sat in self.partial_preference_satisfactions:
+        for mapping, current_predicate, next_predicate, while_sat, start in self.partial_preference_satisfactions:
             cur_predicate_type = None if current_predicate is None else self._type(current_predicate)
             next_predicate_type = None if next_predicate is None else self._type(next_predicate)
 
@@ -226,6 +228,7 @@ class PreferenceHandler():
             print("\tMapping:", mapping)
             print("\tCurrent predicate type:", cur_predicate_type)
             print("\tNext predicate type:", next_predicate_type)
+            print("\tPreference satisfcation start:", start)
             print("\tWhile-conditions satisfied:", while_sat)
 
             # The "Start" state: transition forward if the basic condition of the next predicate is met
@@ -237,13 +240,14 @@ class PreferenceHandler():
 
                 print("\n\tEvaluation of next predicate:", pred_eval)
 
-                # If the basic condition of the next predicate is met, we'll advance the predicates through the (then) operator
+                # If the basic condition of the next predicate is met, we'll advance the predicates through the (then) operator.
+                # We also record the current step as the "start" of the predicate being satisfied
                 if pred_eval:
-                    self.advance_preference(mapping, current_predicate, next_predicate, new_partial_preference_satisfactions)
+                    self.advance_preference(mapping, current_predicate, next_predicate, self.cur_step, new_partial_preference_satisfactions)
 
                 # If not, then just add the same predicates back to the list
                 else:
-                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
+                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0, start))
 
 
             elif cur_predicate_type == "once":
@@ -259,11 +263,11 @@ class PreferenceHandler():
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(mapping, current_predicate, next_predicate, new_partial_preference_satisfactions)
+                    self.advance_preference(mapping, current_predicate, next_predicate, start, new_partial_preference_satisfactions)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
+                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0, start))
 
                 # If neither are satisfied, we return to the start
                 else:
@@ -282,11 +286,11 @@ class PreferenceHandler():
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(mapping, current_predicate, next_predicate, new_partial_preference_satisfactions)
+                    self.advance_preference(mapping, current_predicate, next_predicate, start, new_partial_preference_satisfactions)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0))
+                    new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, 0, start))
 
                 # If neither are satisfied, we return to the start
                 else:
@@ -309,11 +313,11 @@ class PreferenceHandler():
 
                     # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                     if next_pred_eval:
-                        self.advance_preference(mapping, current_predicate, next_predicate, new_partial_preference_satisfactions)
+                        self.advance_preference(mapping, current_predicate, next_predicate, start, new_partial_preference_satisfactions)
 
                     # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                     elif cur_pred_eval:
-                        new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat))
+                        new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat, start))
 
                     # If neither are satisfied, we return to the start
                     else:
@@ -334,10 +338,10 @@ class PreferenceHandler():
 
                     if cur_pred_eval:
                         if cur_while_eval:
-                            new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat + 1))
+                            new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat + 1, start))
 
                         else:
-                            new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat))
+                            new_partial_preference_satisfactions.append((mapping, current_predicate, next_predicate, while_sat, start))
 
                     else:
                         self.revert_preference(mapping, new_partial_preference_satisfactions)
@@ -347,9 +351,11 @@ class PreferenceHandler():
         # TODO: figure out if this will ever break down
         keyfunc = lambda pref_sat: "_".join(pref_sat[0].values())
         new_partial_preference_satisfactions = [list(g)[0] for k, g in itertools.groupby(sorted(
-                                        new_partial_preference_satisfactions, key=keyfunc), keyfunc)]
+            new_partial_preference_satisfactions, key=keyfunc), keyfunc)]
 
         self.partial_preference_satisfactions = new_partial_preference_satisfactions
+
+        self.cur_step += 1
 
         return self.satisfied_this_step
 
@@ -547,7 +553,7 @@ if __name__ == "__main__":
 
     preferences = ast[3][1]["preferences"]
     
-    pref1 = preferences[0]["definition"]
+    pref1 = preferences[1]["definition"]
     handler1 = PreferenceHandler(pref1)
     
     for idx, state in enumerate(SAMPLE_TRAJECTORY):

@@ -343,7 +343,45 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_start": False,
                       "game_over": False},
 
-                     # State 9: ball stops moving, game ends
+                     # State 9: ball stops moving in bin
+                     {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
+                                                    "velocity": [0, 0, 0], "objectType": "ball", 
+                                                    "color": "blue"},
+
+                               "pink-dodgeball-1": {"name": "pink-dodgeball-1", "position": [0, 4, 0],
+                                                    "velocity": [0, 0, 0], "objectType": "ball",
+                                                    "color": "pink"},
+
+                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [9, 9, 0],
+                                                    "velocity": [0, 0, 0], "objectType": "ball",
+                                                    "color": "red"},
+
+                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
+                                                    "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
+                                                    "velocity": [0, 0, 0], "objectType": "bin"},
+
+                               "left-wall-1": {"name": "left-wall-1", "position": [0, 10, 10],
+                                               "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "right-wall-1": {"name": "right-wall-1", "position": [20, 10, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "front-wall-1": {"name": "front-wall-1", "position": [10, 0, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
+                                                "velocity": [0, 0, 0], "objectType": "wall"},
+
+                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
+                                         "is_crouching": False, "holding": None, "objectType": "agent"},
+                              },
+
+                      "game_start": False,
+                      "game_over": False},
+
+                     # State 10: game ends
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},

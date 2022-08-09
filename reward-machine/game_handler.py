@@ -214,7 +214,7 @@ class GameHandler():
                 group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
 
                 prev_end = -1
-                for mapping, start, end in group:
+                for mapping, start, end, measures in group:
                     if start >= prev_end:
                         prev_end = end
                         count += 1
@@ -246,8 +246,27 @@ class GameHandler():
 
             return count
 
+        # For each nonoverlapping satisfaction (see count_nonoverlapping above), sum the value of the measurement
         elif rule == "count_nonoverlapping_measure":
-            pass # TODO
+            name_and_types = scoring_expression["name_and_types"]
+            preference_name = name_and_types["pref_name"]
+            object_types = name_and_types["object_types"]["type_name"] if "object_types" in name_and_types else None
+
+            satisfactions = self.preference_satisfactions[preference_name]
+
+            count = 0
+
+            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+
+                prev_end = -1
+                for mapping, start, end, measures in group:
+                    if start >= prev_end:
+                        prev_end = end
+                        count += list(measures.values())[0] # TODO: will we only ever have one measurement per preference?
+
+            return count
 
         elif rule == "count_unique_positions":
             pass # TODO
@@ -402,11 +421,11 @@ if __name__ == "__main__":
             )
         ))
     )) 
-    (:scoring maximize (count-nonoverlapping-measure throwToWallAndBack)
+    (:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
     ))
     """
 
-    game_handler = GameHandler(test_game_3)
+    game_handler = GameHandler(test_game_1)
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
         score = game_handler.process(state)

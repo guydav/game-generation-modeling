@@ -100,7 +100,11 @@ class GameHandler():
                 self.setup = ast["setup"]
 
             elif rule == "preferences":
-                self.preferences = ast["preferences"]
+                # Handle games with single preference
+                if isinstance(ast["preferences"], tatsu.ast.AST):
+                    self.preferences = [ast["preferences"]]
+                else:
+                    self.preferences = ast["preferences"]
 
             elif rule == "terminal":
                 self.terminal = ast["terminal"]
@@ -386,7 +390,23 @@ if __name__ == "__main__":
     )))
     """
 
-    game_handler = GameHandler(test_game_1)
+    test_game_3 = """
+    (define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
+
+    (:constraints (and 
+        (preference throwToBinFromDistance (exists (?d - ball ?h - bin)
+            (then 
+                (once-measure (agent_holds ?d) (distance agent ?h))
+                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+                (once (and (not (in_motion ?d)) (in ?h ?d)))
+            )
+        ))
+    )) 
+    (:scoring maximize (count-nonoverlapping-measure throwToWallAndBack)
+    ))
+    """
+
+    game_handler = GameHandler(test_game_3)
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
         score = game_handler.process(state)

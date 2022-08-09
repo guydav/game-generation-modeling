@@ -153,7 +153,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_start": False,
                       "game_over": False},
 
-                     # State 4: no changes
+                     # State 4: agent moves to [5, 5, 0]
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},
@@ -184,7 +184,7 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
                                                 "velocity": [0, 0, 0], "objectType": "wall"},
 
-                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [5, 5, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
                               },
 
@@ -222,14 +222,14 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "back-wall-1": {"name": "back-wall-1", "position": [10, 20, 10],
                                                 "velocity": [0, 0, 0], "objectType": "wall"},
 
-                               "agent": {"name": "agent", "position": [3, 3, 0], "velocity": [0, 0, 0],
+                               "agent": {"name": "agent", "position": [5, 5, 0], "velocity": [0, 0, 0],
                                          "is_crouching": False, "holding": None, "objectType": "agent"},
                               },
 
                       "game_start": False,
                       "game_over": False},
 
-                     # State 6: ball travels towards bin-1, agent crouches
+                     # State 6: ball travels towards bin-1, agent crouches and moves back to [3, 3, 0]
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball", 
                                                     "color": "blue"},

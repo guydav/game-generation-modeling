@@ -150,7 +150,7 @@ class GameHandler():
         if rule == "scoring_maximize":
             return self.score(scoring_expression["expr"])
 
-        elif rule == "scoring_minize":
+        elif rule == "scoring_minimize":
             return self.score(scoring_expression["expr"])
 
         elif rule == "scoring_expr":
@@ -205,10 +205,8 @@ class GameHandler():
             # count the total number of satisfactions that satisfy those criteria
             count = 0
 
-            # TODO: validate this function works for more complicated inputs
-
             keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
-            for key, group in itertools.groupby(satisfactions, keyfunc):
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
 
                 prev_end = -1
@@ -378,3 +376,29 @@ if __name__ == "__main__":
             break
 
     print("\n\nSCORE ACHIEVED:", score)
+
+
+    # satisfactions = [({"?a": "ball"}, 1, 10),
+    #                  ({"?a": "ball-2"}, 3, 7),
+    #                  ({"?a": "ball"}, 2, 4),
+    #                  ({"?a": "ball"}, 3, 7),
+    #                  ({"?a": "ball"}, 4, 8),
+    #                  ({"?a": "ball"}, 1, 3),
+    #                  ({"?a": "ball-3"}, 1, 10)
+    #                 ]
+
+    # count = 0
+
+    # keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+    # for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+    #     # print("New group! Key =", key)
+    #     group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+
+    #     prev_end = -1
+    #     for mapping, start, end in group:
+    #         if start >= prev_end:
+    #             prev_end = end
+    #             count += 1
+
+
+    # print("\nCount:", count)

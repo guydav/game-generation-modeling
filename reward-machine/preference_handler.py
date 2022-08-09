@@ -40,8 +40,6 @@ class PreferenceHandler():
         # State info: (current_predicate: None or ast.AST, next_predicate: None or ast.AST, while_sat: int,
         #              start: int)
         #
-        # TODO: should add data for the first and last state number used in satisfying the preference, to allow
-        # for computing things like count-nonoverlapping
         #
         # EXAMPLE:
         #      [({?d : blue-dodgeball-1}, None, _once, 0, -1),

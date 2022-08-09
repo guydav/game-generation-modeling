@@ -215,14 +215,32 @@ class GameHandler():
                         prev_end = end
                         count += 1
 
-
             return count
 
+        # Count whether the preference has been satisfied at all
         elif rule == "count_once":
-            pass # TODO
+            name_and_types = scoring_expression["name_and_types"]
+            preference_name = name_and_types["pref_name"]
 
+            satisfactions = self.preference_satisfactions[preference_name]
+
+            return 1 if len(satisfactions) > 0 else 0
+
+        # Count the number of satisfactions of the given preference that use distinct variable mappings
         elif rule == "count_once_per_objects":
-            pass # TODO
+            name_and_types = scoring_expression["name_and_types"]
+            preference_name = name_and_types["pref_name"]
+            object_types = name_and_types["object_types"]["type_name"] if "object_types" in name_and_types else None
+
+            satisfactions = self.preference_satisfactions[preference_name]
+
+            count = 0
+
+            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+                count += 1
+
+            return count
 
         elif rule == "count_nonoverlapping_measure":
             pass # TODO

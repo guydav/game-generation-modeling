@@ -96,7 +96,12 @@ class PreferenceHandler():
             for sub_predicate in predicate:
                 pred_vars += self._extract_variables(sub_predicate)
 
-            return list(set(pred_vars))
+            unique_vars = []
+            for var in pred_vars:
+                if var not in unique_vars:
+                    unique_vars.append(var)
+
+            return unique_vars
 
         elif isinstance(predicate, tatsu.ast.AST):
             pred_vars = []
@@ -120,7 +125,12 @@ class PreferenceHandler():
                 elif key != "parseinfo":
                     pred_vars += self._extract_variables(predicate[key])
 
-            return list(set(pred_vars))
+            unique_vars = []
+            for var in pred_vars:
+                if var not in unique_vars:
+                    unique_vars.append(var)
+
+            return unique_vars
 
         else:
             return []
@@ -210,8 +220,6 @@ class PreferenceHandler():
         '''
         Take a state from an active trajectory and update each of the internal states based on the
         satisfcation of predicates and the rules of the temporal logic operators
-
-        BIG TODO: handle once-measure!
         '''
 
         self.satisfied_this_step = []

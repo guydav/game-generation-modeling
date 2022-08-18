@@ -481,6 +481,9 @@ class PreferenceHandler():
 
             # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
 
+            # TODO: handle cases where the two arguments two '=' are variables, in which case we're checking
+            #       variable equivalence instead of numerical equivalance
+
             # For each comparison argument, evaluate it if it's a function or convert to an int if not
             comp_arg_1 = predicate["comp"]["arg_1"]["arg"]
             if isinstance(comp_arg_1, tatsu.ast.AST):
@@ -490,7 +493,7 @@ class PreferenceHandler():
                 comp_arg_1 = function(*function_args)
 
             else:
-                comp_arg_1 = int(comp_arg_1)
+                comp_arg_1 = float(comp_arg_1)
 
             comp_arg_2 = predicate["comp"]["arg_2"]["arg"]
             if isinstance(comp_arg_1, tatsu.ast.AST):
@@ -500,7 +503,7 @@ class PreferenceHandler():
                 comp_arg_2 = function(*function_args)
 
             else:
-                comp_arg_2 = int(comp_arg_2)
+                comp_arg_2 = float(comp_arg_2)
 
             if comparison_operator == "=":
                 return comp_arg_1 == comp_arg_2

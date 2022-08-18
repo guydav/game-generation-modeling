@@ -7,6 +7,7 @@ from math import prod
 
 from config import SAMPLE_TRAJECTORY
 from preference_handler import PreferenceHandler
+from utils import PreferenceDescriber
 
 class GameHandler():
     def __init__(self, game, grammar_path="../dsl/dsl.ebnf"):
@@ -38,6 +39,7 @@ class GameHandler():
             # A preference definition expands into either (forall <variable_list> <preference>) or <preference>
             if rule == "preference":
                 name = preference["definition"]["pref_name"]
+                
                 try:
                     pref_handler = PreferenceHandler(preference["definition"])
                     self.preference_handlers[name] = pref_handler
@@ -131,7 +133,7 @@ class GameHandler():
             terminate = False
 
         if terminate or state["game_over"]:
-            score = self.score(self.scoring) # TODO
+            score = self.score(self.scoring) 
 
         else:
             score = None
@@ -425,7 +427,44 @@ if __name__ == "__main__":
     ))
     """
 
-    game_handler = GameHandler(test_game_1)
+    test_game_4 = """
+    (define (game 61015f63f9a351d3171a0f98-105) (:domain few-objects-room-v1)  ; 105
+    (:setup (and 
+        (forall (?c - cube_block) (game-optional (on rug ?c)))
+        (game-optional (not (exists (?o - game_object) (above ?o desk))))
+        (forall (?d - dodgeball) (game-conserved (not (exists (?s - shelf) (on ?s ?d)))))
+    ))
+    (:constraints (and 
+        (preference woodenBlockMovedFromRugToDesk (exists (?b - tan_cube_block)
+            (then 
+                (once (and 
+                    (forall (?c - (either blue_cube_block yellow_cube_block)) (on rug ?c))
+                    (on rug ?b)
+                ))
+                (hold (forall (?c - (either blue_cube_block yellow_cube_block)) (or
+                    (on rug ?c) 
+                    (agent_holds ?c)
+                    (in_motion ?c)
+                    (exists (?c2 - (either blue_cube_block yellow_cube_block)) (and 
+                        (not (= ?c ?c2))
+                        (< (distance ?c ?c2) 0.5)
+                        (on floor ?c)
+                        (on floor ?c2) 
+                    ))
+                )))
+                (hold (forall (?c - (either blue_cube_block yellow_cube_block))
+                    (< (distance desk ?c) 1)
+                ))
+                (once (above ?b desk)) 
+            )  
+        ))
+    ))
+    (:scoring maximize
+        (count-once-per-objects woodenBlockMovedFromRugToDesk)
+    ))
+    """
+
+    game_handler = GameHandler(test_game_4)
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
         score = game_handler.process(state)

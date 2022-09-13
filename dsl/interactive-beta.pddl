@@ -2861,7 +2861,7 @@
 
 ; 95 requires counting something that happens during a preference
 
-; 96 requires is underconstrainted -- I'm omitting it for now
+; 96 is underconstrainted -- I'm omitting it for now
 
 
 (define (game 5b6a87d2cda8590001db8e07097) (:domain medium-objects-room-v1)  ; 97

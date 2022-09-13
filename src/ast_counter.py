@@ -13,7 +13,6 @@ import copy
 import re
 import typing
 import string
-from uritemplate import variables
 
 from parse_dsl import load_tests_from_file
 from ast_parser import ASTParser

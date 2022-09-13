@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pandas
+from collections import defaultdict
 
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
@@ -37,9 +38,22 @@ for i in range(len(playtrace)):
         print("STATE:", i + 1)
         object_names = list(sorted([obj["name"] for obj in objects]))
 
-        shelves = [obj.keys() for obj in objects if "Shelf" in obj["name"] or True]
+        objects_by_type = defaultdict(list)
+        for obj in objects:
+            objects_by_type[obj["objectType"]].append(obj["name"])
+            if obj["objectType"] == "Beachball":
+                print(obj)
+                exit()
 
-        print("Objects:", shelves)
+        shelves = [obj for obj in objects if "Shelf" in obj["name"] or True]
+
+        # for obj_name in object_names:
+        #     print(obj_name)
+
+        # print("[" + ", ".join(object_names) + "]")
+
+        print(objects_by_type)
+        # print("Objects:", shelves)
         print("Num changed:", n_objects_changed)
         print("Agent State:", playtrace[i]["agentState"])
 
@@ -59,10 +73,10 @@ programs = load_tests_from_file("../dsl/interactive-beta.pddl")
 print("\nNumber of programs: ", len(programs))
 print("\nNumber that contain '(then':", sum(["(then" in program for program in programs]))
 
-for program in programs:
-    if "(then" not in program:
-        print("\n\n==========================================")
-        print(program)
+# for program in programs:
+#     if "(then" not in program:
+#         print("\n\n==========================================")
+#         print(program)
 
 
 # print([playtrace[idx]["agentState"] for idx in range(len(playtrace))])

@@ -26,8 +26,12 @@ def _distance(obj1, obj2):
 
 OBJECTS_BY_TYPE = {"ball": ["blue-dodgeball-1", "red-dodgeball-1", "pink-dodgeball-1"],
                    "bin": ["hexagonal-bin-1", "hexagonal-bin-2"],
-                   "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"],
-                   "agent": ["agent"]}
+                   "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"]}
+
+# A list of all objects that can be referred to directly as variables inside of a game
+NAMED_OBJECTS = ["agent", "desk"]
+
+OBJECTS_BY_TYPE.update({obj: [obj] for obj in NAMED_OBJECTS})
 
 PREDICATE_LIBRARY = {"agent_crouches": _agent_crouches,
                      "agent_holds": _agent_holds,
@@ -38,6 +42,9 @@ PREDICATE_LIBRARY = {"agent_crouches": _agent_crouches,
 FUNCTION_LIBRARY = {"distance": _distance}
 
 # ===================================================================================================
+
+STATIC_OBJECTS = {"desk": {"name": "desk", "position": [20, 20, 0], "velocity": [0, 0, 0],
+                           "objectType": "desk", "color": "brown"}}
 
 SAMPLE_TRAJECTORY = [# Starting state: nothing held
                      {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
@@ -420,3 +427,8 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                       "game_over": True},
 
                     ]
+
+# Add the static objects to each state in the trajectory
+for state in SAMPLE_TRAJECTORY:
+    for obj, info in STATIC_OBJECTS.items():
+        state["objects"][obj] = info

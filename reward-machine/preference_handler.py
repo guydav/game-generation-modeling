@@ -7,7 +7,7 @@ import tatsu
 
 import numpy as np
 
-from config import OBJECTS_BY_TYPE, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_TRAJECTORY
+from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_TRAJECTORY
 
 class PreferenceHandler():
     def __init__(self, preference):
@@ -27,7 +27,10 @@ class PreferenceHandler():
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = self._extract_variable_type_mapping(body["exists_vars"]["variables"])
-        self.variable_type_mapping["agent"] = ["agent"]
+
+        # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
+        # can just be referred to explicitly within predicates without quantification beforehand
+        self.variable_type_mapping.update({obj: [obj] for obj in NAMED_OBJECTS})
 
         # Extract the ordered list of temporal predicates
         self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
@@ -85,10 +88,6 @@ class PreferenceHandler():
         '''
         Recursively extract every variable referenced in the predicate (including inside functions 
         used within the predicate)
-
-        BIG TODO: some objects (like 'desk') are just referred to directly inside of predicates, and
-        are never quantified over (i.e. we never see (exists ?d - desk)). We need to be able to detect
-        and handle these kinds of variables
         '''
 
         if isinstance(predicate, list) or isinstance(predicate, tuple):
@@ -481,7 +480,7 @@ class PreferenceHandler():
 
             # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
 
-            # TODO: handle cases where the two arguments two '=' are variables, in which case we're checking
+            # TODO: handle cases where the two arguments of '=' are variables, in which case we're checking
             #       variable equivalence instead of numerical equivalance
 
             # For each comparison argument, evaluate it if it's a function or convert to an int if not

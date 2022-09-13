@@ -47,7 +47,7 @@ class GameHandler():
                     print(f"Successfully constructed PreferenceHandler for '{name}'")
 
                 except Exception as exc:
-                    print(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
+                    exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
 
             elif rule == "pref_forall":
                 forall_vars = preference["definition"]["forall_vars"]
@@ -464,7 +464,7 @@ if __name__ == "__main__":
     ))
     """
 
-    game_handler = GameHandler(test_game_4)
+    game_handler = GameHandler(test_game_1)
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
         score = game_handler.process(state)

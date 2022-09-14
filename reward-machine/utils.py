@@ -1,5 +1,32 @@
 import inflect
 import tatsu
+import tatsu.ast
+import typing
+
+
+def _extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]):
+    '''
+    Given a list of variables, extract the mapping from variable names to variable types. Variable types are
+    stored in lists, even in cases where there is only one possible for the variable in order to handle cases
+    where multiple types are linked together with an (either) clause
+
+    TODO: this code is copied from PreferenceHandler -- need to figure out how best to distribute access to
+    the function. Maybe a utils file?
+    '''
+    if isinstance(variable_list, tatsu.ast.AST):
+        variable_list = [variable_list]
+
+    variables = {}
+    for var_info in variable_list:
+        var_type = typing.cast(tatsu.ast.AST, var_info["var_type"])
+
+        if isinstance(var_type["type"], tatsu.ast.AST):
+            var_type_type = typing.cast(tatsu.ast.AST, var_type["type"])
+            variables[var_info["var_names"]] = var_type_type["type_names"]
+        else:
+            variables[var_info["var_names"]] = var_type["type"]
+
+    return {var: types if isinstance(types, list) else [types] for var, types in variables.items()}
 
 def describe_preference(preference):
     '''

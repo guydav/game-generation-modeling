@@ -151,7 +151,6 @@ class PreferenceHandler():
     def _predicate_type(self, predicate: tatsu.ast.AST) -> PredicateType:
         '''
         Returns the temporal logic type of a given predicate
-        # TODO (GD): change this to return an enum of preference type
         '''
         if "once_pred" in predicate.keys():
             return PredicateType.ONCE
@@ -213,11 +212,13 @@ class PreferenceHandler():
                 new_mapping = dict(zip(new_variables, object_assignment))
                 new_mapping.update(partial_preference_satisfcation.mapping)
 
-                new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(mapping=new_mapping, current_predicate=new_cur_predicate, next_predicate=new_next_predicate))
+                new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(mapping=new_mapping, current_predicate=new_cur_predicate, 
+                                                                                                     next_predicate=new_next_predicate, while_sat=0))
 
         # Otherwise, just advance the predicates but keep the mapping the same
         else:
-            new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate))
+            new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate,
+                                                                                                 while_sat=0))
 
     def revert_preference(self, mapping: typing.Dict[str, str], new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfcation]) -> None:
         '''

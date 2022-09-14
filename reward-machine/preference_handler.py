@@ -11,7 +11,8 @@ import copy
 
 import numpy as np
 
-from utils import _extract_variable_type_mapping
+from utils import extract_variable_type_mapping, extract_variables
+from predicate_handler import PredicateHandler
 
 from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_TRAJECTORY
 
@@ -40,9 +41,12 @@ class PredicateType(enum.Enum):
 
 
 class PreferenceHandler():
-    def __init__(self, preference):
+    def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler):
         # Validity check
         assert isinstance(preference, tatsu.ast.AST) and preference["parseinfo"].rule == "preference"  # type: ignore
+
+        self.preference = preference
+        self.predicate_handler = predicate_handler
 
         self.preference_name = preference["pref_name"]
         body = preference["pref_body"]["body"]  # type: ignore
@@ -56,7 +60,7 @@ class PreferenceHandler():
         # This partial mapping gets added to all other partial mappings monitored by the PreferenceHandler
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
-        self.variable_type_mapping = _extract_variable_type_mapping(body["exists_vars"]["variables"])
+        self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
 
         # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
         # can just be referred to explicitly within predicates without quantification beforehand
@@ -82,7 +86,7 @@ class PreferenceHandler():
         #      ]
         self.partial_preference_satisfactions = []
 
-        initial_variables = self._extract_variables(self.temporal_predicates[0])
+        initial_variables = extract_variables(self.temporal_predicates[0])
         initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
         object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
                                   for var_types in initial_var_types]))
@@ -95,58 +99,6 @@ class PreferenceHandler():
         self.satisfied_this_step = []
 
         self.cur_step = 1
-
-    def _extract_variables(self, predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
-        '''
-        Recursively extract every variable referenced in the predicate (including inside functions 
-        used within the predicate)
-        '''
-        if predicate is None:
-            return []
-
-        if isinstance(predicate, list) or isinstance(predicate, tuple):
-            pred_vars = []
-            for sub_predicate in predicate:
-                pred_vars += self._extract_variables(sub_predicate)
-
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
-
-            return unique_vars
-
-        elif isinstance(predicate, tatsu.ast.AST):
-            pred_vars = []
-            for key in predicate:
-                if key == "term":
-
-                    # Different structure for predicate args vs. function args
-                    if isinstance(predicate["term"], tatsu.ast.AST):
-                        pred_vars += [predicate["term"]["arg"]]  # type: ignore 
-                    else:
-                        pred_vars += [predicate["term"]]
-
-                # We don't want to capture any variables within an (exists) or (forall) that's inside 
-                # the preference, since those are not globally required -- see evaluate_predicate()
-                elif key == "exists_args":
-                    continue
-
-                elif key == "forall_args":
-                    continue
-
-                elif key != "parseinfo":
-                    pred_vars += self._extract_variables(predicate[key])
-
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
-
-            return unique_vars
-
-        else:
-            return []
 
     def _predicate_type(self, predicate: tatsu.ast.AST) -> PredicateType:
         '''
@@ -197,7 +149,7 @@ class PreferenceHandler():
         else:
             new_next_predicate = self.temporal_predicates[next_pred_idx + 1]
             # Determine all of the variables referenced in the new predicate that aren't referenced already
-            new_variables = [var for var in self._extract_variables(new_next_predicate) if var not in partial_preference_satisfcation.mapping]
+            new_variables = [var for var in extract_variables(new_next_predicate) if var not in partial_preference_satisfcation.mapping]
 
         print("\n\tNew variables required by the next predicate:", new_variables)
 
@@ -227,7 +179,7 @@ class PreferenceHandler():
         represents the "initial component" of the current mapping: the portion of the mapping that consists
         of variables required by the first predicate.
         '''
-        initial_variables = self._extract_variables(self.temporal_predicates[0])
+        initial_variables = extract_variables(self.temporal_predicates[0])
         new_mapping = {key: val for key, val in mapping.items() if key in initial_variables}
         
         new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(new_mapping, None, self.temporal_predicates[0], 0, -1, {}))
@@ -236,11 +188,11 @@ class PreferenceHandler():
         if next_predicate_type is None:
             return True
         elif next_predicate_type == PredicateType.ONCE:
-            return self.evaluate_predicate(next_predicate["once_pred"], traj_state, mapping)
+            return self.predicate_handler(next_predicate["once_pred"], traj_state, mapping)
         elif next_predicate_type == PredicateType.ONCE_MEASURE:
-            return self.evaluate_predicate(next_predicate["once_measure_pred"], traj_state, mapping)
+            return self.predicate_handler(next_predicate["once_measure_pred"], traj_state, mapping)
         elif next_predicate_type in [PredicateType.HOLD, PredicateType.HOLD_WHILE]:
-            return self.evaluate_predicate(next_predicate["hold_pred"], traj_state, mapping)
+            return self.predicate_handler(next_predicate["hold_pred"], traj_state, mapping)
 
         return False
 
@@ -287,7 +239,7 @@ class PreferenceHandler():
                         current_predicate, next_predicate, 0, start, measures))
 
             elif cur_predicate_type == PredicateType.ONCE:
-                cur_pred_eval = self.evaluate_predicate(current_predicate["once_pred"], traj_state, mapping)
+                cur_pred_eval = self.predicate_handler(current_predicate["once_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
                 
                 print("\n\tEvaluation of next predicate:", next_pred_eval)
@@ -308,7 +260,7 @@ class PreferenceHandler():
                     self.revert_preference(mapping, new_partial_preference_satisfactions)
 
             elif cur_predicate_type == PredicateType.ONCE_MEASURE:
-                cur_pred_eval = self.evaluate_predicate(current_predicate["once_measure_pred"], traj_state, mapping)
+                cur_pred_eval = self.predicate_handler(current_predicate["once_measure_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
 
                 print("\n\tEvaluation of next predicate:", next_pred_eval)
@@ -318,7 +270,7 @@ class PreferenceHandler():
                 measurement_fn = FUNCTION_LIBRARY[measurement["func_name"]]
 
                 # Map the variables names to the object names, and extract them from the state
-                func_args = [traj_state["objects"][mapping[var]] for var in self._extract_variables(measurement)]
+                func_args = [traj_state["objects"][mapping[var]] for var in extract_variables(measurement)]
 
                 evaluation = measurement_fn(*func_args)
 
@@ -343,7 +295,7 @@ class PreferenceHandler():
                     self.revert_preference(mapping, new_partial_preference_satisfactions)
 
             elif cur_predicate_type == PredicateType.HOLD:
-                cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
+                cur_pred_eval = self.predicate_handler(current_predicate["hold_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
 
                 print("\n\tEvaluation of next predicate:", next_pred_eval)
@@ -369,7 +321,7 @@ class PreferenceHandler():
 
                 # If all of the while condition has already been met, then we can treat this exactly like a normal hold
                 if while_sat == num_while_conditions:
-                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
+                    cur_pred_eval = self.predicate_handler(current_predicate["hold_pred"], traj_state, mapping)
                     next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
 
                     print("\n\tEvaluation of next predicate:", next_pred_eval)
@@ -392,13 +344,13 @@ class PreferenceHandler():
 
                 # If not, then we only care about the while condition and the current hold
                 else:
-                    cur_pred_eval = self.evaluate_predicate(current_predicate["hold_pred"], traj_state, mapping)
+                    cur_pred_eval = self.predicate_handler(current_predicate["hold_pred"], traj_state, mapping)
 
                     # Determine whether the next while condition is satisfied in the current state
                     if num_while_conditions == 1:
-                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"], traj_state, mapping)
+                        cur_while_eval = self.predicate_handler(current_predicate["while_preds"], traj_state, mapping)
                     else:
-                        cur_while_eval = self.evaluate_predicate(current_predicate["while_preds"][while_sat], traj_state, mapping)
+                        cur_while_eval = self.predicate_handler(current_predicate["while_preds"][while_sat], traj_state, mapping)
 
                     print("\n\tEvaluation of current predicate:", cur_pred_eval)
                     print("\tEvaluation of current while pred:", cur_while_eval)
@@ -428,107 +380,7 @@ class PreferenceHandler():
 
         return self.satisfied_this_step
 
-    def evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
-        '''
-        Given a predicate, a trajectory state, and an assignment of each of the predicate's
-        arguments to specific objects in the state, returns the evaluation of the predicate
-        '''
-
-        if predicate is None:
-            return True
-
-        predicate_rule = predicate["parseinfo"].rule  # type: ignore
-
-        if predicate_rule == "predicate":
-            # Obtain the functional representation of the base predicate
-            predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
-
-            # Map the variables names to the object names, and extract them from the state
-            predicate_args = [state["objects"][mapping[var]] for var in self._extract_variables(predicate)]
-            
-            # Evaluate the predicate
-            evaluation = predicate_fn(state, *predicate_args)
-
-            return evaluation
-
-        elif predicate_rule == "super_predicate":
-            return self.evaluate_predicate(predicate["pred"], state, mapping)
-
-        elif predicate_rule == "super_predicate_not":
-            return not self.evaluate_predicate(predicate["not_args"], state, mapping)
-
-        elif predicate_rule == "super_predicate_and":
-            return all([self.evaluate_predicate(sub, state, mapping) for sub in predicate["and_args"]])  # type: ignore
-
-        elif predicate_rule == "super_predicate_or":
-            return any([self.evaluate_predicate(sub, state, mapping) for sub in predicate["or_args"]])  # type: ignore
-
-        elif predicate_rule == "super_predicate_exists":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                      for var_types in variable_type_mapping.values()]))
-
-            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return any([self.evaluate_predicate(predicate["exists_args"], state, {**sub_mapping, **mapping}) for 
-                        sub_mapping in sub_mappings])
-
-        elif predicate_rule == "super_predicate_forall":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                      for var_types in variable_type_mapping.values()]))
-
-            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return all([self.evaluate_predicate(predicate["forall_args"], state, {**sub_mapping, **mapping}) for 
-                        sub_mapping in sub_mappings])
-
-        elif predicate_rule == "function_comparison":
-            comp = typing.cast(tatsu.ast.AST, predicate["comp"])
-            comparison_operator = comp["comp_op"]      
-
-            # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
-
-            # TODO: handle cases where the two arguments of '=' are variables, in which case we're checking
-            #       variable equivalence instead of numerical equivalance
-
-            # For each comparison argument, evaluate it if it's a function or convert to an int if not
-            comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
-            if isinstance(comp_arg_1, tatsu.ast.AST):
-                func_name = str(comp_arg_1["func_name"])
-                function = FUNCTION_LIBRARY[func_name]
-                function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_1)]
-
-                comp_arg_1 = float(function(*function_args))
-
-            else:
-                comp_arg_1 = float(comp_arg_1)
-
-            comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
-            if isinstance(comp_arg_1, tatsu.ast.AST):
-                function = FUNCTION_LIBRARY[comp_arg_2["func_name"]]
-                function_args = [state["objects"][mapping[var]] for var in self._extract_variables(comp_arg_2)]
-
-                comp_arg_2 = float(function(*function_args))
-
-            else:
-                comp_arg_2 = float(comp_arg_2)
-
-            if comparison_operator == "=":
-                return comp_arg_1 == comp_arg_2
-            elif comparison_operator == "<":
-                return comp_arg_1 < comp_arg_2
-            elif comparison_operator == "<=":
-                return comp_arg_1 <= comp_arg_2
-            elif comparison_operator == ">":
-                return comp_arg_1 > comp_arg_2
-            elif comparison_operator == ">=":
-                return comp_arg_1 >= comp_arg_2
-            else:
-                raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
-
-        else:
-            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
-
-        return False
+    
 
 
 
@@ -633,7 +485,8 @@ if __name__ == "__main__":
     preferences = ast[3][1]["preferences"]
     
     pref1 = preferences[1]["definition"]
-    handler1 = PreferenceHandler(pref1)
+    predicate_handler = PredicateHandler()
+    handler1 = PreferenceHandler(pref1, predicate_handler)
     
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")

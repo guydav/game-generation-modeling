@@ -2,15 +2,21 @@ import itertools
 import os
 import sys
 import tatsu
+import tatsu.ast
+import typing
 
 from math import prod
 
 from config import SAMPLE_TRAJECTORY
 from preference_handler import PreferenceHandler
-from utils import PreferenceDescriber
+from utils import PreferenceDescriber, _extract_variable_type_mapping
+
+
+DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
+
 
 class GameHandler():
-    def __init__(self, game, grammar_path="../dsl/dsl.ebnf"):
+    def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
         self.grammar_parser = tatsu.compile(grammar)
 
@@ -19,7 +25,7 @@ class GameHandler():
         self.game_name = None
         self.domain_name = None
         self.setup = None
-        self.preferences = None
+        self.preferences = []
         self.terminal = None
         self.scoring = None
 
@@ -53,35 +59,14 @@ class GameHandler():
                 forall_vars = preference["definition"]["forall_vars"]
                 forall_pref = preference["definition"]["forall_pref"]
                 
-                variable_type_mapping = self._extract_variable_type_mapping(forall_vars["variables"])
+                variable_type_mapping = _extract_variable_type_mapping(forall_vars["variables"])
                 sub_preference = forall_pref["preferences"]
                 name = sub_preference["pref_name"]
 
                 print(f"TODO: construct PreferenceHandler for '{name}'")
 
 
-    def _extract_variable_type_mapping(self, variable_list):
-        '''
-        Given a list of variables, extract the mapping from variable names to variable types. Variable types are
-        stored in lists, even in cases where there is only one possible for the variable in order to handle cases
-        where multiple types are linked together with an (either) clause
-
-        TODO: this code is copied from PreferenceHandler -- need to figure out how best to distribute access to
-        the function. Maybe a utils file?
-        '''
-        if isinstance(variable_list, tatsu.ast.AST):
-            variable_list = [variable_list]
-
-        variables = {}
-        for var_info in variable_list:
-            if isinstance(var_info["var_type"]["type"], tatsu.ast.AST):
-                variables[var_info["var_names"]] = var_info["var_type"]["type"]["type_names"]
-            else:
-                variables[var_info["var_names"]] = [var_info["var_type"]["type"]]
-
-        return variables
-
-    def _extract_game_info(self, ast):
+    def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
         '''
         Recursively extract the game's name, domain, setup, preferences, terminal conditions, and
         scoring (if they exist)
@@ -91,7 +76,7 @@ class GameHandler():
                 self._extract_game_info(item)
 
         elif isinstance(ast, tatsu.ast.AST):
-            rule = ast["parseinfo"].rule
+            rule = ast["parseinfo"].rule  # type: ignore
             if rule == "game_def":
                 self.game_name = ast["game_name"]
 
@@ -114,7 +99,7 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state):
+    def process(self, state: typing.Dict[str, typing.Any]) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
@@ -140,16 +125,27 @@ class GameHandler():
 
         return score
 
-    def score(self, scoring_expression):
+    def evaluate_terminals(self, state: typing.Dict[str, typing.Any]):
+        raise NotImplementedError
+
+    def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
+        name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
+        preference_name = name_and_types["pref_name"]
+        object_types = list(name_and_types["object_types"]["type_name"]) if "object_types" in name_and_types else None  # type: ignore
+        return str(preference_name), object_types
+
+    def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None]) -> float:
         '''
         Determine the score of the current trajectory using the given scoring expression
         '''
+        if scoring_expression is None:
+            return 0.0
 
         # TODO: is the only situation in which we'll directly score a string?
         if isinstance(scoring_expression, str):
-            return int(scoring_expression)
+            return float(scoring_expression)
         
-        rule = scoring_expression["parseinfo"].rule
+        rule = scoring_expression["parseinfo"].rule  # type: ignore
 
         # TODO: clearly there needs to be some logic here for handling maximize vs. minimize. Maybe we should
         # pass an argument down the recursive calls?
@@ -201,10 +197,7 @@ class GameHandler():
         # (a) the mapping of variables to objects
         # (b) the temporal states involved
         elif rule == "count_nonoverlapping":
-            name_and_types = scoring_expression["name_and_types"]
-            preference_name = name_and_types["pref_name"]
-            object_types = name_and_types["object_types"]["type_name"] if "object_types" in name_and_types else None
-
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
             satisfactions = self.preference_satisfactions[preference_name]
 
             # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and
@@ -225,8 +218,7 @@ class GameHandler():
 
         # Count whether the preference has been satisfied at all
         elif rule == "count_once":
-            name_and_types = scoring_expression["name_and_types"]
-            preference_name = name_and_types["pref_name"]
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
             satisfactions = self.preference_satisfactions[preference_name]
 
@@ -234,9 +226,7 @@ class GameHandler():
 
         # Count the number of satisfactions of the given preference that use distinct variable mappings
         elif rule == "count_once_per_objects":
-            name_and_types = scoring_expression["name_and_types"]
-            preference_name = name_and_types["pref_name"]
-            object_types = name_and_types["object_types"]["type_name"] if "object_types" in name_and_types else None
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
             satisfactions = self.preference_satisfactions[preference_name]
 
@@ -250,9 +240,7 @@ class GameHandler():
 
         # For each nonoverlapping satisfaction (see count_nonoverlapping above), sum the value of the measurement
         elif rule == "count_nonoverlapping_measure":
-            name_and_types = scoring_expression["name_and_types"]
-            preference_name = name_and_types["pref_name"]
-            object_types = name_and_types["object_types"]["type_name"] if "object_types" in name_and_types else None
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
             satisfactions = self.preference_satisfactions[preference_name]
 
@@ -292,7 +280,9 @@ class GameHandler():
             pass # TODO
 
         else:
-            exit(f"Error: Unknown rule '{rule}' in scoring expression")
+            raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
+
+        return 0.0
 
 
 if __name__ == "__main__":
@@ -465,13 +455,16 @@ if __name__ == "__main__":
     """
 
     game_handler = GameHandler(test_game_1)
+    score = None
+
     for idx, state in enumerate(SAMPLE_TRAJECTORY):
         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
         score = game_handler.process(state)
         if score is not None:
             break
 
-    print("\n\nSCORE ACHIEVED:", score)
+    if score is not None:
+        print("\n\nSCORE ACHIEVED:", score)
 
 
     # satisfactions = [({"?a": "ball"}, 1, 10),

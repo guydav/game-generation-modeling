@@ -1,26 +1,6 @@
 import numpy as np
 
-# ====================================== PREDICATE DEFINITIONS ======================================
-def _agent_crouches(state):
-    return state["objects"]["agent"]["is_crouching"]
 
-def _agent_holds(state, obj):
-    return state["objects"]["agent"]["holding"] == obj["name"]
-
-def _in(state, obj1, obj2):
-    return all([obj1["position"][i] == obj2["position"][i] for i in range(3)])
-
-def _in_motion(state, obj):
-    return np.linalg.norm(obj["velocity"]) > 0
-
-def _touch(state, obj1, obj2):
-    return any([obj1["position"][i] == obj2["position"][i] for i in range(3)])
-# ===================================================================================================
-
-# ====================================== FUNCTION DEFINITIONS =======================================
-
-def _distance(obj1, obj2):
-    return np.linalg.norm(np.array(obj1["position"]) - np.array(obj2["position"]))
 
 # ===================================================================================================
 
@@ -33,13 +13,6 @@ NAMED_OBJECTS = ["agent", "desk"]
 
 OBJECTS_BY_TYPE.update({obj: [obj] for obj in NAMED_OBJECTS})
 
-PREDICATE_LIBRARY = {"agent_crouches": _agent_crouches,
-                     "agent_holds": _agent_holds,
-                     "in": _in,
-                     "in_motion": _in_motion,
-                     "touch": _touch}
-
-FUNCTION_LIBRARY = {"distance": _distance}
 
 # ===================================================================================================
 

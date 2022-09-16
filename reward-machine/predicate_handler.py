@@ -1,53 +1,118 @@
+import pathlib
+import sys
+sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
+
 import itertools
+import numpy as np
 import tatsu
 import tatsu.ast
 import typing
 
+import ast_printer
+
 from utils import extract_variable_type_mapping, extract_variables
 
+from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, SAMPLE_TRAJECTORY
 
-from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_TRAJECTORY
+
+AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
+ObjectState = typing.NewType('ObjectState', typing.Dict[str, typing.Any])
+FullState = typing.NewType('StateType', typing.Dict[str, typing.Union[bool, int, AgentState, typing.Sequence[ObjectState]]])
+
+
+AGENT_STATE_KEY = 'agentState'
+AGENT_STATE_CHANGED_KEY = 'agentStateChanged'
+N_OBJECTS_CHANGED_KEY = 'nObjectsChanged'
+OBJECTS_KEY = 'objects'
+ACTION_CHANGED_KEY = 'actionChanged'
+ACTION_KEY = 'action'
+
+ORIGINAL_INDEX_KEY = 'originalIndex'
 
 
 class PredicateHandler:
+    # Which field in the state to use as the index
+    index_key: str
+    # The cache from a string representation of the state X predicate X mapping to
+    # the predicate's truth value in that state given the mapping.
     evaluation_cache: typing.Dict[str, bool]
+    # The last state the evaluation cache was updated for a given key.
+    evaluation_cache_last_updated: typing.Dict[str, int]
+    # A cache of the latest observed value for each object
+    state_cache: typing.Dict[str, typing.Union[ObjectState, AgentState]]
+    # The last state the state cache was updated for
+    state_cache_last_updated: int
 
-    def __init__(self): 
-        # The cache from a string representation of the state X predicate X mapping to
-        # the predicate's truth value in that state given the mapping.
+    def __init__(self, index_key: str = ORIGINAL_INDEX_KEY):
+        self.index_key = index_key
+
         self.evaluation_cache = {}
+        self.evaluation_cache_last_updated = {}
+        self.state_cache = {}
+        self.state_cache_last_updated = -1
     
     def _new_game(self):
         """
         Call when a new game is started to clear the cache.
         """
         self.evaluation_cache = {}
+        self.evaluation_cache_last_updated = {}
+        self.state_cache = {}
+        self.state_cache_last_updated = -1
 
-    def _cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> str:
+    def _cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
         """
         Map from the arguments to __call__ to the key that represents them in the cache. 
         """
-        raise NotImplementedError()
+        ast_printer.reset_buffers()
+        ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](predicate)
+        predicate_str = ' '.join(ast_printer.BUFFER if ast_printer.BUFFER is not None else [])
+        mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
+        return f'{predicate_str}_{mapping_str}'
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
         """
         The external API to the predicate handler.
         For now, implements the same logic as before, to make sure I separated it correctly from the `preference_handler`.
         After that, this will implement the caching logic.
-        """
-        # TODO: cache
-        return self._inner_evaluate_predicate(predicate, state, mapping)
 
+        GD 2022-09-14: The data, as currently stored, saves delta updates of the state. 
+        This means that the truth value of a predicate with a particular assignment holds unitl
+        there's information that merits updating it. This means that we should cache predicate
+        evaluation results, update them when they return a non-None value, and return the cached result. 
+        """
+        predicate_key = self._cache_key(predicate, mapping)
+        state_index = state[self.index_key]
+
+        if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
+            return self.evaluation_cache[predicate_key]
+
+        if state_index > self.state_cache_last_updated:
+            self.state_cache_last_updated = state_index
+            for obj in state[OBJECTS_KEY]:
+                self.state_cache[obj[self.index_key]] = obj
+
+            if state[AGENT_STATE_CHANGED_KEY]:
+                self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
+
+        current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping)
+        if current_state_value is not None:
+            self.evaluation_cache[predicate_key] = current_state_value
+            self.evaluation_cache_last_updated[predicate_key] = state_index
+        
+        return self.evaluation_cache[predicate_key] if predicate_key in self.evaluation_cache else False
 
     def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
 
-        GD 2022-09-14: The data, as currently stored, saves delta updates of the state. 
-        This means that the truth value of a predicate with a particular assignment holds unitl
-        there's information that merits updating it. This means that we should cache predicate
-        evaluation results, update them when they return a non-None value, and return the cached result. 
+        GD: 2022-09-14: The logic in `__call__` relies on the assumption that if the predicate's
+        value was not updated at this timestep, this function returns None, rather than False. 
+        This is to know when the cache should be updated. 
+
+        I should figure out how to implement this in a manner that's reasonable across all predicates,
+        or maybe it's something the individual predicate handlers should do? Probably the latter.
         '''
 
         if predicate is None:
@@ -58,12 +123,9 @@ class PredicateHandler:
         if predicate_rule == "predicate":
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
-
-            # Map the variables names to the object names, and extract them from the state
-            predicate_args = [state["objects"][mapping[var]] for var in extract_variables(predicate)]
             
             # Evaluate the predicate
-            evaluation = predicate_fn(state, *predicate_args)
+            evaluation = predicate_fn(state, mapping, self.state_cache)
 
             return evaluation
 
@@ -143,4 +205,114 @@ class PredicateHandler:
 
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
+
+
+# ====================================== UTILITIES ======================================
+
+
+def _vec3_dict_to_array(vec3: typing.Dict[str, float]):
+    return np.array([vec3['x'], vec3['y'], vec3['z']])
+
+
+def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = 'objectId') -> typing.Callable:
+    def wrapper(state: FullState, mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
+
+        current_state_mapping_objects = {}
+        mapping_values = set(mapping.values())
+        state_objects = typing.cast(list, state[OBJECTS_KEY])
+        for object in state_objects:
+            if object[object_id_key] in mapping_values:
+                current_state_mapping_objects[object[object_id_key]] = object
+
+        # None of the objects in the mapping are updated in the current state, so return None
+        if current_state_mapping_objects == 0:
+            return None
+
+        # At least one object is, so populate the rest from the cache
+        for mapping_value in mapping_values:
+            if mapping_value not in current_state_mapping_objects:
+                current_state_mapping_objects[mapping_value] = state_cache[mapping_value]
+
+        mapping_objects = [current_state_mapping_objects[mapping_value] for mapping_key, mapping_value in mapping.items()]
+        agent_object = state[AGENT_STATE_KEY] if state[AGENT_STATE_CHANGED_KEY] else state_cache[AGENT_STATE_KEY]
+        return predicate_func(agent_object, mapping_objects)
+
+    return wrapper
+
+
+# ====================================== PREDICATE DEFINITIONS ======================================
+
+
+@mapping_objects_decorator
+def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    """
+    This isn't here to do anything useful -- it's just to demonstrate the interface that all predicates
+    should follow.  The first argument should be the agent's state, and the second should be a list 
+    (potentially empty) of objects that are the arguments to this predicate.
+    """
+    raise NotImplementedError()
+
+
+@mapping_objects_decorator
+def _agent_crouches(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 0
+    return agent["crouching"]
+
+
+@mapping_objects_decorator
+def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 1
+    return agent["heldObjectName"] == objects[0]["name"]
+
+
+@mapping_objects_decorator
+def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+    outer_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
+    outer_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
+    inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
+    inner_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
+
+    return np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents) and \
+              np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
+
+
+@mapping_objects_decorator
+def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 1
+    return np.linalg.norm(objects[0]["velocity"]) > 0    
+
+
+@mapping_objects_decorator
+def _pred_touch(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+    return objects[1]['name'] in objects[0]['touchingObjects'] or objects[0]['name'] in objects[1]['touchingObjects']
+
+
+# ====================================== FUNCTION DEFINITIONS =======================================
+
+
+@mapping_objects_decorator
+def _func_distance(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+    # TODO: do we want to use the position? Or the bounding box?
+    return np.linalg.norm(objects[0]['bboxCenter'] - objects[1]['bboxCenter'])
+
+
+# ================================= EXTRACTING LIBRARIES FROM LOCALS() ==================================
+
+
+PREDICATE_PREFIX = '_pred_'
+
+PREDICATE_LIBRARY = {local_key: local_val
+    for local_key, local_val in locals().items()
+    if local_key.startswith(PREDICATE_PREFIX)
+}
+
+FUNCTION_PREFIX = '_func_'
+
+FUNCTION_LIBRARY = {local_key: local_val
+    for local_key, local_val in locals().items()
+    if local_key.startswith(FUNCTION_PREFIX)
+}
 

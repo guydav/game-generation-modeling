@@ -7,7 +7,7 @@ import typing
 
 from math import prod
 
-from config import SAMPLE_TRAJECTORY
+from config import SAMPLE_TRAJECTORY, OBJECTS_BY_TYPE
 from preference_handler import PreferenceHandler
 from utils import PreferenceDescriber, _extract_variable_type_mapping
 
@@ -138,10 +138,57 @@ class GameHandler():
         raise NotImplementedError
 
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
+        '''
+        Helper function to extract the name of the preference being scored, as well as any of the object types that have been
+        passed to it using the ":" syntax
+        '''
         name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
         preference_name = name_and_types["pref_name"]
-        object_types = list(name_and_types["object_types"]["type_name"]) if "object_types" in name_and_types else None  # type: ignore
+
+        if isinstance(name_and_types["object_types"], tatsu.ast.AST):
+            object_types = [name_and_types["object_types"]["type_name"]]
+
+        elif isinstance(name_and_types["object_types"], list):
+            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]
+
+        else:
+            object_types = None
+        
         return str(preference_name), object_types
+
+
+    def _filter_satisfactions(self, preference_name, object_types):
+        '''
+        Given the name of a preference and a list of object types, return the set of all satisfactions
+        of the given preference that abide by the given variable mapping. In the case where object_types
+        is None, this amounts to returning all the satisfactions of the given preference. When object_types
+        is not None (as in the case of an external forall and the use of the ":" syntax), then we filter
+        accordingly.
+        '''
+
+        if object_types is None:
+            return self.preference_satisfactions[preference_name]
+
+        pref_handler = self.preference_handlers[preference_name]
+        satisfactions = []
+
+        # Check to see if the mapping lines up with the specified object type
+        for potential_sat in self.preference_satisfactions[preference_name]:
+            mapping = potential_sat.mapping
+            
+            # TODO: additional_variable_mapping isn't an OrderedDict, but it might need to be because the
+            #       ":" syntax chains in the order of the variables in the outer "forall". This will work
+            #       only for cases where we only have one object type specification
+            acceptable_sat = True
+            for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
+                specififed_object = mapping[variable]
+                if specififed_object not in OBJECTS_BY_TYPE[object_type]:
+                    acceptable_sat = False
+
+            if acceptable_sat:
+                satisfactions.append(potential_sat)
+
+        return satisfactions
 
     def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None]) -> float:
         '''
@@ -207,7 +254,8 @@ class GameHandler():
         # (b) the temporal states involved
         elif rule == "count_nonoverlapping":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
-            satisfactions = self.preference_satisfactions[preference_name]
+
+            satisfactions = self._filter_satisfactions(preference_name, object_types)
 
             # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and
             # count the total number of satisfactions that satisfy those criteria
@@ -229,7 +277,7 @@ class GameHandler():
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self.preference_satisfactions[preference_name]
+            satisfactions = self._filter_satisfactions(preference_name, object_types)
 
             return 1 if len(satisfactions) > 0 else 0
 
@@ -237,7 +285,7 @@ class GameHandler():
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self.preference_satisfactions[preference_name]
+            satisfactions = self._filter_satisfactions(preference_name, object_types)
 
             count = 0
 
@@ -251,7 +299,7 @@ class GameHandler():
         elif rule == "count_nonoverlapping_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self.preference_satisfactions[preference_name]
+            satisfactions = self._filter_satisfactions(preference_name, object_types)
 
             count = 0
 
@@ -339,7 +387,7 @@ if __name__ == "__main__":
         )
     ))
     (:scoring maximize (+
-        (count-nonoverlapping ballThrownToBin)
+        (count-nonoverlapping ballThrownToBin:golfball)
     )))
     """
 

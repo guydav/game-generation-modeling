@@ -56,14 +56,6 @@ class PreferenceHandler():
         self.preference_name = preference["pref_name"]
         body = preference["pref_body"]["body"]  # type: ignore
 
-        # BIG TODO: currently we are only handling (exists) quantifications at the top level, but we need to
-        # be able to do (forall) as well.
-        #
-        # I think the way to do this is to have each PreferenceHandler() optionally expect an "initial_mapping"
-        # argument. In the case of a (forall ?d - dodgeball) around a preference, we would construct a different
-        # PreferenceHandler() object for each dodgeball, and pass each of them a variant of {"?d": "dodgeball-1"}
-        # This partial mapping gets added to all other partial mappings monitored by the PreferenceHandler
-
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = _extract_variable_type_mapping(body["exists_vars"]["variables"])
 

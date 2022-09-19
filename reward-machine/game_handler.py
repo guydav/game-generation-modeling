@@ -245,6 +245,35 @@ class GameHandler():
         elif rule == "scoring_neg_expr":
             return - self.score(scoring_expression["expr"])
 
+        elif rule == "scoring_comparison":
+            comparison_operator = scoring_expression["comp"]["op"]
+
+            # In this case, we know that the operator is = and that we have more than 2 comparison arguments,
+            # so we just determine whether all arguments evaluate to the same value
+            if comparison_operator is None:
+                expressions = scoring_expression["comp"]["expr"]
+                evaluations = [self.score(expr) for expr in expressions]
+
+                return float(evaluations.count(evaluations[0]) == len(evaluations))
+
+            # Otherwise, there will be exactly two comparison arguments and we can compare them normally
+            else:
+                expr_1 = scoring_expression["comp"]["expr_1"]
+                expr_2 = scoring_expression["comp"]["expr_2"]
+
+                if comparison_operator == "=":
+                    return self.score(expr_1) == self.score(expr_2)
+                elif comparison_operator == "<":
+                    return self.score(expr_1) < self.score(expr_2)
+                elif comparison_operator == "<=":
+                    return self.score(expr_1) <= self.score(expr_2)
+                elif comparison_operator == ">":
+                    return self.score(expr_1) > self.score(expr_2)
+                elif comparison_operator == ">=":
+                    return self.score(expr_1) >= self.score(expr_2)
+                else:
+                    raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
+
         elif rule == "preference_eval":
             return self.score(scoring_expression["count_method"])
 
@@ -387,6 +416,7 @@ if __name__ == "__main__":
     ))
     (:scoring maximize (+
         (count-nonoverlapping ballThrownToBin:golfball)
+        (* 5 (= (count-nonoverlapping ballThrownToBin:ball) 1))
     )))
     """
 

@@ -25,6 +25,7 @@ def _distance(obj1, obj2):
 # ===================================================================================================
 
 OBJECTS_BY_TYPE = {"ball": ["blue-dodgeball-1", "red-dodgeball-1", "pink-dodgeball-1"],
+                   "golfball": ["golfball-1"],
                    "bin": ["hexagonal-bin-1", "hexagonal-bin-2"],
                    "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"]}
 
@@ -58,6 +59,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
+
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
@@ -97,6 +101,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
+
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
@@ -134,6 +141,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
+
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
@@ -173,6 +183,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
+
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
@@ -210,6 +223,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
+
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
@@ -249,6 +265,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
 
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
+
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
@@ -286,6 +305,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [8, 8, 0],
                                                     "velocity": [2, 2, 0], "objectType": "ball",
                                                     "color": "red"},
+
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
@@ -325,6 +347,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0.2, 0.2, 0], "objectType": "ball",
                                                     "color": "red"},
 
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
+
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
@@ -363,6 +388,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
 
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
+
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},
 
@@ -400,6 +428,9 @@ SAMPLE_TRAJECTORY = [# Starting state: nothing held
                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "ball",
                                                     "color": "red"},
+
+                               "golfball-1": {"name": "golfball-1", "poisition": [6, 3, 0], "velocity": [0, 0, 0],
+                                              "objectType": "golfball", "color": "white"},
 
                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [9, 9, 0],
                                                     "velocity": [0, 0, 0], "objectType": "bin"},

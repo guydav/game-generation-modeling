@@ -40,7 +40,16 @@ class PredicateType(enum.Enum):
 
 
 class PreferenceHandler():
-    def __init__(self, preference):
+    def __init__(self, preference, additional_variable_mapping: typing.Dict[str, str] = {}):
+        '''
+        Construct a handler object for the provided preference, responsible for tracking when and how the
+        the preference has been satisfied by the various objects in the state using its process() method
+
+        preference: the preference to monitor (tatsu.ast.AST)
+        additional_variable_mapping: variable to type mapping beyond what is specified inside the preference's own
+            quantification. This is used to handle external an "forall", which quantifies additional variables 
+        '''
+
         # Validity check
         assert isinstance(preference, tatsu.ast.AST) and preference["parseinfo"].rule == "preference"  # type: ignore
 
@@ -57,6 +66,9 @@ class PreferenceHandler():
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = _extract_variable_type_mapping(body["exists_vars"]["variables"])
+
+        # Add additional variable mapping
+        self.variable_type_mapping.update(additional_variable_mapping)
 
         # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
         # can just be referred to explicitly within predicates without quantification beforehand

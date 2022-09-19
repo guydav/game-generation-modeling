@@ -56,6 +56,8 @@ class GameHandler():
                     exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
 
             elif rule == "pref_forall":
+                # The outer "forall" works to track the times the inner preference is satisfied for each type
+                # in the outer variables (e.g. )
                 forall_vars = preference["definition"]["forall_vars"]
                 forall_pref = preference["definition"]["forall_pref"]
                 
@@ -63,7 +65,14 @@ class GameHandler():
                 sub_preference = forall_pref["preferences"]
                 name = sub_preference["pref_name"]
 
-                print(f"TODO: construct PreferenceHandler for '{name}'")
+                try:
+                    pref_handler = PreferenceHandler(sub_preference, additional_variable_mapping=variable_type_mapping)
+                    self.preference_handlers[name] = pref_handler
+                    self.preference_satisfactions[name] = []
+                    print(f"Successfully constructed PreferenceHandler for '{name}'")
+
+                except Exception as exc:
+                    exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
 
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
@@ -315,6 +324,25 @@ if __name__ == "__main__":
     )))
     """
 
+    test_game_forall = """
+    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+
+    (:constraints (and 
+        (forall (?b - (either ball golfball)) 
+            (preference ballThrownToBin (exists (?h - bin)
+                (then
+                    (once (agent_holds ?b))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
+                )
+            ))
+        )
+    ))
+    (:scoring maximize (+
+        (count-nonoverlapping ballThrownToBin)
+    )))
+    """
+
     test_game_2 = """
     (define (game 56cb8858edf8da000b6df354-32) (:domain many-objects-room-v1)  ; 32
     (:setup (and 
@@ -454,7 +482,7 @@ if __name__ == "__main__":
     ))
     """
 
-    game_handler = GameHandler(test_game_1)
+    game_handler = GameHandler(test_game_forall)
     score = None
 
     for idx, state in enumerate(SAMPLE_TRAJECTORY):

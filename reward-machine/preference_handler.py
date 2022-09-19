@@ -67,8 +67,9 @@ class PreferenceHandler():
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = _extract_variable_type_mapping(body["exists_vars"]["variables"])
 
-        # Add additional variable mapping
-        self.variable_type_mapping.update(additional_variable_mapping)
+        # Add additional variable mapping, and store it as well (it's needed for scoring)
+        self.additional_variable_mapping = additional_variable_mapping
+        self.variable_type_mapping.update(self.additional_variable_mapping)
 
         # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
         # can just be referred to explicitly within predicates without quantification beforehand

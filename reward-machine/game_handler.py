@@ -176,9 +176,8 @@ class GameHandler():
         for potential_sat in self.preference_satisfactions[preference_name]:
             mapping = potential_sat.mapping
             
-            # TODO: additional_variable_mapping isn't an OrderedDict, but it might need to be because the
-            #       ":" syntax chains in the order of the variables in the outer "forall". This will work
-            #       only for cases where we only have one object type specification
+            # A PreferenceHandler's additional_variable_mapping is an OrderedDict, so the types in 
+            # object_types need to match the order of varaibles in the external forall
             acceptable_sat = True
             for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
                 specififed_object = mapping[variable]

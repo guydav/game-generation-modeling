@@ -119,7 +119,7 @@ class GameHandler():
         else:
             terminate = False
 
-        if terminate or state["game_over"]:
+        if terminate:
             score = self.score(self.scoring) 
 
         else:

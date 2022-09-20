@@ -4,12 +4,49 @@ import numpy as np
 
 # ===================================================================================================
 
-OBJECTS_BY_TYPE = {"ball": ["blue-dodgeball-1", "red-dodgeball-1", "pink-dodgeball-1"],
-                   "bin": ["hexagonal-bin-1", "hexagonal-bin-2"],
-                   "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"]}
+# TODO: this should also be conditional on which room we're in
+OBJECTS_BY_TYPE = {
+        "ball": [
+                'Dodgeball|+00.70|+01.11|-02.80',
+                'Dodgeball|+00.44|+01.13|-02.80',
+                'Dodgeball|+00.19|+01.13|-02.80',
+                'Beachball|+02.29|+00.19|-02.88',
+                'Golfball|+01.05|+01.04|-02.70',
+                'Golfball|+00.96|+01.04|-02.70',
+                'Golfball|+01.14|+01.04|-02.70'
+        ],
+        "block": [
+                'TallRectBlock|-02.95|+02.05|-02.52',
+                'TallRectBlock|-02.95|+02.05|-02.72',
+                'TallRectBlock|-02.95|+02.05|-02.31',
+                'LongCylinderBlock|-02.82|+00.19|-02.09',
+                'LongCylinderBlock|-02.94|+00.19|-02.24',
+                'LongCylinderBlock|-02.93|+00.19|-01.93',
+                'CylinderBlock|-02.95|+01.62|-01.95',
+                'CylinderBlock|-02.97|+01.62|-01.50',
+                'CylinderBlock|-03.02|+01.62|-01.73',
+                'CubeBlock|-02.97|+01.26|-01.94',
+                'CubeBlock|-02.96|+01.26|-01.72',
+                'CubeBlock|-02.99|+01.26|-01.49',
+                'PyramidBlock|-02.95|+01.61|-02.20',
+                'PyramidBlock|-02.96|+01.61|-02.44',
+                'PyramidBlock|-02.95|+01.61|-02.66',
+                'FlatRectBlock|-02.93|+00.15|-02.84',
+                'FlatRectBlock|-02.93|+00.05|-02.84',
+                'FlatRectBlock|-02.93|+00.25|-02.84',
+                'TriangleBlock|-02.92|+01.23|-02.23',
+                'TriangleBlock|-02.95|+01.23|-02.69',
+                'TriangleBlock|-02.94|+01.23|-02.46',
+                'BridgeBlock|-02.92|+00.43|-02.52',
+                'BridgeBlock|-02.92|+00.26|-02.52',
+                'BridgeBlock|-02.92|+00.09|-02.52'
+        ],
+        "hexagonal_bin": ['GarbageCan|+00.75|-00.03|-02.74'],
+        "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"]
+}
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "desk"]
+NAMED_OBJECTS = ["agent", "desk", "bed"]
 
 OBJECTS_BY_TYPE.update({obj: [obj] for obj in NAMED_OBJECTS})
 

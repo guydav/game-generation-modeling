@@ -12,9 +12,9 @@ import copy
 import numpy as np
 
 from utils import extract_variable_type_mapping, extract_variables
-from predicate_handler import PredicateHandler
+from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
-from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, PREDICATE_LIBRARY, FUNCTION_LIBRARY, SAMPLE_TRAJECTORY
+from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, SAMPLE_TRAJECTORY
 
 
 class PartialPreferenceSatisfcation(typing.NamedTuple):
@@ -185,16 +185,21 @@ class PreferenceHandler():
         new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(new_mapping, None, self.temporal_predicates[0], 0, -1, {}))
 
     def _evaluate_next_predicate(self, next_predicate_type: typing.Optional[PredicateType], next_predicate: tatsu.ast.AST, mapping: typing.Dict[str, str], traj_state: typing.Dict[str, typing.Any]) -> bool:
+        next_predicate_value = None
+        
         if next_predicate_type is None:
             return True
         elif next_predicate_type == PredicateType.ONCE:
-            return self.predicate_handler(next_predicate["once_pred"], traj_state, mapping)
+            next_predicate_value = self.predicate_handler(next_predicate["once_pred"], traj_state, mapping)
         elif next_predicate_type == PredicateType.ONCE_MEASURE:
-            return self.predicate_handler(next_predicate["once_measure_pred"], traj_state, mapping)
+            next_predicate_value = self.predicate_handler(next_predicate["once_measure_pred"], traj_state, mapping)
         elif next_predicate_type in [PredicateType.HOLD, PredicateType.HOLD_WHILE]:
-            return self.predicate_handler(next_predicate["hold_pred"], traj_state, mapping)
+            next_predicate_value = self.predicate_handler(next_predicate["hold_pred"], traj_state, mapping)
 
-        return False
+        if next_predicate_value is None:
+            next_predicate_value = False
+
+        return next_predicate_value
 
     def process(self, traj_state: typing.Dict[str, typing.Any]) -> typing.List[PreferenceSatisfcation]:
         '''

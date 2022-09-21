@@ -152,7 +152,7 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_or":
             inner_values = [self(sub, state, mapping) for sub in predicate["or_args"]] # type: ignore
-            return all(inner_values)  
+            return any(inner_values)  
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore

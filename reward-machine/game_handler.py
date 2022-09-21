@@ -13,7 +13,7 @@ from predicate_handler import PredicateHandler
 from utils import PreferenceDescriber, extract_variable_type_mapping
 
 
-DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
+DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
 
 class GameHandler():

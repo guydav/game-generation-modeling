@@ -90,6 +90,7 @@ class PredicateHandler:
         predicate_key = self._cache_key(predicate, mapping)
         state_index = state[self.index_key]
 
+        # If no time has passed since the last update, we know we can use the cached value
         if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
             return self.evaluation_cache[predicate_key]
 
@@ -107,7 +108,7 @@ class PredicateHandler:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
         
-        return self.evaluation_cache[predicate_key] if predicate_key in self.evaluation_cache else current_state_value
+        return self.evaluation_cache.get(predicate_key, None)
 
     def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         '''

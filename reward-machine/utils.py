@@ -6,7 +6,7 @@ import typing
 from collections import OrderedDict
 
 
-def _extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]):
+def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]):
     '''
     Given a list of variables, extract the mapping from variable names to variable types. Variable types are
     stored in lists, even in cases where there is only one possible for the variable in order to handle cases
@@ -27,6 +27,60 @@ def _extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[t
             variables[var_info["var_names"]] = var_type["type"]
 
     return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
+
+
+def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
+        '''
+        Recursively extract every variable referenced in the predicate (including inside functions 
+        used within the predicate)
+        '''
+        if predicate is None:
+            return []
+
+        if isinstance(predicate, list) or isinstance(predicate, tuple):
+            pred_vars = []
+            for sub_predicate in predicate:
+                pred_vars += extract_variables(sub_predicate)
+
+            unique_vars = []
+            for var in pred_vars:
+                if var not in unique_vars:
+                    unique_vars.append(var)
+
+            return unique_vars
+    
+        elif isinstance(predicate, tatsu.ast.AST):
+            pred_vars = []
+            for key in predicate:
+                if key == "term":
+
+                    # Different structure for predicate args vs. function args
+                    if isinstance(predicate["term"], tatsu.ast.AST):
+                        pred_vars += [predicate["term"]["arg"]]  # type: ignore 
+                    else:
+                        pred_vars += [predicate["term"]]
+
+                # We don't want to capture any variables within an (exists) or (forall) that's inside 
+                # the preference, since those are not globally required -- see evaluate_predicate()
+                elif key == "exists_args":
+                    continue
+
+                elif key == "forall_args":
+                    continue
+
+                elif key != "parseinfo":
+                    pred_vars += extract_variables(predicate[key])
+
+            unique_vars = []
+            for var in pred_vars:
+                if var not in unique_vars:
+                    unique_vars.append(var)
+
+            return unique_vars
+
+        else:
+            return []
+
 
 def describe_preference(preference):
     '''
@@ -60,84 +114,12 @@ class PreferenceDescriber():
         self.preference_name = preference["pref_name"]
         self.body = preference["pref_body"]["body"]
 
-        self.variable_type_mapping = self._extract_variable_type_mapping(self.body["exists_vars"]["variables"])
+        self.variable_type_mapping = extract_variable_type_mapping(self.body["exists_vars"]["variables"])
         self.variable_type_mapping["agent"] = ["agent"]
 
         self.temporal_predicates = [func["seq_func"] for func in self.body["exists_args"]["body"]["then_funcs"]]
 
         self.engine = inflect.engine()
-
-    def _extract_variable_type_mapping(self, variable_list):
-        '''
-        Given a list of variables, extract the mapping from variable names to variable types. Variable types are
-        stored in lists, even in cases where there is only one possible for the variable in order to handle cases
-        where multiple types are linked together with an (either) clause
-        '''
-        if isinstance(variable_list, tatsu.ast.AST):
-            variable_list = [variable_list]
-
-        variables = {}
-        for var_info in variable_list:
-            if isinstance(var_info["var_type"]["type"], tatsu.ast.AST):
-                variables[var_info["var_names"]] = var_info["var_type"]["type"]["type_names"]
-            else:
-                variables[var_info["var_names"]] = [var_info["var_type"]["type"]]
-
-        return variables
-
-    def _extract_variables(self, predicate):
-        '''
-        Recursively extract every variable referenced in the predicate (including inside functions 
-        used within the predicate)
-
-        BIG TODO: some objects (like 'desk') are just referred to directly inside of predicates, and
-        are never quantified over (i.e. we never see (exists ?d - desk)). We need to be able to detect
-        and handle these kinds of variables
-        '''
-
-        if isinstance(predicate, list) or isinstance(predicate, tuple):
-            pred_vars = []
-            for sub_predicate in predicate:
-                pred_vars += self._extract_variables(sub_predicate)
-
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
-
-            return unique_vars
-
-        elif isinstance(predicate, tatsu.ast.AST):
-            pred_vars = []
-            for key in predicate:
-                if key == "term":
-
-                    # Different structure for predicate args vs. function args
-                    if isinstance(predicate["term"], tatsu.ast.AST):
-                        pred_vars += [predicate["term"]["arg"]]
-                    else:
-                        pred_vars += [predicate["term"]]
-
-                # We don't want to capture any variables within an (exists) or (forall) that's inside 
-                # the preference, since those are not globally required -- see evaluate_predicate()
-                elif key == "exists_args":
-                    continue
-
-                elif key == "forall_args":
-                    continue
-
-                elif key != "parseinfo":
-                    pred_vars += self._extract_variables(predicate[key])
-
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
-
-            return unique_vars
-
-        else:
-            return []
 
     def _type(self, predicate):
         '''
@@ -164,6 +146,8 @@ class PreferenceDescriber():
         print("The variables required by this preference are:")
         for var, types in self.variable_type_mapping.items():
             print(f" - {var}: of type {self.engine.join(types, conj='or')}")
+
+        description = ''
 
         for idx, predicate in enumerate(self.temporal_predicates):
             if idx == 0:
@@ -196,13 +180,13 @@ class PreferenceDescriber():
 
             print(prefix + description)
 
-    def describe_predicate(self, predicate):
+    def describe_predicate(self, predicate) -> str:
         predicate_rule = predicate["parseinfo"].rule
 
         if predicate_rule == "predicate":
 
             name = predicate["pred_name"]
-            variables = self._extract_variables(predicate)
+            variables = extract_variables(predicate)
 
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
@@ -219,7 +203,7 @@ class PreferenceDescriber():
             return self.engine.join(["(" + self.describe_predicate(sub) + ")" for sub in predicate["or_args"]], conj="or")
 
         elif predicate_rule == "super_predicate_exists":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])
+            variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])
 
             new_variables = []
             for var, types in variable_type_mapping.items():
@@ -228,7 +212,7 @@ class PreferenceDescriber():
             return f"there exists {self.engine.join(new_variables)}, such that {self.describe_predicate(predicate['exists_args'])}"
 
         elif predicate_rule == "super_predicate_forall":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])
+            variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])
 
             new_variables = []
             for var, types in variable_type_mapping.items():
@@ -243,14 +227,14 @@ class PreferenceDescriber():
             if isinstance(comp_arg_1, tatsu.ast.AST):
 
                 name = comp_arg_1["func_name"]
-                variables = self._extract_variables(comp_arg_1)
+                variables = extract_variables(comp_arg_1)
 
-                comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)
+                comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)  # type: ignore
 
             comp_arg_2 = predicate["comp"]["arg_2"]["arg"]
             if isinstance(comp_arg_1, tatsu.ast.AST):
                 name = comp_arg_2["func_name"]
-                variables = self._extract_variables(comp_arg_2)
+                variables = extract_variables(comp_arg_2)
 
                 comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)
 
@@ -266,4 +250,7 @@ class PreferenceDescriber():
                 return f"{comp_arg_1} is greater than or equal to {comp_arg_2}"
 
         else:
-            exit(f"Error: Unknown rule '{predicate_rule}'")
+            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
+
+        return ''
+        

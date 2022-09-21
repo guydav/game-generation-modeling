@@ -9,10 +9,11 @@ from math import prod
 
 from config import SAMPLE_TRAJECTORY, OBJECTS_BY_TYPE
 from preference_handler import PreferenceHandler
-from utils import PreferenceDescriber, _extract_variable_type_mapping
+from predicate_handler import PredicateHandler
+from utils import PreferenceDescriber, extract_variable_type_mapping
 
 
-DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
+DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
 
 class GameHandler():
@@ -21,6 +22,7 @@ class GameHandler():
         self.grammar_parser = tatsu.compile(grammar)
 
         self.game_ast = self.grammar_parser.parse(game)
+        self.predicate_handler = PredicateHandler()
 
         self.game_name = None
         self.domain_name = None
@@ -47,7 +49,7 @@ class GameHandler():
                 name = preference["definition"]["pref_name"]
                 
                 try:
-                    pref_handler = PreferenceHandler(preference["definition"])
+                    pref_handler = PreferenceHandler(preference["definition"], self.predicate_handler)
                     self.preference_handlers[name] = pref_handler
                     self.preference_satisfactions[name] = []
                     print(f"Successfully constructed PreferenceHandler for '{name}'")
@@ -61,7 +63,7 @@ class GameHandler():
                 forall_vars = preference["definition"]["forall_vars"]
                 forall_pref = preference["definition"]["forall_pref"]
                 
-                variable_type_mapping = _extract_variable_type_mapping(forall_vars["variables"])
+                variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])
                 sub_preference = forall_pref["preferences"]
                 name = sub_preference["pref_name"]
 
@@ -126,7 +128,7 @@ class GameHandler():
         else:
             terminate = False
 
-        if terminate or state["game_over"]:
+        if terminate:
             score = self.score(self.scoring) 
 
         else:

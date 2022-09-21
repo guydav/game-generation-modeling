@@ -1,5 +1,5 @@
 import tatsu
-
+import tatsu.ast
 
 class ASTParser:
     def __call__(self, ast, **kwargs):

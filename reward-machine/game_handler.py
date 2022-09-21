@@ -68,7 +68,7 @@ class GameHandler():
                 name = sub_preference["pref_name"]
 
                 try:
-                    pref_handler = PreferenceHandler(sub_preference, additional_variable_mapping=variable_type_mapping)
+                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, additional_variable_mapping=variable_type_mapping)
                     self.preference_handlers[name] = pref_handler
                     self.preference_satisfactions[name] = []
                     print(f"Successfully constructed PreferenceHandler for '{name}'")

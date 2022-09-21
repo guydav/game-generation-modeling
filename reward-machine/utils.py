@@ -30,56 +30,56 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
 
 
 def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
-        '''
-        Recursively extract every variable referenced in the predicate (including inside functions 
-        used within the predicate)
-        '''
-        if predicate is None:
-            return []
+    '''
+    Recursively extract every variable referenced in the predicate (including inside functions 
+    used within the predicate)
+    '''
+    if predicate is None:
+        return []
 
-        if isinstance(predicate, list) or isinstance(predicate, tuple):
-            pred_vars = []
-            for sub_predicate in predicate:
-                pred_vars += extract_variables(sub_predicate)
+    if isinstance(predicate, list) or isinstance(predicate, tuple):
+        pred_vars = []
+        for sub_predicate in predicate:
+            pred_vars += extract_variables(sub_predicate)
 
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars:
+                unique_vars.append(var)
 
-            return unique_vars
-    
-        elif isinstance(predicate, tatsu.ast.AST):
-            pred_vars = []
-            for key in predicate:
-                if key == "term":
+        return unique_vars
 
-                    # Different structure for predicate args vs. function args
-                    if isinstance(predicate["term"], tatsu.ast.AST):
-                        pred_vars += [predicate["term"]["arg"]]  # type: ignore 
-                    else:
-                        pred_vars += [predicate["term"]]
+    elif isinstance(predicate, tatsu.ast.AST):
+        pred_vars = []
+        for key in predicate:
+            if key == "term":
 
-                # We don't want to capture any variables within an (exists) or (forall) that's inside 
-                # the preference, since those are not globally required -- see evaluate_predicate()
-                elif key == "exists_args":
-                    continue
+                # Different structure for predicate args vs. function args
+                if isinstance(predicate["term"], tatsu.ast.AST):
+                    pred_vars += [predicate["term"]["arg"]]  # type: ignore 
+                else:
+                    pred_vars += [predicate["term"]]
 
-                elif key == "forall_args":
-                    continue
+            # We don't want to capture any variables within an (exists) or (forall) that's inside 
+            # the preference, since those are not globally required -- see evaluate_predicate()
+            elif key == "exists_args":
+                continue
 
-                elif key != "parseinfo":
-                    pred_vars += extract_variables(predicate[key])
+            elif key == "forall_args":
+                continue
 
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
+            elif key != "parseinfo":
+                pred_vars += extract_variables(predicate[key])
 
-            return unique_vars
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars:
+                unique_vars.append(var)
 
-        else:
-            return []
+        return unique_vars
+
+    else:
+        return []
 
 
 def describe_preference(preference):

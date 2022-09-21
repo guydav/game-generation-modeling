@@ -33,15 +33,16 @@ TEST_THROWING_GAME = """
     (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
 
     (:constraints (and 
-        (preference throwBallToBin
-            (exists (?d - ball ?h - hexagonal_bin)
+        (forall (?b - (either dodgeball golfball)) 
+            (preference throwBallToBin (exists (?h - hexagonal_bin)
                 (then
-                    (once (agent_holds ?d))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                    (once (and (not (in_motion ?d)) (in ?h ?d)))
+                    (once (agent_holds ?b))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
                 )
-            )
+            ))
         )
+
         (preference throwAttempt
             (exists (?d - ball)
                 (then 
@@ -53,7 +54,7 @@ TEST_THROWING_GAME = """
         )
     ))
     (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin)
+        (count-nonoverlapping throwBallToBin:golfball)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
     """

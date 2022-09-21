@@ -15,6 +15,20 @@ OBJECTS_BY_TYPE = {
                 'Golfball|+00.96|+01.04|-02.70',
                 'Golfball|+01.14|+01.04|-02.70'
         ],
+        "dodgeball": [
+                'Dodgeball|+00.70|+01.11|-02.80',
+                'Dodgeball|+00.44|+01.13|-02.80',
+                'Dodgeball|+00.19|+01.13|-02.80',
+                'Beachball|+02.29|+00.19|-02.88'
+        ],
+        "beachball": [
+                'Beachball|+02.29|+00.19|-02.88'
+        ],
+        "golfball": [
+                'Golfball|+01.05|+01.04|-02.70',
+                'Golfball|+00.96|+01.04|-02.70',
+                'Golfball|+01.14|+01.04|-02.70'
+        ],
         "block": [
                 'TallRectBlock|-02.95|+02.05|-02.52',
                 'TallRectBlock|-02.95|+02.05|-02.72',

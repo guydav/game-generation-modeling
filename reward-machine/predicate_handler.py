@@ -145,14 +145,21 @@ class PredicateHandler:
             return self._inner_evaluate_predicate(predicate["pred"], state, mapping)
 
         elif predicate_rule == "super_predicate_not":
-            return not self(predicate["not_args"], state, mapping)
+            inner_pred_value = self(predicate["not_args"], state, mapping)
+            return None if inner_pred_value is None else not inner_pred_value
 
         elif predicate_rule == "super_predicate_and":
             inner_values = [self(sub, state, mapping) for sub in predicate["and_args"]] # type: ignore
+            # If there are any Nones, we cannot know about their conjunction, so return None
+            if any(v is None for v in inner_values):
+                return None
             return all(inner_values)  
 
         elif predicate_rule == "super_predicate_or":
             inner_values = [self(sub, state, mapping) for sub in predicate["or_args"]] # type: ignore
+            # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
+            if all(v is None for v in inner_values):
+                return None
             return any(inner_values)  
 
         elif predicate_rule == "super_predicate_exists":
@@ -161,8 +168,10 @@ class PredicateHandler:
                                       for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return any([self(predicate["exists_args"], state, {**sub_mapping, **mapping}) for 
-                        sub_mapping in sub_mappings])
+            inner_mapping_values = [self(predicate["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            if all(v is None for v in inner_mapping_values):
+                return None
+            return any(inner_mapping_values)
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
@@ -170,8 +179,10 @@ class PredicateHandler:
                                       for var_types in variable_type_mapping.values()]))
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            return all([self(predicate["forall_args"], state, {**sub_mapping, **mapping}) for 
-                        sub_mapping in sub_mappings])
+            inner_mapping_values = [self(predicate["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            if any(v is None for v in inner_mapping_values):
+                return None
+            return all(inner_mapping_values)
 
         elif predicate_rule == "function_comparison":
             comp = typing.cast(tatsu.ast.AST, predicate["comp"])

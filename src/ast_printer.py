@@ -768,11 +768,17 @@ def build_scoring_printer():
     return printer
 
 
+SETUP_KEY = '(:setup'
+PREFERENCES_KEY = '(:constraints'
+TERMINAL_KEY = '(:terminal'
+SCORING_KEY = '(:scoring'
+
+
 PARSE_DICT = {
-    '(:setup': build_setup_printer(),
-    '(:constraints': build_constraints_printer(),
-    '(:terminal': build_terminal_printer(),
-    '(:scoring': build_scoring_printer(),
+    SETUP_KEY: build_setup_printer(),
+    PREFERENCES_KEY: build_constraints_printer(),
+    TERMINAL_KEY: build_terminal_printer(),
+    SCORING_KEY: build_scoring_printer(),
 }
 
 

@@ -1358,9 +1358,9 @@
     (count-nonoverlapping throwBallToBin:basketball)
     (* 2 (count-nonoverlapping throwBallToBin:beachball))
     (* 3 (count-nonoverlapping throwBallToBin:dodgeball))
-    (* 2 (count-nonoverlapping throwBallToBin:basketball))
-    (* 3 (count-nonoverlapping throwBallToBin:beachball))
-    (* 4 (count-nonoverlapping throwBallToBin:dodgeball))
+    (* 2 (count-nonoverlapping throwBallToBinOffWall:basketball))
+    (* 3 (count-nonoverlapping throwBallToBinOffWall:beachball))
+    (* 4 (count-nonoverlapping throwBallToBinOffWall:dodgeball))
 )))
 
 ; 44 is another find the hidden object game

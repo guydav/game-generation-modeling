@@ -5,7 +5,8 @@ import typing
 from game_handler import GameHandler
 
 
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json').resolve().as_posix()
+SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -13,19 +14,30 @@ REPLAY_NESTING_KEYS = (
     'participants-v2-develop/17tSEDmCvGp1uKVEh5iq/replay-preCreateGame'
 )
 
-def _load_trace(path: str, replay_nesting_keys: typing.Sequence[str]):
+def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = None):
     with open(path, 'r') as f:
         trace = json.load(f)
 
-    for key in replay_nesting_keys:
-        trace = trace[key]
+    simple = isinstance(trace, list)
 
-    assert(all([key.startswith('batch-') for key in trace.keys()]))
+    if not simple and replay_nesting_keys is None:
+        raise ValueError('Must provide replay_nesting_keys when not using simple mode')
 
-    for batch_idx in range(len(trace)):
-        batch = trace[f'batch-{batch_idx}']
-        for event in batch['events']:
+    if simple:
+        for event in trace:
             yield event
+
+    else:
+        replay_nesting_keys = typing.cast(typing.Sequence[str], replay_nesting_keys)
+        for key in replay_nesting_keys:
+            trace = trace[key]
+
+        assert(all([key.startswith('batch-') for key in trace.keys()]))
+
+        for batch_idx in range(len(trace)):
+            batch = trace[f'batch-{batch_idx}']
+            for event in batch['events']:
+                yield event
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
@@ -63,7 +75,9 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_THROWING_GAME)
     score = None
 
-    for idx, state in enumerate(_load_trace(TEST_TRACE, REPLAY_NESTING_KEYS)):
+    trace_path = SIMPLE_STACKING_TRACE.resolve().as_posix()
+
+    for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         score = game_handler.process(state)
         if score is not None:

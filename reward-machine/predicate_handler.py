@@ -30,6 +30,23 @@ ACTION_KEY = 'action'
 ORIGINAL_INDEX_KEY = 'originalIndex'
 OBJECT_ID_KEY = 'objectId'
 
+WALL_ID = 'FP302:StandardWallSize'
+WALL_NAME = 'FP326:StandardWallSize.021'
+WALL_INFO = {'isToggled': False, 
+             'bboxCenter': {'y': 0, 'x': 0, 'z': 0},
+             'isOpen': False,
+             'bboxExtents': {'x': 0, 'z': 0, 'y': 0},
+             'touchingObjects': [], 
+             'rotation': {'z': 0, 'x': 0, 'y': 0},
+             'angularVelocity': {'z': 0, 'x': 0, 'y': 0},
+             'position': {'y': 0, 'z': 0, 'x': 0},
+             'velocity': {'x': 0, 'y': 0, 'z': 0},
+             'objectType': 'wall', 
+             'name': WALL_NAME, 
+             'objectId': WALL_ID,
+             'isBroken': False}
+
+
 
 class PredicateHandler:
     # Which field in the state to use as the index
@@ -137,6 +154,8 @@ class PredicateHandler:
             
             # Evaluate the predicate
             evaluation = predicate_fn(state, relevant_mapping, self.state_cache)
+
+            print(f"Base level evaluation of {predicate['pred_name']} with arguments {relevant_mapping}: {evaluation}")
 
             return evaluation
 
@@ -268,7 +287,6 @@ def _object_location(object: ObjectState) -> np.ndarray:
 
 def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = OBJECT_ID_KEY) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
-
         agent_object = state[AGENT_STATE_KEY] if state[AGENT_STATE_CHANGED_KEY] else state_cache[AGENT_STATE_KEY]
 
         # if there are no objects in the predicate mapping, then we can just evaluate the predicate
@@ -287,6 +305,10 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
         # None of the objects in the mapping are updated in the current state, so return None
         if len(current_state_mapping_objects) == 0:
             return None
+
+        # HACK: add the wall to the state cache as a dummy object so that predicates using it as an argument will
+        #       actually run
+        state_cache[WALL_ID] = WALL_INFO
 
         # At least one object is, so populate the rest from the cache
         for mapping_value in mapping_values:
@@ -331,6 +353,7 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
 @mapping_objects_decorator
 def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
+    import ipdb; ipdb.set_trace()
     outer_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
     outer_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
     inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])

@@ -56,7 +56,7 @@ OBJECTS_BY_TYPE = {
                 'BridgeBlock|-02.92|+00.09|-02.52'
         ],
         "hexagonal_bin": ['GarbageCan|+00.75|-00.03|-02.74'],
-        "wall": ["left-wall-1", "right-wall-1", "front-wall-1", "back-wall-1"]
+        "wall": ['FP302:StandardWallSize']
 }
 
 # A list of all objects that can be referred to directly as variables inside of a game

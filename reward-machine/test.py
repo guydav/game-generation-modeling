@@ -6,7 +6,7 @@ from game_handler import GameHandler
 
 
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_wall_bounce_test.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -66,22 +66,46 @@ TEST_THROWING_GAME = """
                 )
             )
         )
+
     ))
 
     (:terminal (>= (count-nonoverlapping throwAttempt) 10))
 
     (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin:dodgeball)
+        (count-nonoverlapping throwBallToBin:golfball)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
     """
 
+TEST_THROW_BOUNCE_GAME = """
+    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+
+    (:constraints (and 
+
+        (preference throwToWallToBin
+            (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
+                (then 
+                    (once (agent_holds ?b))
+                    (hold-while 
+                        (and (not (agent_holds ?b)) (in_motion ?b))
+                        (touch ?b ?w)) 
+                    (once  (and (in ?h ?b) (not (in_motion ?b))))
+                )
+            )
+        )
+    ))
+
+    (:scoring maximize (+
+        (* (count-nonoverlapping throwToWallToBin) 10)
+    )))
+"""
+
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROWING_GAME)
+    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
     score = None
 
-    trace_path = SIMPLE_STACKING_TRACE.resolve().as_posix()
+    trace_path = TEST_TRACE.resolve().as_posix()
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

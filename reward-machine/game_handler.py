@@ -57,6 +57,8 @@ class GameHandler():
                 except Exception as exc:
                     exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
 
+
+            # TODO: forall can cover multiple preferences
             elif rule == "pref_forall":
                 # The outer "forall" works to track the times the inner preference is satisfied for each type
                 # in the outer variables (e.g. )
@@ -159,7 +161,7 @@ class GameHandler():
         return str(preference_name), object_types
 
 
-    def _filter_satisfactions(self, preference_name, object_types):
+    def _filter_satisfactions(self, preference_name: str, object_types: typing.Tuple[str]):
         '''
         Given the name of a preference and a list of object types, return the set of all satisfactions
         of the given preference that abide by the given variable mapping. In the case where object_types

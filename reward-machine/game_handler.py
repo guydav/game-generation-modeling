@@ -126,7 +126,7 @@ class GameHandler():
                 pass
 
         if self.terminal is not None:
-            terminate = self.evaluate_terminals(state) # TODO
+            terminate = self.evaluate_terminals(self.terminal) # TODO
         else:
             terminate = False
 
@@ -138,8 +138,51 @@ class GameHandler():
 
         return score
 
-    def evaluate_terminals(self, state: typing.Dict[str, typing.Any]):
-        raise NotImplementedError
+    def evaluate_terminals(self, terminal_expression: typing.Union[str, tatsu.ast.AST, None]) -> bool:
+        '''
+        Determine whether the terminal conditions of the game have been met
+        '''
+
+        rule = terminal_expression["parseinfo"].rule  # type: ignore
+
+        if rule == "terminal":
+            return self.evaluate_terminals(terminal_expression["terminal"])
+
+        elif rule == "terminal_not":
+            inner_value = self.evaluate_terminals(terminal_expression["not_args"])
+
+            return not inner_value
+
+        elif rule == "terminal_and":
+            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["and_args"]]
+
+            return all(inner_values)
+
+        elif rule == "terminal_or":
+            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["or_args"]]
+
+            return any(inner_values)
+
+        # Interestingly, in the grammar a terminal comparison can only over have 2 arguments (i.e. there can be no
+        # (= arg1 arg2 arg3)), so this makes extracting the expressions a bit more straightforward
+        elif rule == "terminal_comp":
+            comparison_operator = terminal_expression["op"]
+
+            expr_1 = self.score(terminal_expression["expr_1"]["expr"])
+            expr_2 = self.score(terminal_expression["expr_2"]["expr"])
+
+            if comparison_operator == "=":
+                return expr_1 == expr_2
+            elif comparison_operator == "<":
+                return expr_1 < expr_2
+            elif comparison_operator == "<=":
+                return expr_1 <= expr_2
+            elif comparison_operator == ">":
+                return expr_1 > expr_2
+            elif comparison_operator == ">=":
+                return expr_1 >= expr_2
+            else:
+                raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
 
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
         '''

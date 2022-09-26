@@ -29,6 +29,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Sequence[str]):
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
+# (:terminal (or (>= (count-nonoverlapping throwAttempt) 5) (not (= (count-nonoverlapping throwBallToBin) 2) )))
+# (:terminal (>= (count-nonoverlapping throwAttempt) 5))
 TEST_THROWING_GAME = """
     (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
 
@@ -53,8 +55,11 @@ TEST_THROWING_GAME = """
             )
         )
     ))
+
+    (:terminal (>= (count-nonoverlapping throwAttempt) 10))
+
     (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin:golfball)
+        (count-nonoverlapping throwBallToBin:dodgeball)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
     """

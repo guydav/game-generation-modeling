@@ -148,6 +148,8 @@ class PredicateHandler:
             inner_pred_value = self(predicate["not_args"], state, mapping)
             return None if inner_pred_value is None else not inner_pred_value
 
+        # TODO: technically, AND and OR can accept a single argument under the grammar, but that would break the
+        #       logic here, since it expects to be able to iterate through the 'and_args' / 'or_args'
         elif predicate_rule == "super_predicate_and":
             inner_values = [self(sub, state, mapping) for sub in predicate["and_args"]] # type: ignore
             # If there are any Nones, we cannot know about their conjunction, so return None

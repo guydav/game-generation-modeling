@@ -7,7 +7,7 @@ import typing
 
 from math import prod
 
-from config import SAMPLE_TRAJECTORY, OBJECTS_BY_TYPE
+from config import SAMPLE_TRAJECTORY, OBJECTS_BY_ROOM_AND_TYPE
 from preference_handler import PreferenceHandler
 from predicate_handler import PredicateHandler
 from utils import PreferenceDescriber, extract_variable_type_mapping
@@ -30,6 +30,9 @@ class GameHandler():
 
         self.game_ast = self.grammar_parser.parse(game)
         self._extract_game_info(self.game_ast)
+
+        if self.domain_name is None:
+            raise ValueError("Error: Failed to extract domain from game specification")
 
         self.predicate_handler = PredicateHandler(self.domain_name)
 
@@ -65,8 +68,8 @@ class GameHandler():
                 sub_preference = forall_pref["preferences"]
                 name = sub_preference["pref_name"]
 
-                pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name,
-                                                 additional_variable_mapping=variable_type_mapping)
+                pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
+                    additional_variable_mapping=variable_type_mapping)
                 self.preference_handlers[name] = pref_handler
                 self.preference_satisfactions[name] = []
                 print(f"Successfully constructed PreferenceHandler for '{name}'")
@@ -136,28 +139,31 @@ class GameHandler():
 
         return score
 
-    def evaluate_terminals(self, terminal_expression: typing.Union[str, tatsu.ast.AST, None]) -> bool:
+    def evaluate_terminals(self, terminal_expression: typing.Optional[tatsu.ast.AST]) -> bool:
         '''
         Determine whether the terminal conditions of the game have been met
         '''
+        if terminal_expression is None:
+            return False
+
 
         rule = terminal_expression["parseinfo"].rule  # type: ignore
 
         if rule == "terminal":
-            return self.evaluate_terminals(terminal_expression["terminal"])
+            return self.evaluate_terminals(terminal_expression["terminal"])  
 
         elif rule == "terminal_not":
-            inner_value = self.evaluate_terminals(terminal_expression["not_args"])
+            inner_value = self.evaluate_terminals(terminal_expression["not_args"])  
 
             return not inner_value
 
         elif rule == "terminal_and":
-            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["and_args"]]
+            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["and_args"]]  # type: ignore
 
             return all(inner_values)
 
         elif rule == "terminal_or":
-            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["or_args"]]
+            inner_values = [self.evaluate_terminals(sub) for sub in terminal_expression["or_args"]]   # type: ignore
 
             return any(inner_values)
 
@@ -166,8 +172,8 @@ class GameHandler():
         elif rule == "terminal_comp":
             comparison_operator = terminal_expression["op"]
 
-            expr_1 = self.score(terminal_expression["expr_1"]["expr"])
-            expr_2 = self.score(terminal_expression["expr_2"]["expr"])
+            expr_1 = self.score(terminal_expression["expr_1"]["expr"]) # type: ignore
+            expr_2 = self.score(terminal_expression["expr_2"]["expr"]) # type: ignore
 
             if comparison_operator == "=":
                 return expr_1 == expr_2
@@ -182,6 +188,9 @@ class GameHandler():
             else:
                 raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
 
+        else:
+            raise ValueError(f"Error: Unknown terminal rule '{rule}'")
+
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
         '''
         Helper function to extract the name of the preference being scored, as well as any of the object types that have been
@@ -191,10 +200,10 @@ class GameHandler():
         preference_name = name_and_types["pref_name"]
 
         if isinstance(name_and_types["object_types"], tatsu.ast.AST):
-            object_types = [name_and_types["object_types"]["type_name"]]
+            object_types = [name_and_types["object_types"]["type_name"]]  # type: ignore
 
         elif isinstance(name_and_types["object_types"], list):
-            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]
+            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]  # type: ignore
 
         else:
             object_types = None
@@ -202,7 +211,7 @@ class GameHandler():
         return str(preference_name), object_types
 
 
-    def _filter_satisfactions(self, preference_name: str, object_types: typing.Tuple[str]):
+    def _filter_satisfactions(self, preference_name: str, object_types: typing.Optional[typing.Sequence[str]]):
         '''
         Given the name of a preference and a list of object types, return the set of all satisfactions
         of the given preference that abide by the given variable mapping. In the case where object_types
@@ -226,7 +235,8 @@ class GameHandler():
             acceptable_sat = True
             for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
                 specififed_object = mapping[variable]
-                if specififed_object not in OBJECTS_BY_TYPE[self.domain_name][object_type]:
+                self.domain_name = typing.cast(str, self.domain_name)
+                if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
                     acceptable_sat = False
 
             if acceptable_sat:
@@ -291,20 +301,21 @@ class GameHandler():
             return - self.score(scoring_expression["expr"])
 
         elif rule == "scoring_comparison":
-            comparison_operator = scoring_expression["comp"]["op"]
+            comp_expr = typing.cast(tatsu.ast.AST, scoring_expression["comp"])
+            comparison_operator = comp_expr["op"]  
 
             # In this case, we know that the operator is = and that we have more than 2 comparison arguments,
             # so we just determine whether all arguments evaluate to the same value
             if comparison_operator is None:
-                expressions = scoring_expression["comp"]["expr"]
-                evaluations = [self.score(expr) for expr in expressions]
+                expressions = comp_expr["expr"]
+                evaluations = [self.score(expr) for expr in expressions]  # type: ignore
 
                 return float(evaluations.count(evaluations[0]) == len(evaluations))
 
             # Otherwise, there will be exactly two comparison arguments and we can compare them normally
             else:
-                expr_1 = scoring_expression["comp"]["expr_1"]
-                expr_2 = scoring_expression["comp"]["expr_2"]
+                expr_1 = comp_expr["expr_1"]
+                expr_2 = comp_expr["expr_2"]
 
                 if comparison_operator == "=":
                     return self.score(expr_1) == self.score(expr_2)

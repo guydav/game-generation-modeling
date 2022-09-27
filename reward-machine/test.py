@@ -4,7 +4,9 @@ import typing
 
 from game_handler import GameHandler
 
-
+THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_at_wall.json')
+WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
+SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
 TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
 REPLAY_NESTING_KEYS = (
@@ -99,11 +101,36 @@ TEST_THROW_BOUNCE_GAME = """
 """
 
 
+TEST_THROW_BALL_AT_WALL_GAME = """
+    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+
+    (:constraints (and 
+
+        (preference throwToWall
+            (exists (?w - wall ?b - ball) 
+                (then 
+                    (once (agent_holds ?b))
+                    (hold-while  
+                        (and (not (agent_holds ?b)) (in_motion ?b))
+                        (touch ?b ?w)
+                    ) 
+                    (once (not (in_motion ?b)))
+                )
+            )
+        )
+    ))
+
+    (:scoring maximize (+
+        (* (count-nonoverlapping throwToWall) 1)
+    )))
+"""
+
+
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROWING_GAME)
+    game_handler = GameHandler(TEST_THROW_BALL_AT_WALL_GAME)
     score = None
 
-    trace_path = TEST_TRACE.resolve().as_posix()
+    trace_path = THROWING_BALLS_AT_WALL_TRACE.resolve().as_posix()
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

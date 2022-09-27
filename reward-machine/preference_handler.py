@@ -42,7 +42,7 @@ class PredicateType(enum.Enum):
 
 class PreferenceHandler():
     def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
-                 additional_variable_mapping: typing.Dict[str, str] = {}):
+                 additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None):
         '''
         Construct a handler object for the provided preference, responsible for tracking when and how the
         the preference has been satisfied by the various objects in the state using its process() method
@@ -54,6 +54,9 @@ class PreferenceHandler():
         '''
         # Validity check
         assert isinstance(preference, tatsu.ast.AST) and preference["parseinfo"].rule == "preference"  # type: ignore
+
+        if additional_variable_mapping is None:
+            additional_variable_mapping = {}
 
         self.preference = preference
         self.predicate_handler = predicate_handler
@@ -390,114 +393,111 @@ class PreferenceHandler():
 
         return self.satisfied_this_step
 
+
+# if __name__ == "__main__":
+#     grammar_path= "../dsl/dsl.ebnf"
+#     grammar = open(grammar_path).read()
+#     grammar_parser = tatsu.compile(grammar)
+
+#     # test_game = """
+#     # (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+
+#     # (:constraints (and 
+#     #     (preference throwBallToBin
+#     #         (exists (?d - ball ?h - bin)
+#     #             (then
+#     #                 (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
+#     #                 (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
+#     #                 (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
+#     #             )
+#     #         )
+#     #     )
+#     #     (preference throwAttempt
+#     #         (exists (?d - ball)
+#     #             (then 
+#     #                 (once (agent_holds ?d))
+#     #                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+#     #                 (once (not (in_motion ?d)))
+#     #             )
+#     #         )
+#     #     )
+#     # ))
+#     # (:scoring maximize (+
+#     #     (count-nonoverlapping throwBallToBin)
+#     #     (- (/ (count-nonoverlapping throwAttempt) 5))
+#     # )))
+#     # """
+
+#     test_game = """
+#     (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+
+#     (:constraints (and 
+#         (preference throwBallToBin
+#             (exists (?d - ball ?h - bin)
+#                 (then
+#                     (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
+#                     (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
+#                     (once (and (not (in_motion ?d)) (in ?h ?d)))
+#                 )
+#             )
+#         )
+#         (preference throwAttempt
+#             (exists (?d - ball)
+#                 (then 
+#                     (once (agent_holds ?d))
+#                     (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+#                     (once (not (in_motion ?d)))
+#                 )
+#             )
+#         )
+#     ))
+#     (:scoring maximize (+
+#         (count-nonoverlapping throwBallToBin)
+#         (- (/ (count-nonoverlapping throwAttempt) 5))
+#     )))
+#     """
+
+#     # Extra predicates
+#     # (once (and (agent_holds ?d) (in_motion ?d)))
+#     # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
+#     # 
+#     # (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
+
+#     DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
+#                                                     "velocity": [0, 0, 0], "objectType": "ball", 
+#                                                     "color": "blue"},
+
+#                                "pink-dodgeball-1": {"name": "pink-dodgeball-1", "position": [0, 4, 0],
+#                                                     "velocity": [0, 0, 0], "objectType": "ball",
+#                                                     "color": "pink"},
+
+#                                "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
+#                                                     "velocity": [0, 0, 0], "objectType": "ball",
+#                                                     "color": "red"},
+
+#                                "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [15, 10, 0],
+#                                                     "velocity": [1.0, 0, 0], "objectType": "bin"},
+
+#                                "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
+#                                                     "velocity": [0, 0, 0], "objectType": "bin"},
+
+#                                "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
+#                                          "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
+#                               },
+
+#                    "game_start": True,
+#                    "game_over": False
+
+#                   }
+
+#     ast = grammar_parser.parse(test_game)
+
+#     preferences = ast[3][1]["preferences"]
     
-
-
-
-if __name__ == "__main__":
-    grammar_path= "../dsl/dsl.ebnf"
-    grammar = open(grammar_path).read()
-    grammar_parser = tatsu.compile(grammar)
-
-    # test_game = """
-    # (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
-
-    # (:constraints (and 
-    #     (preference throwBallToBin
-    #         (exists (?d - ball ?h - bin)
-    #             (then
-    #                 (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
-    #                 (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
-    #                 (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
-    #             )
-    #         )
-    #     )
-    #     (preference throwAttempt
-    #         (exists (?d - ball)
-    #             (then 
-    #                 (once (agent_holds ?d))
-    #                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-    #                 (once (not (in_motion ?d)))
-    #             )
-    #         )
-    #     )
-    # ))
-    # (:scoring maximize (+
-    #     (count-nonoverlapping throwBallToBin)
-    #     (- (/ (count-nonoverlapping throwAttempt) 5))
-    # )))
-    # """
-
-    test_game = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
-
-    (:constraints (and 
-        (preference throwBallToBin
-            (exists (?d - ball ?h - bin)
-                (then
-                    (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
-                    (once (and (not (in_motion ?d)) (in ?h ?d)))
-                )
-            )
-        )
-        (preference throwAttempt
-            (exists (?d - ball)
-                (then 
-                    (once (agent_holds ?d))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                    (once (not (in_motion ?d)))
-                )
-            )
-        )
-    ))
-    (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin)
-        (- (/ (count-nonoverlapping throwAttempt) 5))
-    )))
-    """
-
-    # Extra predicates
-    # (once (and (agent_holds ?d) (in_motion ?d)))
-    # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
-    # 
-    # (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
-
-    DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball", 
-                                                    "color": "blue"},
-
-                               "pink-dodgeball-1": {"name": "pink-dodgeball-1", "position": [0, 4, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball",
-                                                    "color": "pink"},
-
-                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball",
-                                                    "color": "red"},
-
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [15, 10, 0],
-                                                    "velocity": [1.0, 0, 0], "objectType": "bin"},
-
-                               "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "bin"},
-
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
-                              },
-
-                   "game_start": True,
-                   "game_over": False
-
-                  }
-
-    ast = grammar_parser.parse(test_game)
-
-    preferences = ast[3][1]["preferences"]
+#     pref1 = preferences[1]["definition"]
+#     predicate_handler = PredicateHandler()
+#     handler1 = PreferenceHandler(pref1, predicate_handler)
     
-    pref1 = preferences[1]["definition"]
-    predicate_handler = PredicateHandler()
-    handler1 = PreferenceHandler(pref1, predicate_handler)
-    
-    for idx, state in enumerate(SAMPLE_TRAJECTORY):
-        print(f"\n\n================================PROCESSING STATE {idx+1}================================")
-        handler1.process(state)
+#     for idx, state in enumerate(SAMPLE_TRAJECTORY):
+#         print(f"\n\n================================PROCESSING STATE {idx+1}================================")
+#         handler1.process(state)

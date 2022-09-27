@@ -1,5 +1,6 @@
 import pathlib
 import sys
+
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 
 import numpy as np
@@ -10,6 +11,7 @@ import typing
 import ast_printer
 
 from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
+from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, PseudoObject
 
 AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 ObjectState = typing.NewType('ObjectState', typing.Dict[str, typing.Any])
@@ -25,23 +27,7 @@ ACTION_KEY = 'action'
 
 ORIGINAL_INDEX_KEY = 'originalIndex'
 OBJECT_ID_KEY = 'objectId'
-
-WALL_ID = 'FP302:StandardWallSize'
-WALL_NAME = 'FP326:StandardWallSize.021'
-WALL_INFO = {'isToggled': False, 
-             'bboxCenter': {'y': 0, 'x': 0, 'z': 0},
-             'isOpen': False,
-             'bboxExtents': {'x': 0, 'z': 0, 'y': 0},
-             'touchingObjects': [], 
-             'rotation': {'z': 0, 'x': 0, 'y': 0},
-             'angularVelocity': {'z': 0, 'x': 0, 'y': 0},
-             'position': {'y': 0, 'z': 0, 'x': 0},
-             'velocity': {'x': 0, 'y': 0, 'z': 0},
-             'objectType': 'wall', 
-             'name': WALL_NAME, 
-             'objectId': WALL_ID,
-             'isBroken': False}
-
+OBJECT_NAME_KEY = 'name'
 
 
 class PredicateHandler:
@@ -55,7 +41,7 @@ class PredicateHandler:
     # The last state the evaluation cache was updated for a given key.
     evaluation_cache_last_updated: typing.Dict[str, int]
     # A cache of the latest observed value for each object
-    state_cache: typing.Dict[str, typing.Union[ObjectState, AgentState]]
+    state_cache: typing.Dict[str, typing.Union[ObjectState, AgentState, PseudoObject]]
     # The last state the state cache was updated for
     state_cache_last_updated: int
 
@@ -63,11 +49,7 @@ class PredicateHandler:
         self.domain = domain
         self.index_key = index_key
         self.object_id_key = object_id_key
-
-        self.evaluation_cache = {}
-        self.evaluation_cache_last_updated = {}
-        self.state_cache = {}
-        self.state_cache_last_updated = -1
+        self._new_game()
     
     def _new_game(self):
         """
@@ -76,6 +58,7 @@ class PredicateHandler:
         self.evaluation_cache = {}
         self.evaluation_cache_last_updated = {}
         self.state_cache = {}
+        self.state_cache.update(UNITY_PSEUDO_OBJECTS)
         self.state_cache_last_updated = -1
 
     def _cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
@@ -273,7 +256,7 @@ def _vec3_dict_to_array(vec3: typing.Dict[str, float]):
     return np.array([vec3['x'], vec3['y'], vec3['z']])
     
 
-def _object_location(object: ObjectState) -> np.ndarray:
+def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndarray:
     key = 'bboxCenter' if 'bboxCenter' in object else 'position'
     return _vec3_dict_to_array(object[key])
 
@@ -298,10 +281,6 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
         # None of the objects in the mapping are updated in the current state, so return None
         if len(current_state_mapping_objects) == 0:
             return None
-
-        # HACK: add the wall to the state cache as a dummy object so that predicates using it as an argument will
-        #       actually run
-        state_cache[WALL_ID] = WALL_INFO
 
         # At least one object is, so populate the rest from the cache
         for mapping_value in mapping_values:
@@ -340,17 +319,22 @@ def _agent_crouches(agent: AgentState, objects: typing.Sequence[ObjectState]):
 @mapping_objects_decorator
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
-    return agent["heldObjectName"] == objects[0]["name"]
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return agent["heldObject"] == objects[0][OBJECT_ID_KEY]
 
 
 @mapping_objects_decorator
 def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
+
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
+        return False
+
     outer_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
     outer_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
     inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
-    inner_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
-
+    # inner_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
     # start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents)
     # end_inside = np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
     start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center)
@@ -361,23 +345,97 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
 @mapping_objects_decorator
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
     return not (np.allclose(_vec3_dict_to_array(objects[0]["velocity"]), 0) and np.allclose(_vec3_dict_to_array(objects[0]["angularVelocity"]), 0))
 
 
+TOUCH_DISTANCE_THRESHOLD = 0.15
+
+
 @mapping_objects_decorator
-def _pred_touch(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
-    return objects[1]['name'] in objects[0]['touchingObjects'] or objects[0]['name'] in objects[1]['touchingObjects']
+
+    first_pseudo = isinstance(objects[0], PseudoObject)
+    second_pseudo = isinstance(objects[1], PseudoObject)
+
+    # TODO: the logic here to decide which wall to attribute the collision here is incomoplete; right now it assigns
+    # it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle and traveled sufficiently
+    # far to be nearest another wall. This is a (literal) corner case, but one we probably want to eventually resolve
+    # better, for example by simulating the ball back in time using the negative of its velcoity and finding a wall
+    # it was most recently very close to?
+
+    if first_pseudo and second_pseudo:
+        return False
+    elif first_pseudo:
+        obj = objects[1]
+        pseudo_obj = objects[0]
+
+        return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
+            pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
+    elif second_pseudo:
+        obj = objects[0]
+        pseudo_obj = objects[1]
+
+        return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
+            pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
+    else:
+        return objects[1][OBJECT_ID_KEY] in objects[0]['touchingObjects'] or objects[0][OBJECT_ID_KEY] in objects[1]['touchingObjects']
 
 
 # ====================================== FUNCTION DEFINITIONS =======================================
 
 
+def _find_nearest_pseudo_object(object: ObjectState, pseudo_objects: typing.Sequence[PseudoObject]):
+    """
+    Finds the pseudo object in the sequence that is closest to the object.
+    """
+    pseudo_objects = list(pseudo_objects)
+    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in pseudo_objects]
+    return pseudo_objects[np.argmin(distances)]
+
+
+def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoObject):
+    if np.allclose(pseudo_object.rotation['y'], 0):
+        return 2
+
+    if np.allclose(pseudo_object.rotation['y'], 90):
+        return 0
+
+    raise NotImplemented(f'Cannot compute distance between object and pseudo object with rotation {pseudo_object.rotation}')
+
+
+def _get_pseudo_object_relevant_distance_dimension(pseudo_object: PseudoObject):
+    return 'xyz'[_get_pseudo_object_relevant_distance_dimension_index(pseudo_object)]
+
+
+def _distance_object_pseudo_object(object: ObjectState, pseudo_object: PseudoObject):
+    distance_dimension = _get_pseudo_object_relevant_distance_dimension_index(pseudo_object)
+    return np.linalg.norm(_object_location(object)[distance_dimension] - _object_location(pseudo_object)[distance_dimension])
+        
+
 @mapping_objects_decorator
-def _func_distance(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
-    # TODO: do we want to use the position? Or the bounding box?
+
+    first_pseudo = isinstance(objects[0], PseudoObject)
+    second_pseudo = isinstance(objects[1], PseudoObject)
+
+    if first_pseudo and second_pseudo:
+        # handled identically to the case where neither is a pseudo object
+        pass
+    elif first_pseudo:
+        return _distance_object_pseudo_object(objects[1], objects[0])  # type: ignore
+    elif second_pseudo:
+        return _distance_object_pseudo_object(objects[0], objects[1])  # type: ignore
+    
+    
     return np.linalg.norm(_object_location(objects[0]) - _object_location(objects[1]))
+
+
+    # TODO: do we want to use the position? Or the bounding box?
+    
 
 
 # ================================= EXTRACTING LIBRARIES FROM LOCALS() ==================================

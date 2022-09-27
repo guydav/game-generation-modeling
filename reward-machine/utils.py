@@ -1,15 +1,16 @@
 import inflect
+import itertools
 import tatsu
 import tatsu.ast
 import typing
 
 from collections import OrderedDict
-
+from config import OBJECTS_BY_TYPE
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]):
     '''
-    Given a list of variables, extract the mapping from variable names to variable types. Variable types are
-    stored in lists, even in cases where there is only one possible for the variable in order to handle cases
+    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types 
+    are returned in lists, even in cases where there is only one possible for the variable in order to handle cases
     where multiple types are linked together with an (either) clause
 
     '''
@@ -80,6 +81,19 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
     else:
         return []
+
+def get_object_assignments(domain: str, variable_types):
+    '''
+    Given a room type / domain (few, medium, or many) and a list of lists of variable types,
+    returns a list of every possible assignment of objects in the room to those types. For 
+    instance, if variable_types is [(beachball, dodgeball), (bin)], then this will return 
+    every pair consisting of one beachball or dodgeball and one bin
+    '''
+
+    grouped_objects = [sum([OBJECTS_BY_TYPE[domain][var_type] for var_type in sub_types], []) for sub_types in variable_types]
+    assignments = list(itertools.product(*grouped_objects))
+
+    return assignments
 
 
 def describe_preference(preference):

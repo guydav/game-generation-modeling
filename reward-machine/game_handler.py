@@ -21,9 +21,6 @@ class GameHandler():
         grammar = open(grammar_path).read()
         self.grammar_parser = tatsu.compile(grammar)
 
-        self.game_ast = self.grammar_parser.parse(game)
-        self.predicate_handler = PredicateHandler()
-
         self.game_name = None
         self.domain_name = None
         self.setup = None
@@ -31,7 +28,10 @@ class GameHandler():
         self.terminal = None
         self.scoring = None
 
+        self.game_ast = self.grammar_parser.parse(game)
         self._extract_game_info(self.game_ast)
+
+        self.predicate_handler = PredicateHandler(self.domain_name)
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
         # evaluate that preference
@@ -48,14 +48,10 @@ class GameHandler():
             if rule == "preference":
                 name = preference["definition"]["pref_name"]
                 
-                try:
-                    pref_handler = PreferenceHandler(preference["definition"], self.predicate_handler)
-                    self.preference_handlers[name] = pref_handler
-                    self.preference_satisfactions[name] = []
-                    print(f"Successfully constructed PreferenceHandler for '{name}'")
-
-                except Exception as exc:
-                    exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
+                pref_handler = PreferenceHandler(preference["definition"], self.predicate_handler, self.domain_name)
+                self.preference_handlers[name] = pref_handler
+                self.preference_satisfactions[name] = []
+                print(f"Successfully constructed PreferenceHandler for '{name}'")
 
 
             # TODO: forall can cover multiple preferences
@@ -69,15 +65,11 @@ class GameHandler():
                 sub_preference = forall_pref["preferences"]
                 name = sub_preference["pref_name"]
 
-                try:
-                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, additional_variable_mapping=variable_type_mapping)
-                    self.preference_handlers[name] = pref_handler
-                    self.preference_satisfactions[name] = []
-                    print(f"Successfully constructed PreferenceHandler for '{name}'")
-
-                except Exception as exc:
-                    exit(f"Unable to construct PreferenceHandler for '{name}' due to following exception: {repr(exc)}")
-
+                pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name,
+                                                 additional_variable_mapping=variable_type_mapping)
+                self.preference_handlers[name] = pref_handler
+                self.preference_satisfactions[name] = []
+                print(f"Successfully constructed PreferenceHandler for '{name}'")
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
         '''
@@ -94,7 +86,13 @@ class GameHandler():
                 self.game_name = ast["game_name"]
 
             elif rule == "domain_def":
-                self.domain_name = ast["domain_name"]
+
+                if ast["domain_name"] == "few-objects-room-v1":
+                    self.domain_name = "few"
+                elif ast["domain_name"] == "medium-objects-room-v1":
+                    self.domain_name = "medium"
+                elif ast["domain_name"] == "many-objects-room-v1":
+                    self.domain_name = "many"
 
             elif rule == "setup":
                 self.setup = ast["setup"]
@@ -228,7 +226,7 @@ class GameHandler():
             acceptable_sat = True
             for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
                 specififed_object = mapping[variable]
-                if specififed_object not in OBJECTS_BY_TYPE[object_type]:
+                if specififed_object not in OBJECTS_BY_TYPE[self.domain_name][object_type]:
                     acceptable_sat = False
 
             if acceptable_sat:

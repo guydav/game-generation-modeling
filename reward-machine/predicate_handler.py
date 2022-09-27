@@ -2,7 +2,6 @@ import pathlib
 import sys
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 
-import itertools
 import numpy as np
 import tatsu
 import tatsu.ast
@@ -10,10 +9,7 @@ import typing
 
 import ast_printer
 
-from utils import extract_variable_type_mapping, extract_variables
-
-from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, SAMPLE_TRAJECTORY
-
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
 
 AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 ObjectState = typing.NewType('ObjectState', typing.Dict[str, typing.Any])
@@ -63,7 +59,8 @@ class PredicateHandler:
     # The last state the state cache was updated for
     state_cache_last_updated: int
 
-    def __init__(self, index_key: str = ORIGINAL_INDEX_KEY, object_id_key: str = OBJECT_ID_KEY):
+    def __init__(self, domain: str, index_key: str = ORIGINAL_INDEX_KEY, object_id_key: str = OBJECT_ID_KEY):
+        self.domain = domain
         self.index_key = index_key
         self.object_id_key = object_id_key
 
@@ -155,8 +152,6 @@ class PredicateHandler:
             # Evaluate the predicate
             evaluation = predicate_fn(state, relevant_mapping, self.state_cache)
 
-            print(f"Base level evaluation of {predicate['pred_name']} with arguments {relevant_mapping}: {evaluation}")
-
             return evaluation
 
         elif predicate_rule == "super_predicate":
@@ -185,8 +180,7 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                      for var_types in variable_type_mapping.values()]))
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self(predicate["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
@@ -196,8 +190,7 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                      for var_types in variable_type_mapping.values()]))
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self(predicate["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
@@ -353,7 +346,6 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
 @mapping_objects_decorator
 def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
-    import ipdb; ipdb.set_trace()
     outer_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
     outer_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
     inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])

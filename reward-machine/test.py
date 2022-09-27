@@ -6,7 +6,7 @@ from game_handler import GameHandler
 
 
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_wall_bounce_test.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -44,7 +44,7 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
 # (:terminal (or (>= (count-nonoverlapping throwAttempt) 5) (not (= (count-nonoverlapping throwBallToBin) 2) )))
 # (:terminal (>= (count-nonoverlapping throwAttempt) 5))
 TEST_THROWING_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
     (:constraints (and 
         (forall (?b - (either dodgeball golfball)) 
@@ -69,16 +69,14 @@ TEST_THROWING_GAME = """
 
     ))
 
-    (:terminal (>= (count-nonoverlapping throwAttempt) 10))
-
     (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin:golfball)
+        (count-nonoverlapping throwBallToBin)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
     """
 
 TEST_THROW_BOUNCE_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
 
     (:constraints (and 
 
@@ -102,7 +100,7 @@ TEST_THROW_BOUNCE_GAME = """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
+    game_handler = GameHandler(TEST_THROWING_GAME)
     score = None
 
     trace_path = TEST_TRACE.resolve().as_posix()

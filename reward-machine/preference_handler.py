@@ -11,10 +11,10 @@ import copy
 
 import numpy as np
 
-from utils import extract_variable_type_mapping, extract_variables
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
 from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
-from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, SAMPLE_TRAJECTORY
+from config import NAMED_OBJECTS, SAMPLE_TRAJECTORY
 
 
 class PartialPreferenceSatisfcation(typing.NamedTuple):
@@ -41,7 +41,8 @@ class PredicateType(enum.Enum):
 
 
 class PreferenceHandler():
-    def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, additional_variable_mapping: typing.Dict[str, str] = {}):
+    def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
+                 additional_variable_mapping: typing.Dict[str, str] = {}):
         '''
         Construct a handler object for the provided preference, responsible for tracking when and how the
         the preference has been satisfied by the various objects in the state using its process() method
@@ -56,6 +57,7 @@ class PreferenceHandler():
 
         self.preference = preference
         self.predicate_handler = predicate_handler
+        self.domain = domain
 
         self.preference_name = preference["pref_name"]
         body = preference["pref_body"]["body"]  # type: ignore
@@ -93,8 +95,7 @@ class PreferenceHandler():
 
         initial_variables = extract_variables(self.temporal_predicates[0])
         initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
-        object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                  for var_types in initial_var_types]))
+        object_assignments = get_object_assignments(self.domain, initial_var_types)
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
@@ -162,8 +163,7 @@ class PreferenceHandler():
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
             new_var_types = [self.variable_type_mapping[var] for var in new_variables]
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                  for var_types in new_var_types]))
+            object_assignments = get_object_assignments(self.domain, new_var_types)
 
             for object_assignment in object_assignments:
                 new_mapping = dict(zip(new_variables, object_assignment))

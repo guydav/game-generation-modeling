@@ -8,7 +8,7 @@ THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_ba
 WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
 SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_wall_bounce_test.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -78,7 +78,7 @@ TEST_THROWING_GAME = """
     """
 
 TEST_THROW_BOUNCE_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
     (:constraints (and 
 
@@ -86,9 +86,7 @@ TEST_THROW_BOUNCE_GAME = """
             (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
                 (then 
                     (once (agent_holds ?b))
-                    (hold-while 
-                        (and (not (agent_holds ?b)) (in_motion ?b))
-                        (touch ?b ?w)) 
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                     (once  (and (in ?h ?b) (not (in_motion ?b))))
                 )
             )

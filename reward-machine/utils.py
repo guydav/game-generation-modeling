@@ -83,11 +83,11 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
     else:
         return []
 
-def get_object_assignments(domain: str, variable_types):
+def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]]):
     '''
     Given a room type / domain (few, medium, or many) and a list of lists of variable types,
     returns a list of every possible assignment of objects in the room to those types. For 
-    instance, if variable_types is [(beachball, dodgeball), (bin)], then this will return 
+    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
     every pair consisting of one beachball or dodgeball and one bin
     '''
 

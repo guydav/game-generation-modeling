@@ -16,7 +16,6 @@ from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
 from config import NAMED_OBJECTS
 
-
 class PartialPreferenceSatisfcation(typing.NamedTuple):
     mapping: typing.Dict[str, str]
     current_predicate: typing.Optional[tatsu.ast.AST]

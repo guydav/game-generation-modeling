@@ -360,11 +360,11 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     first_pseudo = isinstance(objects[0], PseudoObject)
     second_pseudo = isinstance(objects[1], PseudoObject)
 
-    # TODO: the logic here to decide which wall to attribute the collision here is incomoplete; right now it assigns
-    # it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle and traveled sufficiently
-    # far to be nearest another wall. This is a (literal) corner case, but one we probably want to eventually resolve
-    # better, for example by simulating the ball back in time using the negative of its velcoity and finding a wall
-    # it was most recently very close to?
+    # TODO (GD 2022-09-27): the logic here to decide which wall to attribute the collision here is incomoplete; 
+    # right now it assigns it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle 
+    # and traveled sufficiently far to be nearest another wall. This is a (literal) corner case, but one we probably 
+    # want to eventually resolve better, for example by simulating the ball back in time using the negative of its 
+    # velcoity and finding a wall it was most recently very close to?
 
     if first_pseudo and second_pseudo:
         return False

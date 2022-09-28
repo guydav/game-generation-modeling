@@ -89,15 +89,9 @@ class GameHandler():
                 self.game_name = ast["game_name"]
 
             elif rule == "domain_def":
-
-                if ast["domain_name"] == "few-objects-room-v1":
-                    self.domain_name = "few"
-                elif ast["domain_name"] == "medium-objects-room-v1":
-                    self.domain_name = "medium"
-                elif ast["domain_name"] == "many-objects-room-v1":
-                    self.domain_name = "many"
-                else:
-                    raise ValueError("Game domain must be one of 'few-objects-room-v1', 'medium-objects-room-v1', or 'many-objects-room-v1'")
+                self.domain_name = ast["domain_name"].split("-")[0]  # type: ignore
+                if self.domain_name not in OBJECTS_BY_ROOM_AND_TYPE:
+                    raise ValueError(f"Error: Domain '{self.domain_name}' not supported (not found in the keys of OBJECTS_BY_ROOM_AND_TYPE: {list(OBJECTS_BY_ROOM_AND_TYPE.keys())}")
 
             elif rule == "setup":
                 self.setup = ast["setup"]
@@ -340,7 +334,6 @@ class GameHandler():
         # (b) the temporal states involved
         elif rule == "count_nonoverlapping":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
-
             satisfactions = self._filter_satisfactions(preference_name, object_types)
 
             # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and

@@ -1,22 +1,24 @@
 import inflect
+import itertools
 import tatsu
 import tatsu.ast
 import typing
 
+from collections import OrderedDict
+from config import OBJECTS_BY_ROOM_AND_TYPE
 
-def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]):
+
+def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
     '''
-    Given a list of variables, extract the mapping from variable names to variable types. Variable types are
-    stored in lists, even in cases where there is only one possible for the variable in order to handle cases
+    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types 
+    are returned in lists, even in cases where there is only one possible for the variable in order to handle cases
     where multiple types are linked together with an (either) clause
 
-    TODO: this code is copied from PreferenceHandler -- need to figure out how best to distribute access to
-    the function. Maybe a utils file?
     '''
     if isinstance(variable_list, tatsu.ast.AST):
         variable_list = [variable_list]
 
-    variables = {}
+    variables = OrderedDict({})
     for var_info in variable_list:
         var_type = typing.cast(tatsu.ast.AST, var_info["var_type"])
 
@@ -26,60 +28,73 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
         else:
             variables[var_info["var_names"]] = var_type["type"]
 
-    return {var: types if isinstance(types, list) else [types] for var, types in variables.items()}
+    return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
 
 
 def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
-        '''
-        Recursively extract every variable referenced in the predicate (including inside functions 
-        used within the predicate)
-        '''
-        if predicate is None:
-            return []
+    '''
+    Recursively extract every variable referenced in the predicate (including inside functions 
+    used within the predicate)
+    '''
+    if predicate is None:
+        return []
 
-        if isinstance(predicate, list) or isinstance(predicate, tuple):
-            pred_vars = []
-            for sub_predicate in predicate:
-                pred_vars += extract_variables(sub_predicate)
+    if isinstance(predicate, list) or isinstance(predicate, tuple):
+        pred_vars = []
+        for sub_predicate in predicate:
+            pred_vars += extract_variables(sub_predicate)
 
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars:
+                unique_vars.append(var)
 
-            return unique_vars
-    
-        elif isinstance(predicate, tatsu.ast.AST):
-            pred_vars = []
-            for key in predicate:
-                if key == "term":
+        return unique_vars
 
-                    # Different structure for predicate args vs. function args
-                    if isinstance(predicate["term"], tatsu.ast.AST):
-                        pred_vars += [predicate["term"]["arg"]]  # type: ignore 
-                    else:
-                        pred_vars += [predicate["term"]]
+    elif isinstance(predicate, tatsu.ast.AST):
+        pred_vars = []
+        for key in predicate:
+            if key == "term":
 
-                # We don't want to capture any variables within an (exists) or (forall) that's inside 
-                # the preference, since those are not globally required -- see evaluate_predicate()
-                elif key == "exists_args":
-                    continue
+                # Different structure for predicate args vs. function args
+                if isinstance(predicate["term"], tatsu.ast.AST):
+                    pred_vars += [predicate["term"]["arg"]]  # type: ignore 
+                else:
+                    pred_vars += [predicate["term"]]
 
-                elif key == "forall_args":
-                    continue
+            # We don't want to capture any variables within an (exists) or (forall) that's inside 
+            # the preference, since those are not globally required -- see evaluate_predicate()
+            elif key == "exists_args":
+                continue
 
-                elif key != "parseinfo":
-                    pred_vars += extract_variables(predicate[key])
+            elif key == "forall_args":
+                continue
 
-            unique_vars = []
-            for var in pred_vars:
-                if var not in unique_vars:
-                    unique_vars.append(var)
+            elif key != "parseinfo":
+                pred_vars += extract_variables(predicate[key])
 
-            return unique_vars
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars:
+                unique_vars.append(var)
 
-        else:
-            return []
+        return unique_vars
+
+    else:
+        return []
+
+def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]]):
+    '''
+    Given a room type / domain (few, medium, or many) and a list of lists of variable types,
+    returns a list of every possible assignment of objects in the room to those types. For 
+    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
+    every pair consisting of one beachball or dodgeball and one bin
+    '''
+
+    grouped_objects = [sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] for var_type in sub_types], []) for sub_types in variable_types]
+    assignments = list(itertools.product(*grouped_objects))
+
+    return assignments
 
 
 def describe_preference(preference):

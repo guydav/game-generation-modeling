@@ -11,11 +11,10 @@ import copy
 
 import numpy as np
 
-from utils import extract_variable_type_mapping, extract_variables
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
 from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
-from config import OBJECTS_BY_TYPE, NAMED_OBJECTS, SAMPLE_TRAJECTORY
-
+from config import NAMED_OBJECTS
 
 class PartialPreferenceSatisfcation(typing.NamedTuple):
     mapping: typing.Dict[str, str]
@@ -41,26 +40,36 @@ class PredicateType(enum.Enum):
 
 
 class PreferenceHandler():
-    def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler):
+    def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
+                 additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None):
+        '''
+        Construct a handler object for the provided preference, responsible for tracking when and how the
+        the preference has been satisfied by the various objects in the state using its process() method
+
+        preference: the preference to monitor (tatsu.ast.AST)
+        predicate_handler: object passed from the GameHandler which actually evaluates (and caches) the predicates
+        additional_variable_mapping: variable to type mapping beyond what is specified inside the preference's own
+            quantification. This is used to handle external an "forall", which quantifies additional variables 
+        '''
         # Validity check
         assert isinstance(preference, tatsu.ast.AST) and preference["parseinfo"].rule == "preference"  # type: ignore
 
+        if additional_variable_mapping is None:
+            additional_variable_mapping = {}
+
         self.preference = preference
         self.predicate_handler = predicate_handler
+        self.domain = domain
 
         self.preference_name = preference["pref_name"]
         body = preference["pref_body"]["body"]  # type: ignore
 
-        # BIG TODO: currently we are only handling (exists) quantifications at the top level, but we need to
-        # be able to do (forall) as well.
-        #
-        # I think the way to do this is to have each PreferenceHandler() optionally expect an "initial_mapping"
-        # argument. In the case of a (forall ?d - dodgeball) around a preference, we would construct a different
-        # PreferenceHandler() object for each dodgeball, and pass each of them a variant of {"?d": "dodgeball-1"}
-        # This partial mapping gets added to all other partial mappings monitored by the PreferenceHandler
-
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+
+        # Add additional variable mapping, and store it as well (it's needed for scoring)
+        self.additional_variable_mapping = additional_variable_mapping
+        self.variable_type_mapping.update(self.additional_variable_mapping)
 
         # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
         # can just be referred to explicitly within predicates without quantification beforehand
@@ -88,8 +97,7 @@ class PreferenceHandler():
 
         initial_variables = extract_variables(self.temporal_predicates[0])
         initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
-        object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                  for var_types in initial_var_types]))
+        object_assignments = get_object_assignments(self.domain, initial_var_types)
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
@@ -157,8 +165,7 @@ class PreferenceHandler():
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
             new_var_types = [self.variable_type_mapping[var] for var in new_variables]
-            object_assignments = list(itertools.product(*[sum([OBJECTS_BY_TYPE[var_type] for var_type in var_types], []) 
-                                  for var_types in new_var_types]))
+            object_assignments = get_object_assignments(self.domain, new_var_types)
 
             for object_assignment in object_assignments:
                 new_mapping = dict(zip(new_variables, object_assignment))
@@ -384,115 +391,3 @@ class PreferenceHandler():
         self.cur_step += 1
 
         return self.satisfied_this_step
-
-    
-
-
-
-if __name__ == "__main__":
-    grammar_path= "../dsl/dsl.ebnf"
-    grammar = open(grammar_path).read()
-    grammar_parser = tatsu.compile(grammar)
-
-    # test_game = """
-    # (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
-
-    # (:constraints (and 
-    #     (preference throwBallToBin
-    #         (exists (?d - ball ?h - bin)
-    #             (then
-    #                 (once (or (agent_holds ?d) (and (in_motion ?h) (< (distance agent ?d) 5)) ))
-    #                 (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (in_motion ?h) (agent_crouches))
-    #                 (once-measure (and (not (in_motion ?d)) (in ?h ?d)) (color ?h))
-    #             )
-    #         )
-    #     )
-    #     (preference throwAttempt
-    #         (exists (?d - ball)
-    #             (then 
-    #                 (once (agent_holds ?d))
-    #                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-    #                 (once (not (in_motion ?d)))
-    #             )
-    #         )
-    #     )
-    # ))
-    # (:scoring maximize (+
-    #     (count-nonoverlapping throwBallToBin)
-    #     (- (/ (count-nonoverlapping throwAttempt) 5))
-    # )))
-    # """
-
-    test_game = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
-
-    (:constraints (and 
-        (preference throwBallToBin
-            (exists (?d - ball ?h - bin)
-                (then
-                    (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-                    (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
-                    (once (and (not (in_motion ?d)) (in ?h ?d)))
-                )
-            )
-        )
-        (preference throwAttempt
-            (exists (?d - ball)
-                (then 
-                    (once (agent_holds ?d))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                    (once (not (in_motion ?d)))
-                )
-            )
-        )
-    ))
-    (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin)
-        (- (/ (count-nonoverlapping throwAttempt) 5))
-    )))
-    """
-
-    # Extra predicates
-    # (once (and (agent_holds ?d) (in_motion ?d)))
-    # (once (or (in ?d ?h) (and (in_motion ?d) (not (agent_holds ?d))) (agent_crouches)))
-    # 
-    # (hold (and (not (agent_holds ?d)) (in_motion ?d) (not (forall (?w - wall ?x - bin) (touch ?w ?x)))))
-
-    DUMMY_STATE = {"objects": {"blue-dodgeball-1": {"name": "blue-dodgeball-1", "position": [4, 0, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball", 
-                                                    "color": "blue"},
-
-                               "pink-dodgeball-1": {"name": "pink-dodgeball-1", "position": [0, 4, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball",
-                                                    "color": "pink"},
-
-                               "red-dodgeball-1": {"name": "red-dodgeball-1", "position": [4, 4, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "ball",
-                                                    "color": "red"},
-
-                               "hexagonal-bin-1": {"name": "hexagonal-bin-1", "position": [15, 10, 0],
-                                                    "velocity": [1.0, 0, 0], "objectType": "bin"},
-
-                               "hexagonal-bin-2": {"name": "hexagonal-bin-2", "position": [10, 15, 0],
-                                                    "velocity": [0, 0, 0], "objectType": "bin"},
-
-                               "agent": {"name": "agent", "position": [0, 0, 0], "velocity": [0, 0, 0],
-                                         "is_crouching": False, "holding": "red-dodgeball-1", "objectType": "agent"},
-                              },
-
-                   "game_start": True,
-                   "game_over": False
-
-                  }
-
-    ast = grammar_parser.parse(test_game)
-
-    preferences = ast[3][1]["preferences"]
-    
-    pref1 = preferences[1]["definition"]
-    predicate_handler = PredicateHandler()
-    handler1 = PreferenceHandler(pref1, predicate_handler)
-    
-    for idx, state in enumerate(SAMPLE_TRAJECTORY):
-        print(f"\n\n================================PROCESSING STATE {idx+1}================================")
-        handler1.process(state)

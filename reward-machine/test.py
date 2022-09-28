@@ -4,9 +4,11 @@ import typing
 
 from game_handler import GameHandler
 
-
+THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_at_wall.json')
+WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
+SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -41,19 +43,22 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
+# (:terminal (or (>= (count-nonoverlapping throwAttempt) 5) (not (= (count-nonoverlapping throwBallToBin) 2) )))
+# (:terminal (>= (count-nonoverlapping throwAttempt) 5))
 TEST_THROWING_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain few-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
     (:constraints (and 
-        (preference throwBallToBin
-            (exists (?d - ball ?h - hexagonal_bin)
+        (forall (?b - (either dodgeball golfball)) 
+            (preference throwBallToBin (exists (?h - hexagonal_bin)
                 (then
-                    (once (agent_holds ?d))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                    (once (and (not (in_motion ?d)) (in ?h ?d)))
+                    (once (agent_holds ?b))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
                 )
-            )
+            ))
         )
+
         (preference throwAttempt
             (exists (?d - ball)
                 (then 
@@ -63,19 +68,67 @@ TEST_THROWING_GAME = """
                 )
             )
         )
+
     ))
+
     (:scoring maximize (+
         (count-nonoverlapping throwBallToBin)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
     """
 
+TEST_THROW_BOUNCE_GAME = """
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
+
+    (:constraints (and 
+
+        (preference throwToWallToBin
+            (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
+                (then 
+                    (once (agent_holds ?b))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                    (once  (and (in ?h ?b) (not (in_motion ?b))))
+                )
+            )
+        )
+    ))
+
+    (:scoring maximize (+
+        (* (count-nonoverlapping throwToWallToBin) 10)
+    )))
+"""
+
+
+TEST_THROW_BALL_AT_WALL_GAME = """
+    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+
+    (:constraints (and 
+
+        (preference throwToWall
+            (exists (?w - wall ?b - ball) 
+                (then 
+                    (once (agent_holds ?b))
+                    (hold-while  
+                        (and (not (agent_holds ?b)) (in_motion ?b))
+                        (touch ?b ?w)
+                    ) 
+                    (once (not (in_motion ?b)))
+                )
+            )
+        )
+    ))
+
+    (:scoring maximize (+
+        (* (count-nonoverlapping throwToWall) 1)
+    )))
+"""
+
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROWING_GAME)
+    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
     score = None
 
-    trace_path = SIMPLE_STACKING_TRACE.resolve().as_posix()
+    trace_path = TEST_TRACE.resolve().as_posix()
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

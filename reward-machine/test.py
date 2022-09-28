@@ -8,7 +8,7 @@ THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_ba
 WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
 SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_test_trace.json')
+TEST_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_wall_bounce_test.json')
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -127,10 +127,10 @@ TEST_THROW_BALL_AT_WALL_GAME = """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BALL_AT_WALL_GAME)
+    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
     score = None
 
-    trace_path = THROWING_BALLS_AT_WALL_TRACE.resolve().as_posix()
+    trace_path = TEST_TRACE.resolve().as_posix()
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

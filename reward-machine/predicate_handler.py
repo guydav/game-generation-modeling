@@ -73,7 +73,7 @@ class PredicateHandler:
         mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
         return f'{predicate_str}_{mapping_str}'
     
-    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
+    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
         """
         The external API to the predicate handler.
         For now, implements the same logic as before, to make sure I separated it correctly from the `preference_handler`.
@@ -83,7 +83,13 @@ class PredicateHandler:
         This means that the truth value of a predicate with a particular assignment holds unitl
         there's information that merits updating it. This means that we should cache predicate
         evaluation results, update them when they return a non-None value, and return the cached result. 
+
+        GD 2022-09-29: We decided that since all external callers treat a None 
         """
+        pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
+        return pred_value if pred_value is not None else False
+
+    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         predicate_key = self._cache_key(predicate, mapping)
         state_index = state[self.index_key]
 
@@ -142,20 +148,20 @@ class PredicateHandler:
             return self._inner_evaluate_predicate(predicate["pred"], state, mapping)
 
         elif predicate_rule == "super_predicate_not":
-            inner_pred_value = self(predicate["not_args"], state, mapping)
+            inner_pred_value = self._inner_call(predicate["not_args"], state, mapping)
             return None if inner_pred_value is None else not inner_pred_value
 
         # TODO: technically, AND and OR can accept a single argument under the grammar, but that would break the
         #       logic here, since it expects to be able to iterate through the 'and_args' / 'or_args'
         elif predicate_rule == "super_predicate_and":
-            inner_values = [self(sub, state, mapping) for sub in predicate["and_args"]] # type: ignore
+            inner_values = [self._inner_call(sub, state, mapping) for sub in predicate["and_args"]] # type: ignore
             # If there are any Nones, we cannot know about their conjunction, so return None
             if any(v is None for v in inner_values):
                 return None
             return all(inner_values)  
 
         elif predicate_rule == "super_predicate_or":
-            inner_values = [self(sub, state, mapping) for sub in predicate["or_args"]] # type: ignore
+            inner_values = [self._inner_call(sub, state, mapping) for sub in predicate["or_args"]] # type: ignore
             # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
             if all(v is None for v in inner_values):
                 return None
@@ -163,20 +169,20 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self(predicate["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
             if all(v is None for v in inner_mapping_values):
                 return None
             return any(inner_mapping_values)
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self(predicate["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
             if any(v is None for v in inner_mapping_values):
                 return None
             return all(inner_mapping_values)

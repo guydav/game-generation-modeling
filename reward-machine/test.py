@@ -100,7 +100,7 @@ TEST_THROW_BOUNCE_GAME = """
 
 
 TEST_THROW_BALL_AT_WALL_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
     (:constraints (and 
 
@@ -123,9 +123,54 @@ TEST_THROW_BALL_AT_WALL_GAME = """
     )))
 """
 
+TEST_SETUP_GAME = """
+(define (game 60d432ce6e413e7509dd4b78-22) (:domain medium-objects-room-v1)  ; 22
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-optional (touch bed ?h)))
+    (forall (?b - ball) (game-optional (on floor ?b)))
+    (game-optional (not (exists (?g - game_object) (on desk ?g))))
+))
+(:constraints (and 
+    (forall (?b - ball ?c - (either red yellow pink))
+        (preference throwBallToBin
+            (exists (?h - hexagonal_bin)
+                (then 
+                    (once (and (agent_holds ?b) (on floor agent) (rug_color_under agent ?c)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
+                )
+            )
+        )
+    )
+    (preference throwAttempt
+        (exists (?b - ball)
+            (then 
+                (once (and (agent_holds ?b) (on floor agent)))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count-nonoverlapping throwAttempt) 8)
+)
+(:scoring maximize (+ 
+    (* 2 (count-nonoverlapping throwBallToBin:dodgeball:red))
+    (* 3 (count-nonoverlapping throwBallToBin:basketball:red))
+    (* 4 (count-nonoverlapping throwBallToBin:beachball:red))
+    (* 3 (count-nonoverlapping throwBallToBin:dodgeball:pink))
+    (* 4 (count-nonoverlapping throwBallToBin:basketball:pink))
+    (* 5 (count-nonoverlapping throwBallToBin:beachball:pink))
+    (* 4 (count-nonoverlapping throwBallToBin:dodgeball:yellow))
+    (* 5 (count-nonoverlapping throwBallToBin:basketball:yellow))
+    (* 6 (count-nonoverlapping throwBallToBin:beachball:yellow))
+)))
+"""
+
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
+    game_handler = GameHandler(TEST_SETUP_GAME)
     score = None
 
     trace_path = TEST_TRACE.resolve().as_posix()

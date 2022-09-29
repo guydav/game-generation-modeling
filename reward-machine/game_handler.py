@@ -7,10 +7,10 @@ import typing
 
 from math import prod
 
-from config import OBJECTS_BY_ROOM_AND_TYPE
+from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
 from preference_handler import PreferenceHandler
 from predicate_handler import PredicateHandler
-from utils import PreferenceDescriber, extract_variable_type_mapping
+from utils import extract_variable_type_mapping, get_object_assignments
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -24,6 +24,7 @@ class GameHandler():
         self.game_name = None
         self.domain_name = None
         self.setup = None
+        self.game_optional_cache = set([])
         self.preferences = []
         self.terminal = None
         self.scoring = None
@@ -114,6 +115,11 @@ class GameHandler():
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+
+        # Every named object will exist only once in the room, so we can just 
+        default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
+        setup = self.evaluate_setup(self.setup, state, default_mapping)
+
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
                 satisfactions = handlers.process(state)
@@ -122,10 +128,7 @@ class GameHandler():
             elif isinstance(handlers, list):
                 pass
 
-        if self.terminal is not None:
-            terminate = self.evaluate_terminals(self.terminal) # TODO
-        else:
-            terminate = False
+        terminate = self.evaluate_terminals(self.terminal) # TODO
 
         if terminate:
             score = self.score(self.scoring) 
@@ -135,13 +138,90 @@ class GameHandler():
 
         return score
 
+    def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any],
+                       mapping: typing.Optional[typing.Dict[str, str]]) -> bool:
+        '''
+        Determine whether the setup conditions of the game have been met. The setup conditions
+        of a game are met if all of the game-optional expressions have evaluated to True at least
+        once in the past and if all of the game-conserved expressions currently evaluate to true
+        '''
+
+        # TODO: this function will probably need to take a potential mapping and state as arguments,
+        #       since we eventually need to evaluate predicates
+
+        if setup_expression is None:
+            return True
+
+        rule = setup_expression["parseinfo"].rule  # type: ignore
+
+        print(f"{rule}: {setup_expression.keys()}")
+
+        if rule == "setup":
+            return self.evaluate_setup(setup_expression["setup"], state, mapping)
+
+        elif rule == "setup_statement":
+            return self.evaluate_setup(setup_expression["statement"], state, mapping)
+
+        elif rule == "super_predicate":
+            evaluation = self.predicate_handler(setup_expression, state, mapping)
+            print("Evaluation:", evaluation)
+            exit()
+
+        elif rule == "setup_not":
+            inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping)  
+
+            return not inner_value
+
+        elif rule == "setup_and":
+            inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["and_args"]]  # type: ignore
+
+            return all(inner_values)
+
+        elif rule == "setup_or":
+            inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["or_args"]]   # type: ignore
+
+            return any(inner_values)
+
+        elif rule == "setup_exists":
+            variable_type_mapping = extract_variable_type_mapping(setup_expression["exists_vars"]["variables"])  # type: ignore
+            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())
+
+            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
+            inner_mapping_values = [self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+
+            if all(v is None for v in inner_mapping_values):
+                return None
+
+            return any(inner_mapping_values)
+
+        elif rule == "setup_forall":
+            pass
+
+        elif rule == "setup_game_optional":
+            # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
+
+            cache_str = str(setup_expression["optional_pred"])
+            if cache_str in self.game_optional_cache:
+                return True
+
+            evaluation = self.evaluate_setup(setup_expression["optional_pred"], state, mapping)
+            if evaluation:
+                self.game_optional_cache.add(cache_str)
+
+            return evaluation
+
+        elif rule == "setup_game_conserved":
+            # By contrast, each game-conserved condition must be satisfied at every step
+            return self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+
+        return True
+
     def evaluate_terminals(self, terminal_expression: typing.Optional[tatsu.ast.AST]) -> bool:
         '''
         Determine whether the terminal conditions of the game have been met
         '''
         if terminal_expression is None:
             return False
-
 
         rule = terminal_expression["parseinfo"].rule  # type: ignore
 

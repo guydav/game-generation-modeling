@@ -262,16 +262,20 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
     OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "desk", "bed"]
+NAMED_OBJECTS = ["agent", "desk", "bed", "floor"]
+
+# A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
+COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
 
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
                         "tall_rect_block", "triangle_block"]}
 
-# Update the dictionary by mapping named objects to themselves and grouping objects into meta types
+# Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types
 for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
-    OBJECTS_BY_ROOM_AND_TYPE[domain].update({obj: [obj] for obj in NAMED_OBJECTS})
+    OBJECTS_BY_ROOM_AND_TYPE[domain]["agent"] = ["agent"]
+    OBJECTS_BY_ROOM_AND_TYPE[domain].update({color: [color] for color in COLORS})
 
     for meta_type, object_types in META_TYPES.items():
         OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] = []

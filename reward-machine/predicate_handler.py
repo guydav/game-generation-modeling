@@ -162,7 +162,7 @@ class PredicateHandler:
             return any(inner_values)  
 
         elif predicate_rule == "super_predicate_exists":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
+            variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
@@ -172,7 +172,7 @@ class PredicateHandler:
             return any(inner_mapping_values)
 
         elif predicate_rule == "super_predicate_forall":
-            variable_type_mapping = self._extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
+            variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]

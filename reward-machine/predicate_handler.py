@@ -87,6 +87,10 @@ class PredicateHandler:
         GD 2022-09-29: We decided that since all external callers treat a None 
         """
         pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
+
+        predicate_key = self._cache_key(predicate, mapping)
+        print(f"Base level evaluation for {predicate_key.split('_')[0]} with args {mapping}: {pred_value}")
+
         return pred_value if pred_value is not None else False
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
@@ -346,7 +350,28 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center)
     end_inside = np.all(inner_object_bbox_center <= outer_object_bbox_center + outer_object_bbox_extents)
     return start_inside and end_inside
-   
+  
+
+ON_DISTANCE_THRESHOLD = 0.15
+
+@mapping_objects_decorator
+def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+
+    lower_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
+    lower_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
+    lower_object_top = (lower_object_bbox_center + lower_object_bbox_extents)[1]
+
+    upper_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
+    upper_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
+    upper_object_bottom = (upper_object_bbox_center - upper_object_bbox_extents)[1]
+
+    print(f"Calling 'on' with {objects[0]['name']} ({lower_object_top}) and {objects[1]['name']} ({upper_object_bottom})")
+
+    return (upper_object_bottom >= lower_object_top) and (upper_object_bottom - lower_object_top) < ON_DISTANCE_THRESHOLD
+
+
+
 
 @mapping_objects_decorator
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
@@ -357,7 +382,6 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
-
 
 @mapping_objects_decorator
 def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):

@@ -120,6 +120,12 @@ class GameHandler():
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
 
+        if not setup:
+            return
+
+        print("ALL SETUP CONDITIONS SATISFIED!!!")
+        exit()
+
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
                 satisfactions = handlers.process(state)
@@ -201,7 +207,7 @@ class GameHandler():
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
 
-            cache_str = str(setup_expression["optional_pred"])
+            cache_str = str(setup_expression["optional_pred"]) + str(mapping)
             if cache_str in self.game_optional_cache:
                 return True
 

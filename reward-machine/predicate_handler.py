@@ -310,7 +310,6 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
 # ====================================== PREDICATE DEFINITIONS ======================================
 
 
-@mapping_objects_decorator
 def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequence[ObjectState]):
     """
     This isn't here to do anything useful -- it's just to demonstrate the interface that all predicates
@@ -320,13 +319,11 @@ def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequenc
     raise NotImplementedError()
 
 
-@mapping_objects_decorator
 def _agent_crouches(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 0
     return agent["crouching"]
 
 
-@mapping_objects_decorator
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
@@ -334,7 +331,6 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
     return agent["heldObject"] == objects[0][OBJECT_ID_KEY]
 
 
-@mapping_objects_decorator
 def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
 
@@ -354,7 +350,6 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 ON_DISTANCE_THRESHOLD = 0.15
 
-@mapping_objects_decorator
 def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
 
@@ -370,10 +365,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
     return (upper_object_bottom >= lower_object_top) and (upper_object_bottom - lower_object_top) < ON_DISTANCE_THRESHOLD
 
-
-
-
-@mapping_objects_decorator
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
@@ -383,7 +374,6 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
 
-@mapping_objects_decorator
 def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
@@ -445,7 +435,6 @@ def _distance_object_pseudo_object(object: ObjectState, pseudo_object: PseudoObj
     return np.linalg.norm(_object_location(object)[distance_dimension] - _object_location(pseudo_object)[distance_dimension])
         
 
-@mapping_objects_decorator
 def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
@@ -473,15 +462,15 @@ def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
 
 PREDICATE_PREFIX = '_pred_'
 
-PREDICATE_LIBRARY = {local_key.replace(PREDICATE_PREFIX, ''): local_val
-    for local_key, local_val in locals().items()
+PREDICATE_LIBRARY = {local_key.replace(PREDICATE_PREFIX, ''): mapping_objects_decorator(local_val_pred)
+    for local_key, local_val_pred in locals().items()
     if local_key.startswith(PREDICATE_PREFIX)
 }
 
 FUNCTION_PREFIX = '_func_'
 
-FUNCTION_LIBRARY = {local_key.replace(FUNCTION_PREFIX, ''): local_val
-    for local_key, local_val in locals().items()
+FUNCTION_LIBRARY = {local_key.replace(FUNCTION_PREFIX, ''): mapping_objects_decorator(local_val_func)
+    for local_key, local_val_func in locals().items()
     if local_key.startswith(FUNCTION_PREFIX)
 }
 

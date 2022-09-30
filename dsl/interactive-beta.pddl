@@ -1250,7 +1250,7 @@
         )))
         (forall (?g - game_object) (game-optional (or 
             (type ?g bridge_block)
-            (> (distance ?w1 ?b) (distance ?w2 ?b))
+            (> (distance ?w1 ?g) (distance ?w2 ?g))
         )))
     ))
 ))

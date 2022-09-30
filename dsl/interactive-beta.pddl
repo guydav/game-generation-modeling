@@ -1248,8 +1248,8 @@
             (on floor ?b)
             (= (distance ?w1 ?b) (distance ?w2 ?b))    
         )))
-        (forall (?g - game_object) (game-conserved (and 
-            (not (type ?g bridge_block))
+        (forall (?g - game_object) (game-optional (or 
+            (type ?g bridge_block)
             (> (distance ?w1 ?b) (distance ?w2 ?b))
         )))
     ))

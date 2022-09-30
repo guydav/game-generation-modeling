@@ -154,8 +154,6 @@ class GameHandler():
 
         rule = setup_expression["parseinfo"].rule  # type: ignore
 
-        print(f"{rule}: {setup_expression.keys()}")
-
         if rule == "setup":
             return self.evaluate_setup(setup_expression["setup"], state, mapping)
 
@@ -164,8 +162,8 @@ class GameHandler():
 
         elif rule == "super_predicate":
             evaluation = self.predicate_handler(setup_expression, state, mapping)
-            print("Evaluation:", evaluation)
-            exit()
+            
+            return evaluation
 
         elif rule == "setup_not":
             inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping)  
@@ -189,13 +187,16 @@ class GameHandler():
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
 
-            if all(v is None for v in inner_mapping_values):
-                return None
-
             return any(inner_mapping_values)
 
         elif rule == "setup_forall":
-            pass
+            variable_type_mapping = extract_variable_type_mapping(setup_expression["forall_vars"]["variables"])  # type: ignore
+            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())
+
+            sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
+            inner_mapping_values = [self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+
+            return all(inner_mapping_values)
 
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
@@ -214,7 +215,9 @@ class GameHandler():
             # By contrast, each game-conserved condition must be satisfied at every step
             return self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
 
-        return True
+        else:
+            raise ValueError(f"Error: Unknown setup rule '{rule}'")
+
 
     def evaluate_terminals(self, terminal_expression: typing.Optional[tatsu.ast.AST]) -> bool:
         '''

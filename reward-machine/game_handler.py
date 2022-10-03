@@ -123,9 +123,6 @@ class GameHandler():
         if not setup:
             return
 
-        print("ALL SETUP CONDITIONS SATISFIED!!!")
-        exit()
-
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
                 satisfactions = handlers.process(state)

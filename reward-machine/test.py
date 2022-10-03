@@ -134,9 +134,10 @@ TEST_THROW_BALL_AT_WALL_GAME = """
 
 TEST_SETUP_GAME = """
 (define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22
-(:setup 
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
     (forall (?b - ball) (game-optional (on desk ?b)))
-)
+))
 (:constraints (and 
     (forall (?b - ball ?c - (either red yellow pink))
         (preference throwBallToBin
@@ -184,6 +185,7 @@ if __name__ == "__main__":
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
+
         score = game_handler.process(state)
         if score is not None:
             break

@@ -86,7 +86,7 @@ TEST_THROW_BOUNCE_GAME = """
             (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
                 (then 
                     (once (agent_holds ?b))
-                    (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                    (hold-while (and (not (agent_holds ?b)) (in_motion ?b)) (touch ?w ?b))
                     (once  (and (in ?h ?b) (not (in_motion ?b))))
                 )
             )

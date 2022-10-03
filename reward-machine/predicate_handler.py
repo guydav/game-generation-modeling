@@ -270,6 +270,15 @@ def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndar
     key = 'bboxCenter' if 'bboxCenter' in object else 'position'
     return _vec3_dict_to_array(object[key])
 
+def _point_in_object(point: np.ndarray, object: ObjectState):
+    '''
+    Returns whether a point is contained with the bounding box of the provided object
+    '''
+
+    bbox_center = _vec3_dict_to_array(object['bboxCenter'])
+    bbox_extents = _vec3_dict_to_array(object['bboxExtents'])
+
+    return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
 def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = OBJECT_ID_KEY) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
@@ -350,35 +359,20 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 ON_DISTANCE_THRESHOLD = 0.15
 
-# def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
-#     assert len(objects) == 2
-
-#     lower_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
-#     lower_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
-#     lower_object_top = (lower_object_bbox_center + lower_object_bbox_extents)[1]
-
-#     upper_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
-#     upper_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
-#     upper_object_bottom = (upper_object_bbox_center - upper_object_bbox_extents)[1]
-
-#     print(f"Calling 'on' with {objects[0]['name']} ({lower_object_top}) and {objects[1]['name']} ({upper_object_bottom})")
-
-#     return (upper_object_bottom >= lower_object_top) and (upper_object_bottom - lower_object_top) < ON_DISTANCE_THRESHOLD
-
-
 def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
 
-    lower_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
-    lower_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
-    lower_object_top = (lower_object_bbox_center + lower_object_bbox_extents)[1]
+    lower_object = objects[0]
+    upper_object = objects[1]
 
-    upper_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
-    upper_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
-    upper_object_bottom = (upper_object_bbox_center - upper_object_bbox_extents)[1]
+    upper_object_bbox_center = _vec3_dict_to_array(upper_object['bboxCenter'])
+    upper_object_bbox_extents = _vec3_dict_to_array(upper_object['bboxExtents'])
+
+    # Project a point slightly below the bottom of the upper object
+    upper_object_bottom = upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])
 
     objects_touch = _pred_touch(agent, objects)
-    objects_on = np.isclose(lower_object_top, upper_object_bottom, atol=ON_DISTANCE_THRESHOLD)
+    objects_on = _point_in_object(upper_object_bottom, lower_object)
 
     # object 1 is on object 0 if they're touching and object 1 is above object 0
     # or if they're touching and object 1 is contained withint object 0? 

@@ -382,6 +382,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
     lower_object = objects[0]
     upper_object = objects[1]
 
+    # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
+
     upper_object_bbox_center = _vec3_dict_to_array(upper_object['bboxCenter'])
     upper_object_bbox_extents = _vec3_dict_to_array(upper_object['bboxExtents'])
 

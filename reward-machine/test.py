@@ -139,40 +139,28 @@ TEST_SETUP_GAME = """
     (forall (?b - ball) (game-optional (on desk ?b)))
 ))
 (:constraints (and 
-    (forall (?b - ball ?c - (either red yellow pink))
-        (preference throwBallToBin
-            (exists (?h - hexagonal_bin)
-                (then 
-                    (once (and (agent_holds ?b) (on floor agent) (rug_color_under agent ?c)))
-                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                    (once (and (not (in_motion ?b)) (in ?h ?b)))
-                )
+    (preference throwToBin
+        (exists (?b - ball ?h - hexagonal_bin) 
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once  (and (in ?h ?b) (not (in_motion ?b))))
             )
         )
     )
+
     (preference throwAttempt
         (exists (?b - ball)
             (then 
-                (once (and (agent_holds ?b) (on floor agent)))
+                (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
                 (once (not (in_motion ?b)))
             )
         )
     )
 ))
-(:terminal
-    (>= (count-nonoverlapping throwAttempt) 8)
-)
 (:scoring maximize (+ 
-    (* 2 (count-nonoverlapping throwBallToBin:dodgeball:red))
-    (* 3 (count-nonoverlapping throwBallToBin:basketball:red))
-    (* 4 (count-nonoverlapping throwBallToBin:beachball:red))
-    (* 3 (count-nonoverlapping throwBallToBin:dodgeball:pink))
-    (* 4 (count-nonoverlapping throwBallToBin:basketball:pink))
-    (* 5 (count-nonoverlapping throwBallToBin:beachball:pink))
-    (* 4 (count-nonoverlapping throwBallToBin:dodgeball:yellow))
-    (* 5 (count-nonoverlapping throwBallToBin:basketball:yellow))
-    (* 6 (count-nonoverlapping throwBallToBin:beachball:yellow))
+    (* (count-nonoverlapping throwToBin) 1)
 )))
 """
 

@@ -274,7 +274,9 @@ META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
 GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
-                              "poster", "shelf", "side_table", "window", "wall"]
+                              "poster", "shelf", "side_table", "window", "wall", "agent"]
+GAME_OBJECT_EXCLUDED_TYPES += COLORS
+GAME_OBJECT_EXCLUDED_TYPES += list(META_TYPES.keys())
 
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
@@ -291,7 +293,8 @@ for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
     OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = []
     for object_type in OBJECTS_BY_ROOM_AND_TYPE[domain]:
         if object_type not in GAME_OBJECT_EXCLUDED_TYPES:
-            OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type] 
+            OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
+    OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"])))
 
 
 class PseudoObject:

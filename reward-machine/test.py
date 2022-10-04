@@ -126,11 +126,7 @@ TEST_THROW_BALL_AT_WALL_GAME = """
 """
 
 # (game-optional (not (exists (?g - game_object) (on desk ?g))))
-
-# (:setup (and 
-#     (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
-#     (forall (?b - ball) (game-optional (on desk ?b)))
-# ))
+# (forall (?g - game_object) (game-optional (not (on desk ?g))))
 
 TEST_SETUP_GAME = """
 (define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22

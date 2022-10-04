@@ -116,7 +116,7 @@ class GameHandler():
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
 
-        # Every named object will exist only once in the room, so we can just 
+        # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
 
@@ -148,9 +148,6 @@ class GameHandler():
         of a game are met if all of the game-optional expressions have evaluated to True at least
         once in the past and if all of the game-conserved expressions currently evaluate to true
         '''
-
-        # TODO: this function will probably need to take a potential mapping and state as arguments,
-        #       since we eventually need to evaluate predicates
 
         if setup_expression is None:
             return True

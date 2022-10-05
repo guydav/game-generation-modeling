@@ -8,7 +8,7 @@ import typing
 from math import prod
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
-from preference_handler import PreferenceHandler
+from preference_handler import PreferenceHandler, PreferenceSatisfcation
 from predicate_handler import PredicateHandler
 from utils import extract_variable_type_mapping, get_object_assignments
 
@@ -17,12 +17,22 @@ DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
 
 class GameHandler():
+    domain_name: str
+    game_name: str
+    setup: typing.Optional[tatsu.ast.AST]
+    preferences: typing.List[tatsu.ast.AST]
+    terminal: typing.Optional[tatsu.ast.AST]
+    scoring: typing.Optional[tatsu.ast.AST]
+    game_ast: tatsu.ast.AST
+    predicate_handler: PredicateHandler
+    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfcation]]
+
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
         self.grammar_parser = tatsu.compile(grammar)
 
-        self.game_name = None
-        self.domain_name = None
+        self.game_name = ''
+        self.domain_name = ''
         self.setup = None
         self.game_optional_cache = set([])
         self.preferences = []
@@ -32,7 +42,7 @@ class GameHandler():
         self.game_ast = self.grammar_parser.parse(game)
         self._extract_game_info(self.game_ast)
 
-        if self.domain_name is None:
+        if not self.domain_name:
             raise ValueError("Error: Failed to extract domain from game specification")
 
         self.predicate_handler = PredicateHandler(self.domain_name)
@@ -41,18 +51,19 @@ class GameHandler():
         # evaluate that preference
         self.preference_handlers = {}
 
-        # Maps from each preference name to a list of satisfaction data. Each entry in the list is a tuple
-        # of the following form: (variable_mapping, start_state_num, end_state_num)
+        # Maps from each preference name to a list of satisfaction data. Each entry in the list 
+        # is a namedtuple of type PreferenceSatisfcation (defined in preference_handler.py)
         self.preference_satisfactions = {}
 
         for preference in self.preferences:
-            rule = preference["definition"]["parseinfo"].rule
+            pref_def = typing.cast(tatsu.ast.AST, preference["definition"])
+            rule = pref_def["parseinfo"].rule   # type: ignore
 
             # A preference definition expands into either (forall <variable_list> <preference>) or <preference>
             if rule == "preference":
-                name = preference["definition"]["pref_name"]
+                name = typing.cast(str, pref_def["pref_name"])
                 
-                pref_handler = PreferenceHandler(preference["definition"], self.predicate_handler, self.domain_name)
+                pref_handler = PreferenceHandler(pref_def, self.predicate_handler, self.domain_name)
                 self.preference_handlers[name] = pref_handler
                 self.preference_satisfactions[name] = []
                 print(f"Successfully constructed PreferenceHandler for '{name}'")
@@ -62,11 +73,12 @@ class GameHandler():
             elif rule == "pref_forall":
                 # The outer "forall" works to track the times the inner preference is satisfied for each type
                 # in the outer variables (e.g. )
-                forall_vars = preference["definition"]["forall_vars"]
-                forall_pref = preference["definition"]["forall_pref"]
+                forall_vars = pref_def["forall_vars"]
+                forall_pref = pref_def["forall_pref"]
                 
-                variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])
-                sub_preference = forall_pref["preferences"]
+                variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
+                # TODO (GD): handle the case where there are multiple forall prefs under an `(and ...)`
+                sub_preference = forall_pref["preferences"] # type: ignore
                 name = sub_preference["pref_name"]
 
                 pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
@@ -87,7 +99,7 @@ class GameHandler():
         elif isinstance(ast, tatsu.ast.AST):
             rule = ast["parseinfo"].rule  # type: ignore
             if rule == "game_def":
-                self.game_name = ast["game_name"]
+                self.game_name = typing.cast(str, ast["game_name"])
 
             elif rule == "domain_def":
                 self.domain_name = ast["domain_name"].split("-")[0]  # type: ignore
@@ -100,9 +112,9 @@ class GameHandler():
             elif rule == "preferences":
                 # Handle games with single preference
                 if isinstance(ast["preferences"], tatsu.ast.AST):
-                    self.preferences = [ast["preferences"]]
+                    self.preferences = [ast["preferences"]]  # type: ignore
                 else:
-                    self.preferences = ast["preferences"]
+                    self.preferences = ast["preferences"] # type: ignore
 
             elif rule == "terminal":
                 self.terminal = ast["terminal"]
@@ -182,7 +194,7 @@ class GameHandler():
 
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["exists_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())
+            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
@@ -191,7 +203,7 @@ class GameHandler():
 
         elif rule == "setup_forall":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["forall_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())
+            object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values()) # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
@@ -473,7 +485,8 @@ class GameHandler():
                 for mapping, start, end, measures in group:
                     if start >= prev_end:
                         prev_end = end
-                        count += list(measures.values())[0] # TODO: will we only ever have one measurement per preference?
+                        if measures is not None:
+                            count += list(measures.values())[0] # TODO: will we only ever have one measurement per preference?
 
             return count
 

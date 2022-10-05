@@ -87,6 +87,7 @@ class PredicateHandler:
         GD 2022-09-29: We decided that since all external callers treat a None 
         """
         pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
+
         return pred_value if pred_value is not None else False
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
@@ -266,6 +267,32 @@ def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndar
     key = 'bboxCenter' if 'bboxCenter' in object else 'position'
     return _vec3_dict_to_array(object[key])
 
+def _object_corners(object: ObjectState):
+    '''
+    Returns the coordinates of each of the 4 corners of the object's bounding box, with the
+    y coordinate matching the center of mass
+    '''
+
+    bbox_center = _vec3_dict_to_array(object['bboxCenter'])
+    bbox_extents = _vec3_dict_to_array(object['bboxExtents'])
+
+    corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
+               bbox_center + np.array([bbox_extents[0], 0, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], 0, -bbox_extents[2]])
+              ]
+
+    return corners
+
+def _point_in_object(point: np.ndarray, object: ObjectState):
+    '''
+    Returns whether a point is contained with the bounding box of the provided object
+    '''
+
+    bbox_center = _vec3_dict_to_array(object['bboxCenter'])
+    bbox_extents = _vec3_dict_to_array(object['bboxExtents'])
+
+    return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
 def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = OBJECT_ID_KEY) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
@@ -342,7 +369,39 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center)
     end_inside = np.all(inner_object_bbox_center <= outer_object_bbox_center + outer_object_bbox_extents)
     return start_inside and end_inside
-   
+  
+
+ON_DISTANCE_THRESHOLD = 0.01
+
+def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+
+    lower_object = objects[0]
+    upper_object = objects[1]
+
+    objects_touch = _pred_touch(agent, objects)
+
+    if objects_touch:
+        # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
+
+        upper_object_bbox_center = _vec3_dict_to_array(upper_object['bboxCenter'])
+        upper_object_bbox_extents = _vec3_dict_to_array(upper_object['bboxExtents'])
+
+        # Project a point slightly below the bottom center / corners of the upper object
+        upper_object_corners = _object_corners(upper_object)
+
+        test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])
+                       for corner in upper_object_corners]
+        test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
+
+        objects_touch = _pred_touch(agent, objects)
+        objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
+
+        # object 1 is on object 0 if they're touching and object 1 is above object 0
+        # or if they're touching and object 1 is contained withint object 0? 
+        return objects_on or _pred_in(agent, objects)
+
+    return False
 
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
@@ -352,7 +411,6 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
-
 
 def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2

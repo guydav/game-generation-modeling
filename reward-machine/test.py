@@ -9,6 +9,8 @@ WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7Wu
 SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
 TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
+SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
+
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
     '17tSEDmCvGp1uKVEh5iq',
@@ -100,7 +102,7 @@ TEST_THROW_BOUNCE_GAME = """
 
 
 TEST_THROW_BALL_AT_WALL_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
     (:constraints (and 
 
@@ -123,15 +125,51 @@ TEST_THROW_BALL_AT_WALL_GAME = """
     )))
 """
 
+# (game-optional (not (exists (?g - game_object) (on desk ?g))))
+# (forall (?g - game_object) (game-optional (not (on desk ?g))))
+
+TEST_SETUP_GAME = """
+(define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
+    (forall (?b - ball) (game-optional (on desk ?b)))
+))
+(:constraints (and 
+    (preference throwToBin
+        (exists (?b - ball ?h - hexagonal_bin) 
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once  (and (in ?h ?b) (not (in_motion ?b))))
+            )
+        )
+    )
+
+    (preference throwAttempt
+        (exists (?b - ball)
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
+            )
+        )
+    )
+))
+(:scoring maximize (+ 
+    (* (count-nonoverlapping throwToBin) 1)
+)))
+"""
+
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
+    game_handler = GameHandler(TEST_SETUP_GAME)
     score = None
 
-    trace_path = TEST_TRACE.resolve().as_posix()
+    trace_path = SETUP_TEST_TRACE.resolve().as_posix()
 
     for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
+
         score = game_handler.process(state)
         if score is not None:
             break

@@ -9,6 +9,8 @@ SOUTH_WALL = 'south_wall'
 EAST_WALL = 'east_wall'
 WEST_WALL = 'west_wall'
 
+BUILDING_TYPE = 'building'
+
 FEW_OBJECTS_ROOM = 'few'
 MEDIUM_OBJECTS_ROOM = 'medium'
 MANY_OBJECTS_ROOM = 'many'
@@ -298,7 +300,7 @@ class PseudoObject:
             self.rotation = rotation
 
 
-        def __getitem__(self, item):
+        def __getitem__(self, item: typing.Any) -> typing.Any:
             if item in self.__dict__:
                 return self.__dict__[item]
 
@@ -317,4 +319,4 @@ UNITY_PSEUDO_OBJECTS = {
         SOUTH_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=0.1875, y=1.35, z=-3.1), extents=dict(x=3.2875, y=1.35, z=0.075), rotation=dict(x=0, y=0, z=0)),
         EAST_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=3.475, y=1.35, z=-1.2125), extents=dict(x=0.075, y=1.35, z=1.8875), rotation=dict(x=0, y=90, z=0)),
         WEST_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=-3.1, y=1.35, z=-1.2125), extents=dict(x=0.075, y=1.35, z=1.8875), rotation=dict(x=0, y=90, z=0)),
-}  
+}

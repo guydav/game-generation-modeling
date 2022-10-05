@@ -327,20 +327,28 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
     return agent["heldObject"] == objects[0][OBJECT_ID_KEY]
 
 
+def _extract_object_corners(obj: ObjectState):
+    obj_center = _object_location(obj)
+    obj_extents = _vec3_dict_to_array(obj['bboxExtents'])
+
+    obj_min = obj_center - obj_extents
+    obj_max = obj_center + obj_extents
+    return obj_min,obj_max
+
+
 def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
 
     if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
         return False
 
-    outer_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
-    outer_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
+    outer_min_corner, outer_max_corner = _extract_object_corners(objects[0])
     inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
     # inner_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
     # start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents)
     # end_inside = np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
-    start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center)
-    end_inside = np.all(inner_object_bbox_center <= outer_object_bbox_center + outer_object_bbox_extents)
+    start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
+    end_inside = np.all(inner_object_bbox_center <= outer_max_corner)
     return start_inside and end_inside
    
 
@@ -382,6 +390,28 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
     else:
         return objects[1][OBJECT_ID_KEY] in objects[0]['touchingObjects'] or objects[0][OBJECT_ID_KEY] in objects[1]['touchingObjects']
+
+
+ON_DISTANCE_THRESHOLD = 0.15
+
+
+def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+
+    lower_object_bbox_center = _vec3_dict_to_array(objects[0]['bboxCenter'])
+    lower_object_bbox_extents = _vec3_dict_to_array(objects[0]['bboxExtents'])
+    lower_object_top = (lower_object_bbox_center + lower_object_bbox_extents)[1]
+
+    upper_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
+    upper_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
+    upper_object_bottom = (upper_object_bbox_center - upper_object_bbox_extents)[1]
+
+    objects_touch = _pred_touch(agent, objects)
+    objects_on = np.isclose(lower_object_top, upper_object_bottom, atol=ON_DISTANCE_THRESHOLD)
+
+    # object 1 is on object 0 if they're touching and object 1 is above object 0no, 
+    # or if they're touching and object 1 is contained withint object 0? 
+    return objects_touch and (objects_on or _pred_in(agent, objects))
 
 
 # ====================================== FUNCTION DEFINITIONS =======================================

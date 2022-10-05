@@ -24,9 +24,18 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
 
         if isinstance(var_type["type"], tatsu.ast.AST):
             var_type_type = typing.cast(tatsu.ast.AST, var_type["type"])
-            variables[var_info["var_names"]] = var_type_type["type_names"]
+            var_type_name = var_type_type["type_names"]
         else:
-            variables[var_info["var_names"]] = var_type["type"]
+            var_type_name = var_type["type"]
+
+        var_names = var_info["var_names"]
+        if isinstance(var_names, str):
+            variables[var_info["var_names"]] = var_type_name
+        else:
+            var_names = typing.cast(typing.Sequence[str], var_names)
+            for var_name in var_names: 
+                variables[var_name] = var_type_name
+        
 
     return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
 

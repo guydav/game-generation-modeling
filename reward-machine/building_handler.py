@@ -27,9 +27,19 @@ class BuildingHandler:
         return self.active_buildings
 
     def process(self, state: typing.Dict[str, typing.Any]):
-        # TOOD (GD): implement the following logic:
+        # TODO (GD): implement the following logic:
         # if the currently held object isn't marked as active, mark it as active
+        if state['agentStateChanged']:
+            held_object = state['agentState']['heldObject']
+            if held_object:
+                self.active_objects.add(held_object)
+
         # from the objects updated at this state intersected with the valid objects:
+        current_objects = set([o['objectId'] for o in state['objects']]).intersection_update(self.active_objects)
+        for obj in current_objects:
+            
+        
+
         # if the object is in motion, do we mark it immediately as no longer in a building? 
         # or wait for it to settle? Probably the former
         # maintain collection of moving/held objects that we're monitoring?

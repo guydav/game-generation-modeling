@@ -88,9 +88,6 @@ class PredicateHandler:
         """
         pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
 
-        predicate_key = self._cache_key(predicate, mapping)
-        # print(f"Base level evaluation for {predicate_key.split('_')[0]} with args {mapping}: {pred_value}")
-
         return pred_value if pred_value is not None else False
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:

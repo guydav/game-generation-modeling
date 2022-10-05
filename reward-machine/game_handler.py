@@ -24,7 +24,7 @@ class GameHandler():
         self.game_name = None
         self.domain_name = None
         self.setup = None
-        self.game_optional_cache = set([])
+        self.game_optional_cache = set()
         self.preferences = []
         self.terminal = None
         self.scoring = None
@@ -142,7 +142,7 @@ class GameHandler():
         return score
 
     def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any],
-                       mapping: typing.Optional[typing.Dict[str, str]]) -> bool:
+                       mapping: typing.Dict[str, str]) -> bool:
         '''
         Determine whether the setup conditions of the game have been met. The setup conditions
         of a game are met if all of the game-optional expressions have evaluated to True at least

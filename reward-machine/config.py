@@ -270,7 +270,8 @@ COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
-                        "tall_rect_block", "triangle_block"]}
+                        "tall_rect_block", "triangle_block"],
+              "color": COLORS}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
 GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",

@@ -350,7 +350,7 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
     end_inside = np.all(inner_object_bbox_center <= outer_max_corner)
     return start_inside and end_inside
-   
+
 
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1

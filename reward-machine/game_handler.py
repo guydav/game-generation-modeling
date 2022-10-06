@@ -10,6 +10,7 @@ from math import prod
 from config import OBJECTS_BY_ROOM_AND_TYPE
 from preference_handler import PreferenceHandler
 from predicate_handler import PredicateHandler
+from building_handler import BuildingHandler
 from utils import PreferenceDescriber, extract_variable_type_mapping
 
 

@@ -25,7 +25,8 @@ class GameHandler():
     terminal: typing.Optional[tatsu.ast.AST]
     scoring: typing.Optional[tatsu.ast.AST]
     game_ast: tatsu.ast.AST
-    predicate_handler: PredicateHandler
+    building_handler: BuildingHandler
+    predicate_handlers: typing.Dict[str, PredicateHandler]
     preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfcation]]
 
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
@@ -46,6 +47,7 @@ class GameHandler():
         if not self.domain_name:
             raise ValueError("Error: Failed to extract domain from game specification")
 
+        self.building_handler = BuildingHandler(self.domain_name)
         self.predicate_handler = PredicateHandler(self.domain_name)
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
@@ -123,11 +125,12 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: typing.Dict[str, typing.Any]) -> typing.Optional[float]:  
+    def process(self, state: typing.Dict[str, typing.Any], debug: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+        self.building_handler.process(state, debug=True)
 
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
@@ -138,7 +141,7 @@ class GameHandler():
 
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
-                satisfactions = handlers.process(state)
+                satisfactions = handlers.process(state, debug=debug)
                 self.preference_satisfactions[preference_name] += satisfactions
 
             elif isinstance(handlers, list):

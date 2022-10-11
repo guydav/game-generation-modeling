@@ -377,13 +377,16 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
     start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
     end_inside = np.all(inner_object_bbox_center <= outer_max_corner)
     return start_inside and end_inside
-  
+
+# TODO (GD): we should discuss what this threshold should be
+IN_MOTION_ZERO_VELOCITY_THRESHOLD = 0.1
 
 def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
-    return not (np.allclose(_vec3_dict_to_array(objects[0]["velocity"]), 0) and np.allclose(_vec3_dict_to_array(objects[0]["angularVelocity"]), 0))
+    return not (np.allclose(_vec3_dict_to_array(objects[0]["velocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
+        np.allclose(_vec3_dict_to_array(objects[0]["angularVelocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
 
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
@@ -418,7 +421,37 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         return objects[1][OBJECT_ID_KEY] in objects[0]['touchingObjects'] or objects[0][OBJECT_ID_KEY] in objects[1]['touchingObjects']
 
 
-ON_DISTANCE_THRESHOLD = 0.15
+ON_DISTANCE_THRESHOLD = 0.01
+
+def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
+    assert len(objects) == 2
+
+    lower_object = objects[0]
+    upper_object = objects[1]
+
+    objects_touch = _pred_touch(agent, objects)
+
+    if objects_touch:
+        # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
+
+        upper_object_bbox_center = _vec3_dict_to_array(upper_object['bboxCenter'])
+        upper_object_bbox_extents = _vec3_dict_to_array(upper_object['bboxExtents'])
+
+        # Project a point slightly below the bottom center / corners of the upper object
+        upper_object_corners = _object_corners(upper_object)
+
+        test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])
+                       for corner in upper_object_corners]
+        test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
+
+        objects_touch = _pred_touch(agent, objects)
+        objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
+
+        # object 1 is on object 0 if they're touching and object 1 is above object 0
+        # or if they're touching and object 1 is contained withint object 0? 
+        return objects_on or _pred_in(agent, objects)
+
+    return False
 
 
 # ====================================== FUNCTION DEFINITIONS =======================================

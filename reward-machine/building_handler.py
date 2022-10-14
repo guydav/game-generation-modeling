@@ -102,7 +102,7 @@ class BuildingHandler:
 
             if debug: print(f'Object {obj_id} removed from building {obj_building.objectId} because it is {"held" if obj_id == held_object_id else "in motion"}')
 
-        def _merge_buildings(self, touched_buildings: typing.Collection[str], debug: bool = False) -> None:
+    def _merge_buildings(self, touched_buildings: typing.Collection[str], debug: bool = False) -> None:
         min_building_id = min(touched_buildings)
         if debug: print(f'Merging buildings {touched_buildings} into {min_building_id}')
 

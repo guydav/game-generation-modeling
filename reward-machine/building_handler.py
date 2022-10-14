@@ -65,6 +65,7 @@ class BuildingHandler:
     active_buildings: typing.Set[str]  # buildings that are currently active
     building_ids: typing.List[str]
     building_valid_objects: typing.Set[str]  # objects that have been held by the agent at some point or another
+    currently_held_object_id: str
     objects_to_buildings: typing.Dict[str, str]
     recently_moved_objects: typing.Set[str] 
     domain: str
@@ -77,6 +78,8 @@ class BuildingHandler:
         self.building_ids = [f'building_{i}' for i in range(max_buildings)]
         OBJECTS_BY_ROOM_AND_TYPE[domain][BUILDING_TYPE] = self.building_ids
         UNITY_PSEUDO_OBJECTS.update({f'building_{i}': BuildingPseudoObject(f'building_{i}') for i in range(max_buildings)})
+
+        self.currently_held_object_id = ''
 
         self.active_buildings = set()
         self.building_valid_objects = set()
@@ -91,7 +94,7 @@ class BuildingHandler:
         self.active_buildings.add(building_id)
         self.objects_to_buildings[obj['objectId']] = building_id
 
-    def _remove_object_from_building(self, obj: ObjectState, held_object_id: str, debug: bool = False) -> None: 
+    def _remove_object_from_building(self, obj: ObjectState, debug: bool = False) -> None: 
         obj_id = obj['objectId']
         if obj_id in self.objects_to_buildings:
             obj_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[self.objects_to_buildings[obj_id]])
@@ -100,7 +103,7 @@ class BuildingHandler:
             if len(obj_building.building_objects) == 0:
                 self.active_buildings.remove(obj_building.objectId)
 
-            if debug: print(f'Object {obj_id} removed from building {obj_building.objectId} because it is {"held" if obj_id == held_object_id else "in motion"}')
+            if debug: print(f'Object {obj_id} removed from building {obj_building.objectId} because it is {"held" if obj_id == self.currently_held_object_id else "in motion"}')
 
     def _merge_buildings(self, touched_buildings: typing.Collection[str], debug: bool = False) -> None:
         min_building_id = min(touched_buildings)
@@ -124,11 +127,10 @@ class BuildingHandler:
     def process(self, state: typing.Dict[str, typing.Any], debug: bool = False) -> None:
         # if the currently held object isn't marked as active, mark it as active
         agent = state['agentState']
-        held_object_id = ''
         if state['agentStateChanged']:
-            held_object_id = agent['heldObject']
-            if held_object_id:
-                self.building_valid_objects.add(held_object_id)
+            self.currently_held_object_id = agent['heldObject']
+            if self.currently_held_object_id:
+                self.building_valid_objects.add(self.currently_held_object_id)
 
         # from the objects updated at this state intersected with the valid objects:
         current_object_ids = set([o['objectId'] for o in state['objects']])
@@ -137,7 +139,7 @@ class BuildingHandler:
         current_object_ids_list = list(sorted(current_object_ids))
         current_objects = {obj_id: [o for o in state['objects'] if o['objectId'] == obj_id][0]
             for obj_id in current_object_ids}
-        current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == held_object_id
+        current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == self.currently_held_object_id
             for obj_id, obj in current_objects.items()
         }
 
@@ -148,7 +150,7 @@ class BuildingHandler:
             # or wait for it to settle? Let's try the former
             if current_objects_in_motion_or_held[obj_id]:
                 self.recently_moved_objects.add(obj_id)
-                self._remove_object_from_building(obj, held_object_id, debug=debug)
+                self._remove_object_from_building(obj, debug=debug)
 
             # maintain collection of moving/held objects that we're monitoring?
             # if an object was in that collection and is no longer moving, check which objects it's touching

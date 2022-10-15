@@ -170,15 +170,20 @@ class BuildingHandler:
                 # (b) not currently being updated, as if they're updated they're either in motion/held
                 # (and therefore not part of a building), or need to be updated at this step, in which
                 # case they'll be dealt with after this object
-                touched_object_ids = list(filter(lambda o_id: o_id in self.building_valid_objects, obj['touchingObjects']))
+                # touched_object_ids = list(filter(lambda o_id: o_id in self.building_valid_objects, obj['touchingObjects']))
                 # touched_object_ids = list(filter(
                 #     lambda o_id: o_id in self.building_valid_objects and (o_id not in current_object_ids
                 #     or (not current_objects_in_motion_or_held[o_id] and current_object_ids_list.index(o_id) < current_object_ids_list.index(obj_id))), 
                 #     obj['touchingObjects']))
 
+                # touched_buildings = set([self.objects_to_buildings[o_id] 
+                #         for o_id in touched_object_ids 
+                #         if o_id in self.objects_to_buildings])
+
                 touched_buildings = set([self.objects_to_buildings[o_id] 
-                        for o_id in touched_object_ids 
-                        if o_id in self.objects_to_buildings])
+                        for o_id in obj['touchingObjects'] 
+                        if o_id in self.objects_to_buildings
+                    ])
                 
                 # Doesn't touch any valid objects, create
                 #  a new building, or continue the previous one

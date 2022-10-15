@@ -3,7 +3,7 @@ import typing
 
 
 from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject, UNITY_PSEUDO_OBJECTS
-from predicate_handler import ObjectState, _pred_in_motion, _vec3_dict_to_array, _extract_object_corners
+from predicate_handler import ObjectState, _pred_in_motion, _vec3_dict_to_array, _extract_object_limits
 
 MAX_BUILDINGS = 10
 
@@ -25,8 +25,11 @@ class BuildingPseudoObject(PseudoObject):
         self.position_valid = False
 
     def add_object(self, obj: ObjectState):
+        '''
+        Add a new object to the building and update the building's position and bounding box
+        '''
         self.building_objects[obj['objectId']] = obj        
-        obj_min, obj_max = _extract_object_corners(obj)
+        obj_min, obj_max = _extract_object_limits(obj)
 
         if not self.position_valid:
             self.min_corner = obj_min
@@ -53,7 +56,7 @@ class BuildingPseudoObject(PseudoObject):
             self.position_valid = False
         
         else:
-            object_minima, object_maxima = list(zip(*[_extract_object_corners(curr_obj) 
+            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj) 
                 for curr_obj in self.building_objects.values()]))
             
             self.min_corner = np.min(object_minima, axis=0)  

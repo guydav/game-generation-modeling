@@ -67,6 +67,7 @@ class BuildingHandler:
     building_valid_objects: typing.Set[str]  # objects that have been held by the agent at some point or another
     currently_held_object_id: str
     objects_to_buildings: typing.Dict[str, str]
+    object_building_ratios: typing.List[float]
     recently_moved_objects: typing.Set[str] 
     domain: str
     max_buildings: int
@@ -85,6 +86,8 @@ class BuildingHandler:
         self.building_valid_objects = set()
         self.objects_to_buildings = {}
         self.recently_moved_objects = set()
+
+        self.object_building_ratios = []
 
     def get_active_buildings(self) -> typing.Set[str]:
         return self.active_buildings
@@ -224,7 +227,8 @@ class BuildingHandler:
 
         if debug:
             if self.active_buildings:
-                print('Active buildings:')
+                self.object_building_ratios.append(len(self.objects_to_buildings) / len(self.active_buildings))
+                print(f'Active buildings: {np.mean(self.object_building_ratios):.3f}')
                 for building_id in self.active_buildings:
                     building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id])
                     print(f'Building {building_id} has {len(building.building_objects)} objects')

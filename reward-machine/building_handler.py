@@ -3,7 +3,7 @@ import typing
 
 
 from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject, UNITY_PSEUDO_OBJECTS
-from predicate_handler import ObjectState, _pred_in_motion, _vec3_dict_to_array, _extract_object_limits
+from predicate_handler import ObjectState, _pred_in_motion, _vec3_dict_to_array, _extract_object_limits, OBJECT_ID_KEY, OBJECTS_KEY
 
 MAX_BUILDINGS = 10
 
@@ -28,7 +28,7 @@ class BuildingPseudoObject(PseudoObject):
         '''
         Add a new object to the building and update the building's position and bounding box
         '''
-        self.building_objects[obj['objectId']] = obj        
+        self.building_objects[obj[OBJECT_ID_KEY]] = obj        
         obj_min, obj_max = _extract_object_limits(obj)
 
         if not self.position_valid:
@@ -47,10 +47,10 @@ class BuildingPseudoObject(PseudoObject):
         self.bboxExtents = _array_to_vec3_dict((self.max_corner - self.min_corner) / 2)  # type: ignore
 
     def remove_object(self, obj: ObjectState):
-        if obj['objectId'] not in self.building_objects:
-            raise ValueError(f'Object {obj["objectId"]} is not in building {self.name}')
+        if obj[OBJECT_ID_KEY] not in self.building_objects:
+            raise ValueError(f'Object {obj[OBJECT_ID_KEY]} is not in building {self.name}')
         
-        del self.building_objects[obj['objectId']]
+        del self.building_objects[obj[OBJECT_ID_KEY]]
 
         if len(self.building_objects) == 0:
             self.position_valid = False
@@ -98,10 +98,10 @@ class BuildingHandler:
     def _add_object_to_building(self, obj: ObjectState, building_id: str) -> None:
         typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id]).add_object(obj)  
         self.active_buildings.add(building_id)
-        self.objects_to_buildings[obj['objectId']] = building_id
+        self.objects_to_buildings[obj[OBJECT_ID_KEY]] = building_id
 
     def _remove_object_from_building(self, obj: ObjectState, debug: bool = False) -> None: 
-        obj_id = obj['objectId']
+        obj_id = obj[OBJECT_ID_KEY]
         if obj_id in self.objects_to_buildings:
             obj_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[self.objects_to_buildings[obj_id]])
             obj_building.remove_object(obj)  
@@ -139,11 +139,11 @@ class BuildingHandler:
                 self.building_valid_objects.add(self.currently_held_object_id)
 
         # from the objects updated at this state intersected with the valid objects:
-        current_object_ids = set([o['objectId'] for o in state['objects']])
+        current_object_ids = set([o[OBJECT_ID_KEY] for o in state[OBJECTS_KEY]])
         current_object_ids.intersection_update(self.building_valid_objects)
 
         current_object_ids_list = list(sorted(current_object_ids))
-        current_objects = {obj_id: [o for o in state['objects'] if o['objectId'] == obj_id][0]
+        current_objects = {obj_id: [o for o in state[OBJECTS_KEY] if o[OBJECT_ID_KEY] == obj_id][0]
             for obj_id in current_object_ids}
         current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == self.currently_held_object_id
             for obj_id, obj in current_objects.items()

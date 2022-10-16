@@ -10,7 +10,7 @@ import typing
 
 import ast_printer
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, _vec_dict_to_array
 from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, PseudoObject
 from building_handler import BuildingPseudoObject
 
@@ -259,15 +259,11 @@ class PredicateHandler:
 
 
 # ====================================== UTILITIES ======================================
-
-
-def _vec3_dict_to_array(vec3: typing.Dict[str, float]):
-    return np.array([vec3['x'], vec3['y'], vec3['z']])
     
 
 def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndarray:
     key = 'bboxCenter' if 'bboxCenter' in object else 'position'
-    return _vec3_dict_to_array(object[key])
+    return _vec_dict_to_array(object[key])
 
 def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
     '''
@@ -275,8 +271,8 @@ def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
     y coordinate matching the center of mass
     '''
 
-    bbox_center = _vec3_dict_to_array(object['bboxCenter'])
-    bbox_extents = _vec3_dict_to_array(object['bboxExtents'])
+    bbox_center = _vec_dict_to_array(object['bboxCenter'])
+    bbox_extents = _vec_dict_to_array(object['bboxExtents'])
 
     corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
                bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
@@ -291,8 +287,8 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
     Returns whether a point is contained with the bounding box of the provided object
     '''
 
-    bbox_center = _vec3_dict_to_array(object['bboxCenter'])
-    bbox_extents = _vec3_dict_to_array(object['bboxExtents'])
+    bbox_center = _vec_dict_to_array(object['bboxCenter'])
+    bbox_extents = _vec_dict_to_array(object['bboxExtents'])
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
@@ -358,7 +354,7 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[O
 
 def _extract_object_limits(obj: typing.Union[ObjectState, PseudoObject]):
     obj_center = _object_location(obj)
-    obj_extents = _vec3_dict_to_array(obj['bboxExtents'])
+    obj_extents = _vec_dict_to_array(obj['bboxExtents'])
 
     obj_min = obj_center - obj_extents
     obj_max = obj_center + obj_extents
@@ -388,8 +384,8 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
-    inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
-    # inner_object_bbox_extents = _vec3_dict_to_array(objects[1]['bboxExtents'])
+    inner_object_bbox_center = _vec_dict_to_array(objects[1]['bboxCenter'])
+    # inner_object_bbox_extents = _vec_dict_to_array(objects[1]['bboxExtents'])
     # start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents)
     # end_inside = np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
     start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
@@ -403,8 +399,8 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
-    return not (np.allclose(_vec3_dict_to_array(objects[0]["velocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
-        np.allclose(_vec3_dict_to_array(objects[0]["angularVelocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
+    return not (np.allclose(_vec_dict_to_array(objects[0]["velocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
+        np.allclose(_vec_dict_to_array(objects[0]["angularVelocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
 
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
@@ -476,8 +472,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     if objects_touch:
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
-        upper_object_bbox_center = _vec3_dict_to_array(upper_object['bboxCenter'])
-        upper_object_bbox_extents = _vec3_dict_to_array(upper_object['bboxExtents'])
+        upper_object_bbox_center = _vec_dict_to_array(upper_object['bboxCenter'])
+        upper_object_bbox_extents = _vec_dict_to_array(upper_object['bboxExtents'])
 
         # Project a point slightly below the bottom center / corners of the upper object
         upper_object_corners = _object_corners(upper_object)

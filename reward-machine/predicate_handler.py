@@ -12,9 +12,11 @@ import ast_printer
 
 from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
 from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, PseudoObject
+from building_handler import BuildingPseudoObject
 
 AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 ObjectState = typing.NewType('ObjectState', typing.Dict[str, typing.Any])
+# ObjectOrPseudo = typing.NewType('ObjectOrPseudo', typing.Union[ObjectState, PseudoObject])  # TODO: figure out the syntax for this
 FullState = typing.NewType('StateType', typing.Dict[str, typing.Union[bool, int, AgentState, typing.Sequence[ObjectState]]])
 
 
@@ -267,7 +269,7 @@ def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndar
     key = 'bboxCenter' if 'bboxCenter' in object else 'position'
     return _vec3_dict_to_array(object[key])
 
-def _object_corners(object: ObjectState):
+def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
     '''
     Returns the coordinates of each of the 4 corners of the object's bounding box, with the
     y coordinate matching the center of mass
@@ -284,7 +286,7 @@ def _object_corners(object: ObjectState):
 
     return corners
 
-def _point_in_object(point: np.ndarray, object: ObjectState):
+def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
     '''
     Returns whether a point is contained with the bounding box of the provided object
     '''
@@ -333,7 +335,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
 # ====================================== PREDICATE DEFINITIONS ======================================
 
 
-def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     """
     This isn't here to do anything useful -- it's just to demonstrate the interface that all predicates
     should follow.  The first argument should be the agent's state, and the second should be a list 
@@ -342,19 +344,19 @@ def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequenc
     raise NotImplementedError()
 
 
-def _agent_crouches(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 0
     return agent["crouching"]
 
 
-def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
     return agent["heldObject"] == objects[0][OBJECT_ID_KEY]
 
 
-def _extract_object_limits(obj: ObjectState):
+def _extract_object_limits(obj: typing.Union[ObjectState, PseudoObject]):
     obj_center = _object_location(obj)
     obj_extents = _vec3_dict_to_array(obj['bboxExtents'])
 
@@ -363,11 +365,27 @@ def _extract_object_limits(obj: ObjectState):
     return obj_min,obj_max
 
 
-def _pred_in(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
+    return other_object[OBJECT_ID_KEY] in building.building_objects
+
+
+def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
-    if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
-        return False
+    first_pseudo = isinstance(objects[0], PseudoObject)
+    second_pseudo = isinstance(objects[1], PseudoObject)
+
+    if first_pseudo or second_pseudo:
+        first_building = isinstance(objects[0], BuildingPseudoObject)
+        second_building = isinstance(objects[0], BuildingPseudoObject)
+
+        if first_building == second_building:
+            return False  # a building cannot be inside another building, same holds for other pseudo objects
+
+        if first_building:
+            return _object_in_building(*objects)  # type: ignore
+
+        # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
     inner_object_bbox_center = _vec3_dict_to_array(objects[1]['bboxCenter'])
@@ -391,6 +409,14 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
 
+
+def _building_touch(agent: AgentState, building: BuildingPseudoObject, other_object: typing.Union[ObjectState, PseudoObject]):
+    if other_object[OBJECT_ID_KEY] in building.building_objects:
+        return False
+
+    return any([_pred_touch(agent, [building_obj, other_object]) for building_obj in building.building_objects.values()])
+
+
 def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
@@ -404,16 +430,32 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     # velcoity and finding a wall it was most recently very close to?
 
     if first_pseudo and second_pseudo:
-        return False
+        first_building = isinstance(objects[0], BuildingPseudoObject)
+        second_building = isinstance(objects[0], BuildingPseudoObject)
+        if first_building == second_building:
+            return False   # if both are buildings they would be merged; if neither, they wouldn't touch
+        
+        if first_building:
+            return _building_touch(agent, objects[0], objects[1])  # type: ignore
+
+        elif second_building:
+            return _building_touch(agent, objects[1], objects[0])  # type: ignore
+
     elif first_pseudo:
-        obj = objects[1]
+        obj = typing.cast(ObjectState, objects[1])
         pseudo_obj = objects[0]
+
+        if isinstance(pseudo_obj, BuildingPseudoObject):
+            return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
             pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
     elif second_pseudo:
-        obj = objects[0]
+        obj = typing.cast(ObjectState, objects[0])
         pseudo_obj = objects[1]
+
+        if isinstance(pseudo_obj, BuildingPseudoObject):
+            return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
             pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
@@ -423,7 +465,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
 ON_DISTANCE_THRESHOLD = 0.01
 
-def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
+def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
     lower_object = objects[0]
@@ -444,12 +486,31 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
                        for corner in upper_object_corners]
         test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
 
-        objects_touch = _pred_touch(agent, objects)
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0
         # or if they're touching and object 1 is contained withint object 0? 
         return objects_on or _pred_in(agent, objects)
+
+    elif isinstance(upper_object, BuildingPseudoObject):
+        # A building can also be on an object if that object is (a) in the building
+        if lower_object[OBJECT_ID_KEY] not in upper_object.building_objects:
+            return False
+
+        # and (b) that object is not on any other object in the building
+        return not any([_pred_on(agent, [building_object, lower_object]) 
+            for building_object in upper_object.building_objects.values()
+            if building_object != lower_object])
+
+    elif isinstance(lower_object, BuildingPseudoObject):
+        # An object is on a building if that object is (a) in the building
+        if upper_object[OBJECT_ID_KEY] not in lower_object.building_objects:
+            return False
+
+        # and (b) no other object in the building is on that object
+        return not any([_pred_on(agent, [upper_object, building_object]) 
+            for building_object in lower_object.building_objects.values()
+            if building_object != upper_object])
 
     return False
 

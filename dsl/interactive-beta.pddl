@@ -580,7 +580,7 @@
         (preference blockInTowerAtEnd (exists (?l - block)
             (at-end
                 (and 
-                    (in building ?b ?l)
+                    (in ?b ?l)
                 )
             )
         ))

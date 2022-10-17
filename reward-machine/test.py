@@ -10,6 +10,7 @@ SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETS
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
 TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
+CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -185,7 +186,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_AT_END_GAME)
     score = None
 
-    trace_path = SETUP_TEST_TRACE.resolve().as_posix()
+    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
@@ -194,6 +195,8 @@ if __name__ == "__main__":
         score = game_handler.process(state, is_final)
         if score is not None:
             break
+
+        # at_end game states start at 1677 (1122) roughly
 
     score = game_handler.score(game_handler.scoring)
 

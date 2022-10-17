@@ -64,8 +64,15 @@ class PreferenceHandler():
         self.preference_name = preference["pref_name"]
         body = preference["pref_body"]["body"]  # type: ignore
 
+        self.pref_quantifier_rule = body["parseinfo"].rule  # type: ignore
+
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
-        self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+        if self.pref_quantifier_rule == "pref_body_exists":
+            self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+            preference_body = body["exists_args"]["body"]
+
+        elif self.pref_quantifier_rule == "pref_body_forall":
+            raise NotImplementedError("Forall quantification not yet supported")
 
         # Add additional variable mapping, and store it as well (it's needed for scoring)
         self.additional_variable_mapping = additional_variable_mapping
@@ -75,8 +82,17 @@ class PreferenceHandler():
         # can just be referred to explicitly within predicates without quantification beforehand
         self.variable_type_mapping.update({obj: [obj] for obj in NAMED_OBJECTS})
 
-        # Extract the ordered list of temporal predicates
-        self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
+        self.pref_body_rule = preference_body["parseinfo"].rule  # type: ignore
+        if self.pref_body_rule == "then":
+            # Extract the ordered list of temporal predicates
+            self.temporal_predicates = [func["seq_func"] for func in preference_body["then_funcs"]]
+
+        elif self.pref_body_rule == "at_end":
+            # An at-end preference is just a single predicate
+            self.temporal_predicates = [preference_body["at_end_pred"]["pred"]]
+
+        elif self.pref_body_rule == "always":
+            raise NotImplementedError("Always operator not yet supported")
 
         # A list of tuples, containing the state of the preference evaluated on partial sets of arguments.
         # Each tuple includes a partial mapping from variables to specific objects, the current predicate,
@@ -216,6 +232,24 @@ class PreferenceHandler():
 
         self.satisfied_this_step = []
 
+        # The behavior of process depends on the preference body rule
+        if self.pref_body_rule == "always":
+            return self._process_always(traj_state)
+
+        elif self.pref_body_rule == "then":
+            return self._process_then(traj_state)
+
+        elif self.pref_body_rule == "at_end":
+            return self._process_at_end(traj_state)
+
+        print(traj_state.keys())
+
+
+    def _process_then(self, traj_state: typing.Dict[str, typing.Any]) -> typing.List[PreferenceSatisfcation]:
+        '''
+        Handle temporal predicates inside a then operator
+        '''
+        
         new_partial_preference_satisfactions = []
 
         for mapping, current_predicate, next_predicate, while_sat, start, measures in self.partial_preference_satisfactions:
@@ -391,3 +425,19 @@ class PreferenceHandler():
         self.cur_step += 1
 
         return self.satisfied_this_step
+
+    def _process_at_end(self, traj_state: typing.Dict[str, typing.Any]) -> typing.List[PreferenceSatisfcation]:
+        """
+        Handle the single predicate inside an at_end operator. This will always return no satisfactions unless the
+        provided state is the last state in the trajectory.
+        """
+        
+        # TODO: determine whether this is the last state in the trajectory
+
+        return []
+
+    def _process_always(self, traj_state: typing.Dict[str, typing.Any]) -> typing.List[PreferenceSatisfcation]:
+        """
+        Handle the single predicate inside an always operator
+        """
+        raise NotImplementedError

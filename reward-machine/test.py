@@ -160,9 +160,29 @@ TEST_SETUP_GAME = """
 )))
 """
 
+TEST_AT_END_GAME = """
+(define (game 613e4bf960ca68f8de00e5e7-17) (:domain medium-objects-room-v1)  ; 17/18
+
+(:constraints (and 
+    (preference castleBuilt (exists (?b - bridge_block ?f - flat_block ?t - tall_cylindrical_block ?c - cube_block ?p - pyramid_block)
+        (at-end
+            (and 
+                (on ?b ?f)
+                (on ?f ?t)
+                (on ?t ?c)
+                (on ?c ?p)
+            )
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (* 10 (count-once-per-objects castleBuilt))
+)))
+"""
+
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_SETUP_GAME)
+    game_handler = GameHandler(TEST_AT_END_GAME)
     score = None
 
     trace_path = SETUP_TEST_TRACE.resolve().as_posix()

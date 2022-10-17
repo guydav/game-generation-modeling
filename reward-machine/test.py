@@ -28,8 +28,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
         raise ValueError('Must provide replay_nesting_keys when not using simple mode')
 
     if simple:
-        for event in trace:
-            yield event
+        for idx, event in enumerate(trace):
+            yield (event, idx == len(trace) - 1)
 
     else:
         replay_nesting_keys = typing.cast(typing.Sequence[str], replay_nesting_keys)
@@ -40,8 +40,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
 
         for batch_idx in range(len(trace)):
             batch = trace[f'batch-{batch_idx}']
-            for event in batch['events']:
-                yield event
+            for idx, event in enumerate(batch['events']):
+                yield (event, (idx == len(batch['events']) - 1) and (batch_idx == len(trace) - 1)) # make sure we're in the last batch and the last event
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
@@ -187,10 +187,11 @@ if __name__ == "__main__":
 
     trace_path = SETUP_TEST_TRACE.resolve().as_posix()
 
-    for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
+    for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
+        print("Is final?", is_final)
 
-        score = game_handler.process(state)
+        score = game_handler.process(state, is_final)
         if score is not None:
             break
 

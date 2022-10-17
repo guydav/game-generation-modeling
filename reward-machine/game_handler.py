@@ -8,7 +8,7 @@ import typing
 from math import prod
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
-from preference_handler import PreferenceHandler, PreferenceSatisfcation
+from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from utils import extract_variable_type_mapping, get_object_assignments
 
@@ -25,7 +25,7 @@ class GameHandler():
     scoring: typing.Optional[tatsu.ast.AST]
     game_ast: tatsu.ast.AST
     predicate_handler: PredicateHandler
-    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfcation]]
+    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
 
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
@@ -122,7 +122,7 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: typing.Dict[str, typing.Any]) -> typing.Optional[float]:  
+    def process(self, state: typing.Dict[str, typing.Any], is_final: bool) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
@@ -135,17 +135,18 @@ class GameHandler():
         if not setup:
             return
 
+        # The game is in its last step if the terminal conditions are met or if the trajectory is over
+        is_last_step = is_final or self.evaluate_terminals(self.terminal)
+
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
-                satisfactions = handlers.process(state)
+                satisfactions = handlers.process(state, is_last_step)
                 self.preference_satisfactions[preference_name] += satisfactions
 
             elif isinstance(handlers, list):
                 pass
 
-        terminate = self.evaluate_terminals(self.terminal) # TODO
-
-        if terminate:
+        if is_last_step:
             score = self.score(self.scoring) 
 
         else:

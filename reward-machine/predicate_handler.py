@@ -88,24 +88,22 @@ class PredicateHandler:
         """
         pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
 
+        if pred_value is not None: print("Predicate: ", predicate, " with mapping: ", mapping, " has value: ", pred_value)
+
         return pred_value if pred_value is not None else False
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         predicate_key = self._cache_key(predicate, mapping)
         state_index = state[self.index_key]
 
+        # print("Evaluating: ", predicate_key, " at state index: ", state_index)
+
         # If no time has passed since the last update, we know we can use the cached value
         if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
             return self.evaluation_cache[predicate_key]
 
         if state_index > self.state_cache_last_updated:
-            self.state_cache_last_updated = state_index
-            for obj in state[OBJECTS_KEY]:
-                self.state_cache[obj[self.object_id_key]] = obj
-
-            if state[AGENT_STATE_CHANGED_KEY]:
-                self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
-                self.state_cache['agent'] = state[AGENT_STATE_KEY]
+            self.update_cache(state)
 
         current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping)
         if current_state_value is not None:
@@ -113,6 +111,20 @@ class PredicateHandler:
             self.evaluation_cache_last_updated[predicate_key] = state_index
 
         return self.evaluation_cache.get(predicate_key, None)
+
+    def update_cache(self, state: typing.Dict[str, typing.Any]):
+        '''
+        Update the cache if any objects / the agent are changed in the current state
+        '''
+        state_index = state[self.index_key]
+
+        self.state_cache_last_updated = state_index
+        for obj in state[OBJECTS_KEY]:
+            self.state_cache[obj[self.object_id_key]] = obj
+
+        if state[AGENT_STATE_CHANGED_KEY]:
+            self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
+            self.state_cache['agent'] = state[AGENT_STATE_KEY]
 
     def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         '''
@@ -126,6 +138,8 @@ class PredicateHandler:
         I should figure out how to implement this in a manner that's reasonable across all predicates,
         or maybe it's something the individual predicate handlers should do? Probably the latter.
         '''
+
+        # print("Doing inner evaluate predicate")
 
         if predicate is None:
             return None
@@ -375,6 +389,8 @@ ON_DISTANCE_THRESHOLD = 0.01
 
 def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
+
+    print("Computing 'on' between {} and {}".format(objects[0][OBJECT_ID_KEY], objects[1][OBJECT_ID_KEY]))
 
     lower_object = objects[0]
     upper_object = objects[1]

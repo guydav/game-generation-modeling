@@ -432,14 +432,18 @@ class PreferenceHandler():
         provided state is the last state in the trajectory.
         """
         
-        # TODO: determine whether this is the last state in the trajectory
-
+        # If this is the last state in the trajectory, then evaluate the predicate
         if is_final:
             for mapping, _, next_predicate, _, _, _ in self.partial_preference_satisfactions:
+                print("\nEvaluating:")
+                for key, val in mapping.items():
+                    print("\t", key, ":", val)
                 if self.predicate_handler(next_predicate, traj_state, mapping):
                     self.satisfied_this_step.append(PreferenceSatisfaction(mapping, self.cur_step, self.cur_step, {}))
 
+        # Otherwise, there are not satisfactions, but we still need to update the predicate_handler's cache
         else:
+            self.predicate_handler.update_cache(traj_state)
             self.cur_step += 1
 
         return self.satisfied_this_step
@@ -448,4 +452,5 @@ class PreferenceHandler():
         """
         Handle the single predicate inside an always operator
         """
+
         raise NotImplementedError

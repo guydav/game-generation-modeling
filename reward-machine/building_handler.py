@@ -2,66 +2,11 @@ import numpy as np
 import typing
 
 
-from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject, UNITY_PSEUDO_OBJECTS
-from predicate_handler import ObjectState, _pred_in_motion, _vec3_dict_to_array, _extract_object_limits, OBJECT_ID_KEY, OBJECTS_KEY
+from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
+from predicate_handler import ObjectState, _pred_in_motion
+from utils import FullState, AgentState, BuildingPseudoObject
 
 MAX_BUILDINGS = 10
-
-
-def _array_to_vec3_dict(array: typing.List[float]) -> typing.Dict[str, float]:
-    return {'x': array[0], 'y': array[1], 'z': array[2]}
-
-
-class BuildingPseudoObject(PseudoObject):
-    building_objects: typing.Dict[str, ObjectState]  # a collection of the objects in the building
-    min_corner: np.ndarray
-    max_corner: np.ndarray
-    
-    def __init__(self, building_id: str):
-        super().__init__(building_id, building_id, dict(x=0, y=0, z=0), dict(x=0, y=0, z=0), dict(x=0, y=0, z=0))
-        self.building_objects = {}
-        self.min_corner = np.zeros(3)
-        self.max_corner = np.zeros(3)
-        self.position_valid = False
-
-    def add_object(self, obj: ObjectState):
-        '''
-        Add a new object to the building and update the building's position and bounding box
-        '''
-        self.building_objects[obj[OBJECT_ID_KEY]] = obj        
-        obj_min, obj_max = _extract_object_limits(obj)
-
-        if not self.position_valid:
-            self.min_corner = obj_min
-            self.max_corner = obj_max
-            self.position_valid = True
-
-        else:
-            self.min_corner = np.minimum(obj_min, self.min_corner)  # type: ignore
-            self.max_corner = np.maximum(obj_max, self.max_corner)  # type: ignore
-
-        self._update_position_from_corners()
-        
-    def _update_position_from_corners(self) -> None:
-        self.position = self.bboxCenter = _array_to_vec3_dict((self.min_corner + self.max_corner) / 2)  # type: ignore
-        self.bboxExtents = _array_to_vec3_dict((self.max_corner - self.min_corner) / 2)  # type: ignore
-
-    def remove_object(self, obj: ObjectState):
-        if obj[OBJECT_ID_KEY] not in self.building_objects:
-            raise ValueError(f'Object {obj[OBJECT_ID_KEY]} is not in building {self.name}')
-        
-        del self.building_objects[obj[OBJECT_ID_KEY]]
-
-        if len(self.building_objects) == 0:
-            self.position_valid = False
-        
-        else:
-            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj) 
-                for curr_obj in self.building_objects.values()]))
-            
-            self.min_corner = np.min(object_minima, axis=0)  
-            self.max_corner = np.max(object_maxima, axis=0)  
-            self._update_position_from_corners()
 
 
 class BuildingHandler:
@@ -98,10 +43,10 @@ class BuildingHandler:
     def _add_object_to_building(self, obj: ObjectState, building_id: str) -> None:
         typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id]).add_object(obj)  
         self.active_buildings.add(building_id)
-        self.objects_to_buildings[obj[OBJECT_ID_KEY]] = building_id
+        self.objects_to_buildings[obj.object_id] = building_id
 
     def _remove_object_from_building(self, obj: ObjectState, debug: bool = False) -> None: 
-        obj_id = obj[OBJECT_ID_KEY]
+        obj_id = obj.object_id
         if obj_id in self.objects_to_buildings:
             obj_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[self.objects_to_buildings[obj_id]])
             obj_building.remove_object(obj)  
@@ -130,20 +75,21 @@ class BuildingHandler:
             self.active_buildings.remove(building_id)
 
 
-    def process(self, state: typing.Dict[str, typing.Any], debug: bool = False) -> None:
+    def process(self, state: FullState, debug: bool = False) -> None:
         # if the currently held object isn't marked as active, mark it as active
-        agent = state['agentState']
-        if state['agentStateChanged']:
-            self.currently_held_object_id = agent['heldObject']
+        agent = state.agent_state
+        if state.agent_state_changed:
+            agent = typing.cast(AgentState, state.agent_state)
+            self.currently_held_object_id = agent.held_object
             if self.currently_held_object_id:
                 self.building_valid_objects.add(self.currently_held_object_id)
 
         # from the objects updated at this state intersected with the valid objects:
-        current_object_ids = set([o[OBJECT_ID_KEY] for o in state[OBJECTS_KEY]])
+        current_object_ids = set([o.object_id for o in state.objects])
         current_object_ids.intersection_update(self.building_valid_objects)
 
         current_object_ids_list = list(sorted(current_object_ids))
-        current_objects = {obj_id: [o for o in state[OBJECTS_KEY] if o[OBJECT_ID_KEY] == obj_id][0]
+        current_objects = {obj_id: [o for o in state.objects if o.object_id == obj_id][0]
             for obj_id in current_object_ids}
         current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == self.currently_held_object_id
             for obj_id, obj in current_objects.items()
@@ -181,7 +127,7 @@ class BuildingHandler:
                 #         if o_id in self.objects_to_buildings])
 
                 touched_buildings = set([self.objects_to_buildings[o_id] 
-                        for o_id in obj['touchingObjects'] 
+                        for o_id in obj.touching_objects
                         if o_id in self.objects_to_buildings
                     ])
                 
@@ -225,7 +171,7 @@ class BuildingHandler:
                 if obj_id in self.objects_to_buildings:
                     obj_building = self.objects_to_buildings[obj_id]
                     touched_buildings = set([self.objects_to_buildings[o_id] 
-                        for o_id in obj['touchingObjects'] 
+                        for o_id in obj.touching_objects
                         if o_id in self.objects_to_buildings
                     ])
 

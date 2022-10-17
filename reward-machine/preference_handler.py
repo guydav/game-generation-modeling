@@ -11,7 +11,7 @@ import copy
 
 import numpy as np
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
 from config import NAMED_OBJECTS
@@ -39,7 +39,7 @@ class PredicateType(enum.Enum):
     HOLD_WHILE = 4
 
 
-class PreferenceHandler():
+class PreferenceHandler:
     def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
                  additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None):
         '''
@@ -211,7 +211,7 @@ class PreferenceHandler():
 
         return next_predicate_value
 
-    def process(self, traj_state: typing.Dict[str, typing.Any], debug: bool = False) -> typing.List[PreferenceSatisfcation]:
+    def process(self, traj_state: FullState, debug: bool = False) -> typing.List[PreferenceSatisfcation]:
         '''
         Take a state from an active trajectory and update each of the internal states based on the
         satisfcation of predicates and the rules of the temporal logic operators

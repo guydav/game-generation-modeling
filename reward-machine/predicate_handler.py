@@ -10,14 +10,14 @@ import typing
 
 import ast_printer
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, _vec_dict_to_array
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, _extract_object_limits,\
+    _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, PseudoObject
-from building_handler import BuildingPseudoObject
 
-AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
-ObjectState = typing.NewType('ObjectState', typing.Dict[str, typing.Any])
-# ObjectOrPseudo = typing.NewType('ObjectOrPseudo', typing.Union[ObjectState, PseudoObject])  # TODO: figure out the syntax for this
-FullState = typing.NewType('StateType', typing.Dict[str, typing.Union[bool, int, AgentState, typing.Sequence[ObjectState]]])
+# AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
+# ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
+# ObjectOrPseudo = typing.Union[ObjectState, PseudoObject]  # TODO: figure out the syntax for this
+
 
 
 AGENT_STATE_KEY = 'agentState'
@@ -47,10 +47,8 @@ class PredicateHandler:
     # The last state the state cache was updated for
     state_cache_last_updated: int
 
-    def __init__(self, domain: str, index_key: str = ORIGINAL_INDEX_KEY, object_id_key: str = OBJECT_ID_KEY):
+    def __init__(self, domain: str):
         self.domain = domain
-        self.index_key = index_key
-        self.object_id_key = object_id_key
         self._new_game()
     
     def _new_game(self):
@@ -75,7 +73,7 @@ class PredicateHandler:
         mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
         return f'{predicate_str}_{mapping_str}'
     
-    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
+    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, mapping: typing.Dict[str, str]) -> bool:
         """
         The external API to the predicate handler.
         For now, implements the same logic as before, to make sure I separated it correctly from the `preference_handler`.
@@ -92,9 +90,9 @@ class PredicateHandler:
 
         return pred_value if pred_value is not None else False
 
-    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
+    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         predicate_key = self._cache_key(predicate, mapping)
-        state_index = state[self.index_key]
+        state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
         if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
@@ -102,12 +100,11 @@ class PredicateHandler:
 
         if state_index > self.state_cache_last_updated:
             self.state_cache_last_updated = state_index
-            for obj in state[OBJECTS_KEY]:
-                self.state_cache[obj[self.object_id_key]] = obj
+            for obj in state.objects:
+                self.state_cache[obj.object_id] = obj
 
-            if state[AGENT_STATE_CHANGED_KEY]:
-                self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
-                self.state_cache['agent'] = state[AGENT_STATE_KEY]
+            if state.agent_state_changed:
+                self.state_cache[AGENT_STATE_KEY] = self.state_cache['agent'] = typing.cast(AgentState, state.agent_state)
 
         current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping)
         if current_state_value is not None:
@@ -116,7 +113,7 @@ class PredicateHandler:
 
         return self.evaluation_cache.get(predicate_key, None)
 
-    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
+    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
@@ -258,56 +255,21 @@ class PredicateHandler:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
 
-# ====================================== UTILITIES ======================================
-    
-
-def _object_location(object: typing.Union[ObjectState, PseudoObject]) -> np.ndarray:
-    key = 'bboxCenter' if 'bboxCenter' in object else 'position'
-    return _vec_dict_to_array(object[key])
-
-def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
-    '''
-    Returns the coordinates of each of the 4 corners of the object's bounding box, with the
-    y coordinate matching the center of mass
-    '''
-
-    bbox_center = _vec_dict_to_array(object['bboxCenter'])
-    bbox_extents = _vec_dict_to_array(object['bboxExtents'])
-
-    corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([bbox_extents[0], 0, -bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, -bbox_extents[2]])
-              ]
-
-    return corners
-
-def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
-    '''
-    Returns whether a point is contained with the bounding box of the provided object
-    '''
-
-    bbox_center = _vec_dict_to_array(object['bboxCenter'])
-    bbox_extents = _vec_dict_to_array(object['bboxExtents'])
-
-    return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
-
-def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = OBJECT_ID_KEY) -> typing.Callable:
+def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
-        agent_object = state[AGENT_STATE_KEY] if state[AGENT_STATE_CHANGED_KEY] else state_cache[AGENT_STATE_KEY]
+        agent_object = state.agent_state if state.agent_state_changed else state_cache[AGENT_STATE_KEY]
 
         # if there are no objects in the predicate mapping, then we can just evaluate the predicate
         if len(predicate_partial_mapping) == 0:
             return predicate_func(agent_object, [])
 
         # Otherwise, check if any of the relevant objects have changed in this state
-
         current_state_mapping_objects = {}
         mapping_values = set(predicate_partial_mapping.values())
-        state_objects = typing.cast(list, state[OBJECTS_KEY])
+        state_objects = state.objects
         for object in state_objects:
-            if object[object_id_key] in mapping_values:
-                current_state_mapping_objects[object[object_id_key]] = object
+            if object.object_id in mapping_values:
+                current_state_mapping_objects[object.object_id] = object
 
         # None of the objects in the mapping are updated in the current state, so return None
         if len(current_state_mapping_objects) == 0:
@@ -342,27 +304,18 @@ def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequenc
 
 def _agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 0
-    return agent["crouching"]
+    return agent.crouching
 
 
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
-    return agent["heldObject"] == objects[0][OBJECT_ID_KEY]
-
-
-def _extract_object_limits(obj: typing.Union[ObjectState, PseudoObject]):
-    obj_center = _object_location(obj)
-    obj_extents = _vec_dict_to_array(obj['bboxExtents'])
-
-    obj_min = obj_center - obj_extents
-    obj_max = obj_center + obj_extents
-    return obj_min,obj_max
+    return agent.held_object == objects[0].object_id
 
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
-    return other_object[OBJECT_ID_KEY] in building.building_objects
+    return other_object.object_id in building.building_objects
 
 
 def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
@@ -384,13 +337,14 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
-    inner_object_bbox_center = _vec_dict_to_array(objects[1]['bboxCenter'])
+    inner_object_bbox_center = objects[1].bbox_center
     # inner_object_bbox_extents = _vec_dict_to_array(objects[1]['bboxExtents'])
     # start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents)
     # end_inside = np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
     start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
     end_inside = np.all(inner_object_bbox_center <= outer_max_corner)
     return start_inside and end_inside
+
 
 # TODO (GD): we should discuss what this threshold should be
 IN_MOTION_ZERO_VELOCITY_THRESHOLD = 0.1
@@ -399,15 +353,15 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
-    return not (np.allclose(_vec_dict_to_array(objects[0]["velocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
-        np.allclose(_vec_dict_to_array(objects[0]["angularVelocity"]), 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
+    return not (np.allclose(objects[0].velocity, 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
+        np.allclose(objects[0].angular_velocity, 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
 
 
 TOUCH_DISTANCE_THRESHOLD = 0.15
 
 
 def _building_touch(agent: AgentState, building: BuildingPseudoObject, other_object: typing.Union[ObjectState, PseudoObject]):
-    if other_object[OBJECT_ID_KEY] in building.building_objects:
+    if other_object.object_id in building.building_objects:
         return False
 
     return any([_pred_touch(agent, [building_obj, other_object]) for building_obj in building.building_objects.values()])
@@ -444,7 +398,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
 
-        return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
+        return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
             pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
     elif second_pseudo:
         obj = typing.cast(ObjectState, objects[0])
@@ -453,10 +407,10 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
 
-        return (pseudo_obj[OBJECT_ID_KEY] in obj['touchingObjects'] or pseudo_obj[OBJECT_NAME_KEY] in obj['touchingObjects']) and \
+        return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
             pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
     else:
-        return objects[1][OBJECT_ID_KEY] in objects[0]['touchingObjects'] or objects[0][OBJECT_ID_KEY] in objects[1]['touchingObjects']
+        return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
 
 
 ON_DISTANCE_THRESHOLD = 0.01
@@ -472,8 +426,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     if objects_touch:
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
-        upper_object_bbox_center = _vec_dict_to_array(upper_object['bboxCenter'])
-        upper_object_bbox_extents = _vec_dict_to_array(upper_object['bboxExtents'])
+        upper_object_bbox_center = upper_object.bbox_center
+        upper_object_bbox_extents = upper_object.bbox_extents
 
         # Project a point slightly below the bottom center / corners of the upper object
         upper_object_corners = _object_corners(upper_object)
@@ -490,7 +444,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     elif isinstance(upper_object, BuildingPseudoObject):
         # A building can also be on an object if that object is (a) in the building
-        if lower_object[OBJECT_ID_KEY] not in upper_object.building_objects:
+        if lower_object.object_id not in upper_object.building_objects:
             return False
 
         # and (b) that object is not on any other object in the building
@@ -500,7 +454,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     elif isinstance(lower_object, BuildingPseudoObject):
         # An object is on a building if that object is (a) in the building
-        if upper_object[OBJECT_ID_KEY] not in lower_object.building_objects:
+        if upper_object.object_id not in lower_object.building_objects:
             return False
 
         # and (b) no other object in the building is on that object

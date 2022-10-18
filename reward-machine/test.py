@@ -181,6 +181,7 @@ TEST_AT_END_GAME = """
 (:scoring maximize (+ 
     (* 10 (count-once-per-objects castleBuilt))
 )))
+"""
 
 TEST_BLOCK_STACK_GAME = """
     (define (game block-test) (:domain many-objects-room-v1)

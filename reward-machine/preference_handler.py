@@ -167,8 +167,8 @@ class PreferenceHandler:
 
 
     def advance_preference(self, 
-        partial_preference_satisfcation: PartialPreferenceSatisfcation, 
-        new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfcation],
+        partial_preference_satisfcation: PartialPreferenceSatisfaction, 
+        new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction],
         debug: bool = False):
         '''
         Called when a predicate inside a (then) operator has been fully satisfied and we are moving to the
@@ -306,7 +306,7 @@ class PreferenceHandler:
                 # If the basic condition of the next predicate is met, we'll advance the predicates through the (then) operator.
                 # We also record the current step as the "start" of the predicate being satisfied
                 if pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, self.cur_step, measures),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, self.cur_step, measures),
                                             new_partial_preference_satisfactions, debug)
 
                 # If not, then just add the same predicates back to the list
@@ -325,7 +325,7 @@ class PreferenceHandler:
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, start, measures),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, start, measures),
                                             new_partial_preference_satisfactions, debug)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
@@ -363,7 +363,7 @@ class PreferenceHandler:
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, start, measures_copy),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, start, measures_copy),
                                             new_partial_preference_satisfactions, debug)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 

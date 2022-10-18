@@ -93,8 +93,6 @@ class PredicateHandler:
         """
         pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping, force_evaluation=force_evaluation)
 
-        # if pred_value is not None: print("Predicate: ", predicate, " with mapping: ", mapping, " has value: ", pred_value)
-
         return pred_value if pred_value is not None else False
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], 
@@ -147,8 +145,6 @@ class PredicateHandler:
         I should figure out how to implement this in a manner that's reasonable across all predicates,
         or maybe it's something the individual predicate handlers should do? Probably the latter.
         '''
-
-        # print("Doing inner evaluate predicate")
 
         if predicate is None:
             return None
@@ -400,8 +396,6 @@ ON_DISTANCE_THRESHOLD = 0.01
 
 def _pred_on(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 2
-
-    # print("Computing 'on' between {} and {}".format(objects[0][OBJECT_ID_KEY], objects[1][OBJECT_ID_KEY]))
 
     lower_object = objects[0]
     upper_object = objects[1]

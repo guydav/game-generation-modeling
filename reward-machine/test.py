@@ -190,13 +190,10 @@ if __name__ == "__main__":
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
-        print("Is final?", is_final)
 
         score = game_handler.process(state, is_final)
         if score is not None:
             break
-
-        # at_end game states start at 1677 (1122) roughly
 
     score = game_handler.score(game_handler.scoring)
 

@@ -32,6 +32,9 @@ class PredicateType(enum.Enum):
     HOLD = 3
     HOLD_WHILE = 4
 
+class PreferenceQuantifiers(enum.Enum):
+    EXISTS = 'pref_body_exists'
+    FORALL = 'pref_body_forall'
 
 class PreferenceType(enum.Enum):
     THEN = 'then'
@@ -79,11 +82,11 @@ class PreferenceHandler:
         self.pref_quantifier_rule = body["parseinfo"].rule  # type: ignore
 
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
-        if self.pref_quantifier_rule == "pref_body_exists":
+        if self.pref_quantifier_rule == PreferenceQuantifiers.EXISTS.value:
             self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
             preference_body = body["exists_args"]["body"]
 
-        elif self.pref_quantifier_rule == "pref_body_forall":
+        elif self.pref_quantifier_rule == PreferenceQuantifiers.FORALL.value:
             raise NotImplementedError("Forall quantification not yet supported")
 
         else:
@@ -460,9 +463,6 @@ class PreferenceHandler:
         # If this is the last state in the trajectory, then evaluate the predicate
         if is_final:
             for mapping, _, next_predicate, _, _, _ in self.partial_preference_satisfactions:
-                # print("\nEvaluating:")
-                # for key, val in mapping.items():
-                #     print("\t", key, ":", val)
                 if self.predicate_handler(next_predicate, traj_state, mapping, force_evaluation=True):
                     self.satisfied_this_step.append(PreferenceSatisfaction(mapping, self.cur_step, self.cur_step, {}))
 

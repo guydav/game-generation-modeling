@@ -305,7 +305,6 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
             return predicate_func(agent_object, [])
 
         # Otherwise, check if any of the relevant objects have changed in this state
-
         current_state_mapping_objects = {}
         mapping_values = set(predicate_partial_mapping.values())
         state_objects = typing.cast(list, state[OBJECTS_KEY])

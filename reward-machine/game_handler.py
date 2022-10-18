@@ -10,6 +10,7 @@ from math import prod
 from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
 from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
+from building_handler import BuildingHandler
 from utils import extract_variable_type_mapping, get_object_assignments
 
 
@@ -26,6 +27,7 @@ class GameHandler():
     game_ast: tatsu.ast.AST
     predicate_handler: PredicateHandler
     preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
+    building_handler: BuildingHandler
 
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
@@ -45,6 +47,7 @@ class GameHandler():
         if not self.domain_name:
             raise ValueError("Error: Failed to extract domain from game specification")
 
+        self.building_handler = BuildingHandler(self.domain_name)
         self.predicate_handler = PredicateHandler(self.domain_name)
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
@@ -122,12 +125,13 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: typing.Dict[str, typing.Any], is_final: bool) -> typing.Optional[float]:  
+    def process(self, state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
         self.predicate_handler.update_cache(state)
+        self.building_handler.process(state, debug=True)
 
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
@@ -141,7 +145,7 @@ class GameHandler():
 
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
-                satisfactions = handlers.process(state, is_last_step)
+                satisfactions = handlers.process(state, is_last_step, debug=debug)
                 self.preference_satisfactions[preference_name] += satisfactions
 
             elif isinstance(handlers, list):

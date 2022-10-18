@@ -4,6 +4,8 @@ import typing
 
 from game_handler import GameHandler
 
+
+BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
 THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_at_wall.json')
 WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
 SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
@@ -179,14 +181,32 @@ TEST_AT_END_GAME = """
 (:scoring maximize (+ 
     (* 10 (count-once-per-objects castleBuilt))
 )))
+
+TEST_BLOCK_STACK_GAME = """
+    (define (game block-test) (:domain many-objects-room-v1)
+    (:constraints (and 
+        (preference blockOnBlock
+            (exists (?b1 ?b2 - block)
+                (then 
+                    (once (agent_holds ?b1))
+                    (hold (or (in_motion ?b1) (on ?b2 ?b1)))
+                    (hold (on ?b2 ?b1))
+                    (once (or (in_motion ?b1) (in_motion ?b2)))
+                )
+            )
+        )
+    ))
+    (:scoring maximize (+
+        (* (count-nonoverlapping blockOnBlock) 1)
+    )))
 """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_AT_END_GAME)
+    game_handler = GameHandler(TEST_BLOCK_STACK_GAME)
     score = None
 
-    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
+    trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

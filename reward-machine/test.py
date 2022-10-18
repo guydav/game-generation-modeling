@@ -162,7 +162,7 @@ TEST_SETUP_GAME = """
 """
 
 TEST_AT_END_GAME = """
-(define (game 613e4bf960ca68f8de00e5e7-17) (:domain medium-objects-room-v1)  ; 17/18
+(define (game 613e4bf960ca68f8de00e5e7-17) (:domain many-objects-room-v1)  ; 17/18
 
 (:constraints (and 
     (preference castleBuilt (exists (?b - bridge_block ?f - flat_block ?t - tall_cylindrical_block ?c - cube_block ?p - pyramid_block)

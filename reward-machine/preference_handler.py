@@ -350,7 +350,7 @@ class PreferenceHandler:
                 measurement = typing.cast(tatsu.ast.AST, current_predicate["measurement"])
                 measurement_fn_name = typing.cast(str, measurement["func_name"])
 
-                evaluation = self.predicate_handler(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
+                evaluation = self.predicate_handler.evaluate_function(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
 
                 measures_copy = measures.copy()  # type: ignore
                 measures_copy[measurement_fn_name] = evaluation

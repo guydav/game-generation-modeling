@@ -40,7 +40,7 @@ class PredicateHandler:
     object_id_key: str 
     # The cache from a string representation of the state X predicate X mapping to
     # the predicate's truth value in that state given the mapping.
-    evaluation_cache: typing.Dict[str, bool]
+    evaluation_cache: typing.Dict[str, typing.Union[bool, float]]
     # The last state the evaluation cache was updated for a given key.
     evaluation_cache_last_updated: typing.Dict[str, int]
     # A cache of the latest observed value for each object
@@ -66,7 +66,7 @@ class PredicateHandler:
         self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
 
-    def _predicate_cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
+    def _ast_cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
         """
         Map from the arguments to __call__ to the key that represents them in the cache. 
         """
@@ -98,12 +98,12 @@ class PredicateHandler:
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
-        predicate_key = self._predicate_cache_key(predicate, mapping)
+        predicate_key = self._ast_cache_key(predicate, mapping)
         state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
         if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
-            return self.evaluation_cache[predicate_key]
+            return typing.cast(bool, self.evaluation_cache[predicate_key])
 
         # This shouldn't happen, but no reason not to check it anyhow
         if state_index > self.state_cache_global_last_updated:
@@ -114,7 +114,7 @@ class PredicateHandler:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
 
-        return self.evaluation_cache.get(predicate_key, None)
+        return typing.cast(bool, self.evaluation_cache.get(predicate_key, None))
 
     def update_cache(self, state: FullState):
         '''
@@ -221,43 +221,25 @@ class PredicateHandler:
             # For each comparison argument, evaluate it if it's a function or convert to an int if not
             comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
             if isinstance(comp_arg_1, tatsu.ast.AST):
-                # Obtain the functional representation of the function
-                function = FUNCTION_LIBRARY[str(comp_arg_1["func_name"])]
-
-                # Extract only the variables in the mapping relevant to this predicate
-                relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
-            
-                # Evaluate the function
-                evaluation = function(state, relevant_mapping, self.state_cache, force_evaluation)
+                # If it's an AST, it's a function, so evaluate it
+                comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
 
                 # If the function is undecidable with the current information, return None
-                if evaluation is None:
+                if comp_arg_1 is None:
                     return None
 
-                comp_arg_1 = float(evaluation)
-
-            else:
-                comp_arg_1 = float(comp_arg_1)
+            comp_arg_1 = float(comp_arg_1)
 
             comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
-            if isinstance(comp_arg_1, tatsu.ast.AST):
-                # Obtain the functional representation of the base predicate
-                function = FUNCTION_LIBRARY[str(comp_arg_2["func_name"])]
-            
-                # Extract only the variables in the mapping relevant to this predicate
-                relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}  
-
-                # Evaluate the function
-                evaluation = function(state, relevant_mapping, self.state_cache, force_evaluation)
+            if isinstance(comp_arg_2, tatsu.ast.AST):
+                # If it's an AST, it's a function, so evaluate it
+                comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
 
                 # If the function is undecidable with the current information, return None
-                if evaluation is None:
+                if comp_arg_2 is None:
                     return None
 
-                comp_arg_2 = float(evaluation)
-
-            else:
-                comp_arg_2 = float(comp_arg_2)
+            comp_arg_2 = float(comp_arg_2)
 
             if comparison_operator == "=":
                 return comp_arg_1 == comp_arg_2
@@ -274,6 +256,47 @@ class PredicateHandler:
 
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
+
+    def evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState, 
+        mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[float]:
+        function_key = self._ast_cache_key(function, mapping)
+        state_index = state.original_index
+
+        # If no time has passed since the last update, we know we can use the cached value
+        if function_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[function_key] == state_index:
+            return self.evaluation_cache[function_key]
+
+        # This shouldn't happen, but no reason not to check it anyhow
+        if state_index > self.state_cache_global_last_updated:
+            self.update_cache(state)
+
+        current_state_value =  self._inner_evaluate_function(function, state, mapping, force_evaluation)
+        if current_state_value is not None:
+            self.evaluation_cache[function_key] = current_state_value
+            self.evaluation_cache_last_updated[function_key] = state_index
+
+        return self.evaluation_cache.get(function_key, None)
+
+    def _inner_evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState, 
+        mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[float]:
+
+        if function is None:
+            return None
+
+        # Obtain the functional representation of the function
+        func = FUNCTION_LIBRARY[str(function["func_name"])]
+
+        # Extract only the variables in the mapping relevant to this predicate
+        relevant_mapping = {var: mapping[var] for var in extract_variables(function)}
+    
+        # Evaluate the function
+        evaluation = func(state, relevant_mapping, self.state_cache, force_evaluation)
+
+        # If the function is undecidable with the current information, return None
+        if evaluation is None:
+            return None
+
+        return float(evaluation)
 
 
 def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:

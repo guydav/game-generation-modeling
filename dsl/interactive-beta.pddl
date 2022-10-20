@@ -274,7 +274,8 @@
             (at-end
                 (and 
                     (in ?b ?l)
-                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?b))))
+                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?l))))
+                    (not (on floor ?l))
                 )
             )
         )) 

@@ -1,22 +1,16 @@
-import ast as pyast
 import itertools
-import os
-import re
-import sys
 import tatsu
 import typing
 import tatsu.ast
 import enum
-import copy
 
-import numpy as np
 
 from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
 from config import NAMED_OBJECTS
 
-class PartialPreferenceSatisfcation(typing.NamedTuple):
+class PartialPreferenceSatisfaction(typing.NamedTuple):
     mapping: typing.Dict[str, str]
     current_predicate: typing.Optional[tatsu.ast.AST]
     next_predicate: typing.Optional[tatsu.ast.AST]
@@ -25,7 +19,7 @@ class PartialPreferenceSatisfcation(typing.NamedTuple):
     measures: typing.Optional[dict]
 
 
-class PreferenceSatisfcation(typing.NamedTuple):
+class PreferenceSatisfaction(typing.NamedTuple):
     mapping: typing.Dict[str, str]
     start: int
     end: int
@@ -38,8 +32,29 @@ class PredicateType(enum.Enum):
     HOLD = 3
     HOLD_WHILE = 4
 
+class PreferenceQuantifiers(enum.Enum):
+    EXISTS = 'pref_body_exists'
+    FORALL = 'pref_body_forall'
+
+class PreferenceType(enum.Enum):
+    THEN = 'then'
+    AT_END = 'at_end'
+    ALWAYS = 'always'
+
 
 class PreferenceHandler:
+    additional_variable_mapping: typing.Dict[str, typing.List[str]]
+    cur_step: int
+    domain: str
+    partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction]
+    predicate_handler: PredicateHandler
+    preference: tatsu.ast.AST
+    preference_name: str
+    pref_body_rule: str
+    pref_quantifier_rule: str
+    satisfied_this_step: typing.List[PreferenceSatisfaction]
+    variable_type_mapping: typing.Dict[str, typing.List[str]]
+
     def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
                  additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None):
         '''
@@ -61,11 +76,21 @@ class PreferenceHandler:
         self.predicate_handler = predicate_handler
         self.domain = domain
 
-        self.preference_name = preference["pref_name"]
+        self.preference_name = preference["pref_name"]  # type: ignore
         body = preference["pref_body"]["body"]  # type: ignore
 
+        self.pref_quantifier_rule = body["parseinfo"].rule  # type: ignore
+
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
-        self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+        if self.pref_quantifier_rule == PreferenceQuantifiers.EXISTS.value:
+            self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+            preference_body = body["exists_args"]["body"]
+
+        elif self.pref_quantifier_rule == PreferenceQuantifiers.FORALL.value:
+            raise NotImplementedError("Forall quantification not yet supported")
+
+        else:
+            raise ValueError(f"Error: encountered unknown preference quantifier rule: {self.pref_quantifier_rule}")
 
         # Add additional variable mapping, and store it as well (it's needed for scoring)
         self.additional_variable_mapping = additional_variable_mapping
@@ -75,8 +100,20 @@ class PreferenceHandler:
         # can just be referred to explicitly within predicates without quantification beforehand
         self.variable_type_mapping.update({obj: [obj] for obj in NAMED_OBJECTS})
 
-        # Extract the ordered list of temporal predicates
-        self.temporal_predicates = [func["seq_func"] for func in body["exists_args"]["body"]["then_funcs"]]
+        self.pref_body_rule = preference_body["parseinfo"].rule  # type: ignore
+        if self.pref_body_rule == PreferenceType.THEN.value:
+            # Extract the ordered list of temporal predicates
+            self.temporal_predicates = [func["seq_func"] for func in preference_body["then_funcs"]]
+
+        elif self.pref_body_rule == PreferenceType.AT_END.value:
+            # An at-end preference is just a single predicate
+            self.temporal_predicates = [preference_body["at_end_pred"]["pred"]]
+
+        elif self.pref_body_rule == PreferenceType.ALWAYS.value:
+            raise NotImplementedError("Always operator not yet supported")
+
+        else:
+            raise ValueError(f"Error: encountered unknown preference body rule: {self.pref_body_rule}")
 
         # A list of tuples, containing the state of the preference evaluated on partial sets of arguments.
         # Each tuple includes a partial mapping from variables to specific objects, the current predicate,
@@ -101,7 +138,7 @@ class PreferenceHandler:
 
         for object_assignment in object_assignments:
             mapping = dict(zip(initial_variables, object_assignment))
-            self.partial_preference_satisfactions.append((mapping, None, self.temporal_predicates[0], 0, -1, {}))
+            self.partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, None, self.temporal_predicates[0], 0, -1, {}))
 
         # A list of all versions of the predicate satisfied at a particular step, updated during self.process()
         self.satisfied_this_step = []
@@ -128,9 +165,10 @@ class PreferenceHandler:
         else:
             raise ValueError("Error: predicate does not have a temporal logic type")
 
+
     def advance_preference(self, 
-        partial_preference_satisfcation: PartialPreferenceSatisfcation, 
-        new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfcation],
+        partial_preference_satisfcation: PartialPreferenceSatisfaction, 
+        new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction],
         debug: bool = False):
         '''
         Called when a predicate inside a (then) operator has been fully satisfied and we are moving to the
@@ -141,9 +179,7 @@ class PreferenceHandler:
         case where the initial mapping was split, before one of the later branches was reverted back to the
         initial state. If the first predicate is satisfied again, the initial mapping will again split and
         we need to make sure not to add duplicate branches back in)
-
         '''
-
         next_pred_idx = self.temporal_predicates.index(partial_preference_satisfcation.next_predicate)
         new_cur_predicate = partial_preference_satisfcation.next_predicate
 
@@ -152,7 +188,7 @@ class PreferenceHandler:
         # and add the reverted mapping back to new_partial_preference_satisfactions
         if next_pred_idx + 1 == len(self.temporal_predicates):
             print("\n\tPREFERENCE SATISFIED!")
-            self.satisfied_this_step.append(PreferenceSatisfcation(partial_preference_satisfcation.mapping, partial_preference_satisfcation.start, 
+            self.satisfied_this_step.append(PreferenceSatisfaction(partial_preference_satisfcation.mapping, partial_preference_satisfcation.start, 
                 self.cur_step, partial_preference_satisfcation.measures))
             self.revert_preference(partial_preference_satisfcation.mapping, new_partial_preference_satisfactions)
             return
@@ -182,7 +218,7 @@ class PreferenceHandler:
             new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate,
                                                                                                  while_sat=0))
 
-    def revert_preference(self, mapping: typing.Dict[str, str], new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfcation]) -> None:
+    def revert_preference(self, mapping: typing.Dict[str, str], new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction]) -> None:
         '''
         Called when a predicate inside a (then) operator is no longer satisfied and we have to return to
         the start state. This function will add at most one tuple to new_partial_preference_satisfactions that
@@ -192,14 +228,18 @@ class PreferenceHandler:
         initial_variables = extract_variables(self.temporal_predicates[0])
         new_mapping = {key: val for key, val in mapping.items() if key in initial_variables}
         
-        new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(new_mapping, None, self.temporal_predicates[0], 0, -1, {}))
+        new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(new_mapping, None, self.temporal_predicates[0], 0, -1, {}))
 
-    def _evaluate_next_predicate(self, next_predicate_type: typing.Optional[PredicateType], next_predicate: tatsu.ast.AST, mapping: typing.Dict[str, str], traj_state: typing.Dict[str, typing.Any]) -> bool:
+    def _evaluate_next_predicate(self, next_predicate_type: typing.Optional[PredicateType], next_predicate: typing.Optional[tatsu.ast.AST], 
+        mapping: typing.Dict[str, str], traj_state: FullState) -> bool:
         next_predicate_value = None
         
         if next_predicate_type is None:
             return True
-        elif next_predicate_type == PredicateType.ONCE:
+
+        next_predicate = typing.cast(tatsu.ast.AST, next_predicate)
+
+        if next_predicate_type == PredicateType.ONCE:
             next_predicate_value = self.predicate_handler(next_predicate["once_pred"], traj_state, mapping)
         elif next_predicate_type == PredicateType.ONCE_MEASURE:
             next_predicate_value = self.predicate_handler(next_predicate["once_measure_pred"], traj_state, mapping)
@@ -211,14 +251,34 @@ class PreferenceHandler:
 
         return next_predicate_value
 
-    def process(self, traj_state: FullState, debug: bool = False) -> typing.List[PreferenceSatisfcation]:
+    def process(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
         '''
         Take a state from an active trajectory and update each of the internal states based on the
         satisfcation of predicates and the rules of the temporal logic operators
         '''
-
         self.satisfied_this_step = []
 
+        # The behavior of process depends on the preference body rule
+        if self.pref_body_rule == PreferenceType.THEN.value:
+            satisfactions = self._process_then(traj_state, is_final, debug=debug)
+
+        elif self.pref_body_rule == PreferenceType.AT_END.value:
+            satisfactions =  self._process_at_end(traj_state, is_final, debug=debug)
+
+        elif self.pref_body_rule == PreferenceType.ALWAYS.value:
+            satisfactions = self._process_always(traj_state, is_final, debug=debug)
+
+        else:
+            raise ValueError(f"Unknown preference body rule: {self.pref_body_rule}")
+
+        self.cur_step += 1
+        return satisfactions
+
+    def _process_then(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+        '''
+        Handle temporal predicates inside a then operator
+        '''
+        
         new_partial_preference_satisfactions = []
 
         for mapping, current_predicate, next_predicate, while_sat, start, measures in self.partial_preference_satisfactions:
@@ -246,15 +306,16 @@ class PreferenceHandler:
                 # If the basic condition of the next predicate is met, we'll advance the predicates through the (then) operator.
                 # We also record the current step as the "start" of the predicate being satisfied
                 if pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, self.cur_step, measures),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, self.cur_step, measures),
                                             new_partial_preference_satisfactions, debug)
 
                 # If not, then just add the same predicates back to the list
                 else:
-                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                         current_predicate, next_predicate, 0, start, measures))
 
             elif cur_predicate_type == PredicateType.ONCE:
+                current_predicate = typing.cast(tatsu.ast.AST, current_predicate)
                 cur_pred_eval = self.predicate_handler(current_predicate["once_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
                 
@@ -264,12 +325,12 @@ class PreferenceHandler:
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, start, measures),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, start, measures),
                                             new_partial_preference_satisfactions, debug)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                         current_predicate, next_predicate, 0, start, measures))
 
                 # If neither are satisfied, we return to the start
@@ -277,6 +338,7 @@ class PreferenceHandler:
                     self.revert_preference(mapping, new_partial_preference_satisfactions)
 
             elif cur_predicate_type == PredicateType.ONCE_MEASURE:
+                current_predicate = typing.cast(tatsu.ast.AST, current_predicate)
                 cur_pred_eval = self.predicate_handler(current_predicate["once_measure_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
 
@@ -284,28 +346,26 @@ class PreferenceHandler:
                     print("\n\tEvaluation of next predicate:", next_pred_eval)
                     print("\tEvaluation of current predicate:", cur_pred_eval)
 
-                measurement = current_predicate["measurement"]
-                measurement_fn = FUNCTION_LIBRARY[measurement["func_name"]]
 
-                # Map the variables names to the object names, and extract them from the state
-                func_args = [traj_state["objects"][mapping[var]] for var in extract_variables(measurement)]
+                measurement = typing.cast(tatsu.ast.AST, current_predicate["measurement"])
+                measurement_fn_name = typing.cast(str, measurement["func_name"])
 
-                evaluation = measurement_fn(*func_args)
+                evaluation = self.predicate_handler(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
 
-                measures_copy = measures.copy()
-                measures_copy[measurement["func_name"]] = evaluation
+                measures_copy = measures.copy()  # type: ignore
+                measures_copy[measurement_fn_name] = evaluation
 
                 # TODO: when we advance out of a once-measure, should we update the measurement on that frame? Or does
                 # that frame technically not count as satisfying the once condition, meaning it should be excluded?
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, current_predicate, next_predicate, 0, start, measures_copy),
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, current_predicate, next_predicate, 0, start, measures_copy),
                                             new_partial_preference_satisfactions, debug)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                         current_predicate, next_predicate, 0, start, measures_copy))
 
                 # If neither are satisfied, we return to the start
@@ -313,6 +373,7 @@ class PreferenceHandler:
                     self.revert_preference(mapping, new_partial_preference_satisfactions)
 
             elif cur_predicate_type == PredicateType.HOLD:
+                current_predicate = typing.cast(tatsu.ast.AST, current_predicate)
                 cur_pred_eval = self.predicate_handler(current_predicate["hold_pred"], traj_state, mapping)
                 next_pred_eval = self._evaluate_next_predicate(next_predicate_type, next_predicate, mapping, traj_state)
 
@@ -322,13 +383,13 @@ class PreferenceHandler:
 
                 # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                 if next_pred_eval:
-                    self.advance_preference(PartialPreferenceSatisfcation(mapping, 
+                    self.advance_preference(PartialPreferenceSatisfaction(mapping, 
                         current_predicate, next_predicate, 0, start, measures), 
                         new_partial_preference_satisfactions, debug)
 
                 # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                 elif cur_pred_eval:
-                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                    new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                         current_predicate, next_predicate, 0, start, measures))
 
                 # If neither are satisfied, we return to the start
@@ -336,7 +397,8 @@ class PreferenceHandler:
                     self.revert_preference(mapping, new_partial_preference_satisfactions)
 
             elif cur_predicate_type == PredicateType.HOLD_WHILE:
-                num_while_conditions = 1 if isinstance(current_predicate["while_preds"], tatsu.ast.AST) else len(current_predicate["while_preds"])
+                current_predicate = typing.cast(tatsu.ast.AST, current_predicate)
+                num_while_conditions = 1 if isinstance(current_predicate["while_preds"], tatsu.ast.AST) else len(current_predicate["while_preds"])  # type: ignore
 
                 # If all of the while condition has already been met, then we can treat this exactly like a normal hold
                 if while_sat == num_while_conditions:
@@ -349,13 +411,13 @@ class PreferenceHandler:
 
                     # If the next predicate is satisfied, then we advance regardless of the state of the current predicate
                     if next_pred_eval:
-                        self.advance_preference(PartialPreferenceSatisfcation(mapping, 
+                        self.advance_preference(PartialPreferenceSatisfaction(mapping, 
                             current_predicate, next_predicate, 0, start, measures),
                             new_partial_preference_satisfactions, debug)
 
                     # If the next predicate *isn't* satisfied, but the current one *is* then we stay in our current state 
                     elif cur_pred_eval:
-                        new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                        new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                             current_predicate, next_predicate, while_sat, start, measures))
 
                     # If neither are satisfied, we return to the start
@@ -370,7 +432,7 @@ class PreferenceHandler:
                     if num_while_conditions == 1:
                         cur_while_eval = self.predicate_handler(current_predicate["while_preds"], traj_state, mapping)
                     else:
-                        cur_while_eval = self.predicate_handler(current_predicate["while_preds"][while_sat], traj_state, mapping)
+                        cur_while_eval = self.predicate_handler(current_predicate["while_preds"][while_sat], traj_state, mapping)  # type: ignore
 
                     if debug: 
                         print("\n\tEvaluation of current predicate:", cur_pred_eval)
@@ -378,11 +440,11 @@ class PreferenceHandler:
 
                     if cur_pred_eval:
                         if cur_while_eval:
-                            new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                            new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                                 current_predicate, next_predicate, while_sat + 1, start, measures))
 
                         else:
-                            new_partial_preference_satisfactions.append(PartialPreferenceSatisfcation(mapping, 
+                            new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, 
                                 current_predicate, next_predicate, while_sat, start, measures))
 
                     else:
@@ -397,6 +459,25 @@ class PreferenceHandler:
 
         self.partial_preference_satisfactions = new_partial_preference_satisfactions
 
-        self.cur_step += 1
+        return self.satisfied_this_step
+
+    def _process_at_end(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+        """
+        Handle the single predicate inside an at_end operator. This will always return no satisfactions unless the
+        provided state is the last state in the trajectory.
+        """
+        
+        # If this is the last state in the trajectory, then evaluate the predicate
+        if is_final:
+            for mapping, _, next_predicate, _, _, _ in self.partial_preference_satisfactions:
+                if self.predicate_handler(next_predicate, traj_state, mapping, force_evaluation=True):
+                    self.satisfied_this_step.append(PreferenceSatisfaction(mapping, self.cur_step, self.cur_step, {}))
 
         return self.satisfied_this_step
+
+    def _process_always(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+        """
+        Handle the single predicate inside an always operator
+        """
+
+        raise NotImplementedError

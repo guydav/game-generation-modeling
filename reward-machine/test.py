@@ -13,6 +13,7 @@ SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETS
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
 TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
+CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -31,8 +32,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
         raise ValueError('Must provide replay_nesting_keys when not using simple mode')
 
     if simple:
-        for event in trace:
-            yield event
+        for idx, event in enumerate(trace):
+            yield (event, idx == len(trace) - 1)
 
     else:
         replay_nesting_keys = typing.cast(typing.Sequence[str], replay_nesting_keys)
@@ -43,8 +44,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
 
         for batch_idx in range(len(trace)):
             batch = trace[f'batch-{batch_idx}']
-            for event in batch['events']:
-                yield event
+            for idx, event in enumerate(batch['events']):
+                yield (event, (idx == len(batch['events']) - 1) and (batch_idx == len(trace) - 1)) # make sure we're in the last batch and the last event
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
@@ -163,9 +164,29 @@ TEST_SETUP_GAME = """
 )))
 """
 
+TEST_AT_END_GAME = """
+(define (game 613e4bf960ca68f8de00e5e7-17) (:domain many-objects-room-v1)  ; 17/18
+
+(:constraints (and 
+    (preference castleBuilt (exists (?b - bridge_block ?f - flat_block ?t - tall_cylindrical_block ?c - cube_block ?p - pyramid_block)
+        (at-end
+            (and 
+                (on ?b ?f)
+                (on ?f ?t)
+                (on ?t ?c)
+                (on ?c ?p)
+            )
+        )
+    ))
+))
+(:scoring maximize (+ 
+    (* 10 (count-once-per-objects castleBuilt))
+)))
+"""
+
 TEST_BLOCK_STACK_GAME = """
-    (define (game block-test) (:domain many-objects-room-v1)
-    (:constraints (and 
+(define (game block-test) (:domain many-objects-room-v1)
+(:constraints (and 
         (preference blockOnBlock
             (exists (?b1 ?b2 - block)
                 (then 
@@ -176,10 +197,30 @@ TEST_BLOCK_STACK_GAME = """
                 )
             )
         )
-    ))
-    (:scoring maximize (+
-        (* (count-nonoverlapping blockOnBlock) 1)
-    )))
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockOnBlock) 1)
+)))
+"""
+
+
+TEST_BUILDING_GAME = """
+(define (game building-test) (:domain many-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingAtEnd (exists (?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                )
+            )
+        )
+    )
+)
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingAtEnd) 1)
+))
+)
 """
 
 
@@ -189,10 +230,10 @@ if __name__ == "__main__":
 
     trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()
 
-    for idx, state in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
+    for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state)
+        score = game_handler.process(state, is_final)
         if score is not None:
             break
 

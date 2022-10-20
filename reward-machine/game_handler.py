@@ -9,7 +9,7 @@ import typing
 from math import prod
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
-from preference_handler import PreferenceHandler, PreferenceSatisfcation
+from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
 from utils import extract_variable_type_mapping, get_object_assignments, FullState
@@ -26,9 +26,9 @@ class GameHandler():
     terminal: typing.Optional[tatsu.ast.AST]
     scoring: typing.Optional[tatsu.ast.AST]
     game_ast: tatsu.ast.AST
+    predicate_handler: PredicateHandler
+    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
     building_handler: BuildingHandler
-    predicate_handlers: typing.Dict[str, PredicateHandler]
-    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfcation]]
 
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
@@ -126,11 +126,12 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: FullState, debug: bool = False) -> typing.Optional[float]:  
+    def process(self, state: FullState, is_final: bool, debug: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+        self.predicate_handler.update_cache(state)
         self.building_handler.process(state, debug=True)
 
         # Every named object will exist only once in the room, so we can just directly use index 0
@@ -140,17 +141,18 @@ class GameHandler():
         if not setup:
             return
 
+        # The game is in its last step if the terminal conditions are met or if the trajectory is over
+        is_last_step = is_final or self.evaluate_terminals(self.terminal)
+
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
-                satisfactions = handlers.process(state, debug=debug)  # type: ignore
+                satisfactions = handlers.process(state, is_last_step, debug=debug)
                 self.preference_satisfactions[preference_name] += satisfactions
 
             elif isinstance(handlers, list):
                 pass
 
-        terminate = self.evaluate_terminals(self.terminal) # TODO
-
-        if terminate:
+        if is_last_step:
             score = self.score(self.scoring) 
 
         else:

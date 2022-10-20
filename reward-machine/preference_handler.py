@@ -263,7 +263,7 @@ class PreferenceHandler:
             satisfactions = self._process_then(traj_state, is_final, debug=debug)
 
         elif self.pref_body_rule == PreferenceType.AT_END.value:
-            satisfactions =  self._process_at_end(traj_state, is_final, debug=debug)
+            satisfactions = self._process_at_end(traj_state, is_final, debug=debug)
 
         elif self.pref_body_rule == PreferenceType.ALWAYS.value:
             satisfactions = self._process_always(traj_state, is_final, debug=debug)

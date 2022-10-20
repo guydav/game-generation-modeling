@@ -109,7 +109,7 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping, force_evaluation)
+        current_state_value = self._inner_evaluate_predicate(predicate, state, mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
@@ -173,17 +173,23 @@ class PredicateHandler:
             inner_pred_value = self._inner_call(predicate["not_args"], state, mapping, force_evaluation)
             return None if inner_pred_value is None else not inner_pred_value
 
-        # TODO: technically, AND and OR can accept a single argument under the grammar, but that would break the
-        #       logic here, since it expects to be able to iterate through the 'and_args' / 'or_args'
         elif predicate_rule == "super_predicate_and":
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in predicate["and_args"]] # type: ignore
+            and_args = predicate["and_args"]
+            if isinstance(and_args, tatsu.ast.AST):
+                and_args = [and_args]
+
+            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in and_args] # type: ignore
             # If there are any Nones, we cannot know about their conjunction, so return None
             if any(v is None for v in inner_values):
                 return None
             return all(inner_values)  
 
         elif predicate_rule == "super_predicate_or":
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in predicate["or_args"]] # type: ignore
+            or_args = predicate["or_args"]
+            if isinstance(or_args, tatsu.ast.AST):
+                or_args = [or_args]
+
+            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in or_args] # type: ignore
             # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
             if all(v is None for v in inner_values):
                 return None
@@ -373,7 +379,7 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     if first_pseudo or second_pseudo:
         first_building = isinstance(objects[0], BuildingPseudoObject)
-        second_building = isinstance(objects[0], BuildingPseudoObject)
+        second_building = isinstance(objects[1], BuildingPseudoObject)
 
         if first_building == second_building:
             return False  # a building cannot be inside another building, same holds for other pseudo objects
@@ -497,7 +503,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # and (b) that object is not on any other object in the building
         return not any([_pred_on(agent, [building_object, lower_object]) 
             for building_object in upper_object.building_objects.values()
-            if building_object != lower_object])
+            if building_object.object_id != lower_object.object_id])
 
     elif isinstance(lower_object, BuildingPseudoObject):
         # An object is on a building if that object is (a) in the building
@@ -507,7 +513,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # and (b) no other object in the building is on that object
         return not any([_pred_on(agent, [upper_object, building_object]) 
             for building_object in lower_object.building_objects.values()
-            if building_object != upper_object])
+            if building_object.object_id != upper_object.object_id])
 
     return False
 

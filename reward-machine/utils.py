@@ -1,11 +1,257 @@
+from collections import OrderedDict, namedtuple
 import inflect
 import itertools
+import numpy as np
 import tatsu
 import tatsu.ast
 import typing
 
-from collections import OrderedDict
-from config import OBJECTS_BY_ROOM_AND_TYPE
+from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+
+
+def _vec_dict_to_array(vec: typing.Dict[str, float]):
+    if 'x' not in vec or 'y' not in vec:
+        raise ValueError(f'x and y must be in vec dict; received {vec}')
+    
+    if 'z' in vec:
+        if 'w' in vec:
+            # TODO (GD 2022-10-16): decide if this should be wxyz or xyzw
+            return np.array([vec['w'], vec['x'], vec['y'], vec['z']])
+
+        return np.array([vec['x'], vec['y'], vec['z']])
+
+    return np.array([vec['x'], vec['y']])
+
+
+# TODO (GD 2022-10-16): is there a way to specify an ndarray with some number of entires/dimensions? a shape?
+
+
+class AgentState(typing.NamedTuple):
+    angle: float
+    angle_int: int
+    camera_local_roation: np.ndarray   # w, x, y, z
+    camera_rotation_euler_angles: np.ndarray  # x, y, z
+    crouching: bool
+    direction: np.ndarray  # x, y, z
+    held_object: str
+    input: np.ndarray  # x, y
+    last_movement_result: bool
+    local_rotation: np.ndarray  # w, x, y, z
+    mouse_only: bool
+    position: np.ndarray  # x, y, z
+    rotation_euler_angles: np.ndarray  # x, y, z
+    succeeded: bool
+    target_position: np.ndarray  # x, y, z
+    touching_ceiling: bool
+    touching_floor: bool
+    touching_side: bool
+
+    @staticmethod
+    def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        return AgentState(
+            angle=state_dict['angle'],
+            angle_int=state_dict['angleInt'],
+            camera_local_roation=_vec_dict_to_array(state_dict['cameraLocalRoation']),
+            camera_rotation_euler_angles=_vec_dict_to_array(state_dict['cameraRotationEulerAngles']),
+            crouching=state_dict['crouching'],
+            direction=_vec_dict_to_array(state_dict['direction']),
+            held_object=state_dict['heldObject'],
+            input=_vec_dict_to_array(state_dict['input']),
+            last_movement_result=state_dict['lastMovementResult'],
+            local_rotation=_vec_dict_to_array(state_dict['localRotation']),
+            mouse_only=state_dict['mouseOnly'],
+            position=_vec_dict_to_array(state_dict['position']),
+            rotation_euler_angles=_vec_dict_to_array(state_dict['rotationEulerAngles']),
+            succeeded=state_dict['succeeded'],
+            target_position=_vec_dict_to_array(state_dict['targetPosition']),
+            touching_ceiling=state_dict['touchingCeiling'],
+            touching_floor=state_dict['touchingFloor'],
+            touching_side=state_dict['touchingSide'],
+        )
+
+
+class ObjectState(typing.NamedTuple):
+    angular_velocity: np.ndarray  # x, y, z
+    bbox_center: np.ndarray  #  x, y, z
+    bbox_extents:  np.ndarray  # x, y, z
+    is_broken: bool
+    is_open: bool
+    is_toggled: bool
+    name: str
+    object_id: str
+    object_type: str
+    position: np.ndarray  # x, y, z
+    rotation: np.ndarray  # x, y, z
+    touching_objects: typing.List[str]
+    velocity: np.ndarray  # x, y, z
+
+    @staticmethod
+    def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        return ObjectState(
+            angular_velocity=_vec_dict_to_array(state_dict['angularVelocity']),
+            bbox_center=_vec_dict_to_array(state_dict['bboxCenter']),
+            bbox_extents=_vec_dict_to_array(state_dict['bboxExtents']),
+            is_broken=state_dict['isBroken'],
+            is_open=state_dict['isOpen'],
+            is_toggled=state_dict['isToggled'],
+            name=state_dict['name'],
+            object_id=state_dict['objectId'],
+            object_type=state_dict['objectType'],
+            position=_vec_dict_to_array(state_dict['position']),
+            rotation=_vec_dict_to_array(state_dict['rotation']),
+            touching_objects=state_dict['touchingObjects'],
+            velocity=_vec_dict_to_array(state_dict['velocity']),
+        )
+
+
+class ActionState(typing.NamedTuple):
+    action: str
+    degrees: float
+    force_action: bool
+    object_id: str
+    object_name: str
+    object_type: str
+    random_seed: int
+    rotation: np.ndarray  # x, y, z
+    x: float
+    y: float
+    z: float
+
+    @staticmethod
+    def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        return ActionState(
+            action=state_dict['action'],
+            degrees=state_dict['degrees'],
+            force_action=state_dict['forceAction'],
+            object_id=state_dict['objectId'],
+            object_name=state_dict['objectName'],
+            object_type=state_dict['objectType'],
+            random_seed=state_dict['randomSeed'],
+            rotation=_vec_dict_to_array(state_dict['rotation']),
+            x=state_dict['x'],
+            y=state_dict['y'],
+            z=state_dict['z'],
+        )
+
+
+class FullState(typing.NamedTuple):
+    action: typing.Optional[ActionState]
+    action_changed: bool
+    agent_state: typing.Optional[AgentState]
+    agent_state_changed: bool
+    index: int
+    n_objects_changed: int
+    objects: typing.List[ObjectState]
+    original_index: int
+
+    @staticmethod
+    def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        action_changed = state_dict['actionChanged']
+        agent_state_changed = state_dict['agentStateChanged']
+        return FullState(
+            action=ActionState.from_state_dict(state_dict['action']) if action_changed else None,
+            action_changed=action_changed,
+            agent_state=AgentState.from_state_dict(state_dict['agentState']) if agent_state_changed else None,
+            agent_state_changed=agent_state_changed,
+            index=state_dict['index'],
+            n_objects_changed=state_dict['nObjectsChanged'],
+            objects=[ObjectState.from_state_dict(object_state_dict) for object_state_dict in state_dict['objects']],
+            original_index=state_dict['originalIndex'],
+        )
+
+
+class BuildingPseudoObject(PseudoObject):
+    building_objects: typing.Dict[str, ObjectState]  # a collection of the objects in the building
+    min_corner: np.ndarray
+    max_corner: np.ndarray
+    
+    def __init__(self, building_id: str):
+        super().__init__(building_id, building_id, np.zeros(3), np.zeros(3), np.zeros(3))
+        self.building_objects = {}
+        self.min_corner = np.zeros(3)
+        self.max_corner = np.zeros(3)
+        self.position_valid = False
+
+    def add_object(self, obj: ObjectState):
+        '''
+        Add a new object to the building and update the building's position and bounding box
+        '''
+        self.building_objects[obj.object_id] = obj        
+        obj_min, obj_max = _extract_object_limits(obj)
+
+        if not self.position_valid:
+            self.min_corner = obj_min
+            self.max_corner = obj_max
+            self.position_valid = True
+
+        else:
+            self.min_corner = np.minimum(obj_min, self.min_corner)  # type: ignore
+            self.max_corner = np.maximum(obj_max, self.max_corner)  # type: ignore
+
+        self._update_position_from_corners()
+        
+    def _update_position_from_corners(self) -> None:
+        self.position = self.bbox_center = (self.min_corner + self.max_corner) / 2  # type: ignore
+        self.bbox_extents = (self.max_corner - self.min_corner) / 2  # type: ignore
+
+    def remove_object(self, obj: ObjectState):
+        if obj.object_id not in self.building_objects:
+            raise ValueError(f'Object {obj.object_id} is not in building {self.name}')
+        
+        del self.building_objects[obj.object_id]
+
+        if len(self.building_objects) == 0:
+            self.position_valid = False
+        
+        else:
+            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj) 
+                for curr_obj in self.building_objects.values()]))
+            
+            self.min_corner = np.min(object_minima, axis=0)  
+            self.max_corner = np.max(object_maxima, axis=0)  
+            self._update_position_from_corners()
+
+
+def _object_location(object: typing.Union[AgentState, ObjectState, PseudoObject]) -> np.ndarray:
+    return object.bbox_center if hasattr(object, 'bbox_center') and object.bbox_center is not None else object.position  # type: ignore
+
+def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
+    '''
+    Returns the coordinates of each of the 4 corners of the object's bounding box, with the
+    y coordinate matching the center of mass
+    '''
+
+    bbox_center = object.bbox_center
+    bbox_extents = object.bbox_extents
+
+    corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
+               bbox_center + np.array([bbox_extents[0], 0, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], 0, -bbox_extents[2]])
+              ]
+
+    return corners
+
+
+def _extract_object_limits(obj: typing.Union[ObjectState, PseudoObject]):
+    obj_center = _object_location(obj)
+    obj_extents = obj.bbox_extents
+
+    obj_min = obj_center - obj_extents
+    obj_max = obj_center + obj_extents
+    return obj_min, obj_max
+
+
+def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
+    '''
+    Returns whether a point is contained with the bounding box of the provided object
+    '''
+
+    bbox_center = object.bbox_center
+    bbox_extents = object.bbox_extents
+
+    return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
+
 
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:

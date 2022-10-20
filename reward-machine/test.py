@@ -3,6 +3,7 @@ import pathlib
 import typing
 
 from game_handler import GameHandler
+from utils import FullState
 
 
 BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
@@ -224,14 +225,14 @@ TEST_BUILDING_GAME = """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_BUILDING_GAME)
+    game_handler = GameHandler(TEST_BLOCK_STACK_GAME)
     score = None
 
     trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
-
+        state = FullState.from_state_dict(state)
         score = game_handler.process(state, is_final)
         if score is not None:
             break

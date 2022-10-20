@@ -1,5 +1,6 @@
 import itertools
 import os
+from queue import Full
 import sys
 import tatsu
 import tatsu.ast
@@ -11,7 +12,7 @@ from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
 from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
-from utils import extract_variable_type_mapping, get_object_assignments
+from utils import extract_variable_type_mapping, get_object_assignments, FullState
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -125,7 +126,7 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.Optional[float]:  
+    def process(self, state: FullState, is_final: bool, debug: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
@@ -159,7 +160,7 @@ class GameHandler():
 
         return score
 
-    def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any],
+    def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: FullState,
                        mapping: typing.Dict[str, str]) -> bool:
         '''
         Determine whether the setup conditions of the game have been met. The setup conditions

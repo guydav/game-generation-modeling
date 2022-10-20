@@ -5,7 +5,7 @@ import tatsu.ast
 import enum
 
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
 
 from config import NAMED_OBJECTS
@@ -231,7 +231,7 @@ class PreferenceHandler:
         new_partial_preference_satisfactions.append(PartialPreferenceSatisfaction(new_mapping, None, self.temporal_predicates[0], 0, -1, {}))
 
     def _evaluate_next_predicate(self, next_predicate_type: typing.Optional[PredicateType], next_predicate: typing.Optional[tatsu.ast.AST], 
-        mapping: typing.Dict[str, str], traj_state: typing.Dict[str, typing.Any]) -> bool:
+        mapping: typing.Dict[str, str], traj_state: FullState) -> bool:
         next_predicate_value = None
         
         if next_predicate_type is None:
@@ -251,7 +251,7 @@ class PreferenceHandler:
 
         return next_predicate_value
 
-    def process(self, traj_state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+    def process(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
         '''
         Take a state from an active trajectory and update each of the internal states based on the
         satisfcation of predicates and the rules of the temporal logic operators
@@ -274,7 +274,7 @@ class PreferenceHandler:
         self.cur_step += 1
         return satisfactions
 
-    def _process_then(self, traj_state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+    def _process_then(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
         '''
         Handle temporal predicates inside a then operator
         '''
@@ -346,14 +346,11 @@ class PreferenceHandler:
                     print("\n\tEvaluation of next predicate:", next_pred_eval)
                     print("\tEvaluation of current predicate:", cur_pred_eval)
 
+
                 measurement = typing.cast(tatsu.ast.AST, current_predicate["measurement"])
                 measurement_fn_name = typing.cast(str, measurement["func_name"])
-                measurement_fn = FUNCTION_LIBRARY[measurement_fn_name]  
 
-                # Map the variables names to the object names, and extract them from the state
-                func_args = [traj_state["objects"][mapping[var]] for var in extract_variables(measurement)]
-
-                evaluation = measurement_fn(*func_args)
+                evaluation = self.predicate_handler.evaluate_function(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
 
                 measures_copy = measures.copy()  # type: ignore
                 measures_copy[measurement_fn_name] = evaluation
@@ -464,7 +461,7 @@ class PreferenceHandler:
 
         return self.satisfied_this_step
 
-    def _process_at_end(self, traj_state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+    def _process_at_end(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
         """
         Handle the single predicate inside an at_end operator. This will always return no satisfactions unless the
         provided state is the last state in the trajectory.
@@ -478,7 +475,7 @@ class PreferenceHandler:
 
         return self.satisfied_this_step
 
-    def _process_always(self, traj_state: typing.Dict[str, typing.Any], is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
+    def _process_always(self, traj_state: FullState, is_final: bool, debug: bool = False) -> typing.List[PreferenceSatisfaction]:
         """
         Handle the single predicate inside an always operator
         """

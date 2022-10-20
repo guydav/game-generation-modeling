@@ -184,8 +184,8 @@ TEST_AT_END_GAME = """
 """
 
 TEST_BLOCK_STACK_GAME = """
-    (define (game block-test) (:domain many-objects-room-v1)
-    (:constraints (and 
+(define (game block-test) (:domain many-objects-room-v1)
+(:constraints (and 
         (preference blockOnBlock
             (exists (?b1 ?b2 - block)
                 (then 
@@ -196,15 +196,35 @@ TEST_BLOCK_STACK_GAME = """
                 )
             )
         )
-    ))
-    (:scoring maximize (+
-        (* (count-nonoverlapping blockOnBlock) 1)
-    )))
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockOnBlock) 1)
+)))
+"""
+
+
+TEST_BUILDING_GAME = """
+(define (game building-test) (:domain many-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingAtEnd (exists (?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                )
+            )
+        )
+    )
+)
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingAtEnd) 1)
+))
+)
 """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_BLOCK_STACK_GAME)
+    game_handler = GameHandler(TEST_BUILDING_GAME)
     score = None
 
     trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()

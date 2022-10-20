@@ -365,7 +365,7 @@ def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequenc
     raise NotImplementedError()
 
 
-def _agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 0
     return agent["crouching"]
 
@@ -586,6 +586,13 @@ def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
 
 
     # TODO: do we want to use the position? Or the bounding box?
+
+
+def _func_building_size(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    assert isinstance(objects[0], BuildingPseudoObject)
+
+    return len(objects[0].building_objects)
     
 
 

@@ -45,7 +45,9 @@ class PredicateHandler:
     # A cache of the latest observed value for each object
     state_cache: typing.Dict[str, typing.Union[ObjectState, AgentState, PseudoObject]]
     # The last state the state cache was updated for
-    state_cache_last_updated: int
+    state_cache_global_last_updated: int
+    # The last state each object was updated for
+    state_cache_object_last_updated: typing.Dict[str, int]    
 
     def __init__(self, domain: str, index_key: str = ORIGINAL_INDEX_KEY, object_id_key: str = OBJECT_ID_KEY):
         self.domain = domain
@@ -60,10 +62,12 @@ class PredicateHandler:
         self.evaluation_cache = {}
         self.evaluation_cache_last_updated = {}
         self.state_cache = {}
+        self.state_cache_object_last_updated = {}
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)
-        self.state_cache_last_updated = -1
+        self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
+        self.state_cache_global_last_updated = -1
 
-    def _cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
+    def _predicate_cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
         """
         Map from the arguments to __call__ to the key that represents them in the cache. 
         """
@@ -75,7 +79,8 @@ class PredicateHandler:
         mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
         return f'{predicate_str}_{mapping_str}'
     
-    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> bool:
+    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], 
+        mapping: typing.Dict[str, str], force_evaluation: bool = False) -> bool:
         """
         The external API to the predicate handler.
         For now, implements the same logic as before, to make sure I separated it correctly from the `preference_handler`.
@@ -86,37 +91,51 @@ class PredicateHandler:
         there's information that merits updating it. This means that we should cache predicate
         evaluation results, update them when they return a non-None value, and return the cached result. 
 
-        GD 2022-09-29: We decided that since all external callers treat a None 
+        GD 2022-09-29: We decided that since all external callers treat a None as a False, we might as well make it explicit here
         """
-        pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping)
+        pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping, force_evaluation=force_evaluation)
 
         return pred_value if pred_value is not None else False
 
-    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
-        predicate_key = self._cache_key(predicate, mapping)
+    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], 
+        mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
+        predicate_key = self._predicate_cache_key(predicate, mapping)
         state_index = state[self.index_key]
 
         # If no time has passed since the last update, we know we can use the cached value
         if predicate_key in self.evaluation_cache_last_updated and self.evaluation_cache_last_updated[predicate_key] == state_index:
             return self.evaluation_cache[predicate_key]
 
-        if state_index > self.state_cache_last_updated:
-            self.state_cache_last_updated = state_index
-            for obj in state[OBJECTS_KEY]:
-                self.state_cache[obj[self.object_id_key]] = obj
+        # This shouldn't happen, but no reason not to check it anyhow
+        if state_index > self.state_cache_global_last_updated:
+            self.update_cache(state)
 
-            if state[AGENT_STATE_CHANGED_KEY]:
-                self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
-                self.state_cache['agent'] = state[AGENT_STATE_KEY]
-
-        current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping)
+        current_state_value =  self._inner_evaluate_predicate(predicate, state, mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
 
         return self.evaluation_cache.get(predicate_key, None)
 
-    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], mapping: typing.Dict[str, str]) -> typing.Optional[bool]:
+    def update_cache(self, state: typing.Dict[str, typing.Any]):
+        '''
+        Update the cache if any objects / the agent are changed in the current state
+        '''
+        state_index = state[self.index_key]
+
+        self.state_cache_global_last_updated = state_index
+        for obj in state[OBJECTS_KEY]:
+            self.state_cache[obj[self.object_id_key]] = obj
+            self.state_cache_object_last_updated[obj[self.object_id_key]] = state_index
+
+        if state[AGENT_STATE_CHANGED_KEY]:
+            self.state_cache[AGENT_STATE_KEY] = state[AGENT_STATE_KEY]
+            self.state_cache['agent'] = state[AGENT_STATE_KEY]
+            self.state_cache_object_last_updated[AGENT_STATE_KEY] = state_index
+            self.state_cache_object_last_updated['agent'] = state_index
+
+    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any], 
+        mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
@@ -142,29 +161,29 @@ class PredicateHandler:
             relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
             
             # Evaluate the predicate
-            evaluation = predicate_fn(state, relevant_mapping, self.state_cache)
+            evaluation = predicate_fn(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
 
             return evaluation
 
         elif predicate_rule == "super_predicate":
             # No need to go back to __call__, there's nothing separate to cache here
-            return self._inner_evaluate_predicate(predicate["pred"], state, mapping)
+            return self._inner_evaluate_predicate(predicate["pred"], state, mapping, force_evaluation)
 
         elif predicate_rule == "super_predicate_not":
-            inner_pred_value = self._inner_call(predicate["not_args"], state, mapping)
+            inner_pred_value = self._inner_call(predicate["not_args"], state, mapping, force_evaluation)
             return None if inner_pred_value is None else not inner_pred_value
 
         # TODO: technically, AND and OR can accept a single argument under the grammar, but that would break the
         #       logic here, since it expects to be able to iterate through the 'and_args' / 'or_args'
         elif predicate_rule == "super_predicate_and":
-            inner_values = [self._inner_call(sub, state, mapping) for sub in predicate["and_args"]] # type: ignore
+            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in predicate["and_args"]] # type: ignore
             # If there are any Nones, we cannot know about their conjunction, so return None
             if any(v is None for v in inner_values):
                 return None
             return all(inner_values)  
 
         elif predicate_rule == "super_predicate_or":
-            inner_values = [self._inner_call(sub, state, mapping) for sub in predicate["or_args"]] # type: ignore
+            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in predicate["or_args"]] # type: ignore
             # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
             if all(v is None for v in inner_values):
                 return None
@@ -175,7 +194,7 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
             if all(v is None for v in inner_mapping_values):
                 return None
             return any(inner_mapping_values)
@@ -185,7 +204,7 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
+            inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
             if any(v is None for v in inner_mapping_values):
                 return None
             return all(inner_mapping_values)
@@ -209,7 +228,7 @@ class PredicateHandler:
                 relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
             
                 # Evaluate the function
-                evaluation = function(state, relevant_mapping, self.state_cache)
+                evaluation = function(state, relevant_mapping, self.state_cache, force_evaluation)
 
                 # If the function is undecidable with the current information, return None
                 if evaluation is None:
@@ -229,7 +248,7 @@ class PredicateHandler:
                 relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}  
 
                 # Evaluate the function
-                evaluation = function(state, relevant_mapping, self.state_cache)
+                evaluation = function(state, relevant_mapping, self.state_cache, force_evaluation)
 
                 # If the function is undecidable with the current information, return None
                 if evaluation is None:
@@ -296,8 +315,10 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
-def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: str = OBJECT_ID_KEY) -> typing.Callable:
-    def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState]):
+def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:
+    def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState], 
+        state_cache_last_updated: typing.Dict[str, int], force_evaluation: bool = False) -> typing.Optional[bool]:
+        
         agent_object = state[AGENT_STATE_KEY] if state[AGENT_STATE_CHANGED_KEY] else state_cache[AGENT_STATE_KEY]
 
         # if there are no objects in the predicate mapping, then we can just evaluate the predicate
@@ -305,27 +326,28 @@ def mapping_objects_decorator(predicate_func: typing.Callable, object_id_key: st
             return predicate_func(agent_object, [])
 
         # Otherwise, check if any of the relevant objects have changed in this state
-        current_state_mapping_objects = {}
-        mapping_values = set(predicate_partial_mapping.values())
-        state_objects = typing.cast(list, state[OBJECTS_KEY])
-        for object in state_objects:
-            if object[object_id_key] in mapping_values:
-                current_state_mapping_objects[object[object_id_key]] = object
+        mapping_values = predicate_partial_mapping.values()
+        any_object_not_in_cache = any(obj not in state_cache for obj in mapping_values)
+        # If any objects are not in the cache, we cannot evaluate the predidate
+        if any_object_not_in_cache:
+            if force_evaluation:
+                raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for obj in mapping_values]}')
+            return None
 
+        any_objects_changed = any(state_cache_last_updated[object_id] == state[ORIGINAL_INDEX_KEY] for object_id in mapping_values)
         # None of the objects in the mapping are updated in the current state, so return None
-        if len(current_state_mapping_objects) == 0:
+        if not any_objects_changed and not force_evaluation:
             return None
 
         # At least one object is, so populate the rest from the cache
+        mapping_objects = []
         for mapping_value in mapping_values:
-            if mapping_value not in current_state_mapping_objects:
-                if mapping_value not in state_cache:
-                    # We don't have this object in the cache, so we can't evaluate the predicate
-                    return None
+            # If we don't have this object in the cache, we can't evaluate the predicate
+            if mapping_value not in state_cache:
+                return None
 
-                current_state_mapping_objects[mapping_value] = state_cache[mapping_value]
+            mapping_objects.append(state_cache[mapping_value])
 
-        mapping_objects = [current_state_mapping_objects[mapping_value] for _, mapping_value in predicate_partial_mapping.items()]
         return predicate_func(agent_object, mapping_objects)
 
     return wrapper

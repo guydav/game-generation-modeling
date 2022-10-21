@@ -390,13 +390,16 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
+    inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])
     inner_object_bbox_center = objects[1].bbox_center
-    # inner_object_bbox_extents = _vec_dict_to_array(objects[1]['bboxExtents'])
-    # start_inside = np.all(outer_object_bbox_center - outer_object_bbox_extents <= inner_object_bbox_center - inner_object_bbox_extents)
-    # end_inside = np.all(inner_object_bbox_center + inner_object_bbox_extents <= outer_object_bbox_center + outer_object_bbox_extents)
-    start_inside = np.all(outer_min_corner <= inner_object_bbox_center)
-    end_inside = np.all(inner_object_bbox_center <= outer_max_corner)
-    return start_inside and end_inside
+
+    # The interior object's bbox center must be inside the exterior object's bbox
+    inner_bbox_center_contained = np.all(outer_min_corner <= inner_object_bbox_center) and np.all(inner_object_bbox_center <= outer_max_corner)
+
+    # We also check to make sure that the outer object's bbox is not entirely inside the inner object's bbox (possible for non-convex objects)
+    outer_bbox_contained = np.all(inner_min_corner <= outer_min_corner) and np.all(outer_max_corner <= inner_max_corner)
+    
+    return inner_bbox_center_contained and not outer_bbox_contained
 
 
 # TODO (GD): we should discuss what this threshold should be

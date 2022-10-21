@@ -371,6 +371,9 @@ def _object_in_building(building: BuildingPseudoObject, other_object: ObjectStat
     return other_object.object_id in building.building_objects
 
 
+IN_MARGIN = 0.05
+
+
 def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
@@ -390,16 +393,19 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
-    inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])
-    inner_object_bbox_center = objects[1].bbox_center
+    inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])    
 
-    # The interior object's bbox center must be inside the exterior object's bbox
-    inner_bbox_center_contained = np.all(outer_min_corner <= inner_object_bbox_center) and np.all(inner_object_bbox_center <= outer_max_corner)
+    return np.all(inner_min_corner >= outer_min_corner - IN_MARGIN) and np.all(inner_max_corner <= outer_max_corner + IN_MARGIN) 
 
-    # We also check to make sure that the outer object's bbox is not entirely inside the inner object's bbox (possible for non-convex objects)
-    outer_bbox_contained = np.all(inner_min_corner <= outer_min_corner) and np.all(outer_max_corner <= inner_max_corner)
+    # inner_object_bbox_center = objects[1].bbox_center
+
+    # # The interior object's bbox center must be inside the exterior object's bbox
+    # inner_bbox_center_contained = np.all(outer_min_corner <= inner_object_bbox_center) and np.all(inner_object_bbox_center <= outer_max_corner)
+
+    # # We also check to make sure that the outer object's bbox is not entirely inside the inner object's bbox (possible for non-convex objects)
+    # outer_bbox_contained = np.all(inner_min_corner <= outer_min_corner) and np.all(outer_max_corner <= inner_max_corner)
     
-    return inner_bbox_center_contained and not outer_bbox_contained
+    # return inner_bbox_center_contained and not outer_bbox_contained
 
 
 # TODO (GD): we should discuss what this threshold should be
@@ -437,7 +443,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
     if first_pseudo and second_pseudo:
         first_building = isinstance(objects[0], BuildingPseudoObject)
-        second_building = isinstance(objects[0], BuildingPseudoObject)
+        second_building = isinstance(objects[1], BuildingPseudoObject)
         if first_building == second_building:
             return False   # if both are buildings they would be merged; if neither, they wouldn't touch
         
@@ -455,7 +461,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
-            pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
+            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore 
     elif second_pseudo:
         obj = typing.cast(ObjectState, objects[0])
         pseudo_obj = objects[1]
@@ -464,7 +470,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
-            pseudo_obj is _find_nearest_pseudo_object(obj, list(UNITY_PSEUDO_OBJECTS.values()))  # type: ignore 
+            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore 
     else:
         return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
 
@@ -524,12 +530,13 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 # ====================================== FUNCTION DEFINITIONS =======================================
 
 
-def _find_nearest_pseudo_object(object: ObjectState, pseudo_objects: typing.Sequence[PseudoObject]):
+def _find_nearest_pseudo_object_of_type(object: ObjectState, object_type: str):
     """
     Finds the pseudo object in the sequence that is closest to the object.
     """
-    pseudo_objects = list(pseudo_objects)
-    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in pseudo_objects]
+    pseudo_objects = list(UNITY_PSEUDO_OBJECTS.values())
+    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in pseudo_objects
+        if pseudo_object.object_type == object_type]
     return pseudo_objects[np.argmin(distances)]
 
 

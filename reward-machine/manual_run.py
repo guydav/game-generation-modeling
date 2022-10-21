@@ -22,7 +22,7 @@ REPLAY_NESTING_KEYS = (
     'participants-v2-develop/17tSEDmCvGp1uKVEh5iq/replay-preCreateGame'
 )
 
-def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = None):
+def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = REPLAY_NESTING_KEYS):
     with open(path, 'r') as f:
         trace = json.load(f)
 
@@ -249,7 +249,7 @@ if __name__ == "__main__":
 
     trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()
 
-    for idx, (state, is_final) in enumerate(_load_trace(trace_path, REPLAY_NESTING_KEYS)):
+    for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
         score = game_handler.process(state, is_final)

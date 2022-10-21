@@ -52,9 +52,9 @@ class BuildingHandler:
             obj_building.remove_object(obj)  
             self.objects_to_buildings.pop(obj_id)
             if len(obj_building.building_objects) == 0:
-                self.active_buildings.remove(obj_building.objectId)
+                self.active_buildings.remove(obj_building.object_id)
 
-            if debug: print(f'Object {obj_id} removed from building {obj_building.objectId} because it is {"held" if obj_id == self.currently_held_object_id else "in motion"}')
+            if debug: print(f'Object {obj_id} removed from building {obj_building.object_id} because it is {"held" if obj_id == self.currently_held_object_id else "in motion"}')
 
     def _merge_buildings(self, touched_buildings: typing.Collection[str], debug: bool = False) -> None:
         min_building_id = min(touched_buildings)

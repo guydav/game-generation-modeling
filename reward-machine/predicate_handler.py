@@ -534,10 +534,10 @@ def _find_nearest_pseudo_object(object: ObjectState, pseudo_objects: typing.Sequ
 
 
 def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoObject):
-    if np.allclose(pseudo_object.rotation['y'], 0):
+    if np.allclose(pseudo_object.rotation[1], 0):
         return 2
 
-    if np.allclose(pseudo_object.rotation['y'], 90):
+    if np.allclose(pseudo_object.rotation[1], 90):
         return 0
 
     raise NotImplemented(f'Cannot compute distance between object and pseudo object with rotation {pseudo_object.rotation}')

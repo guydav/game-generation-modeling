@@ -1,6 +1,6 @@
 from importlib.resources import path
 import pathlib
-from cv2 import trace
+# from cv2 import trace
 import pytest
 import typing
 import sys
@@ -57,11 +57,8 @@ TEST_GAME_LIBRARY = {
 }
 
 TEST_CASES = [
-    ('on-chair-bug', BLOCK_STACKING_TRACE, 1.0, {
-        'chairOnTallRectBlock': [
-            PreferenceSatisfaction(mapping={'?l': 'TallRectBlock|-02.95|+02.05|-02.31', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={})
-            ], 
-    },),
+    ('on-chair-bug', BLOCK_STACKING_TRACE, 0.0, {},),
+    
     ('test-building', BLOCK_STACKING_TRACE, 10.0, {
         'blockInBuildingAtEnd': [
             PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=2140, end=2140, measures={}), 

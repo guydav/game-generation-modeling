@@ -543,10 +543,6 @@ def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoOb
     raise NotImplemented(f'Cannot compute distance between object and pseudo object with rotation {pseudo_object.rotation}')
 
 
-def _get_pseudo_object_relevant_distance_dimension(pseudo_object: PseudoObject):
-    return 'xyz'[_get_pseudo_object_relevant_distance_dimension_index(pseudo_object)]
-
-
 def _distance_object_pseudo_object(object: ObjectState, pseudo_object: PseudoObject):
     distance_dimension = _get_pseudo_object_relevant_distance_dimension_index(pseudo_object)
     return np.linalg.norm(_object_location(object)[distance_dimension] - _object_location(pseudo_object)[distance_dimension])

@@ -5,13 +5,15 @@ import pytest
 import typing
 import sys
 
-from utils import FullState
+from utils import FullState, get_project_dir
 from manual_run import _load_trace
 from game_handler import GameHandler
 from preference_handler import PreferenceSatisfaction
 
 
-BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
+
+
+BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
 TEST_ON_BUG_GAME = """
 (define (game building-test) (:domain many-objects-room-v1)
 (:constraints (and 
@@ -112,4 +114,5 @@ def test_single_game(game_key: str, trace_path: typing.Union[str, pathlib.Path],
                 assert pref_satisfaction in game_handler.preference_satisfactions[pref_name]
 
 if __name__ == '__main__':
+    print(__file__)
     sys.exit(pytest.main([__file__]))

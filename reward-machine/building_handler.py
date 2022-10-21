@@ -91,7 +91,7 @@ class BuildingHandler:
         current_object_ids_list = list(sorted(current_object_ids))
         current_objects = {obj_id: [o for o in state.objects if o.object_id == obj_id][0]
             for obj_id in current_object_ids}
-        current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == self.currently_held_object_id
+        current_objects_in_motion_or_held = {obj_id: _pred_in_motion(agent, [obj]) or obj_id == self.currently_held_object_id  # type: ignore
             for obj_id, obj in current_objects.items()
         }
 

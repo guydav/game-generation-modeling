@@ -2021,7 +2021,7 @@
         )   
     ))
 ))
-(:scoring maximize (count-maximal-once-per-objects ballOnBedAtEnd)
+(:scoring maximize (count-once-per-objects ballOnBedAtEnd)
 ))
 
  

@@ -3,6 +3,7 @@ import pathlib
 from cv2 import trace
 import pytest
 import typing
+import sys
 
 from utils import FullState
 from manual_run import _load_trace
@@ -59,7 +60,21 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?l': 'TallRectBlock|-02.95|+02.05|-02.31', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={})
             ], 
     },),
-    ('test-building', BLOCK_STACKING_TRACE, 10.0, {}),
+    ('test-building', BLOCK_STACKING_TRACE, 10.0, {
+        'blockInBuildingAtEnd': [
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CylinderBlock|-02.95|+01.62|-01.95'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CylinderBlock|-03.02|+01.62|-01.73'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CylinderBlock|-02.97|+01.62|-01.50'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'PyramidBlock|-02.95|+01.61|-02.66'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.31'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.52'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.72'}, start=2140, end=2140, measures={})
+            ]
+        }
+),
 ]
 
 
@@ -95,3 +110,6 @@ def test_single_game(game_key: str, trace_path: typing.Union[str, pathlib.Path],
 
             for pref_satisfaction in pref_satisfactions:
                 assert pref_satisfaction in game_handler.preference_satisfactions[pref_name]
+
+if __name__ == '__main__':
+    sys.exit(pytest.main([__file__]))

@@ -24,6 +24,7 @@ class PreferenceSatisfaction(typing.NamedTuple):
     start: int
     end: int
     measures: typing.Optional[dict]
+        
 
 
 class PredicateType(enum.Enum):

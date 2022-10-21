@@ -14,6 +14,7 @@ from preference_handler import PreferenceSatisfaction
 
 BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
 BALL_TO_WALL_TO_BIN_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
+BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 
 
 TEST_ON_BUG_GAME = """
@@ -48,6 +49,66 @@ TEST_BUILDING_GAME = """
 ))
 (:scoring maximize (+
     (* (count-nonoverlapping blockInBuildingAtEnd) 1)
+))
+)
+"""
+
+TEST_BUILDING_ON_CHAIR_GAME = """
+(define (game building-test) (:domain many-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingOnChairAtEnd (exists (?c - chair ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (on ?c ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingOnChairAtEnd) 2)
+))
+)
+"""
+
+TEST_BUILDING_IN_BIN_GAME = """
+(define (game building-test) (:domain medium-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingInBinAtEnd (exists (?h - hexagonal_bin ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (in ?h ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingInBinAtEnd) 2)
+))
+)
+"""
+
+TEST_BUILDING_TOUCHES_WALL_GAME = """
+(define (game building-test) (:domain medium-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingTouchingWallAtEnd (exists (?w - wall ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (touch ?w ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingTouchingWallAtEnd) 2)
 ))
 )
 """
@@ -112,6 +173,9 @@ TEST_THROW_BALL_AT_WALL_GAME = """
 TEST_GAME_LIBRARY = {
     'on-chair-bug': TEST_ON_BUG_GAME,
     'test-building': TEST_BUILDING_GAME,
+    'test-building-on-chair': TEST_BUILDING_ON_CHAIR_GAME,
+    'test-building-in-bin': TEST_BUILDING_IN_BIN_GAME,
+    'test-building-touches-wall': TEST_BUILDING_TOUCHES_WALL_GAME,
     'test-throwing': TEST_THROWING_GAME,
     'test-throw-to-wall': TEST_THROW_BALL_AT_WALL_GAME,
 }
@@ -130,9 +194,32 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.31'}, start=2140, end=2140, measures={}), 
             PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.52'}, start=2140, end=2140, measures={}), 
             PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.72'}, start=2140, end=2140, measures={})
-            ]
-        }
-    ),
+        ]
+    },),
+    ('test-building-on-chair', BLOCK_STACKING_TRACE, 12.0, {
+        'blockInBuildingOnChairAtEnd': [
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CubeBlock|-02.99|+01.26|-01.49', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CylinderBlock|-02.97|+01.62|-01.50', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'PyramidBlock|-02.95|+01.61|-02.66', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.31', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.52', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'TallRectBlock|-02.95|+02.05|-02.72', '?c': 'Chair|+02.73|00.00|-01.21'}, start=2140, end=2140, measures={})
+        ]
+    },),
+    ('test-building-in-bin', BUILDING_IN_TOUCH_TEST_TRACE, 4.0, {
+        'blockInBuildingInBinAtEnd': [
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|+00.50|+01.61|-02.91', '?h': 'GarbageCan|-02.79|-00.03|-02.67'}, start=2039, end=2039, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|+00.70|+01.61|-02.91', '?h': 'GarbageCan|-02.79|-00.03|-02.67'}, start=2039, end=2039, measures={})
+        ]
+    },),
+    ('test-building-touches-wall', BUILDING_IN_TOUCH_TEST_TRACE, 8.0, {
+        'blockInBuildingTouchingWallAtEnd': [
+            PreferenceSatisfaction(mapping={'?b': 'building_2', '?l': 'BridgeBlock|+00.63|+01.10|-02.91', '?w': 'north_wall'}, start=2039, end=2039, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_2', '?l': 'BridgeBlock|+01.03|+01.11|-02.88', '?w': 'north_wall'}, start=2039, end=2039, measures={}), 
+            PreferenceSatisfaction(mapping={'?b': 'building_2', '?l': 'CylinderBlock|+00.93|+01.61|-02.89', '?w': 'north_wall'}, start=2039, end=2039, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_2', '?l': 'FlatRectBlock|+00.23|+01.66|-02.88', '?w': 'north_wall'}, start=2039, end=2039, measures={})
+        ]
+    },),
     ('test-throwing', BALL_TO_WALL_TO_BIN_TRACE, -1.2, {
         'throwBallToBin': [
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1958, end=2015, measures={}), 
@@ -162,22 +249,33 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2294, end=2373, measures={}), 
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2374, end=2410, measures={})
         ]
-    }),
-    ('test-throw-to-wall', BALL_TO_WALL_TO_BIN_TRACE, 10.0, {
+    },),
+    ('test-throw-to-wall', BALL_TO_WALL_TO_BIN_TRACE, 22.0, {
         'throwToWall': [
             PreferenceSatisfaction(mapping={'?w': 'east_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}), 
-            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}),
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=457, end=590, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=769, end=880, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=881, end=947, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=948, end=1019, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1020, end=1120, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1121, end=1209, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1210, end=1279, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1280, end=1370, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1371, end=1439, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1440, end=1502, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1503, end=1555, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1556, end=1656, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1699, end=1782, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1783, end=1868, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1869, end=1957, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1958, end=2015, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2040, end=2151, measures={}), 
+            PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2198, end=2293, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2294, end=2373, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2374, end=2410, measures={})
-            ]
-        },
-    ),
+        ],
+    },),
 ]
 
 

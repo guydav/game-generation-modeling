@@ -14,6 +14,7 @@ SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_tr
 TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
 CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
+BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -208,18 +209,17 @@ TEST_BUILDING_GAME = """
 (define (game building-test) (:domain many-objects-room-v1)
 (:constraints (and 
     (forall (?b - building) 
-        (preference blockInBuildingOnChairAtEnd (exists (?c - chair ?l - block)
+        (preference blockInBuildingAtEnd (exists (?l - block)
             (at-end
                 (and 
                     (in ?b ?l)
-                    (on ?c ?b)
                 )
             )
         ))
     )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockInBuildingOnChairAtEnd) 1)
+    (* (count-nonoverlapping blockInBuildingAtEnd) 1)
 ))
 )
 """
@@ -238,6 +238,69 @@ TEST_ON_BUG_GAME = """
 ))
 (:scoring maximize (+
     (* (count-nonoverlapping chairOnTallRectBlock) 1)
+))
+)
+"""
+
+
+TEST_BUILDING_ON_CHAIR_GAME = """
+(define (game building-test) (:domain many-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingOnChairAtEnd (exists (?c - chair ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (on ?c ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingOnChairAtEnd) 2)
+))
+)
+"""
+
+
+TEST_BUILDING_IN_BIN_GAME = """
+(define (game building-test) (:domain medium-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingInBinAtEnd (exists (?h - hexagonal_bin ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (in ?h ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingInBinAtEnd) 2)
+))
+)
+"""
+
+
+TEST_BUILDING_TOUCHES_WALL_GAME = """
+(define (game building-test) (:domain medium-objects-room-v1)
+(:constraints (and 
+    (forall (?b - building) 
+        (preference blockInBuildingTouchingWallAtEnd (exists (?w - wall ?l - block)
+            (at-end
+                (and 
+                    (in ?b ?l)
+                    (touch ?w ?b)
+                )
+            )
+        ))
+    )
+))
+(:scoring maximize (+
+    (* (count-nonoverlapping blockInBuildingTouchingWallAtEnd) 2)
 ))
 )
 """

@@ -166,13 +166,16 @@ class FullState(typing.NamedTuple):
         )
 
 
+BUILDING_TYPE = 'building'
+
+
 class BuildingPseudoObject(PseudoObject):
     building_objects: typing.Dict[str, ObjectState]  # a collection of the objects in the building
     min_corner: np.ndarray
     max_corner: np.ndarray
     
     def __init__(self, building_id: str):
-        super().__init__(building_id, building_id, np.zeros(3), np.zeros(3), np.zeros(3))
+        super().__init__(building_id, BUILDING_TYPE, building_id, np.zeros(3), np.zeros(3), np.zeros(3))
         self.building_objects = {}
         self.min_corner = np.zeros(3)
         self.max_corner = np.zeros(3)

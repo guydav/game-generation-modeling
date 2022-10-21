@@ -244,10 +244,10 @@ TEST_ON_BUG_GAME = """
 
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_ON_BUG_GAME)
+    game_handler = GameHandler(TEST_THROW_BALL_AT_WALL_GAME)
     score = None
 
-    trace_path = BLOCK_STACKING_TRACE.resolve().as_posix()
+    trace_path = TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

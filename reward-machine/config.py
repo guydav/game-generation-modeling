@@ -311,7 +311,7 @@ class PseudoObject:
         def __init__(self, object_id: str, name: str, position: np.ndarray, 
             extents: np.ndarray, rotation: np.ndarray):
 
-            self.objectId = object_id
+            self.object_id = object_id
             self.name = name
             self.position = position
             self.bbox_center = position

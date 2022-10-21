@@ -261,7 +261,6 @@
 ))
 
 (define (game 5d29412ab711e9001ab74ece-11) (:domain many-objects-room-v1)  ; 11
-
 (:constraints (and 
     (forall (?b - building) (and 
         (preference baseBlockInTowerAtEnd (exists (?l - block)

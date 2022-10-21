@@ -8,6 +8,12 @@ import typing
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
+PROJECT_NAME = 'game-generation-modeling'
+
+
+def get_project_dir(project_name: str = PROJECT_NAME):
+    return __file__[:__file__.find(project_name) + len(project_name)]
+
 
 def _vec_dict_to_array(vec: typing.Dict[str, float]):
     if 'x' not in vec or 'y' not in vec:

@@ -9,6 +9,8 @@ SOUTH_WALL = 'south_wall'
 EAST_WALL = 'east_wall'
 WEST_WALL = 'west_wall'
 
+BUILDING_TYPE = 'building'
+
 FEW_OBJECTS_ROOM = 'few'
 MEDIUM_OBJECTS_ROOM = 'medium'
 MANY_OBJECTS_ROOM = 'many'
@@ -300,23 +302,26 @@ for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
 
 class PseudoObject:
         object_id: str
+        object_type: str
         name: str
-        position: typing.Dict[str, float]
-        extents: typing.Dict[str, float]
-        rotation: typing.Dict[str, float]
+        bbox_center: np.ndarray
+        bbox_extents: np.ndarray
+        position: np.ndarray
+        rotation: np.ndarray
 
-        def __init__(self, object_id: str, name: str, position: typing.Dict[str, float], 
-            extents: typing.Dict[str, float], rotation: typing.Dict[str, float]):
+        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray, 
+            extents: np.ndarray, rotation: np.ndarray):
 
-            self.objectId = object_id
+            self.object_id = object_id
+            self.object_type = object_type
             self.name = name
             self.position = position
-            self.bboxCenter = position
-            self.bboxExtents = extents
+            self.bbox_center = position
+            self.bbox_extents = extents
             self.rotation = rotation
 
 
-        def __getitem__(self, item):
+        def __getitem__(self, item: typing.Any) -> typing.Any:
             if item in self.__dict__:
                 return self.__dict__[item]
 
@@ -325,14 +330,18 @@ class PseudoObject:
         def __contains__(self, item):
             return item in self.__dict__
 
+
 WALL_ID = 'FP302:StandardWallSize'
+WALL_TYPE = 'wall'
 WALL_NAME = 'FP326:StandardWallSize.021'
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
 UNITY_PSEUDO_OBJECTS = {
-        NORTH_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=0.1875, y=1.35, z=0.675), extents=dict(x=3.2875, y=1.35, z=0.075), rotation=dict(x=0, y=0, z=0)),
-        SOUTH_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=0.1875, y=1.35, z=-3.1), extents=dict(x=3.2875, y=1.35, z=0.075), rotation=dict(x=0, y=0, z=0)),
-        EAST_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=3.475, y=1.35, z=-1.2125), extents=dict(x=0.075, y=1.35, z=1.8875), rotation=dict(x=0, y=90, z=0)),
-        WEST_WALL: PseudoObject(WALL_ID, WALL_NAME, position=dict(x=-3.1, y=1.35, z=-1.2125), extents=dict(x=0.075, y=1.35, z=1.8875), rotation=dict(x=0, y=90, z=0)),
-}  
+        NORTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),
+        SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),
+        EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
+        WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
+}
+
+

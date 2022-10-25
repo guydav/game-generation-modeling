@@ -1,5 +1,6 @@
 import itertools
 import os
+from queue import Full
 import sys
 import tatsu
 import tatsu.ast
@@ -8,9 +9,10 @@ import typing
 from math import prod
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
-from preference_handler import PreferenceHandler, PreferenceSatisfcation
+from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
-from utils import extract_variable_type_mapping, get_object_assignments
+from building_handler import BuildingHandler
+from utils import extract_variable_type_mapping, get_object_assignments, FullState
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -25,7 +27,8 @@ class GameHandler():
     scoring: typing.Optional[tatsu.ast.AST]
     game_ast: tatsu.ast.AST
     predicate_handler: PredicateHandler
-    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfcation]]
+    preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
+    building_handler: BuildingHandler
 
     def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
         grammar = open(grammar_path).read()
@@ -45,6 +48,7 @@ class GameHandler():
         if not self.domain_name:
             raise ValueError("Error: Failed to extract domain from game specification")
 
+        self.building_handler = BuildingHandler(self.domain_name)
         self.predicate_handler = PredicateHandler(self.domain_name)
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
@@ -122,11 +126,14 @@ class GameHandler():
             elif rule == "scoring":
                 self.scoring = ast["scoring"]
 
-    def process(self, state: typing.Dict[str, typing.Any]) -> typing.Optional[float]:  
+    def process(self, state: FullState, is_final: bool, debug: bool = False,
+        debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+        self.predicate_handler.update_cache(state)
+        self.building_handler.process(state, debug=debug or debug_building_handler)
 
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
@@ -135,17 +142,18 @@ class GameHandler():
         if not setup:
             return
 
+        # The game is in its last step if the terminal conditions are met or if the trajectory is over
+        is_last_step = is_final or self.evaluate_terminals(self.terminal)
+
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
-                satisfactions = handlers.process(state)
+                satisfactions = handlers.process(state, is_last_step, debug=debug or debug_preference_handlers)
                 self.preference_satisfactions[preference_name] += satisfactions
 
             elif isinstance(handlers, list):
                 pass
 
-        terminate = self.evaluate_terminals(self.terminal) # TODO
-
-        if terminate:
+        if is_last_step:
             score = self.score(self.scoring) 
 
         else:
@@ -153,7 +161,7 @@ class GameHandler():
 
         return score
 
-    def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: typing.Dict[str, typing.Any],
+    def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: FullState,
                        mapping: typing.Dict[str, str]) -> bool:
         '''
         Determine whether the setup conditions of the game have been met. The setup conditions

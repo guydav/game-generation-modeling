@@ -261,7 +261,6 @@
 ))
 
 (define (game 5d29412ab711e9001ab74ece-11) (:domain many-objects-room-v1)  ; 11
-
 (:constraints (and 
     (forall (?b - building) (and 
         (preference baseBlockInTowerAtEnd (exists (?l - block)
@@ -274,7 +273,8 @@
             (at-end
                 (and 
                     (in ?b ?l)
-                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?b))))
+                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?l))))
+                    (not (on floor ?l))
                 )
             )
         )) 
@@ -580,7 +580,7 @@
         (preference blockInTowerAtEnd (exists (?l - block)
             (at-end
                 (and 
-                    (in building ?b ?l)
+                    (in ?b ?l)
                 )
             )
         ))
@@ -2020,7 +2020,7 @@
         )   
     ))
 ))
-(:scoring maximize (count-maximal-once-per-objects ballOnBedAtEnd)
+(:scoring maximize (count-once-per-objects ballOnBedAtEnd)
 ))
 
  

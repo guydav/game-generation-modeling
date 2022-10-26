@@ -1,7 +1,4 @@
 import itertools
-import os
-from queue import Full
-import sys
 import tatsu
 import tatsu.ast
 import typing
@@ -12,7 +9,7 @@ from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
 from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
-from utils import extract_variable_type_mapping, get_object_assignments, FullState
+from utils import extract_variable_type_mapping, get_object_assignments, ast_cache_key, FullState
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -223,21 +220,20 @@ class GameHandler():
 
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
-
-            cache_str = str(setup_expression["optional_pred"]) + str(mapping)
-            if cache_str in self.game_optional_cache:
+            cache_key = "{0}_{1}".format(*ast_cache_key(setup_expression["optional_pred"], mapping))
+            if cache_key in self.game_optional_cache:
                 return True
 
             evaluation = self.evaluate_setup(setup_expression["optional_pred"], state, mapping)
             if evaluation:
-                self.game_optional_cache.add(cache_str)
+                self.game_optional_cache.add(cache_key)
 
             return evaluation
 
         elif rule == "setup_game_conserved":
             # For a game-conserved condition, we store the first object assignment that satisfies it
             # and ensure that the condition is satisfied *by those objects* in all future states
-            expr_str, mapping_str = str(setup_expression["conserved_pred"]), str(mapping)
+            expr_str, mapping_str = ast_cache_key(setup_expression["conserved_pred"], mapping)
             
             evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
 

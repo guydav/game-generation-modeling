@@ -197,7 +197,8 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
+            used_objects = list(mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
@@ -207,7 +208,8 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
+            used_objects = list(mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]

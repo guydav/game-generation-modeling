@@ -1,9 +1,12 @@
 import argparse
 from collections import namedtuple, defaultdict, Counter
 from functools import reduce
-from multiprocessing.sharedctypes import Value
 from random import sample
 import tatsu
+import tatsu.ast
+import tatsu.exceptions
+import tatsu.infos
+import tatsu.grammars
 from tatsu import grammars
 import tqdm
 import pandas as pd
@@ -55,7 +58,7 @@ class RuleKeyValueCounter:
             self.length_counts.append(len(value))
 
         elif isinstance(value, tatsu.ast.AST):
-            self.rule_counts[value.parseinfo.rule] += 1
+            self.rule_counts[value.parseinfo.rule] += 1  # type: ignore
 
     def __repr__(self):
         return f'<Counter for {self.rule}.{self.key}: {sum(self.rule_counts.values())} rules counted | {sum(self.value_counts.values())} values counted | {len(self.length_counts)} lengths counted>'
@@ -133,16 +136,17 @@ class ASTRuleValueCounter(ASTParser):
 BINARY_OPERATORS = ['-', '/']
 MULTI_OPERATORS = ['+', '*']
 COMPARISON_OPERATORS = ['<=', '<', '=', '>=', '>']
+NUMBER_DEFAULTS = list(range(11))
 TYPE_NAMES = []
 FUNCTION_NAMES = []
 PREDICATE_NAMES = []
 
 
-def generate_game_id(global_context=None, local_context=None):
+def generate_game_id(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
     return 'game-id'
 
 
-def generate_domain_name(global_context=None, local_context=None):
+def generate_domain_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
     return 'domain-name'
     
 
@@ -150,7 +154,7 @@ def _preference_name(i):
     return f'preference{chr(ord("A") + i - 1)}'
 
 
-def sample_new_preference_name(global_context=None, local_context=None):
+def sample_new_preference_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
     if 'preference_count' not in global_context:
         global_context['preference_count'] = 0
 
@@ -158,7 +162,7 @@ def sample_new_preference_name(global_context=None, local_context=None):
     return _preference_name(global_context['preference_count'])
 
 
-def sample_existing_preference_name(global_context=None, local_context=None):
+def sample_existing_preference_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
     if 'preference_count' not in global_context:
         # TODO: do we want to fail here, or return a nonsensical value
         return 'no-preferences-exist'
@@ -172,13 +176,16 @@ def sample_existing_preference_name(global_context=None, local_context=None):
     return _preference_name(rng.integers(1, pref_count + 1))
 
 
-def generate_number(global_context=None, local_context=None):
-    # TODO: decide how to handle this -- do we want to look at the existing values?
-    # TODO: we should return 1 
-    return str(1)
+# def generate_number(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+#     # TODO: decide how to handle this -- do we want to look at the existing values?
+#     # TODO: we should return 1 
+#     return str(1)
 
 
-def sample_new_variable(global_context=None, local_context=None):
+def sample_new_variable(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+    if local_context is None:
+        local_context = {}
+
     if 'variables' not in local_context:
         local_context['variables'] = set()
 
@@ -193,7 +200,10 @@ def sample_new_variable(global_context=None, local_context=None):
     return f'?{new_var}'
 
 
-def sample_existing_variable(global_context=None, local_context=None):
+def sample_existing_variable(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+    if local_context is None:
+        local_context = {}
+
     if 'variables' not in local_context:
         # TODO: decide if we should return a nonsensical value here or an error
         return '?xxx'
@@ -225,7 +235,7 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
         ('game_def', 'game_name'): generate_game_id, 
         ('domain_def', 'domain_name'): generate_domain_name, 
     },
-    number=defaultdict(lambda: generate_number),  # TODO: decide how we want to handle number sampling
+    number=defaultdict(lambda: NUMBER_DEFAULTS),  
     variable=VARIABLE_DEFAULTS,
     total_time=defaultdict(lambda: ['(total-time)']),
     total_score=defaultdict(lambda: ['(total-score)'])
@@ -234,7 +244,8 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'type_name',
-    ('comparison_arg', 'arg'): ('number', 'type_name', 'variable'),
+    ('comparison_arg', 'arg'): 'number',
+    ('function_term', 'term'): ('type_name', 'variable'),
     ('predicate_term', 'term'): ('type_name', 'variable'),
     ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
 }
@@ -307,7 +318,7 @@ class ASTSampler:
         self.length_prior = length_prior
 
         if rng is None:
-            rng = np.random.default_rng(seed)
+            rng = np.random.default_rng(seed)  # type: ignore
         self.rng = rng
 
         self.rules = {}
@@ -318,7 +329,7 @@ class ASTSampler:
         )
         self.parse_prior_to_posterior()
 
-    def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: RuleKeyValueCounter):
+    def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: typing.Dict[str, typing.Any]):
         rule_counter = self.ast_counter.counters[rule_name]
 
         if OPTIONS not in field_prior:
@@ -372,7 +383,7 @@ class ASTSampler:
 
     def _create_length_posterior(self, rule_name: str, field_name: str, 
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
-        field_counter: RuleKeyValueCounter):
+        field_counter: typing.Optional[RuleKeyValueCounter]):
 
         min_length = field_prior['_min_length']
         length_posterior = Counter({k: v for k, v in self.length_prior.items() if k >= min_length})
@@ -395,7 +406,7 @@ class ASTSampler:
 
     def _create_value_posterior(self, rule_name: str, field_name: str, 
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
-        value_type: str, field_counter: RuleKeyValueCounter, rule_hybrird: bool = False):
+        value_type: str, field_counter: typing.Optional[RuleKeyValueCounter], rule_hybrird: bool = False):
         
         field_default = self.pattern_rule_options[value_type][(rule_name, field_name)]
         if TOKEN_POSTERIOR not in field_prior:
@@ -408,7 +419,10 @@ class ASTSampler:
         value_pattern = self.value_patterns[pattern_type] if pattern_type in self.value_patterns else None
 
         if isinstance(field_default, list):
-            field_prior[TOKEN_POSTERIOR].update({value: self.prior_token_count for value in field_default})
+            if not isinstance(field_prior[TOKEN_POSTERIOR], dict):
+                raise ValueError(f'Prior for {rule_name}.{field_name} is not a dict')
+
+            field_prior[TOKEN_POSTERIOR].update({value: self.prior_token_count for value in field_default})  # type: ignore
 
             if field_counter is not None:
                 if len(field_counter.rule_counts) > 0 and not rule_hybrird:
@@ -416,7 +430,7 @@ class ASTSampler:
 
                 for value, count in field_counter.value_counts.items():
                     if value_pattern is None or value_pattern.match(value) is not None:
-                        field_prior[TOKEN_POSTERIOR][value] += count
+                        field_prior[TOKEN_POSTERIOR][value] += count  # type: ignore
 
         elif hasattr(field_default, '__call__'):
             count = self.prior_token_count
@@ -425,16 +439,16 @@ class ASTSampler:
                 valid_values = filter(lambda v: value_pattern.match(v) is not None, field_counter.value_counts)
                 count += sum(field_counter.value_counts[value] for value in valid_values)
 
-            field_prior[TOKEN_POSTERIOR][value_type] = count
+            field_prior[TOKEN_POSTERIOR][value_type] = count  # type: ignore
             if SAMPLERS not in field_prior:
                 field_prior[SAMPLERS] = {}
-            field_prior[SAMPLERS][value_type] = field_default
+            field_prior[SAMPLERS][value_type] = field_default  # type: ignore
         else:
             raise ValueError(f'Unknown field_default type: {field_default}')
 
     def _create_rule_posterior(self, rule_name: str, field_name: str, 
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
-        options: typing.Sequence[str], field_counter: RuleKeyValueCounter):
+        options: typing.Sequence[str], field_counter: typing.Optional[RuleKeyValueCounter]):
 
         field_prior[RULE_POSTERIOR] = {value: self.prior_token_count for value in options}
 
@@ -444,12 +458,12 @@ class ASTSampler:
                     value_type = self.rule_field_value_types[(rule_name, field_name)]
                     if isinstance(value_type, str):
                         if value_type in field_prior[RULE_POSTERIOR]:
-                            del field_prior[RULE_POSTERIOR][value_type]
+                            del field_prior[RULE_POSTERIOR][value_type]  # type: ignore
                         self._create_value_posterior(rule_name, field_name, field_prior, value_type, field_counter, rule_hybrird=True)
                     else:
                         for vt in value_type:
                             if vt in field_prior[RULE_POSTERIOR]:
-                                del field_prior[RULE_POSTERIOR][vt]
+                                del field_prior[RULE_POSTERIOR][vt]  # type: ignore
                             self._create_value_posterior(rule_name, field_name, field_prior, vt, field_counter, rule_hybrird=True)
 
                 else:
@@ -459,7 +473,7 @@ class ASTSampler:
                 if counted_rule not in field_prior[RULE_POSTERIOR]:
                     raise ValueError(f'{rule_name}.{field_name} has counted rule {counted_rule} which is not in the prior {options}')
 
-                field_prior[RULE_POSTERIOR][counted_rule] += count
+                field_prior[RULE_POSTERIOR][counted_rule] += count  # type: ignore
         else:
             print(f'No counted data for {rule_name}.{field_name}')
 
@@ -481,12 +495,17 @@ class ASTSampler:
 
             # Special cases
             if rule_name in ('preferences', 'pref_forall_prefs'):
-                rule_prior = rule_prior[0]
+                if not isinstance(rule_prior, (list, tuple)):
+                    raise ValueError(f'Prior for {rule_name} is not a list or tuple')
+
+                rule_prior = rule_prior[0]  # type: ignore
 
             if rule_name == START:
                 pass
 
             elif isinstance(rule_prior, dict):
+                production = None
+
                 for field_name, field_prior in rule_prior.items():
                     production = None
                     if field_name == PRODUCTION:
@@ -500,6 +519,7 @@ class ASTSampler:
                     if not isinstance(field_prior, dict): 
                         print(f'Encountered non-dict prior for {rule_name}.{field_name}: {field_prior}')
                         continue
+                    
                     self._update_prior_to_posterior(rule_name, field_name, field_prior)
 
                 if PRODUCTION not in rule_prior:
@@ -544,7 +564,7 @@ class ASTSampler:
 
             self.rules[rule.name] = rule_prior
 
-    def parse_rule_prior(self, rule: tatsu.grammars.Node):
+    def parse_rule_prior(self, rule: tatsu.grammars.Node) -> typing.Union[None, str, typing.Dict[str, typing.Any], typing.List]:
         if isinstance(rule, grammars.EOF):
             return EOF
         
@@ -568,12 +588,12 @@ class ASTSampler:
                 elif isinstance(parsed_child, dict):
                     rule_dict.update(parsed_child)
                     if len(parsed_child.keys()) > 1:
-                        print(f'Encountered child rule parsing to dict with multiple keys: {rule.name}: {parsed_child}')
+                        print(f'Encountered child rule parsing to dict with multiple keys: {rule.name}: {parsed_child}')  # type: ignore
                     else:
                         sequence.append((NAMED, list(parsed_child.keys())[0]))
 
                 else:
-                    print(f'Encountered child rule parsing to unknown type: {rule.name}: {parsed_child}')
+                    print(f'Encountered child rule parsing to unknown type: {rule.name}: {parsed_child}')  # type: ignore
 
             rule_dict[PRODUCTION] = sequence
             return rule_dict
@@ -598,7 +618,7 @@ class ASTSampler:
                 if not isinstance(child_value, dict):
                     print(f'Encoutered positive closure with unexpected value type: {child_value}')    
 
-                child_value[next(iter(child_value))].update(d)
+                child_value[next(iter(child_value))].update(d)  # type: ignore
                 d = child_value
             else:
                 print(f'Encoutered positive closure with multiple children: {rule}')
@@ -611,8 +631,7 @@ class ASTSampler:
         if isinstance(rule, grammars.Void):
             return None
 
-        else:
-            print(f'Unhandled child type: {type(rule)}: {rule}')
+        raise ValueError(f'Encountered unknown rule type: {type(rule)}: {rule}')
 
     def _split_posterior(self, posterior_dict: typing.Dict[typing.Any, typing.Any]):
         return zip(*posterior_dict.items())
@@ -623,14 +642,14 @@ class ASTSampler:
 
     def _sample_named(self, 
         sample_dict: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
-        global_context: typing.Dict[str, typing.Any] = None,
-        local_context: typing.Dict[str, typing.Any] = None):
+        global_context: typing.Dict[str, typing.Any],
+        local_context: typing.Dict[str, typing.Any]):
 
         if TYPE_POSTERIOR not in sample_dict:
             raise ValueError(f'Missing type_posterior in sample: {sample_dict}')
 
         if LENGTH_POSTERIOR in sample_dict:
-            length = self._posterior_dict_sample(sample_dict[LENGTH_POSTERIOR])
+            length = self._posterior_dict_sample(sample_dict[LENGTH_POSTERIOR])  # type: ignore
             if length == 0:
                 return None, None
             values, context_updates = zip(*[self._sample_single_named_value(sample_dict, global_context, local_context) for _ in range(length)])
@@ -641,33 +660,34 @@ class ASTSampler:
             return self._sample_single_named_value(sample_dict, global_context, local_context)
 
     def _sample_single_named_value(self, sample_dict: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
-        global_context: typing.Dict[str, typing.Any] = None,
-        local_context: typing.Dict[str, typing.Any] = None):
+        global_context: typing.Dict[str, typing.Any],
+        local_context: typing.Dict[str, typing.Any]):
 
-        sample_type = self._posterior_dict_sample(sample_dict[TYPE_POSTERIOR])
+        sample_type = self._posterior_dict_sample(sample_dict[TYPE_POSTERIOR])  # type: ignore
 
         if sample_type == RULE:
             if RULE_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
-            rule = self._posterior_dict_sample(sample_dict[RULE_POSTERIOR])
+            rule = self._posterior_dict_sample(sample_dict[RULE_POSTERIOR])  # type: ignore
             return self.sample(rule, global_context, local_context)
 
         elif sample_type == TOKEN:
             if TOKEN_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing token_posterior in sample: {sample_dict}')
 
-            token = self._posterior_dict_sample(sample_dict[TOKEN_POSTERIOR])
+            token = self._posterior_dict_sample(sample_dict[TOKEN_POSTERIOR])  # type: ignore
             if SAMPLERS in sample_dict and token in sample_dict[SAMPLERS]:
-                token = sample_dict[SAMPLERS][token](global_context, local_context)
+                token = sample_dict[SAMPLERS][token](global_context, local_context)     # type: ignore
 
             return token, None
 
         else:
             raise ValueError(f'Unknown sample type: {sample_type} in sample: {sample_dict}')
 
-    def sample(self, rule: str = START, global_context: typing.Dict[str, typing.Any] = None, 
-        local_context: typing.Dict[str, typing.Any] = None):
+    def sample(self, rule: str = START, 
+        global_context: typing.Optional[typing.Dict[str, typing.Any]] = None, 
+        local_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
 
         if global_context is None:
             global_context = dict(rng=self.rng)
@@ -711,7 +731,7 @@ class ASTSampler:
 
         if return_ast:
             out_dict = reduce(lambda x, y: {**x, **y}, filter(lambda x: isinstance(x, dict), output))
-            out_dict['parseinfo'] = tatsu.infos.ParseInfo(None, rule, 0, 0, 0, 0)
+            out_dict['parseinfo'] = tatsu.infos.ParseInfo(None, rule, 0, 0, 0, 0) 
             output = tatsu.ast.AST(out_dict)
 
         elif len(output) == 1:
@@ -757,6 +777,8 @@ def main(args):
     samples = []
 
     for _ in range(args.num_samples):
+        first_print_out = ''
+
         try:     
             ast = sampler.sample()
             samples.append(ast)
@@ -781,7 +803,8 @@ def main(args):
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
             print(f'Parse failed: at position {e.pos} expected {e.item}:')
-            print(first_print_out[e.pos:])
+            if len(first_print_out > e.pos):
+                print(first_print_out[e.pos:])
 
     # TODO: conceptual issue: in places where the expansion is recursive 
     # (e.g. `setup`` expands to rules that all contain setup, or 

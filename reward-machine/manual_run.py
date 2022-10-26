@@ -149,16 +149,6 @@ TEST_SETUP_GAME = """
             )
         )
     )
-
-    (preference throwAttempt
-        (exists (?b - ball)
-            (then 
-                (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (not (in_motion ?b)))
-            )
-        )
-    )
 ))
 (:scoring maximize (+ 
     (* (count-nonoverlapping throwToBin) 1)
@@ -322,10 +312,10 @@ TEST_MEASURE_GAME = """
 """
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BOUNCE_GAME)
+    game_handler = GameHandler(TEST_SETUP_GAME)
     score = None
 
-    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
+    trace_path = SETUP_TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

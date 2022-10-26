@@ -2,9 +2,14 @@ from collections import OrderedDict, namedtuple
 import inflect
 import itertools
 import numpy as np
+import pathlib
+import sys
 import tatsu
 import tatsu.ast
 import typing
+
+sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
+import ast_printer
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
@@ -374,6 +379,20 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
 
     return filtered_assignments
 
+def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
+    """
+    Maps from a predicate / function and an object mapping to the key that represents them in the cache. 
+    """
+    ast_printer.reset_buffers()
+    ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](ast)
+
+    # flush the line buffer
+    ast_printer._indent_print('', 0, ast_printer.DEFAULT_INCREMENT, None)
+
+    ast_str = ' '.join(ast_printer.BUFFER if ast_printer.BUFFER is not None else [])
+    mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
+
+    return ast_str, mapping_str
 
 def describe_preference(preference):
     '''

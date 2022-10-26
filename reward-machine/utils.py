@@ -347,15 +347,21 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
     else:
         return []
 
-def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]]):
+def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]],
+    used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):
     '''
     Given a room type / domain (few, medium, or many) and a list of lists of variable types,
     returns a list of every possible assignment of objects in the room to those types. For 
     instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
     every pair consisting of one beachball or dodgeball and one bin
     '''
-
-    grouped_objects = [sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] for var_type in sub_types], []) for sub_types in variable_types]
+    if used_objects is None:
+        used_objects = []
+        
+    grouped_objects = [
+        filter(lambda o: o not in used_objects, sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type]  # type: ignore
+            for var_type in sub_types], []))
+        for sub_types in variable_types]
     assignments = list(itertools.product(*grouped_objects))
 
     return assignments

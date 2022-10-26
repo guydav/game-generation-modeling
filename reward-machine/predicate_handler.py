@@ -296,7 +296,7 @@ class PredicateHandler:
         relevant_mapping = {var: mapping[var] for var in extract_variables(function)}
     
         # Evaluate the function
-        evaluation = func(state, relevant_mapping, self.state_cache, force_evaluation)
+        evaluation = func(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
 
         # If the function is undecidable with the current information, return None
         if evaluation is None:

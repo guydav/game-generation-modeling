@@ -369,14 +369,14 @@ def _format_func_args(ast, depth, increment, context):
 
         formatted_args = [
             arg if isinstance(arg, str) 
-            else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context) 
+            else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context)) 
             for arg in func_args]
             
     return formatted_args
 
 
 @mutation_context
-def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None):
+def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None) -> str:
     arg = ast.arg
 
     if isinstance(arg, tatsu.ast.AST): 
@@ -384,7 +384,7 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
             return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
-    return arg
+    return str(arg)
 
 
 @mutation_context
@@ -400,7 +400,9 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
             _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]    
 
     else:
-        args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) for arg in ast.equal_comp_funcs]
+        args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) if isinstance(arg, tatsu.ast.AST) else str(arg)
+            for arg in ast.equal_comp_args
+        ]
 
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
     

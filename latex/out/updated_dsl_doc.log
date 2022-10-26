@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2021) (preloaded format=pdflatex 2022.1.30)  26 OCT 2022 14:28
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2021) (preloaded format=pdflatex 2022.1.30)  26 OCT 2022 17:29
 entering extended mode
  \write18 enabled.
  %&-line parsing enabled.
@@ -1216,36 +1216,36 @@ LaTeX Warning: Reference `sec:LTL' on page 2 undefined on input line 232.
 
 LaTeX Warning: Reference `sec:LTL' on page 2 undefined on input line 232.
 
-[2] [3] [4]
-Overfull \hbox (1.72978pt too wide) in paragraph at lines 391--392
+[2] [3] [4] [5]
+Overfull \hbox (1.72978pt too wide) in paragraph at lines 394--395
 []\OT1/cmr/m/n/10 : [] [] The op-tional type name spec-i-fi-ca-tion for the abo
 ve syn-tax. For ex-am-ple, pref-name:dodgeball
  []
 
-[5] [6] [7] [8]
+[6] [7] [8]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 582.
-
-
-Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\langle' on input line 582.
+(hyperref)                removing `math shift' on input line 585.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 582.
+(hyperref)                removing `\langle' on input line 585.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 582.
+(hyperref)                removing `math shift' on input line 585.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\rangle' on input line 582.
+(hyperref)                removing `math shift' on input line 585.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 582.
+(hyperref)                removing `\rangle' on input line 585.
+
+
+Package hyperref Warning: Token not allowed in a PDF string (Unicode):
+(hyperref)                removing `math shift' on input line 585.
 
 
 Package caption Warning: Unused \captionsetup[sub] on input line 28.
@@ -1255,13 +1255,16 @@ See the caption package documentation for explanation.
 
 LaTeX Warning: There were undefined references.
 
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
 Package rerunfilecheck Info: File `updated_dsl_doc.out' has not changed.
 (rerunfilecheck)             Checksum: 95DCC31AD3EEB7FD42F066D32D5DA44F;1803.
  ) 
 Here is how much of TeX's memory you used:
  34988 strings out of 478994
  665220 string characters out of 5858184
- 1652225 words of memory out of 5000000
+ 1630352 words of memory out of 5000000
  51690 multiletter control sequences out of 15000+600000
  414369 words of font info for 70 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
@@ -1286,7 +1289,7 @@ b></usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb
 ></usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
 </usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb></
 usr/local/texlive/2021/texmf-dist/fonts/type1/public/cm-super/sfrm1000.pfb>
-Output written on updated_dsl_doc.pdf (9 pages, 239374 bytes).
+Output written on updated_dsl_doc.pdf (9 pages, 239196 bytes).
 PDF statistics:
  401 PDF objects out of 1000 (max. 8388607)
  339 compressed objects within 4 object streams

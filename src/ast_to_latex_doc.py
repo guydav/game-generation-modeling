@@ -486,7 +486,7 @@ SHARED_BLOCKS = {
 
 <function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
 
-<function-term> ::= <name> | <variable> | <number> | <predicate>""", ('function_comparison', FUNCTION)),
+<function-term> ::= <name> | <variable> | <number> """, ('function_comparison', FUNCTION)),
 
     VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
@@ -619,6 +619,7 @@ SCORING_BLOCKS = (
 
     (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
         \alt <count-nonoverlapping>
+        \alt <count-overlapping>
         \alt <count-once> 
         \alt <count-once-per-objects> 
         \alt <count-nonoverlapping-measure> 
@@ -633,6 +634,7 @@ SCORING_BLOCKS = (
     """, 'preference-eval'),
 
     (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count_nonoverlapping'),
+    (r'<count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.', 'count_overlapping'),
     (r'<count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.', 'count_once'),
     (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.', 'count_once_per_objects'),
     # (r'<count-longest> ::= (count-longest <pref-name-and-types>) "#" count the longest (by number of states) satisfication of this preference', 'count_longest'),

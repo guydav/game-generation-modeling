@@ -27,13 +27,13 @@ type_name = name;
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
-multiple_args_equal_comparison = '(=' {equal_comp_funcs:comparison_arg}+ ')';
+multiple_args_equal_comparison = '(=' {equal_comp_args:comparison_arg}+ ')';
 
-comparison_arg = arg:(function_eval | number | type_name | variable);
+comparison_arg = arg:(function_eval | number);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' func_name:func_name {func_args:function_term}* ')';
 func_name = name;
-function_term = term:(comparison_arg | predicate); # TODO: verify this (function calling on a predicate) ever happens
+function_term = term:(number | type_name | variable); 
 
 predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
 predicate_name = name;  # = used to be here to allow for checking that one object is/isn't another

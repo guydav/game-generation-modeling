@@ -193,7 +193,7 @@ For a full list of the predicates we found ourselves using so far, see \fullref{
 
 <function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
 
-<function-term> ::= <name> | <variable> | <number> | <predicate>
+<function-term> ::= <name> | <variable> | <number> 
 
 <variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
@@ -359,6 +359,7 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
 
 <preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
         \alt <count-nonoverlapping>
+        \alt <count-overlapping>
         \alt <count-once> 
         \alt <count-once-per-objects> 
         \alt <count-nonoverlapping-measure> 
@@ -373,6 +374,8 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
     
 
 <count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.
+
+<count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.
 
 <count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.
 

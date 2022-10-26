@@ -1287,7 +1287,7 @@
 (:setup (and 
     (exists (?h - hexagonal_bin) (and 
         (forall (?g - game_object) (game-optional (or
-            (= ?h ?g)
+            (same_object ?h ?g)
             (> (distance ?h ?g) 1) 
         )))      
         (forall (?d - dodgeball) (game-optional (and
@@ -1778,7 +1778,7 @@
                     (in ?b ?l) 
                     (not (exists (?l2 - block) (and 
                         (in ?b ?l2)
-                        (not (= ?l ?l2))
+                        (not (same_object ?l ?l2))
                         (same_type ?l ?l2)
                     )))
             ))
@@ -1917,7 +1917,7 @@
             (once (and 
                 (agent_holds ?o) 
                 (adjacent agent desk) 
-                (not (exists (?o2 - (either chair laptop doggie_bed)) (= ?o ?o2)))
+                (not (exists (?o2 - (either chair laptop doggie_bed)) (same_object ?o ?o2)))
             ))
             (hold (and (not (agent_holds ?o)) (in_motion ?o)))
             (once (and (not (in_motion ?o)) (on bed ?o)))
@@ -2046,7 +2046,7 @@
                     (on top_shelf ?b)
                     (not (exists (?ob - block) 
                         (and 
-                            (not (= ?b ?ob)) 
+                            (not (same_object ?b ?ob)) 
                             (on top_shelf ?ob)
                         )
                     ))
@@ -2055,7 +2055,7 @@
                 (once (and 
                     (not (in_motion ?d)) 
                     (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
-                    (= (color ?b) (color ?tb))
+                    (same_color ?b ?tb)
                 ))
             )
         ))
@@ -2067,7 +2067,7 @@
                     (on top_shelf ?b)
                     (not (exists (?ob - block) 
                         (and 
-                            (not (= ?b ?ob)) 
+                            (not (same_object ?b ?ob)) 
                             (on top_shelf ?ob)
                         )
                     ))
@@ -2076,7 +2076,7 @@
                 (once (and 
                     (not (in_motion ?d)) 
                     (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
-                    (not (= (color ?b) (color ?tb)))
+                    (not (same_color ?b ?tb))
                 ))
             )
         ))
@@ -2482,30 +2482,30 @@
 (:constraints (and 
     (preference pinkObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) pink)))
+            (once (and (agent_holds ?o) (same_color ?o pink)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)))
         )
     ))
     (preference blueObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) blue)))
+            (once (and (agent_holds ?o) (same_color ?o blue)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
                 ))
             ))
         )
     ))
     (preference brownObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) brown)))
+            (once (and (agent_holds ?o) (same_color ?o brown)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
                 ))
             ))
         )
@@ -2516,38 +2516,38 @@
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
                 ))
             ))
         )
     ))
     (preference greenObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) green)))
+            (once (and (agent_holds ?o) (same_color ?o green)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 ?o4 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
-                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
+                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)  
                 ))
             ))
         )
     ))
     (preference tanObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) tan)))
+            (once (and (agent_holds ?o) (same_color ?o tan)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 ?o4 ?o5 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
-                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
-                    (= (color ?o5) green) (< (distance room_center ?o5) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
+                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)  
+                    (same_color ?o5 green) (< (distance room_center ?o5) 1)  
                 ))
             ))
         )
@@ -2639,7 +2639,7 @@
                 (once (and 
                     (agent_holds ?b) 
                     (rug_color_under agent pink) 
-                    (= (color ?b) ?c)
+                    (same_color ?b ?c)
                     (not (exists (?ob - cube_block) (in ?h ?ob)))
                 ))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
@@ -3097,7 +3097,7 @@
                 (agent_holds ?c)
                 (in_motion ?c)
                 (exists (?c2 - (either blue_cube_block yellow_cube_block)) (and 
-                    (not (= ?c ?c2))
+                    (not (same_object ?c ?c2))
                     (< (distance ?c ?c2) 0.5)
                     (on floor ?c)
                     (on floor ?c2) 
@@ -3338,7 +3338,7 @@
 (:constraints (and 
     (preference objectInBuilding (exists (?o - game_object ?d - doggie_bed ?b - building)
         (at-end (and 
-            (not (= ?o ?d))
+            (not (same_object ?o ?d))
             (in ?b ?d)
             (in ?b ?o)
             (on floor ?d)
@@ -3467,8 +3467,8 @@
     (forall (?c - color) 
         (preference objectWithMatchingColor (exists (?o1 ?o2 - game_object)
             (at-end (and
-                (= (color ?o1) (color ?o2))
-                (= (color ?o1) ?c)
+                (same_color ?o1 color ?o2)
+                (same_color ?o1 ?c)
                 (or 
                     (on ?o1 ?o2)
                     (adjacent ?o1 ?o2)

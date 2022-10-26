@@ -25,8 +25,7 @@ type_definition = type:(type_name | either_types);  # TODO: see if I need to add
 either_types = '(either' {type_names:type_name}+ ')'; # TODO: do we want to enforce more than one?
 type_name = name;
 
-function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
-    
+function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison)
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
 multiple_args_equal_comparison = '(=' {equal_comp_funcs:comparison_arg}+ ')';
 
@@ -37,7 +36,7 @@ func_name = name;
 function_term = term:(comparison_arg | predicate); # TODO: verify this (function calling on a predicate) ever happens
 
 predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
-predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
+predicate_name = name;  # = used to be here to allow for checking that one object is/isn't another
 predicate_term = term:(type_name | variable);
 # predicate_function = predicate;
 
@@ -174,7 +173,8 @@ scoring_expr = expr:(
     number |
     preference_eval |
     scoring_comparison |
-    function_eval)  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
+    # function_eval
+    )  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
     ;
 
 scoring_multi_expr = '(' op:multi_op {expr:scoring_expr}+ ')';  # TODO: do we want to enforce more than one?

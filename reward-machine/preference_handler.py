@@ -205,7 +205,11 @@ class PreferenceHandler:
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
             new_var_types = [self.variable_type_mapping[var] for var in new_variables]
-            object_assignments = get_object_assignments(self.domain, new_var_types)
+
+            # We extract the set of objects that are already used in this partial satisfaction, so that they do not get reassigned
+            # to new variables
+            used_objects = list(partial_preference_satisfcation.mapping.values())
+            object_assignments = get_object_assignments(self.domain, new_var_types, used_objects)
 
             for object_assignment in object_assignments:
                 new_mapping = dict(zip(new_variables, object_assignment))

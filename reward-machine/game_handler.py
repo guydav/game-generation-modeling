@@ -72,24 +72,26 @@ class GameHandler():
                 self.preference_satisfactions[name] = []
                 print(f"Successfully constructed PreferenceHandler for '{name}'")
 
-
-            # TODO: forall can cover multiple preferences
+            # This case handles externall forall preferences
             elif rule == "pref_forall":
-                # The outer "forall" works to track the times the inner preference is satisfied for each type
-                # in the outer variables (e.g. )
+
                 forall_vars = pref_def["forall_vars"]
                 forall_pref = pref_def["forall_pref"]
                 
                 variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
-                # TODO (GD): handle the case where there are multiple forall prefs under an `(and ...)`
-                sub_preference = forall_pref["preferences"] # type: ignore
-                name = sub_preference["pref_name"]
+                
+                sub_preferences = forall_pref["preferences"] # type: ignore
+                if isinstance(sub_preferences, tatsu.ast.AST):
+                    sub_preferences = [sub_preferences]
 
-                pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
-                    additional_variable_mapping=variable_type_mapping)
-                self.preference_handlers[name] = pref_handler
-                self.preference_satisfactions[name] = []
-                print(f"Successfully constructed PreferenceHandler for '{name}'")
+                for sub_preference in sub_preferences:
+                    name = sub_preference["pref_name"]
+
+                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
+                        additional_variable_mapping=variable_type_mapping)
+                    self.preference_handlers[name] = pref_handler
+                    self.preference_satisfactions[name] = []
+                    print(f"Successfully constructed PreferenceHandler for '{name}'")
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
         '''

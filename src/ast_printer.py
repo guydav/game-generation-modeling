@@ -3,6 +3,8 @@ from matplotlib.colors import rgb2hex
 import matplotlib.pyplot as plt
 from numpy.core.fromnumeric import var
 import tatsu
+import tatsu.ast
+import typing 
 
 from ast_parser import ASTParser
 
@@ -95,8 +97,8 @@ MUTATION_STYLES = {
     'modified': {'color': '#00FF80'},
     'root': {'color': '#AA00FF'}
 }
-DEFAULT_COLORMAP = plt.get_cmap('tab10')
-MUTATION_STYLES.update({i: {'color': rgb2hex(DEFAULT_COLORMAP(i))} for i in range(10)})
+DEFAULT_COLORMAP = plt.get_cmap('tab10')  # type: ignore
+MUTATION_STYLES.update({i: {'color': rgb2hex(DEFAULT_COLORMAP(i))} for i in range(10)})  # type: ignore
 
 def preprocess_context(context):
     if not context:
@@ -123,7 +125,7 @@ def _indent_print(out, depth, increment, context=None):
 
     context = preprocess_context(context)
 
-    if 'continue_line' in context and context['continue_line']:
+    if 'continue_line' in context and context['continue_line'] and LINE_BUFFER is not None:
         LINE_BUFFER.append(out)
 
     else:
@@ -183,6 +185,7 @@ def mutation_context(func):
 @mutation_context
 def _parse_variable_list(caller, rule, var_list, depth, increment, context=None):
     formatted_vars = []
+    context = typing.cast(dict, context)  
 
     if not isinstance(var_list, list):
         var_list = [var_list]
@@ -247,6 +250,8 @@ QUANTIFIER_KEYS = ('args', 'pred', 'then', 'pref')
 
 @mutation_context
 def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
+
     prev_continue_line = context['continue_line'] if 'continue_line' in context else False
 
     _indent_print(_out_str_to_span(f'({rule}', context), depth, increment, context)
@@ -312,6 +317,8 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_logical(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
+
     if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
         _indent_print(f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">', depth, increment, context)
         
@@ -373,7 +380,7 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
     arg = ast.arg
 
     if isinstance(arg, tatsu.ast.AST): 
-        if  arg.parseinfo.rule == 'function_eval':
+        if  arg.parseinfo.rule == 'function_eval':  # type: ignore
             return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
@@ -489,6 +496,7 @@ def _handle_any(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_once(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print('(once', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_pred, depth + 1, increment, context)
@@ -498,6 +506,7 @@ def _handle_once(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print('(once-measure', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_measure_pred, depth + 1, increment, context)
@@ -508,6 +517,7 @@ def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_hold(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print('(hold', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
@@ -517,6 +527,7 @@ def _handle_hold(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_while_hold(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print('(hold-while', depth, increment, context)
     context['continue_line'] = True
     caller([ast.hold_pred, ast.while_preds], depth + 1, increment, context)
@@ -526,6 +537,7 @@ def _handle_while_hold(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print(f'(hold-for {ast.num_to_hold}', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
@@ -535,6 +547,7 @@ def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print('(hold-to-end', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
@@ -544,6 +557,7 @@ def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     variables = ast.forall_seq_vars.variables
     formatted_vars = _parse_variable_list(caller, rule, variables, depth, increment, context)
     var_str = " ".join(formatted_vars)
@@ -608,6 +622,7 @@ def build_constraints_printer():
 
 @mutation_context
 def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
     caller([ast.expr_1, ast.expr_2], depth + 1, increment, context)
@@ -617,6 +632,7 @@ def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_multi_expr(caller, rule, ast, depth, increment, context=None):
+    context = typing.cast(dict, context) 
     _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
     caller(ast.expr, depth + 1, increment, context)
@@ -714,6 +730,20 @@ def _handle_scoring_expr(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
+def _handle_scoring_external_maximize(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(external-forall-maximize', depth, increment, context)
+    caller(ast.scoring_expr, depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
+
+
+@mutation_context
+def _handle_scoring_external_minimize(caller, rule, ast, depth, increment, context=None):
+    _indent_print(f'(external-forall-minimize', depth, increment, context)
+    caller(ast.scoring_expr, depth + 1, increment, context)
+    _indent_print(f')', depth, increment, context)
+
+
+@mutation_context
 def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
     caller(ast.count_method, depth, increment, context)
 
@@ -722,6 +752,7 @@ def build_terminal_printer():
     printer.register_exact_matches(
         _handle_terminal, _handle_terminal_expr,
         _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
+        _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr, 
         _handle_neg_expr, _handle_equals_comp, 
         _handle_function_eval, _handle_with
@@ -759,6 +790,7 @@ def build_scoring_printer():
     printer.register_exact_matches(
         _handle_scoring, _handle_maximize, _handle_minimize, 
         _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
+        _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
         _handle_equals_comp, _handle_function_eval, _handle_with,
     )

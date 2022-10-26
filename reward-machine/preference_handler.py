@@ -90,6 +90,12 @@ class PreferenceHandler:
         elif self.pref_quantifier_rule == PreferenceQuantifiers.FORALL.value:
             raise NotImplementedError("Forall quantification not yet supported")
 
+        # Some preferences will have all of their variables quantified externally, in which case the quantifier rule
+        # will be either "then", "at_end", or "always". We'll instantiate an empty variable_type_mapping in this case
+        elif self.pref_quantifier_rule in [PreferenceType.THEN.value, PreferenceType.AT_END.value, PreferenceType.ALWAYS.value]:
+            self.variable_type_mapping = {}
+            preference_body = body
+
         else:
             raise ValueError(f"Error: encountered unknown preference quantifier rule: {self.pref_quantifier_rule}")
 

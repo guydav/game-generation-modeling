@@ -38,6 +38,7 @@ class GameHandler():
         self.domain_name = ''
         self.setup = None
         self.game_optional_cache = set()
+        self.game_conserved_cache = {} # maps from a setup condition to the mapping that satisfied it first
         self.preferences = []
         self.terminal = None
         self.scoring = None
@@ -234,8 +235,17 @@ class GameHandler():
             return evaluation
 
         elif rule == "setup_game_conserved":
-            # By contrast, each game-conserved condition must be satisfied at every step
-            return self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+            # For a game-conserved condition, we store the first object assignment that satisfies it
+            # and ensure that the condition is satisfied *by those objects* in all future states
+            expr_str, mapping_str = str(setup_expression["conserved_pred"]), str(mapping)
+            
+            evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+
+            # If we've satisfied the condition for the first time, store the mapping in the cache
+            if evaluation and expr_str not in self.game_conserved_cache:
+                self.game_conserved_cache[expr_str] = mapping_str
+
+            return evaluation and self.game_conserved_cache.get(expr_str) == mapping_str
 
         else:
             raise ValueError(f"Error: Unknown setup rule '{rule}'")

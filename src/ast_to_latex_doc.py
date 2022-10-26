@@ -648,7 +648,6 @@ SCORING_BLOCKS = (
 )
 
 PREDICATE_DESCRIPTIONS = {
-    '=': 'Are these two objects the same object?',
     'above': 'Is the first object above the second object?',
     'adjacent': 'Are the two objects adjacent? [will probably be implemented as distance below some threshold]',
     'adjacent_side': 'Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>',
@@ -669,8 +668,9 @@ PREDICATE_DESCRIPTIONS = {
     'open': 'Is the object open? Only valid for objects that can be opened, such as drawers.',
     'opposite': 'So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls',
     'rug_color_under': 'Is the color of the rug under the object (first argument) the color specified by the second argument?',
-    'same_type': 'Are these two objects of the same type?',
-    # 'side': '(* \\textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)',
+    'same_color': 'If two objects, do they have the same color? If one is a color, does the object have that color?',
+    'same_object': 'Are these two variables bound to the same object?',
+    'same_type': 'Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?',
     'toggled_on': 'Is this object toggled on?',
     'touch': 'Are these two objects touching?',
     'type': 'Is the first argument, an object, an instance of the type specified by the second argument?',    

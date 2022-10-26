@@ -15,6 +15,7 @@ from preference_handler import PreferenceSatisfaction
 BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
 BALL_TO_WALL_TO_BIN_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
+THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
 
 
 TEST_ON_BUG_GAME = """
@@ -146,27 +147,64 @@ TEST_THROWING_GAME = """
 """
 
 TEST_THROW_BALL_AT_WALL_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
+(define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
-    (:constraints (and 
+(:constraints (and 
 
-        (preference throwToWall
-            (exists (?w - wall ?b - ball) 
-                (then 
-                    (once (agent_holds ?b))
-                    (hold-while  
-                        (and (not (agent_holds ?b)) (in_motion ?b))
-                        (touch ?b ?w)
-                    ) 
-                    (once (not (in_motion ?b)))
-                )
+    (preference throwToWall
+        (exists (?w - wall ?b - ball) 
+            (then 
+                (once (agent_holds ?b))
+                (hold-while  
+                    (and (not (agent_holds ?b)) (in_motion ?b))
+                    (touch ?b ?w)
+                ) 
+                (once (not (in_motion ?b)))
             )
         )
-    ))
+    )
+))
 
-    (:scoring maximize (+
-        (* (count-nonoverlapping throwToWall) 1)
-    )))
+(:scoring maximize (+
+    (* (count-nonoverlapping throwToWall) 1)
+)))
+"""
+
+TEST_THROW_BOUNCE_GAME = """
+(define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
+
+(:constraints (and 
+
+    (preference throwToWallToBin
+        (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
+            (then 
+                (once (agent_holds ?b))
+                (hold-while (and (not (agent_holds ?b)) (in_motion ?b)) (touch ?w ?b))
+                (once  (and (in ?h ?b) (not (in_motion ?b))))
+            )
+        )
+    )
+))
+
+(:scoring maximize (+
+    (* (count-nonoverlapping throwToWallToBin) 10)
+)))
+"""
+
+TEST_MEASURE_GAME = """
+(define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
+
+(:constraints (and 
+    (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once-measure (agent_holds ?d) (distance agent ?h))
+            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+)) 
+(:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
+))
 """
 
 
@@ -178,6 +216,8 @@ TEST_GAME_LIBRARY = {
     'test-building-touches-wall': TEST_BUILDING_TOUCHES_WALL_GAME,
     'test-throwing': TEST_THROWING_GAME,
     'test-throw-to-wall': TEST_THROW_BALL_AT_WALL_GAME,
+    'test-measure': TEST_MEASURE_GAME,
+    'test-wall-bounce': TEST_THROW_BOUNCE_GAME,
 }
 
 TEST_CASES = [
@@ -274,6 +314,20 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2198, end=2293, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2294, end=2373, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2374, end=2410, measures={})
+        ],
+    },),
+    ('test-wall-bounce', THREE_WALL_TO_BIN_BOUNCES_TRACE, 30, {
+        'throwToWallToBin' : [
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=1958, end=2015, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2040, end=2151, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2374, end=2410, measures={})
+        ],
+    },),
+    ('test-measure', THREE_WALL_TO_BIN_BOUNCES_TRACE, 3.7705330066455316, {
+        'throwToBinFromDistance' : [
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=1958, end=2015, measures={'distance': 1.1817426840899055}),
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=2040, end=2151, measures={'distance': 1.3097693013954452}),
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=2374, end=2410, measures={'distance': 1.2790210211601807})
         ],
     },),
 ]

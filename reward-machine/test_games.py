@@ -16,6 +16,7 @@ BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/
 BALL_TO_WALL_TO_BIN_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
+SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 
 
 TEST_ON_BUG_GAME = """
@@ -207,6 +208,28 @@ TEST_MEASURE_GAME = """
 ))
 """
 
+TEST_SETUP_GAME = """
+(define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
+    (forall (?b - ball) (game-optional (on desk ?b)))
+))
+(:constraints (and 
+    (preference throwToBin
+        (exists (?b - ball ?h - hexagonal_bin) 
+            (then 
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once  (and (in ?h ?b) (not (in_motion ?b))))
+            )
+        )
+    )
+))
+(:scoring maximize (+ 
+    (* (count-nonoverlapping throwToBin) 1)
+)))
+"""
+
 
 TEST_GAME_LIBRARY = {
     'on-chair-bug': TEST_ON_BUG_GAME,
@@ -218,6 +241,7 @@ TEST_GAME_LIBRARY = {
     'test-throw-to-wall': TEST_THROW_BALL_AT_WALL_GAME,
     'test-measure': TEST_MEASURE_GAME,
     'test-wall-bounce': TEST_THROW_BOUNCE_GAME,
+    'test-setup': TEST_SETUP_GAME,
 }
 
 TEST_CASES = [
@@ -328,6 +352,12 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=1958, end=2015, measures={'distance': 1.1817426840899055}),
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=2040, end=2151, measures={'distance': 1.3097693013954452}),
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80', 'agent': 'agent', '?h': 'GarbageCan|+00.75|-00.03|-02.74'}, start=2374, end=2410, measures={'distance': 1.2790210211601807})
+        ],
+    },),
+    ('test-setup', SETUP_TRACE, 2.0, {
+        'throwToBin' : [
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=886, end=986, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1916, end=1964, measures={})
         ],
     },),
 ]

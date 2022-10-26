@@ -6,8 +6,7 @@ from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
 from predicate_handler import ObjectState, _pred_in_motion
 from utils import FullState, AgentState, BuildingPseudoObject
 
-MAX_BUILDINGS = 10
-
+MAX_BUILDINGS = 20
 
 class BuildingHandler:
     active_buildings: typing.Set[str]  # buildings that are currently active

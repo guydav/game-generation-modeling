@@ -486,7 +486,7 @@ SHARED_BLOCKS = {
 
 <function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
 
-<function-term> ::= <name> | <variable> | <number> | <predicate>""", ('function_comparison', FUNCTION)),
+<function-term> ::= <name> | <variable> | <number> """, ('function_comparison', FUNCTION)),
 
     VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
@@ -591,9 +591,11 @@ TERMINAL_BLOCKS = (
 
 
 SCORING_BLOCKS = (
-    (r"""<scoring> ::= (maximize <scoring-expr>) \alt (minimize <scoring-expr>) "#" The scoring conditions maximize or minimize a scoring expression. """, ('scoring_maximize', 'scoring_minimize')),
+    (r"""<scoring> ::= <scoring-expr> "#" The scoring conditions maximize a scoring expression. """, ('scoring_maximize', 'scoring_minimize')),
 
     (r"""<scoring-expr> ::= "#" A scoring expression can be an arithmetic operation over other scoring expressions, a reference to the total time or score, a comparison, or a preference scoring evaluation.
+        \alt <scoring-external-maximize> 
+        \alt <scoring-external-minimize> 
         \alt (<multi-op> <scoring-expr>$^+$) "#" Either addition or multiplication.
         \alt (<binary-op> <scoring-expr> <scoring-expr>) "#" Either division or subtraction.
         \alt (- <scoring-expr>)
@@ -604,6 +606,12 @@ SCORING_BLOCKS = (
         
     """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr')),
 
+    (r"""<scoring-external-maximize> ::= (external-forall-maximize <scoring-expr>) "#" For any preferences under this expression inside a (forall ...), score only for the single externally-quantified object that maximizes this scoring expression.
+    """, ('scoring_external_maximize',)), 
+
+    (r"""<scoring-external-minimize> ::= (external-forall-minimize <scoring-expr>) "#" For any preferences under this expression inside a (forall ...), score only for the single externally-quantified object that minimizes this scoring expression.
+    """, ('scoring_external_minimize',)), 
+
     (r"""<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
         \alt (<comp-op> <scoring-expr> <scoring-expr>) 
         \alt (= <scoring-expr>$^+$)
@@ -611,6 +619,7 @@ SCORING_BLOCKS = (
 
     (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
         \alt <count-nonoverlapping>
+        \alt <count-overlapping>
         \alt <count-once> 
         \alt <count-once-per-objects> 
         \alt <count-nonoverlapping-measure> 
@@ -625,6 +634,7 @@ SCORING_BLOCKS = (
     """, 'preference-eval'),
 
     (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count_nonoverlapping'),
+    (r'<count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.', 'count_overlapping'),
     (r'<count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.', 'count_once'),
     (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.', 'count_once_per_objects'),
     # (r'<count-longest> ::= (count-longest <pref-name-and-types>) "#" count the longest (by number of states) satisfication of this preference', 'count_longest'),
@@ -634,11 +644,11 @@ SCORING_BLOCKS = (
     (r'<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.', 'count_nonoverlapping_measure'),
     (r'<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
     (r'<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
-    (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
-    (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference.', 'count_maximal_nonoverlapping'),
-    (r'<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states.', 'count_maximal_overlapping'),
-    (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it.', 'count_maximal_once_per_objects'),
-    (r'<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once.', 'count_maximal_once'),
+    # (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
+    # (r'<count-maximal-nonoverlapping> ::= (count-maximal-nonoverlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count non-overlapping satisfactions of this preference.', 'count_maximal_nonoverlapping'),
+    # (r'<count-maximal-overlapping> ::= (count-maximal-overlapping <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count how many satisfactions of this preference with different objects overlap in their states.', 'count_maximal_overlapping'),
+    # (r'<count-maximal-once-per-objects> ::= (count-maximal-once-per-objects <pref-name-and-types>) "#" For the single externally quantified object with the most satisfcations, count this preference for each set of quantified objects that satisfies it.', 'count_maximal_once_per_objects'),
+    # (r'<count-maximal-once> ::= (count-maximal-once <pref-name-and-types>) "#" For the externally quantified object with the most satisfcations (across all preferences in the same (forall ...) block), count this preference at most once.', 'count_maximal_once'),
     (r'<count-once-per-external-objects> ::=  (count-once-per-external-objects <pref-name-and-types>) "#" Similarly to count-once-per-objects, but counting only for each unique object or combination of objects quantified in the (forall ...) block including this preference.',  'count_once_per_external_objects'),
 
     (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
@@ -648,7 +658,6 @@ SCORING_BLOCKS = (
 )
 
 PREDICATE_DESCRIPTIONS = {
-    '=': 'Are these two objects the same object?',
     'above': 'Is the first object above the second object?',
     'adjacent': 'Are the two objects adjacent? [will probably be implemented as distance below some threshold]',
     'adjacent_side': 'Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>',
@@ -669,8 +678,9 @@ PREDICATE_DESCRIPTIONS = {
     'open': 'Is the object open? Only valid for objects that can be opened, such as drawers.',
     'opposite': 'So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls',
     'rug_color_under': 'Is the color of the rug under the object (first argument) the color specified by the second argument?',
-    'same_type': 'Are these two objects of the same type?',
-    # 'side': '(* \\textbf This is not truly a predicate, and requires a more tight solution. I so far used it as a crutch to specify that two particular sides of objects are adjacent, for example (adjacent (side ?h front) (side ?c back)). But that makes (side <object> <side-def>) a function returning an object, not a predicate, where <side-def> is front, back, etc.. Maybe it should be something like (adjacent-side <object1> <side-def1> <object2> <side-def2>)? *)',
+    'same_color': 'If two objects, do they have the same color? If one is a color, does the object have that color?',
+    'same_object': 'Are these two variables bound to the same object?',
+    'same_type': 'Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?',
     'toggled_on': 'Is this object toggled on?',
     'touch': 'Are these two objects touching?',
     'type': 'Is the first argument, an object, an instance of the type specified by the second argument?',    
@@ -864,10 +874,10 @@ TYPE_RULES = {
 
 SCORING_CONSIDER_USED_RULES = (
     'scoring_maximize', 'scoring_minimize',
-    'preference-eval', 'maximal_explainer', 'count_maximal_nonoverlapping', 
+    'preference-eval', # 'count_maximal_nonoverlapping', 
     'count_once_per_external_objects', 'scoring_neg_expr', 'pref_object_type', 
     'pref_name_and_types', 'count_nonoverlapping', 'count_once_per_objects',
-    'count_once', 'count_maximal_nonoverlapping',
+    'count_once', 
 )
 
 

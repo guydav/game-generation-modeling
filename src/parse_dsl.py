@@ -1,9 +1,11 @@
 import argparse
 import tatsu
+import tatsu.exceptions
 import tqdm
 
 import ast_printer
 from ast_utils import load_tests_from_file
+
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -46,7 +48,7 @@ def main(args):
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
             print(test_case[:test_case.find('(:domain')])
-            print(f'Parse failed: at position {e.pos} expected {e.item}:')
+            print(f'Parse failed: at position {e.pos} expected {e.item}')
             print(test_case[e.pos:])
             break
 

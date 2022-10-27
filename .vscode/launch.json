@@ -19,8 +19,8 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl",  
-               "-p", "-v",
+                "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl",  
+                "-p", "-v",
             //    "-c",
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
@@ -32,17 +32,17 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-               "-s", "./schema/game_schema_with_refs.json",
+                "-s", "./schema/game_schema_with_refs.json",
             ],
             "console": "integratedTerminal"
         },
         {
-            "name": "Python: latex doc with new data key",
+            "name": "Python: latex doc",
             "type": "python",
             "request": "launch",
             "program": "/Users/guydavidson/projects/game-generation-modeling/src/ast_to_latex_doc.py",
             "args": [
-               "-c", "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-o", "./latex/paper_ready_dsl_doc.tex", "-e"
+                "-c", "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-o", "./latex/updated_dsl_doc.tex", "-e"
             ],
             "console": "integratedTerminal",
             "notes": "\"-n\", \"61541833a06877a656163b10\"", 
@@ -53,10 +53,21 @@
             "request": "launch",
             "program": "/Users/guydavidson/projects/game-generation-modeling/src/room_and_object_types.py",
             "args": [
-               "-b", "-m", "colors",
+                "-b", "-m", "colors",
             ],
             "console": "integratedTerminal",
             "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+        },
+        {
+            "name": "Python: ast counter MLE",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--print-samples", "--validate-samples", "--parse-counter",
+            ],
+            "console": "integratedTerminal",
+            "notes": "--parse-counter",
         },
     ]
 }

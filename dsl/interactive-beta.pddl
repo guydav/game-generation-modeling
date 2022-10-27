@@ -29,7 +29,7 @@
 ))
 (:terminal (>= (count-once binKnockedOver) 1)
 )
-(:scoring maximize (count-nonoverlapping throwToRampToBin)
+(:scoring (count-nonoverlapping throwToRampToBin)
 ))
 
 ; 1 is invalid
@@ -61,7 +61,7 @@
 ))
 (:terminal (>= (count-once-per-objects throwAttempt) 6)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects throwToDrawerOrBin:golfball:hexagonal_bin)
     (* 2 (count-once-per-objects throwToDrawerOrBin:dodgeball:hexagonal_bin))
     (* 3 (count-once-per-objects throwToDrawerOrBin:golfball:top_drawer))
@@ -77,8 +77,8 @@
         ))
     )
 ))
-(:scoring maximize (+
-    (count-maximal-once-per-objects blockInTowerAtEnd)
+(:scoring (external-forall-maximize
+    (count-once-per-objects blockInTowerAtEnd)
 )))
 
 ; 4 is invalid -- woefully underconstrained
@@ -96,7 +96,7 @@
         )
     )
 ))
-(:scoring maximize (count-nonoverlapping throwBallToBin)
+(:scoring (count-nonoverlapping throwBallToBin)
 ))
 
 (define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)  ; 6
@@ -126,11 +126,11 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* 10 (count-nonoverlapping throwBallToBin:dodgeball))
     (* 20 (count-nonoverlapping throwBallToBin:basketball))
     (* 30 (count-nonoverlapping throwBallToBin:beachball))
-    (* (- 1) (count-nonoverlapping failedThrowToBin))
+    (- (count-nonoverlapping failedThrowToBin))
 )))
 
 ; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
@@ -172,7 +172,7 @@
 ))
 (:terminal (>= (count-once throwOverRamp) 1)
 )
-(:scoring maximize (+
+(:scoring (+
     (* 3 (= (count-nonoverlapping throwAttempt) 1) (count-once throwOverRamp))
     (* 2 (= (count-nonoverlapping throwAttempt) 2) (count-once throwOverRamp))
     (* (>= (count-nonoverlapping throwAttempt) 3) (count-once throwOverRamp))
@@ -227,7 +227,7 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping bounceBallToBin)
     (* 3 (count-nonoverlapping throwBallToBin))
 )))
@@ -257,7 +257,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 10)
 )
-(:scoring maximize (count-nonoverlapping throwTeddyOntoPillow)
+(:scoring (count-nonoverlapping throwTeddyOntoPillow)
 ))
 
 (define (game 5d29412ab711e9001ab74ece-11) (:domain many-objects-room-v1)  ; 11
@@ -289,14 +289,14 @@
         )) 
     ))
 ))
-(:scoring maximize (* 
-    (count-maximal-once pyramidBlockAtopTowerAtEnd)
-    (count-maximal-once baseBlockInTowerAtEnd)
+(:scoring (external-forall-maximize (* 
+    (count-once pyramidBlockAtopTowerAtEnd)
+    (count-once baseBlockInTowerAtEnd)
     (+ 
-        (count-maximal-once baseBlockInTowerAtEnd)
-        (count-maximal-once-per-objects blockOnBlockInTowerAtEnd)   
+        (count-once baseBlockInTowerAtEnd)
+        (count-once-per-objects blockOnBlockInTowerAtEnd)   
     )     
-)))
+))))
 
 ; 12 requires quantifying based on position -- something like
 
@@ -320,7 +320,7 @@
         )
     )
 ))
-(:scoring maximize
+(:scoring 
     (count-unique-positions throwToRampToBin)
 ))
 
@@ -349,7 +349,7 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* 6 (count-nonoverlapping throwToRampToBin:dodgeball))
     (* 3 (count-nonoverlapping throwToRampToBin:golfball))
 )))
@@ -379,7 +379,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 10)
 )
-(:scoring maximize (count-nonoverlapping throwInBin)
+(:scoring (count-nonoverlapping throwInBin)
     ; TODO: how do we want to quantify streaks? some number of one preference without another preference?
 ))
 
@@ -434,7 +434,7 @@
 (:terminal
     (>= (count-once-per-objects throwAttempt) 2)
 )
-(:scoring maximize (count-once-per-objects blockInTowerKnockedByDodgeball)
+(:scoring (count-once-per-objects blockInTowerKnockedByDodgeball)
 ))
 
 
@@ -466,7 +466,7 @@
         ) 
     )
 ))
-(:scoring maximize (count-nonoverlapping rollBallToBin)
+(:scoring (count-nonoverlapping rollBallToBin)
 ))
 
 ; 18 is a dup of 17
@@ -486,7 +486,7 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-once-per-objects castleBuilt))
     ; (* 4 (or 
     ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block) (count-once-per-objects castleBuilt))
@@ -560,7 +560,7 @@
 (:terminal
     (>= (count-once-per-objects throwAttempt) 3)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 6 (count-once-per-objects ballThrownIntoTarget:dodgeball:hexagonal_bin))
     (* 5 (count-once-per-objects ballThrownIntoTarget:beachball:hexagonal_bin))
     (* 4 (count-once-per-objects ballThrownIntoTarget:basketball:hexagonal_bin))
@@ -574,7 +574,6 @@
 
 
 (define (game 5e2df2855e01ef3e5d01ab58-20) (:domain medium-objects-room-v1) ; 20
-
 (:constraints (and 
     (forall (?b - building) (and  
         (preference blockInTowerAtEnd (exists (?l - block)
@@ -617,10 +616,12 @@
         )
     ))
 ))
-(:scoring maximize (+ 
-    (count-maximal-once-per-objects blockInTowerAtEnd)
-    (* 2 (count-maximal-once-per-objects blockInTowerKnockedByDodgeball))
-    (* (- 1) (count-nonoverlapping towerFallsWhileBuilding))
+(:scoring (+ 
+    (external-forall-maximize (+ 
+        (count-once-per-objects blockInTowerAtEnd)
+        (* 2 (count-once-per-objects blockInTowerKnockedByDodgeball))
+    ))
+    (- (count-nonoverlapping towerFallsWhileBuilding))
 )))
 
 (define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)  ; 21
@@ -677,11 +678,11 @@
 (:terminal
     (>= (total-score) 10)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-nonoverlapping ballThrownToBin))
     (count-nonoverlapping ballThrownToBed)
     (count-nonoverlapping ballThrownToChair)
-    (* (- 1) (count-nonoverlapping ballThrownMissesEverything))
+    (- (count-nonoverlapping ballThrownMissesEverything))
 )))
 
 (define (game 60d432ce6e413e7509dd4b78-22) (:domain medium-objects-room-v1)  ; 22
@@ -715,7 +716,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 8)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 2 (count-nonoverlapping throwBallToBin:dodgeball:red))
     (* 3 (count-nonoverlapping throwBallToBin:basketball:red))
     (* 4 (count-nonoverlapping throwBallToBin:beachball:red))
@@ -750,7 +751,7 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping throwBallToBin)
     (- (/ (count-nonoverlapping throwAttempt) 5))
 )))
@@ -776,7 +777,7 @@
 (:terminal
     (>= (total-score) 300)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-nonoverlapping throwBallToBin:blue_dodgeball:red))
     (* 10 (count-nonoverlapping throwBallToBin:pink_dodgeball:red))
     (* 10 (count-nonoverlapping throwBallToBin:blue_dodgeball:pink))
@@ -836,7 +837,7 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* 5 (+
         (count-once-per-objects dodgeballsInPlace)
         (count-once-per-objects blocksInPlace)
@@ -884,13 +885,13 @@
     (>= (total-time) 180)
     (>= (total-score) 50)
 ))
-(:scoring maximize (+
+(:scoring (+
     (* 10 (count-nonoverlapping thrownBallReachesEnd))
     (* (- 5) (count-nonoverlapping thrownBallHitsBlock:red))
     (* (- 3) (count-nonoverlapping thrownBallHitsBlock:green))
     (* (- 3) (count-nonoverlapping thrownBallHitsBlock:pink))
-    (* (- 1) (count-nonoverlapping thrownBallHitsBlock:yellow))
-    (* (- 1) (count-nonoverlapping thrownBallHitsBlock:purple))
+    (- (count-nonoverlapping thrownBallHitsBlock:yellow))
+    (- (count-nonoverlapping thrownBallHitsBlock:purple))
 )))
 
 (define (game 5bb511c6689fc5000149c703-29) (:domain few-objects-room-v1)  ; 29
@@ -905,7 +906,7 @@
         )
     )
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping objectOnBed)
 ))
 
@@ -940,7 +941,7 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping objectThrownFromRug:side_table)
     (* 2 (count-nonoverlapping objectThrownFromRug:bed))
 )))
@@ -1012,10 +1013,10 @@
     )
 ))
 (:terminal (or 
-    (> (count-maximal-nonoverlapping throwAttempt) 2)
+    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 2)
     (>= (count-nonoverlapping throwAttempt) 12)
 ))
-(:scoring maximize (* 
+(:scoring (* 
     (>=     
         (+
             (count-nonoverlapping ballThrownToBin:dodgeball)
@@ -1045,7 +1046,7 @@
         ))
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects itemInClosedDrawerAtEnd)
 ))
 
@@ -1092,11 +1093,11 @@
     (>= (total-score) 10)
     (<= (total-score) (- 30))
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping throwObjectToBin:dodgeball)
     (* 10 (count-once throwObjectToBin:book))
     (* 2 (count-nonoverlapping throwBallToBinOffObject))
-    (* (- 1) (count-nonoverlapping throwMissesBin))
+    (- (count-nonoverlapping throwMissesBin))
 )))
 
 
@@ -1129,7 +1130,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 5)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwToBin)
 ))
 
@@ -1164,7 +1165,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 10)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwToBin)
 ))
 
@@ -1183,7 +1184,7 @@
         )
     )
 ))
-(:scoring maximize
+(:scoring 
     (* 5 (count-nonoverlapping throwToBin))
 ))
 
@@ -1204,7 +1205,7 @@
         )
     )
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownToWallToAgent)
 ))
 
@@ -1229,13 +1230,13 @@
         )
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping ballRolledOnRampToRug:pink)
     (* 2 (count-nonoverlapping ballRolledOnRampToRug:yellow))
     (* 3 (count-nonoverlapping ballRolledOnRampToRug:orange))
     (* 3 (count-nonoverlapping ballRolledOnRampToRug:green))
     (* 4 (count-nonoverlapping ballRolledOnRampToRug:purple))
-    (* (- 1) (count-nonoverlapping ballRolledOnRampToRug:white))
+    (- (count-nonoverlapping ballRolledOnRampToRug:white))
 )))
 
 
@@ -1278,16 +1279,16 @@
 (:terminal 
     (>= (total-time) 30)
 )
-(:scoring maximize
-    (count-maximal-once-per-objects objectMovedRoomSide)
-))
+(:scoring (external-forall-maximize
+    (count-once-per-objects objectMovedRoomSide)
+)))
 
 
 (define (game 5edc195a95d5090e1c3f91b-42) (:domain few-objects-room-v1)  ; 42
 (:setup (and 
     (exists (?h - hexagonal_bin) (and 
         (forall (?g - game_object) (game-optional (or
-            (= ?h ?g)
+            (same_object ?h ?g)
             (> (distance ?h ?g) 1) 
         )))      
         (forall (?d - dodgeball) (game-optional (and
@@ -1319,7 +1320,7 @@
 (:terminal 
     (>= (count-nonoverlapping throwAttempt) 5)
 )
-(:scoring maximize
+(:scoring 
     (count-same-positions throwBallFromOtherBallToBin)
 ))
 
@@ -1353,7 +1354,7 @@
         )  
     ))
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping throwBallToBin:basketball)
     (* 2 (count-nonoverlapping throwBallToBin:beachball))
     (* 3 (count-nonoverlapping throwBallToBin:dodgeball))
@@ -1402,10 +1403,10 @@
     ))
 ))
 (:terminal (or 
-    (> (count-maximal-nonoverlapping throwAttempt) 1)
+    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 1)
     (>= (count-once-per-objects throwAttempt) 6)
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-once-per-objects throwKnocksOverBear:dodgeball)
     (* 2 (count-once-per-objects throwKnocksOverBear:golfball))   
 )))
@@ -1438,9 +1439,9 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping ballThrownToRampToBed)
-    (* (- 1) (count-nonoverlapping ballThrownHitsAgent))
+    (- (count-nonoverlapping ballThrownHitsAgent))
 )))
 
 
@@ -1462,7 +1463,7 @@
         )
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping beachballBouncedOffRamp:red)
     (* 3 (count-nonoverlapping beachballBouncedOffRamp:pink))
     (* 10 (count-nonoverlapping beachballBouncedOffRamp:pink))
@@ -1519,7 +1520,7 @@
         )
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-nonoverlapping ballThrownToBin:dodgeball))
     (* 7 (count-nonoverlapping ballThrownToBin:basketball))
     (* 15 (count-nonoverlapping ballThrownToBin:beachball))
@@ -1561,10 +1562,10 @@
     ))
 ))
 (:terminal (or 
-    (> (count-maximal-nonoverlapping throwAttemptFromDoor) 1)
+    (> (external-forall-maximize (count-nonoverlapping throwAttemptFromDoor)) 1)
     (>= (count-once-per-objects throwAttemptFromDoor) 3)
 ))
-(:scoring maximize
+(:scoring 
     (* 10 (count-once-per-objects dodgeballThrownToBin))
 ))
 
@@ -1581,7 +1582,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects gameObjectToBin)
 ))
 
@@ -1598,7 +1599,7 @@
         )
     )
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwToBin)  
 ))
 
@@ -1619,7 +1620,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects blockFromRugToDesk)
 ))
 
@@ -1645,7 +1646,7 @@
         )
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-once-per-objects dodgeballsInPlace))
     (* 5 (count-once-per-objects blocksInPlace))
     (* 5 (count-once-per-objects smallItemsInPlace))
@@ -1676,10 +1677,10 @@
     )
 ))
 (:terminal
-    (>= (count-maximal-nonoverlapping blockPickedUp) 3)
+    (>= (external-forall-maximize (count-nonoverlapping blockPickedUp)) 3)
 )
-(:scoring maximize (+
-    (count-maximal-overlapping blockPlacedInBuilding)
+(:scoring (external-forall-maximize
+    (count-overlapping blockPlacedInBuilding)
 )))
 
 
@@ -1701,7 +1702,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects objectToBinOnFirstTry)
 ))
 
@@ -1728,7 +1729,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 3)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwFromDoorToBin)
 ))
 
@@ -1760,7 +1761,7 @@
         (at-end (on ?s ?w))
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects bookOnDeskShelf)
     (count-once-per-objects otherObjectsOnDeskShelf)
     (count-once-per-objects dodgeballAndBasketballInBin)    
@@ -1778,7 +1779,7 @@
                     (in ?b ?l) 
                     (not (exists (?l2 - block) (and 
                         (in ?b ?l2)
-                        (not (= ?l ?l2))
+                        (not (same_object ?l ?l2))
                         (same_type ?l ?l2)
                     )))
             ))
@@ -1834,7 +1835,7 @@
         ))
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-once-per-objects gameBlockFound))
     (* 100 (count-once matchingBuildingBuilt))
     (* (-10) (count-nonoverlapping towerFallsWhileBuilding))
@@ -1855,7 +1856,7 @@
         ))
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 2 (count-nonoverlapping ballThrownToBin:golfball))
     (* 3 (count-nonoverlapping ballThrownToBin:dodgeball))
     (* 4 (count-nonoverlapping ballThrownToBin:beachball))
@@ -1893,7 +1894,7 @@
         ))
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-nonoverlapping dodgeballFromBlockToBin:yellow_pyramid_block))
     (* 25 (count-nonoverlapping dodgeballFromBlockToBin:red_pyramid_block))
     (* 50 (count-nonoverlapping dodgeballFromBlockToBin:blue_pyramid_block))
@@ -1917,7 +1918,7 @@
             (once (and 
                 (agent_holds ?o) 
                 (adjacent agent desk) 
-                (not (exists (?o2 - (either chair laptop doggie_bed)) (= ?o ?o2)))
+                (not (exists (?o2 - (either chair laptop doggie_bed)) (same_object ?o ?o2)))
             ))
             (hold (and (not (agent_holds ?o)) (in_motion ?o)))
             (once (and (not (in_motion ?o)) (on bed ?o)))
@@ -1931,7 +1932,7 @@
         )
     ))
 ))
-(:scoring maximize (+
+(:scoring (+
     (count-nonoverlapping smallObjectThrownToBed)
     (* 5 (count-nonoverlapping bigObjectThrownToBed))
     (* (- 5) (count-nonoverlapping failedThrowAttempt))
@@ -1985,10 +1986,10 @@
 (:terminal
     (>= (count-once towerFallsWhileBuilding) 1)
 )
-(:scoring maximize (+ 
-    (count-maximal-overlapping blockPlacedInBuilding)
-    ( * 2 (count-maximal-overlapping nonBlockPlacedInBuilding))
-)))
+(:scoring (external-forall-maximize (+ 
+    (count-overlapping blockPlacedInBuilding)
+    (* 2 (count-overlapping nonBlockPlacedInBuilding))
+))))
 
 
 (define (game 5aeb24e22bd17300018779f2-64) (:domain many-objects-room-v1)  ; 64
@@ -2004,7 +2005,7 @@
         ))
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping ballThrownFromObjectToBin:hexagonal_bin)   
     (* 2 (count-nonoverlapping ballThrownFromObjectToBin:rug))
     (* 3 (count-nonoverlapping ballThrownFromObjectToBin:wall))
@@ -2020,7 +2021,7 @@
         )   
     ))
 ))
-(:scoring maximize (count-once-per-objects ballOnBedAtEnd)
+(:scoring (count-once-per-objects ballOnBedAtEnd)
 ))
 
  
@@ -2046,7 +2047,7 @@
                     (on top_shelf ?b)
                     (not (exists (?ob - block) 
                         (and 
-                            (not (= ?b ?ob)) 
+                            (not (same_object ?b ?ob)) 
                             (on top_shelf ?ob)
                         )
                     ))
@@ -2055,7 +2056,7 @@
                 (once (and 
                     (not (in_motion ?d)) 
                     (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
-                    (= (color ?b) (color ?tb))
+                    (same_color ?b ?tb)
                 ))
             )
         ))
@@ -2067,7 +2068,7 @@
                     (on top_shelf ?b)
                     (not (exists (?ob - block) 
                         (and 
-                            (not (= ?b ?ob)) 
+                            (not (same_object ?b ?ob)) 
                             (on top_shelf ?ob)
                         )
                     ))
@@ -2076,7 +2077,7 @@
                 (once (and 
                     (not (in_motion ?d)) 
                     (not (exists (?ob - block) (< (distance ?d ?ob) (distance ?d ?tb))))
-                    (not (= (color ?b) (color ?tb)))
+                    (not (same_color ?b ?tb))
                 ))
             )
         ))
@@ -2085,9 +2086,9 @@
 (:terminal
     (>= (count-once-per-external-objects blockCorrectlyPicked) 4)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-once-per-external-objects blockCorrectlyPicked))
-    (* (- 1) (count-nonoverlapping blockIncorrectlyPicked))
+    (- (count-nonoverlapping blockIncorrectlyPicked))
     ( * 100 (>= (count-once-per-external-objects blockCorrectlyPicked) 4))
 )))
 
@@ -2130,7 +2131,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 16)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects ballKnocksBlockFromRug:dodgeball)
     (* 0.7 (count-once-per-objects ballKnocksBlockFromRug:basketball))
     (* 0.5 (count-once-per-objects ballKnocksBlockFromRug:beachball))
@@ -2154,7 +2155,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownThroughRampToBin)
 ))
 
@@ -2199,13 +2200,13 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping objectLandsInBin:triangle_block)
     ( * 2 (count-nonoverlapping objectLandsInBin:pyramid_block))
     ( * 2 (count-nonoverlapping objectLandsInBin:dodgeball))
     ( * 3 (count-nonoverlapping objectLandsInBin:golfball))
     ( * 3 (count-nonoverlapping golfballLandsInBinThroughRamp))
-    (* (- 1) (count-nonoverlapping thrownObjectHitsComputer))
+    (- (count-nonoverlapping thrownObjectHitsComputer))
 )))
 
 (define (game 60a696c3afad1b7f16b0c744-71) (:domain many-objects-room-v1)  ; 71
@@ -2236,7 +2237,7 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping dodgeballHitsPillowWithoutTouchingBlock)
     (count-nonoverlapping golfballUnderBridgeWithoutTouchingBlock)
 )))
@@ -2266,7 +2267,7 @@
 (:terminal
     (>= (count-nonoverlapping ballKnocksTeddy) 7)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballKnocksTeddy)
 ))
 
@@ -2284,7 +2285,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping dodgeballThrownToBinFromDesk)
 ))
 
@@ -2311,7 +2312,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 10)
 )
-(:scoring maximize
+(:scoring 
     (* 5 (count-nonoverlapping golfballInBinFromPillow))
 ))
 
@@ -2337,7 +2338,7 @@
     (>= (count-nonoverlapping dropAttempt) 5)
     (>= (count-nonoverlapping ballDroppedInBin) 1)
 ))
-(:scoring maximize
+(:scoring 
     (* 5 (count-nonoverlapping ballDroppedInBin))
 ))
 
@@ -2400,7 +2401,7 @@
     )
     (>= (count-nonoverlapping ballThrowAttempt) 2)  
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-once-per-objects blockToBinFromRug:pink))
     (* 10 (count-once-per-objects blockToBinFromRug:yellow))
     (* 15 (= (count-once-per-objects blockToBinFromRug:yellow) 6))
@@ -2458,9 +2459,9 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 3 (count-nonoverlapping throwMovesBeachballWithoutKnockingTeddy))
-    (* (- 1) (count-nonoverlapping throwKnocksOverBear))
+    (- (count-nonoverlapping throwKnocksOverBear))
 )))
 
 
@@ -2474,7 +2475,7 @@
         )
     ))
 ))
-(:scoring maximize (count-nonoverlapping throwGolfballToBin)
+(:scoring (count-nonoverlapping throwGolfballToBin)
 ))
 
 
@@ -2482,30 +2483,30 @@
 (:constraints (and 
     (preference pinkObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) pink)))
+            (once (and (agent_holds ?o) (same_color ?o pink)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)))
         )
     ))
     (preference blueObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) blue)))
+            (once (and (agent_holds ?o) (same_color ?o blue)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
                 ))
             ))
         )
     ))
     (preference brownObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) brown)))
+            (once (and (agent_holds ?o) (same_color ?o brown)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
                 ))
             ))
         )
@@ -2516,44 +2517,44 @@
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
                 ))
             ))
         )
     ))
     (preference greenObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) green)))
+            (once (and (agent_holds ?o) (same_color ?o green)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 ?o4 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
-                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
+                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)  
                 ))
             ))
         )
     ))
     (preference tanObjectMovedToRoomCenter (exists (?o - game_object)
         (then 
-            (once (and (agent_holds ?o) (= (color ?o) tan)))
+            (once (and (agent_holds ?o) (same_color ?o tan)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
                 (exists (?o1 ?o2 ?o3 ?o4 ?o5 - game_object) (and 
-                    (= (color ?o1) pink) (< (distance room_center ?o1) 1)  
-                    (= (color ?o2) blue) (< (distance room_center ?o2) 1)  
-                    (= (color ?o3) brown) (< (distance room_center ?o3) 1)  
-                    (= (type ?o4) pillow) (< (distance room_center ?o4) 1)  
-                    (= (color ?o5) green) (< (distance room_center ?o5) 1)  
+                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)  
+                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)  
+                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)  
+                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)  
+                    (same_color ?o5 green) (< (distance room_center ?o5) 1)  
                 ))
             ))
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once pinkObjectMovedToRoomCenter)
     (count-once blueObjectMovedToRoomCenter)
     (count-once brownObjectMovedToRoomCenter)
@@ -2585,7 +2586,7 @@
 (:terminal 
     (>= (count-nonoverlapping dodgeballFromRugToBin) 3)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping dodgeballFromRugToBin)
 ))
 
@@ -2602,7 +2603,7 @@
 (:terminal 
     (>= (total-time) 300)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownToBin)
 ))
 
@@ -2624,7 +2625,7 @@
         ))
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects ballToBinFromBed:dodgeball)
     (* (= (count-once-per-objects ballToBinFromBed:dodgeball) 3) (count-once-per-objects ballToBinFromBed:golfball))
 )))
@@ -2639,7 +2640,7 @@
                 (once (and 
                     (agent_holds ?b) 
                     (rug_color_under agent pink) 
-                    (= (color ?b) ?c)
+                    (same_color ?b ?c)
                     (not (exists (?ob - cube_block) (in ?h ?ob)))
                 ))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
@@ -2661,14 +2662,14 @@
     )
 ))
 (:terminal (or 
-    (>= (count-maximal-nonoverlapping throwAttempt) 2)
+    (>= (external-forall-maximize (count-nonoverlapping throwAttempt)) 2)
     (>= (count-once-per-objects throwAttempt) 6)
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects cubeThrownToBin:yellow)
     (* 2 (count-once-per-objects cubeThrownToBin:tan))
     (* 3 (count-once-per-objects cubeThrownToBin:blue))
-    (* (- 1) (count-once-per-objects throwAttempt))
+    (- (count-once-per-objects throwAttempt))
 )))
 
 ; 86 is a dup of 84 -- and is aldo invalid
@@ -2691,7 +2692,7 @@
         ))
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping basketMadeFromRug:dodgeball)
     (* 2 (count-nonoverlapping basketMadeFromRug:block))
 )))
@@ -2764,7 +2765,7 @@
     (>= (count-once throwAttemptKnocksBlock) 1)
     (>= (total-score) 5)
 ))
-(:scoring maximize 
+(:scoring 
     (count-nonoverlapping throwFromEdgeOfRug)
 ))
 
@@ -2790,7 +2791,7 @@
     (>= (total-time) 180)
     (>= (total-score) 10)
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping ballThrownFromRug:dodgeball)
     (* 2 (count-nonoverlapping ballThrownFromRug:basketball))
     (* 10 (count-nonoverlapping ballThrownFromRug:beachball))
@@ -2808,7 +2809,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping dodgeballBouncesOnceToDoggieBed)
 ))
 
@@ -2826,7 +2827,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwBallToBin)
 ))
 
@@ -2853,7 +2854,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttemptFromDoor) 8)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 3 (count-nonoverlapping ballThrownFromDoor:dodgeball))
     (* 6 (count-nonoverlapping ballThrownFromDoor:golfball))
 )))
@@ -2876,7 +2877,7 @@
 (:terminal 
     (>= (total-time) 60)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownToRug)
 ))
 
@@ -2900,7 +2901,7 @@
 (:terminal
     (>= (total-score) 6)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects ballThrownToBin:beachball)
     (* 2 (count-once-per-objects ballThrownToBin:basketball))
     (* 3 (count-once-per-objects ballThrownToBin:dodgeball))
@@ -2927,7 +2928,7 @@
 (:terminal 
     (>= (count-nonoverlapping cubeBlockThrowAttempt) 3)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping cubeBlockFromBedToShelf)
 ))
 
@@ -2951,7 +2952,7 @@
         ))
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 2 (count-nonoverlapping dodgeballFromDeskToTarget:doggie_bed))
     (* 3 (count-nonoverlapping dodgeballFromDeskToTarget:hexagonal_bin))
 )))
@@ -3000,7 +3001,7 @@
     (>= (count-nonoverlapping throwAttemptFromBehindBlock) 2)
     (>= (total-score) 50)
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-nonoverlapping ballThrownFromBehindBlock:blue_cube_block))
     (* 5 (count-nonoverlapping ballThrownFromBehindBlock:yellow_cube_block))
     (* 30 (= (count-nonoverlapping ballThrownFromBehindBlock:blue_cube_block) 2))
@@ -3050,7 +3051,7 @@
 (:terminal
     (>= (count-nonoverlapping throwAttempt) 10)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-nonoverlapping dodgeballHitsBin)
     (* 2 (count-nonoverlapping dodgeballHitsBinBottom))
 )))
@@ -3074,7 +3075,7 @@
 (:terminal
     (>= (total-time) 300)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwFromEdgeOfRug)
 ))  
 
@@ -3097,7 +3098,7 @@
                 (agent_holds ?c)
                 (in_motion ?c)
                 (exists (?c2 - (either blue_cube_block yellow_cube_block)) (and 
-                    (not (= ?c ?c2))
+                    (not (same_object ?c ?c2))
                     (< (distance ?c ?c2) 0.5)
                     (on floor ?c)
                     (on floor ?c2) 
@@ -3110,7 +3111,7 @@
         )  
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects woodenBlockMovedFromRugToDesk)
 ))
 
@@ -3136,7 +3137,7 @@
     (>= (total-score) 6)
     (>= (count-nonoverlapping throwAttempt) 15)
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping throwInBin)
 ))
 
@@ -3212,7 +3213,7 @@
 (:terminal
     (>= (count-once agentLeavesDogbedOrNoMoreBalls) 1)
 )
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 3 (count-once-per-external-objects throwKnocksPyramidBlock:pyramid_block))
     (* (- 3) (count-once-per-external-objects throwKnocksPyramidBlock:tall_cylindrical_block))
     (count-once-per-external-objects throwKnocksPyramidBlock:cylindrical_block) 
@@ -3245,7 +3246,7 @@
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (count-once-per-objects ballThrownToBin)
     (count-once-per-objects cubeBlockThrownToTopShelf)
     (count-once-per-objects pillowThrownToDoggieBed)
@@ -3285,12 +3286,12 @@
     ))
 ))
 (:terminal (or 
-    (> (count-maximal-nonoverlapping throwAttempt:dodgeball) 3)
-    (> (count-maximal-nonoverlapping throwAttempt:cube_block) 1)
-    (> (count-maximal-nonoverlapping throwAttempt:book) 1)
-    (> (count-maximal-nonoverlapping throwAttempt:alarm_clock) 1)
+    (> (external-forall-maximize (count-nonoverlapping throwAttempt:dodgeball)) 3)
+    (> (count-nonoverlapping throwAttempt:cube_block) 1)
+    (> (count-nonoverlapping throwAttempt:book) 1)
+    (> (count-nonoverlapping throwAttempt:alarm_clock) 1)
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 8 (count-nonoverlapping throwFromBehindChairsInBin:dodgeball))
     (* 5 (count-nonoverlapping throwFromBehindChairsInBin:cube_block))
     (* 20 (count-nonoverlapping throwFromBehindChairsInBin:alarm_clock))
@@ -3327,7 +3328,7 @@
         )
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownThroughRampAndBlocksToBin)
 ))
 
@@ -3338,7 +3339,7 @@
 (:constraints (and 
     (preference objectInBuilding (exists (?o - game_object ?d - doggie_bed ?b - building)
         (at-end (and 
-            (not (= ?o ?d))
+            (not (same_object ?o ?d))
             (in ?b ?d)
             (in ?b ?o)
             (on floor ?d)
@@ -3347,7 +3348,7 @@
         ))
     ))
 ))
-(:scoring maximize
+(:scoring 
     (count-once-per-objects objectInBuilding)
 ))
 
@@ -3383,7 +3384,7 @@
         )   
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-nonoverlapping teddyBearLandsInBin))
     (count-nonoverlapping teddyBearHitsBall)
 )))
@@ -3411,9 +3412,9 @@
     ))
 ))
 (:terminal 
-    (> (count-maximal-nonoverlapping throwAttempt) 4)
+    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 4)
 )
-(:scoring maximize
+(:scoring 
     (count-nonoverlapping ballThrownToBin)
 ))
 
@@ -3450,7 +3451,7 @@
     (>= (count-once redDodgeballThrownToBinWithoutTouchingFloor) 1)
     (>= (count-once redDodgeballThrownToBin) 1)
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 3
         (= (count-nonoverlapping throwAttempt) 1) 
         (count-once redDodgeballThrownToBinWithoutTouchingFloor)
@@ -3467,8 +3468,8 @@
     (forall (?c - color) 
         (preference objectWithMatchingColor (exists (?o1 ?o2 - game_object)
             (at-end (and
-                (= (color ?o1) (color ?o2))
-                (= (color ?o1) ?c)
+                (same_color ?o1 color ?o2)
+                (same_color ?o1 ?c)
                 (or 
                     (on ?o1 ?o2)
                     (adjacent ?o1 ?o2)
@@ -3492,7 +3493,7 @@
         )
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 5 (count-once-per-objects objectWithMatchingColor))
     (* 5 (count-once-per-objects objectWithMatchingColor:green))
     (* 5 (count-once-per-objects objectWithMatchingColor:brown))

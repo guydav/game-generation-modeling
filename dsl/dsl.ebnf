@@ -26,18 +26,17 @@ either_types = '(either' {type_names:type_name}+ ')'; # TODO: do we want to enfo
 type_name = name;
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
-    
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
-multiple_args_equal_comparison = '(=' {equal_comp_funcs:comparison_arg}+ ')';
+multiple_args_equal_comparison = '(=' {equal_comp_args:comparison_arg}+ ')';
 
-comparison_arg = arg:(function_eval | number | type_name | variable);
+comparison_arg = arg:(function_eval | number);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' func_name:func_name {func_args:function_term}* ')';
 func_name = name;
-function_term = term:(comparison_arg | predicate); # TODO: verify this (function calling on a predicate) ever happens
+function_term = term:(number | type_name | variable); 
 
 predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
-predicate_name = '=' | name;  # = here to allow for checking that one object is/isn't another
+predicate_name = name;  # = used to be here to allow for checking that one object is/isn't another
 predicate_term = term:(type_name | variable);
 # predicate_function = predicate;
 
@@ -116,8 +115,8 @@ seq_func = seq_func:(
     while_hold |
     hold_for |
     hold_to_end |
-    forall_seq)
-    ;
+    forall_seq
+    );
 
 any = '(any)';
 once = '(once ' once_pred:super_predicate ')';
@@ -150,8 +149,8 @@ terminal = terminal:(
     terminal_and |
     terminal_or |
     terminal_not |
-    terminal_comp)
-    ;
+    terminal_comp
+    );
 
 terminal_and = '(and' {and_args:terminal}+ ')'; # TODO: do we want to enforce more than one?
 terminal_or = '(or' {or_args:terminal}+ ')'; # TODO: do we want to enforce more than one?
@@ -163,6 +162,8 @@ terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')'
 terminal_expr = expr:scoring_expr;
 
 scoring_expr = expr:(
+    scoring_external_maximize |
+    scoring_external_minimize |
     scoring_multi_expr |
     scoring_binary_expr |
     scoring_neg_expr |
@@ -173,9 +174,13 @@ scoring_expr = expr:(
     total_score |
     number |
     preference_eval |
-    scoring_comparison |
-    function_eval)  # allowing an arbitrary function evaluation as part of scoring -- do we want this?
-    ;
+    scoring_comparison 
+    );
+    # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
+    
+
+scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
+scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
 
 scoring_multi_expr = '(' op:multi_op {expr:scoring_expr}+ ')';  # TODO: do we want to enforce more than one?
 scoring_binary_expr = '(' op:binary_op expr_1:scoring_expr expr_2:scoring_expr ')';
@@ -211,10 +216,10 @@ preference_eval = count_method:(
     count_increasing_measure |
     count_unique_positions |
     count_same_positions |
-    count_maximal_once |
-    count_maximal_once_per_objects |
-    count_maximal_nonoverlapping | 
-    count_maximal_overlapping |
+    # count_maximal_once |
+    # count_maximal_once_per_objects |
+    # count_maximal_nonoverlapping | 
+    # count_maximal_overlapping |
     count_once_per_external_objects |
     count_nonoverlapping_measure
     );
@@ -229,10 +234,10 @@ count_total = '(count-total' name_and_types:pref_name_and_types ')';
 count_increasing_measure = '(count-increasing-measure' name_and_types:pref_name_and_types ')';
 count_unique_positions = '(count-unique-positions' name_and_types:pref_name_and_types ')';
 count_same_positions = '(count-same-positions' name_and_types:pref_name_and_types ')';
-count_maximal_once = '(count-maximal-once' name_and_types:pref_name_and_types ')';
-count_maximal_once_per_objects = '(count-maximal-once-per-objects' name_and_types:pref_name_and_types ')';
-count_maximal_nonoverlapping = '(count-maximal-nonoverlapping' name_and_types:pref_name_and_types ')';
-count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_name_and_types ')';
+# count_maximal_once = '(count-maximal-once' name_and_types:pref_name_and_types ')';
+# count_maximal_once_per_objects = '(count-maximal-once-per-objects' name_and_types:pref_name_and_types ')';
+# count_maximal_nonoverlapping = '(count-maximal-nonoverlapping' name_and_types:pref_name_and_types ')';
+# count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_name_and_types ')';
 count_once_per_external_objects = '(count-once-per-external-objects' name_and_types:pref_name_and_types ')';
 count_nonoverlapping_measure = '(count-nonoverlapping-measure' name_and_types:pref_name_and_types ')';
 
@@ -241,9 +246,7 @@ pref_name_and_types = pref_name:preference_name {object_types:pref_object_type}*
 pref_object_type = ':' type_name:type_name;
 
 # Scoring
-scoring = scoring:(
-    scoring_maximize |
-    scoring_minimize);
+scoring = scoring_expr;
     
-scoring_maximize = 'maximize' expr:scoring_expr;
-scoring_minimize = 'minimize' expr:scoring_expr;
+# scoring_maximize = 'maximize' expr:scoring_expr;
+# scoring_minimize = 'minimize' expr:scoring_expr;

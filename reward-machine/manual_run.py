@@ -78,7 +78,7 @@ TEST_THROWING_GAME = """
 
     ))
 
-    (:scoring maximize (+
+    (:scoring (+
         (count-nonoverlapping throwBallToBin)
         (- (/ (count-nonoverlapping throwAttempt) 5))
     )))
@@ -100,7 +100,7 @@ TEST_THROW_BOUNCE_GAME = """
         )
     ))
 
-    (:scoring maximize (+
+    (:scoring (+
         (* (count-nonoverlapping throwToWallToBin) 10)
     )))
 """
@@ -125,7 +125,7 @@ TEST_THROW_BALL_AT_WALL_GAME = """
         )
     ))
 
-    (:scoring maximize (+
+    (:scoring (+
         (* (count-nonoverlapping throwToWall) 1)
     )))
 """
@@ -150,7 +150,7 @@ TEST_SETUP_GAME = """
         )
     )
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* (count-nonoverlapping throwToBin) 1)
 )))
 """
@@ -170,7 +170,7 @@ TEST_AT_END_GAME = """
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring (+ 
     (* 10 (count-once-per-objects castleBuilt))
 )))
 """
@@ -189,7 +189,7 @@ TEST_BLOCK_STACK_GAME = """
             )
         )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping blockOnBlock) 1)
 )))
 """
@@ -208,7 +208,7 @@ TEST_BUILDING_GAME = """
         ))
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping blockInBuildingAtEnd) 1)
 ))
 )
@@ -226,7 +226,7 @@ TEST_ON_BUG_GAME = """
         )
     ))
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping chairOnTallRectBlock) 1)
 ))
 )
@@ -247,7 +247,7 @@ TEST_BUILDING_ON_CHAIR_GAME = """
         ))
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping blockInBuildingOnChairAtEnd) 2)
 ))
 )
@@ -268,7 +268,7 @@ TEST_BUILDING_IN_BIN_GAME = """
         ))
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping blockInBuildingInBinAtEnd) 2)
 ))
 )
@@ -289,7 +289,7 @@ TEST_BUILDING_TOUCHES_WALL_GAME = """
         ))
     )
 ))
-(:scoring maximize (+
+(:scoring (+
     (* (count-nonoverlapping blockInBuildingTouchingWallAtEnd) 2)
 ))
 )
@@ -307,7 +307,7 @@ TEST_MEASURE_GAME = """
         )
     ))
 )) 
-(:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
+(:scoring (count-nonoverlapping-measure throwToBinFromDistance)
 ))
 """
 

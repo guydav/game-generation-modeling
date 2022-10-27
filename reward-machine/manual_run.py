@@ -11,7 +11,7 @@ THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_ba
 WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
 SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
 SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-TEST_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
+THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
 CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
@@ -146,16 +146,6 @@ TEST_SETUP_GAME = """
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once  (and (in ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-
-    (preference throwAttempt
-        (exists (?b - ball)
-            (then 
-                (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (not (in_motion ?b)))
             )
         )
     )
@@ -305,12 +295,27 @@ TEST_BUILDING_TOUCHES_WALL_GAME = """
 )
 """
 
+TEST_MEASURE_GAME = """
+(define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
+
+(:constraints (and 
+    (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then 
+            (once-measure (agent_holds ?d) (distance agent ?h))
+            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+            (once (and (not (in_motion ?d)) (in ?h ?d)))
+        )
+    ))
+)) 
+(:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
+))
+"""
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_THROW_BALL_AT_WALL_GAME)
+    game_handler = GameHandler(TEST_SETUP_GAME)
     score = None
 
-    trace_path = TEST_TRACE.resolve().as_posix()
+    trace_path = SETUP_TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
@@ -323,3 +328,9 @@ if __name__ == "__main__":
 
     if score is not None:
         print("\n\nSCORE ACHIEVED:", score)
+
+    print("\nPREFERENCE SATISFACTIONS")
+    for key, val in game_handler.preference_satisfactions.items():
+        print(key + ":")
+        for sat in val:
+            print(f"\t{sat}")

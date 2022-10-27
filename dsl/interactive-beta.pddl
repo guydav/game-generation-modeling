@@ -2421,7 +2421,7 @@
         )
     ))
 )) 
-(:scoring (count-nonoverlapping-measure throwToWallAndBack)
+(:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
 ))
 
 

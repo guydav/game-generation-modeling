@@ -2,9 +2,14 @@ from collections import OrderedDict, namedtuple
 import inflect
 import itertools
 import numpy as np
+import pathlib
+import sys
 import tatsu
 import tatsu.ast
 import typing
+
+sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
+import ast_printer
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
@@ -348,24 +353,46 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
         return []
 
 def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]],
-    used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):
+                           used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):
     '''
     Given a room type / domain (few, medium, or many) and a list of lists of variable types,
     returns a list of every possible assignment of objects in the room to those types. For 
     instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
-    every pair consisting of one beachball or dodgeball and one bin
+    every pair of objects consisting of one beachball or dodgeball and one bin.
+
+    An optional used_objects argument specifies a list of objects that have already been assigned to
+    a variable, and will be excluded from the returned assignments
     '''
+
     if used_objects is None:
         used_objects = []
-        
-    grouped_objects = [
-        filter(lambda o: o not in used_objects, sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type]  # type: ignore
-            for var_type in sub_types], []))
-        for sub_types in variable_types]
+
+    grouped_objects = []
+    for sub_types in variable_types:
+        objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] for var_type in sub_types], [])
+        grouped_objects.append([obj for obj in objects if obj not in used_objects])
+
     assignments = list(itertools.product(*grouped_objects))
 
-    return assignments
+    # Filter out any assignments that have duplicate objects
+    filtered_assignments = list(filter(lambda assignment: len(set(assignment)) == len(assignment), assignments))
 
+    return filtered_assignments
+
+def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
+    """
+    Maps from a predicate / function and an object mapping to the key that represents them in the cache. 
+    """
+    ast_printer.reset_buffers()
+    ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](ast)
+
+    # flush the line buffer
+    ast_printer._indent_print('', 0, ast_printer.DEFAULT_INCREMENT, None)
+
+    ast_str = ' '.join(ast_printer.BUFFER if ast_printer.BUFFER is not None else [])
+    mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
+
+    return ast_str, mapping_str
 
 def describe_preference(preference):
     '''

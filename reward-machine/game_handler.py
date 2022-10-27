@@ -1,7 +1,4 @@
 import itertools
-import os
-from queue import Full
-import sys
 import tatsu
 import tatsu.ast
 import typing
@@ -12,7 +9,7 @@ from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
 from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
-from utils import extract_variable_type_mapping, get_object_assignments, FullState
+from utils import extract_variable_type_mapping, get_object_assignments, ast_cache_key, FullState
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -38,6 +35,7 @@ class GameHandler():
         self.domain_name = ''
         self.setup = None
         self.game_optional_cache = set()
+        self.game_conserved_cache = {} # maps from a setup condition to the mapping that satisfied it first
         self.preferences = []
         self.terminal = None
         self.scoring = None
@@ -72,24 +70,26 @@ class GameHandler():
                 self.preference_satisfactions[name] = []
                 print(f"Successfully constructed PreferenceHandler for '{name}'")
 
-
-            # TODO: forall can cover multiple preferences
+            # This case handles externall forall preferences
             elif rule == "pref_forall":
-                # The outer "forall" works to track the times the inner preference is satisfied for each type
-                # in the outer variables (e.g. )
+
                 forall_vars = pref_def["forall_vars"]
                 forall_pref = pref_def["forall_pref"]
                 
                 variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
-                # TODO (GD): handle the case where there are multiple forall prefs under an `(and ...)`
-                sub_preference = forall_pref["preferences"] # type: ignore
-                name = sub_preference["pref_name"]
+                
+                sub_preferences = forall_pref["preferences"] # type: ignore
+                if isinstance(sub_preferences, tatsu.ast.AST):
+                    sub_preferences = [sub_preferences]
 
-                pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
-                    additional_variable_mapping=variable_type_mapping)
-                self.preference_handlers[name] = pref_handler
-                self.preference_satisfactions[name] = []
-                print(f"Successfully constructed PreferenceHandler for '{name}'")
+                for sub_preference in sub_preferences:
+                    name = sub_preference["pref_name"]
+
+                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
+                        additional_variable_mapping=variable_type_mapping)
+                    self.preference_handlers[name] = pref_handler
+                    self.preference_satisfactions[name] = []
+                    print(f"Successfully constructed PreferenceHandler for '{name}'")
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
         '''
@@ -220,20 +220,28 @@ class GameHandler():
 
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
-
-            cache_str = str(setup_expression["optional_pred"]) + str(mapping)
-            if cache_str in self.game_optional_cache:
+            cache_key = "{0}_{1}".format(*ast_cache_key(setup_expression["optional_pred"], mapping))
+            if cache_key in self.game_optional_cache:
                 return True
 
             evaluation = self.evaluate_setup(setup_expression["optional_pred"], state, mapping)
             if evaluation:
-                self.game_optional_cache.add(cache_str)
+                self.game_optional_cache.add(cache_key)
 
             return evaluation
 
         elif rule == "setup_game_conserved":
-            # By contrast, each game-conserved condition must be satisfied at every step
-            return self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+            # For a game-conserved condition, we store the first object assignment that satisfies it
+            # and ensure that the condition is satisfied *by those objects* in all future states
+            expr_str, mapping_str = ast_cache_key(setup_expression["conserved_pred"], mapping)
+            
+            evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+
+            # If we've satisfied the condition for the first time, store the mapping in the cache
+            if evaluation and expr_str not in self.game_conserved_cache:
+                self.game_conserved_cache[expr_str] = mapping_str
+
+            return evaluation and self.game_conserved_cache.get(expr_str) == mapping_str
 
         else:
             raise ValueError(f"Error: Unknown setup rule '{rule}'")

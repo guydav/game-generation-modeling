@@ -1,19 +1,11 @@
-import pathlib
-from queue import Full
-import sys
-
-sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
-
 import numpy as np
 import tatsu
 import tatsu.ast
 import typing
 
-import ast_printer
-
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, _extract_object_limits,\
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
     _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, PseudoObject
+from config import UNITY_PSEUDO_OBJECTS, PseudoObject
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -65,18 +57,6 @@ class PredicateHandler:
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)
         self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
-
-    def _ast_cache_key(self,  predicate: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
-        """
-        Map from the arguments to __call__ to the key that represents them in the cache. 
-        """
-        ast_printer.reset_buffers()
-        ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](predicate)
-        # flush the line buffer
-        ast_printer._indent_print('', 0, ast_printer.DEFAULT_INCREMENT, None)
-        predicate_str = ' '.join(ast_printer.BUFFER if ast_printer.BUFFER is not None else [])
-        mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
-        return f'{predicate_str}_{mapping_str}'
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> bool:
@@ -98,7 +78,7 @@ class PredicateHandler:
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
-        predicate_key = self._ast_cache_key(predicate, mapping)
+        predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
         state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
@@ -197,7 +177,8 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
+            used_objects = list(mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
@@ -207,7 +188,8 @@ class PredicateHandler:
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
-            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values())  # type: ignore
+            used_objects = list(mapping.values())
+            object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
             inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
@@ -265,7 +247,7 @@ class PredicateHandler:
 
     def evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[float]:
-        function_key = self._ast_cache_key(function, mapping)
+        function_key = "{0}_{1}".format(*ast_cache_key(function, mapping))
         state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
@@ -296,7 +278,7 @@ class PredicateHandler:
         relevant_mapping = {var: mapping[var] for var in extract_variables(function)}
     
         # Evaluate the function
-        evaluation = func(state, relevant_mapping, self.state_cache, force_evaluation)
+        evaluation = func(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
 
         # If the function is undecidable with the current information, return None
         if evaluation is None:

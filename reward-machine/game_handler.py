@@ -337,33 +337,43 @@ class GameHandler():
         return str(preference_name), object_types
 
 
-    def _filter_satisfactions(self, preference_name: str, object_types: typing.Optional[typing.Sequence[str]]):
+    def _filter_satisfactions(self, preference_name: str, object_types: typing.Optional[typing.Sequence[str]],
+                              external_mapping: typing.List[tuple]):
         '''
-        Given the name of a preference and a list of object types, return the set of all satisfactions
-        of the given preference that abide by the given variable mapping. In the case where object_types
-        is None, this amounts to returning all the satisfactions of the given preference. When object_types
-        is not None (as in the case of an external forall and the use of the ":" syntax), then we filter
-        accordingly.
+        Filter the list of satisfactions of a given preference using two criteria:
+        1. object_types: used with an external forall and the ":" syntax, filters satisfactions to those where the objects
+           used to satisfy the external forall are of the given *types*
+
+        2. external_mapping: used with an external forall, filters satisfactions to those where the objects used to satisfy
+           the external forall are of the given *object IDs*
         '''
 
-        if object_types is None:
+        if object_types is None and external_mapping == []:
             return self.preference_satisfactions[preference_name]
 
         pref_handler = self.preference_handlers[preference_name]
         satisfactions = []
 
-        # Check to see if the mapping lines up with the specified object type
         for potential_sat in self.preference_satisfactions[preference_name]:
             mapping = potential_sat.mapping
-            
-            # A PreferenceHandler's additional_variable_mapping is an OrderedDict, so the types in 
-            # object_types need to match the order of varaibles in the external forall
             acceptable_sat = True
-            for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
-                specififed_object = mapping[variable]
-                self.domain_name = typing.cast(str, self.domain_name)
-                if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
-                    acceptable_sat = False
+
+            for idx, variable in enumerate(pref_handler.additional_variable_mapping.keys()):
+
+                # Check to see if the object type matches
+                if object_types is not None:
+                    specififed_object = mapping[variable]
+                    object_type = object_types[idx]
+
+                    if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
+                        acceptable_sat = False
+                        break
+
+                # Check to see if the object ID matches
+                if external_mapping:
+                    if mapping[variable] != external_mapping[idx]:
+                        acceptable_sat = False
+                        break
 
             if acceptable_sat:
                 satisfactions.append(potential_sat)
@@ -495,17 +505,16 @@ class GameHandler():
         # (a) the mapping of variables to objects
         # (b) the temporal states involved
         elif rule == "count_nonoverlapping":
-            print("In count_nonoverlapping, external_mapping is", external_mapping)
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and
             # count the total number of satisfactions that satisfy those criteria
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
-                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+                group = list(sorted(group, key=lambda satisfaction: satisfaction.end))
 
                 prev_end = -1
                 for mapping, start, end, measures in group:
@@ -519,7 +528,7 @@ class GameHandler():
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             return 1 if len(satisfactions) > 0 else 0
 
@@ -527,11 +536,11 @@ class GameHandler():
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1
 
@@ -541,13 +550,13 @@ class GameHandler():
         elif rule == "count_nonoverlapping_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
-                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+                group = list(sorted(group, key=lambda satisfaction: satisfaction.end))
 
                 prev_end = -1
                 for mapping, start, end, measures in group:

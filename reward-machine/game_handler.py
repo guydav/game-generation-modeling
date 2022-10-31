@@ -136,7 +136,6 @@ class GameHandler():
 
         elif isinstance(scoring_expression, tatsu.ast.AST):
             rule = scoring_expression["parseinfo"].rule
-            print("Rule: ", rule)
             if rule == "pref_name_and_types":
                 return [scoring_expression["pref_name"]]
 
@@ -469,7 +468,6 @@ class GameHandler():
             return self.score(scoring_expression["count_method"], external_mapping)
 
         elif rule == "scoring_external_maximize":
-            print(scoring_expression.keys())
             maximized_preferences = self._extract_scoring_preferences(scoring_expression)
             
             # Make sure that at least once of the predicates is under an external forall, and that the predicates
@@ -503,7 +501,30 @@ class GameHandler():
             return max([self.score(scoring_expression["scoring_expr"], external_mapping) for external_mapping in used_external_mappings])
 
         elif rule == "scoring_external_minimize":
-            pass
+            # Identical except for a single line to scoring_external_maximize, so see above for comments
+            minimized_preferences = self._extract_scoring_preferences(scoring_expression)
+            
+            external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in minimized_preferences
+                                        if self.preference_handlers[pref_name].additional_variable_mapping != {}]
+
+            if len(external_quantifications) == 0:
+                raise ValueError("Error: No external quantification found for minimization")
+
+            for quant in external_quantifications:
+                if any([quant != q for q in external_quantifications]):
+                    raise ValueError("Error: All predicates in an external minimize must be under the same external forall")
+
+            external_quant = external_quantifications[0]
+
+            all_satisfactions = sum([self.preference_satisfactions[pref_name] for pref_name in minimized_preferences
+                                     if self.preference_handlers[pref_name].additional_variable_mapping != {}], [])
+
+            if len(all_satisfactions) == 0:
+                return 0.0
+
+            used_external_mappings = set([tuple([satisfaction.mapping[key] for key in external_quant]) for satisfaction in all_satisfactions])
+
+            return min([self.score(scoring_expression["scoring_expr"], external_mapping) for external_mapping in used_external_mappings])
 
         # Count the number of satisfactions of the given preference that don't overlap in both
         # (a) the mapping of variables to objects

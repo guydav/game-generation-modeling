@@ -66,13 +66,14 @@ TEST_GAME_LIBRARY = {
     'test-measure': load_game("throw_measure_dist"),
     'test-wall-bounce': load_game("throw_bounce_wall_bin"),
     'test-setup': load_game("throw_with_setup"),
+    'test-external-scoring': load_game("throw_external_maximize"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-setup'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-external-scoring'])
     score = None
 
-    trace_path = SETUP_TEST_TRACE.resolve().as_posix()
+    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

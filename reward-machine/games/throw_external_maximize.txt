@@ -2,29 +2,19 @@
 
 (:constraints (and 
     (forall (?b - (either dodgeball golfball)) 
-        (preference throwBallToBin (exists (?h - hexagonal_bin)
-            (then
+        (preference throwAttempt
+            (then 
                 (once (agent_holds ?b))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (and (not (in_motion ?b)) (in ?h ?b)))
-            )
-        ))
-    )
-
-    (preference throwAttempt
-        (exists (?d - ball)
-            (then 
-                (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (not (in_motion ?d)))
+                (once (not (in_motion ?b)))
             )
         )
+
     )
 
 ))
 
-(:scoring (external-forall-maximize (+
-    (count-nonoverlapping throwBallToBin)
-    (- (/ (count-nonoverlapping throwAttempt) 5))
-))
+(:scoring (external-forall-maximize
+    (count-nonoverlapping throwAttempt)
+)
 ))

@@ -16,6 +16,7 @@ BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/
 BALL_TO_WALL_TO_BIN_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
+THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
 SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 
 
@@ -37,6 +38,7 @@ TEST_GAME_LIBRARY = {
     'test-measure': load_game("throw_measure_dist"),
     'test-wall-bounce': load_game("throw_bounce_wall_bin"),
     'test-setup': load_game("throw_with_setup"),
+    'test-external-scoring': load_game("throw_external_maximize"),
 }
 
 TEST_CASES = [
@@ -153,6 +155,17 @@ TEST_CASES = [
         'throwToBin' : [
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=886, end=986, measures={}),
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1916, end=1964, measures={})
+        ],
+    },),
+    ('test-external-scoring', THROW_ALL_DODGEBALLS_TRACE, 4.0, {
+        'throwAttempt' : [
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=38, end=99, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.44|+01.13|-02.80'}, start=104, end=151, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=167, end=248, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=394, end=468, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=296, end=521, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=523, end=662, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=663, end=888, measures={})
         ],
     },),
 ]

@@ -490,6 +490,10 @@ class GameHandler():
             all_satisfactions = sum([self.preference_satisfactions[pref_name] for pref_name in maximized_preferences
                                      if self.preference_handlers[pref_name].additional_variable_mapping != {}], [])
 
+            # If there aren't any satisfactions, then we can just return 0
+            if len(all_satisfactions) == 0:
+                return 0.0
+
             # Each entry in the set is a tuple of the objects used to satisfy the external mapping for at least one satisfaction. 
             # Because the mapping is an OrderedDict, the order of the objects in the tuple is the same as the order of the variables 
             # in the external forall

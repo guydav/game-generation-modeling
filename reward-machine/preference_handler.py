@@ -6,7 +6,7 @@ import enum
 
 
 from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
-from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
+from predicate_handler import PredicateHandler
 
 from config import NAMED_OBJECTS
 

@@ -126,6 +126,25 @@ class GameHandler():
             elif rule == "scoring_expr":
                 self.scoring = ast
 
+    def _extract_scoring_preferences(self, scoring_expression: typing.Union[list, tuple, tatsu.ast.AST]) -> typing.List[str]:
+        '''
+        Extract all the preferences (by name) that are used in the scoring expression
+        '''
+
+        if isinstance(scoring_expression, tuple) or isinstance(scoring_expression, list):
+            return sum([self._extract_scoring_preferences(item) for item in scoring_expression], [])
+
+        elif isinstance(scoring_expression, tatsu.ast.AST):
+            rule = scoring_expression["parseinfo"].rule
+            print("Rule: ", rule)
+            if rule == "pref_name_and_types":
+                return [scoring_expression["pref_name"]]
+
+            return sum([self._extract_scoring_preferences(item) for item in scoring_expression.values()], [])
+
+        return []
+
+
     def process(self, state: FullState, is_final: bool, debug: bool = False,
         debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:  
         '''
@@ -351,7 +370,8 @@ class GameHandler():
 
         return satisfactions
 
-    def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None]) -> float:
+    def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None],
+              external_mapping: typing.List[tuple] = []) -> float:
         '''
         Determine the score of the current trajectory using the given scoring expression
         '''
@@ -365,7 +385,7 @@ class GameHandler():
         rule = scoring_expression["parseinfo"].rule  # type: ignore
 
         if rule == "scoring_expr":
-            return self.score(scoring_expression["expr"])
+            return self.score(scoring_expression["expr"], external_mapping)
 
         elif rule == "scoring_multi_expr":
             # Multi-expression operators are either addition (+) or multiplication (*)
@@ -375,14 +395,14 @@ class GameHandler():
             expressions = scoring_expression["expr"]
 
             if isinstance(expressions, tatsu.ast.AST):
-                return self.score(expressions)
+                return self.score(expressions, external_mapping)
 
             elif isinstance(expressions, list):
                 if operator == "+":
-                    return sum([self.score(expression) for expression in expressions])
+                    return sum([self.score(expression, external_mapping) for expression in expressions])
 
                 elif operator == "*":
-                    return prod([self.score(expression) for expression in expressions])
+                    return prod([self.score(expression, external_mapping) for expression in expressions])
 
         elif rule == "scoring_binary_expr":
             # Binary expression operators are either subtraction (-) or division (/)
@@ -391,13 +411,16 @@ class GameHandler():
             expr_1 = scoring_expression["expr_1"]
             expr_2 = scoring_expression["expr_2"]
 
+            score_1 = self.score(expr_1, external_mapping)
+            score_2 = self.score(expr_2, external_mapping)
+
             if operator == "-":
-                return self.score(expr_1) - self.score(expr_2)
+                return score_1 - score_2
             elif operator == "/":
-                return self.score(expr_1) / self.score(expr_2)
+                return score_1 / score_2
 
         elif rule == "scoring_neg_expr":
-            return - self.score(scoring_expression["expr"])
+            return - self.score(scoring_expression["expr"], external_mapping)
 
         elif rule == "scoring_comparison":
             comp_expr = typing.cast(tatsu.ast.AST, scoring_expression["comp"])
@@ -407,7 +430,7 @@ class GameHandler():
             # so we just determine whether all arguments evaluate to the same value
             if comparison_operator is None:
                 expressions = comp_expr["expr"]
-                evaluations = [self.score(expr) for expr in expressions]  # type: ignore
+                evaluations = [self.score(expr, external_mapping) for expr in expressions]  # type: ignore
 
                 return float(evaluations.count(evaluations[0]) == len(evaluations))
 
@@ -416,26 +439,63 @@ class GameHandler():
                 expr_1 = comp_expr["expr_1"]
                 expr_2 = comp_expr["expr_2"]
 
+                score_1 = self.score(expr_1, external_mapping)
+                score_2 = self.score(expr_2, external_mapping)
+
                 if comparison_operator == "=":
-                    return self.score(expr_1) == self.score(expr_2)
+                    return score_1 == score_2
                 elif comparison_operator == "<":
-                    return self.score(expr_1) < self.score(expr_2)
+                    return score_1 < score_2
                 elif comparison_operator == "<=":
-                    return self.score(expr_1) <= self.score(expr_2)
+                    return score_1 <= score_2
                 elif comparison_operator == ">":
-                    return self.score(expr_1) > self.score(expr_2)
+                    return score_1 > score_2
                 elif comparison_operator == ">=":
-                    return self.score(expr_1) >= self.score(expr_2)
+                    return score_1 >= score_2
                 else:
                     raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
 
         elif rule == "preference_eval":
-            return self.score(scoring_expression["count_method"])
+            return self.score(scoring_expression["count_method"], external_mapping)
+
+        elif rule == "scoring_external_maximize":
+            print(scoring_expression.keys())
+            maximized_preferences = self._extract_scoring_preferences(scoring_expression)
+            
+            # Make sure that at least once of the predicates is under an external forall, and that the predicates
+            # in total are not under more than one external forall
+            external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in maximized_preferences
+                                        if self.preference_handlers[pref_name].additional_variable_mapping != {}]
+
+            if len(external_quantifications) == 0:
+                raise ValueError("Error: No external quantification found for maximization")
+
+            for quant in external_quantifications:
+                if any([quant != q for q in external_quantifications]):
+                    raise ValueError("Error: All predicates in an external maximize must be under the same external forall")
+
+            external_quant = external_quantifications[0]
+
+            # We extract the mappings that are actually used in the satisfactions of the preferences under maximization
+            all_satisfactions = sum([self.preference_satisfactions[pref_name] for pref_name in maximized_preferences
+                                     if self.preference_handlers[pref_name].additional_variable_mapping != {}], [])
+
+            # Each entry in the set is a tuple of the objects used to satisfy the external mapping for at least one satisfaction. 
+            # Because the mapping is an OrderedDict, the order of the objects in the tuple is the same as the order of the variables 
+            # in the external forall
+            used_external_mappings = set([tuple([satisfaction.mapping[key] for key in external_quant]) for satisfaction in all_satisfactions])
+
+            # Return the score computed using the external mapping that maximizes the score
+            return max([self.score(scoring_expression["scoring_expr"], external_mapping) for external_mapping in used_external_mappings])
+
+        elif rule == "scoring_external_minimize":
+            pass
 
         # Count the number of satisfactions of the given preference that don't overlap in both
         # (a) the mapping of variables to objects
         # (b) the temporal states involved
         elif rule == "count_nonoverlapping":
+            print("In count_nonoverlapping, external_mapping is", external_mapping)
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
             satisfactions = self._filter_satisfactions(preference_name, object_types)
 
@@ -502,18 +562,6 @@ class GameHandler():
             pass # TODO
 
         elif rule == "count_same_positions":
-            pass # TODO
-
-        elif rule == "count_maximal_nonoverlapping":
-            pass # TODO
-
-        elif rule == "count_maximal_overlapping":
-            pass # TODO
-
-        elif rule == "count_maximal_once_per_objects":
-            pass # TODO
-
-        elif rule == "count_maximal_once":
             pass # TODO
 
         elif rule == "count_once_per_external_objects":

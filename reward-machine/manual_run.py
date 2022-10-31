@@ -68,10 +68,11 @@ TEST_GAME_LIBRARY = {
     'test-wall-bounce': load_game("throw_bounce_wall_bin"),
     'test-setup': load_game("throw_with_setup"),
     'test-external-scoring': load_game("throw_external_maximize"),
+    'test-score-once-per-external': load_game("throw_count_once_per_external_objects"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-external-scoring'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-score-once-per-external'])
     score = None
 
     trace_path = THROW_ALL_DODGEBALLS_TRACE.resolve().as_posix()

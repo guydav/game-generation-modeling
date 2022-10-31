@@ -14,7 +14,7 @@
 
 ))
 
-(:scoring (external-forall-maximize
-    (count-nonoverlapping throwAttempt)
-))
+(:scoring
+    (count-once-per-external-objects throwAttempt)
+)
 )

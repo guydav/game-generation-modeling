@@ -598,8 +598,21 @@ class GameHandler():
         elif rule == "count_same_positions":
             pass # TODO
 
+        # Count the number of satisfactions of the given preference that use distinct variable mappings for the externally 
+        # quantified variables
         elif rule == "count_once_per_external_objects":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+            external_variables = self.preference_handlers[preference_name].additional_variable_mapping.keys()
+
+            count = 0
+
+            keyfunc = lambda satisfaction: "_".join([satisfaction.mapping[var] for var in external_variables])
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+                count += 1
+
+            return count
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")

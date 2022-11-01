@@ -19,229 +19,24 @@ THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-mach
 SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 
 
-TEST_ON_BUG_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (preference chairOnTallRectBlock (exists (?c - chair ?l - tall_rect_block)
-        (at-end
-            (and 
-                (on ?l ?c)
-            )
-        )
-    ))
-))
-(:scoring maximize (+
-    (* (count chairOnTallRectBlock) 1)
-))
-)
-"""
-
-TEST_BUILDING_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingAtEnd (exists (?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingAtEnd) 1)
-))
-)
-"""
-
-TEST_BUILDING_ON_CHAIR_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingOnChairAtEnd (exists (?c - chair ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (on ?c ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingOnChairAtEnd) 2)
-))
-)
-"""
-
-TEST_BUILDING_IN_BIN_GAME = """
-(define (game building-test) (:domain medium-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingInBinAtEnd (exists (?h - hexagonal_bin ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (in ?h ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingInBinAtEnd) 2)
-))
-)
-"""
-
-TEST_BUILDING_TOUCHES_WALL_GAME = """
-(define (game building-test) (:domain medium-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingTouchingWallAtEnd (exists (?w - wall ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (touch ?w ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingTouchingWallAtEnd) 2)
-))
-)
-"""
-
-TEST_THROWING_GAME = """
-(define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-(:constraints (and 
-    (forall (?b - (either dodgeball golfball)) 
-        (preference throwBallToBin (exists (?h - hexagonal_bin)
-            (then
-                (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                (once (and (not (in_motion ?b)) (in ?h ?b)))
-            )
-        ))
-    )
-
-    (preference throwAttempt
-        (exists (?d - ball)
-            (then 
-                (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (not (in_motion ?d)))
-            )
-        )
-    )
-
-))
-
-(:scoring maximize (+
-    (count throwBallToBin)
-    (- (/ (count throwAttempt) 5))
-)))
-"""
-
-TEST_THROW_BALL_AT_WALL_GAME = """
-(define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-(:constraints (and 
-
-    (preference throwToWall
-        (exists (?w - wall ?b - ball) 
-            (then 
-                (once (agent_holds ?b))
-                (hold-while  
-                    (and (not (agent_holds ?b)) (in_motion ?b))
-                    (touch ?b ?w)
-                ) 
-                (once (not (in_motion ?b)))
-            )
-        )
-    )
-))
-
-(:scoring maximize (+
-    (* (count throwToWall) 1)
-)))
-"""
-
-TEST_THROW_BOUNCE_GAME = """
-(define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-(:constraints (and 
-
-    (preference throwToWallToBin
-        (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?b))
-                (hold-while (and (not (agent_holds ?b)) (in_motion ?b)) (touch ?w ?b))
-                (once  (and (in ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-))
-
-(:scoring maximize (+
-    (* (count throwToWallToBin) 10)
-)))
-"""
-
-TEST_MEASURE_GAME = """
-(define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
-
-(:constraints (and 
-    (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
-        (then 
-            (once-measure (agent_holds ?d) (distance agent ?h))
-            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-            (once (and (not (in_motion ?d)) (in ?h ?d)))
-        )
-    ))
-)) 
-(:scoring maximize (count-measure throwToBinFromDistance)
-))
-"""
-
-TEST_SETUP_GAME = """
-(define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22
-(:setup (and 
-    (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
-    (forall (?b - ball) (game-optional (on desk ?b)))
-))
-(:constraints (and 
-    (preference throwToBin
-        (exists (?b - ball ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once  (and (in ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-))
-(:scoring maximize (+ 
-    (* (count throwToBin) 1)
-)))
-"""
+def load_game(game_name: str):
+    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt') 
+    with open(game_path, 'r') as f:
+        game = f.read()
+    return game
 
 
 TEST_GAME_LIBRARY = {
-    'on-chair-bug': TEST_ON_BUG_GAME,
-    'test-building': TEST_BUILDING_GAME,
-    'test-building-on-chair': TEST_BUILDING_ON_CHAIR_GAME,
-    'test-building-in-bin': TEST_BUILDING_IN_BIN_GAME,
-    'test-building-touches-wall': TEST_BUILDING_TOUCHES_WALL_GAME,
-    'test-throwing': TEST_THROWING_GAME,
-    'test-throw-to-wall': TEST_THROW_BALL_AT_WALL_GAME,
-    'test-measure': TEST_MEASURE_GAME,
-    'test-wall-bounce': TEST_THROW_BOUNCE_GAME,
-    'test-setup': TEST_SETUP_GAME,
+    'on-chair-bug': load_game("building_on_bug"),
+    'test-building': load_game("building_base"),
+    'test-building-on-chair': load_game("building_on_chair"),
+    'test-building-in-bin': load_game("building_in_bin"),
+    'test-building-touches-wall': load_game("building_touches_wall"),
+    'test-throwing': load_game("throw_to_bin"),
+    'test-throw-to-wall': load_game("throw_at_wall"),
+    'test-measure': load_game("throw_measure_dist"),
+    'test-wall-bounce': load_game("throw_bounce_wall_bin"),
+    'test-setup': load_game("throw_with_setup"),
 }
 
 TEST_CASES = [

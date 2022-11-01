@@ -229,19 +229,36 @@ class BuildingPseudoObject(PseudoObject):
 def _object_location(object: typing.Union[AgentState, ObjectState, PseudoObject]) -> np.ndarray:
     return object.bbox_center if hasattr(object, 'bbox_center') and object.bbox_center is not None else object.position  # type: ignore
 
-def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
+def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_offset: str = 'center'):
     '''
     Returns the coordinates of each of the 4 corners of the object's bounding box, with the
-    y coordinate matching the center of mass
+    y coordinate matching either
+    - the center of the object's bounding box (y_offset='center')
+    - the minimum y coordinate of the object's bounding box (y_offset='bottom')
+    - the maximum y coordinate of the object's bounding box (y_offset='top')
+
+    Assuming that positive x is to the right and positive z is forward, the corners are
+    returned in the following order:
+    - 0: top right
+    - 1: bottom right
+    - 2: bottom left
+    - 3: top left
     '''
 
     bbox_center = object.bbox_center
     bbox_extents = object.bbox_extents
 
-    corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([bbox_extents[0], 0, -bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, -bbox_extents[2]])
+    if y_offset == 'center':
+        y = 0
+    elif y_offset == 'bottom':
+        y = -bbox_extents[1]
+    elif y_offset == 'top':
+        y = bbox_extents[1]
+
+    corners = [bbox_center + np.array([bbox_extents[0], y, bbox_extents[2]]),
+               bbox_center + np.array([bbox_extents[0], y, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], y, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], y, bbox_extents[2]])
               ]
 
     return corners
@@ -265,7 +282,6 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
     bbox_extents = object.bbox_extents
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
-
 
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:

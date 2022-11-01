@@ -29,7 +29,7 @@
 ))
 (:terminal (>= (count-once binKnockedOver) 1)
 )
-(:scoring (count-nonoverlapping throwToRampToBin)
+(:scoring (count throwToRampToBin)
 ))
 
 ; 1 is invalid
@@ -96,7 +96,7 @@
         )
     )
 ))
-(:scoring (count-nonoverlapping throwBallToBin)
+(:scoring (count throwBallToBin)
 ))
 
 (define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)  ; 6
@@ -127,10 +127,10 @@
     )
 ))
 (:scoring (+
-    (* 10 (count-nonoverlapping throwBallToBin:dodgeball))
-    (* 20 (count-nonoverlapping throwBallToBin:basketball))
-    (* 30 (count-nonoverlapping throwBallToBin:beachball))
-    (- (count-nonoverlapping failedThrowToBin))
+    (* 10 (count throwBallToBin:dodgeball))
+    (* 20 (count throwBallToBin:basketball))
+    (* 30 (count throwBallToBin:beachball))
+    (- (count failedThrowToBin))
 )))
 
 ; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
@@ -173,9 +173,9 @@
 (:terminal (>= (count-once throwOverRamp) 1)
 )
 (:scoring (+
-    (* 3 (= (count-nonoverlapping throwAttempt) 1) (count-once throwOverRamp))
-    (* 2 (= (count-nonoverlapping throwAttempt) 2) (count-once throwOverRamp))
-    (* (>= (count-nonoverlapping throwAttempt) 3) (count-once throwOverRamp))
+    (* 3 (= (count throwAttempt) 1) (count-once throwOverRamp))
+    (* 2 (= (count throwAttempt) 2) (count-once throwOverRamp))
+    (* (>= (count throwAttempt) 3) (count-once throwOverRamp))
 )))
 
 ; Taking the first game this participant provided
@@ -228,8 +228,8 @@
     )
 ))
 (:scoring (+
-    (count-nonoverlapping bounceBallToBin)
-    (* 3 (count-nonoverlapping throwBallToBin))
+    (count bounceBallToBin)
+    (* 3 (count throwBallToBin))
 )))
 
 (define (game 57aa430b4cda6e00018420e9-10) (:domain medium-objects-room-v1)  ; 10
@@ -255,9 +255,9 @@
     )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
 )
-(:scoring (count-nonoverlapping throwTeddyOntoPillow)
+(:scoring (count throwTeddyOntoPillow)
 ))
 
 (define (game 5d29412ab711e9001ab74ece-11) (:domain many-objects-room-v1)  ; 11
@@ -350,8 +350,8 @@
     )
 ))
 (:scoring (+
-    (* 6 (count-nonoverlapping throwToRampToBin:dodgeball))
-    (* 3 (count-nonoverlapping throwToRampToBin:golfball))
+    (* 6 (count throwToRampToBin:dodgeball))
+    (* 3 (count throwToRampToBin:golfball))
 )))
 
 (define (game 609c15fd6888b88a23312c4-14) (:domain medium-objects-room-v1)  ; 14
@@ -377,9 +377,9 @@
     )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
 )
-(:scoring (count-nonoverlapping throwInBin)
+(:scoring (count throwInBin)
     ; TODO: how do we want to quantify streaks? some number of one preference without another preference?
 ))
 
@@ -466,7 +466,7 @@
         ) 
     )
 ))
-(:scoring (count-nonoverlapping rollBallToBin)
+(:scoring (count rollBallToBin)
 ))
 
 ; 18 is a dup of 17
@@ -621,7 +621,7 @@
         (count-once-per-objects blockInTowerAtEnd)
         (* 2 (count-once-per-objects blockInTowerKnockedByDodgeball))
     ))
-    (- (count-nonoverlapping towerFallsWhileBuilding))
+    (- (count towerFallsWhileBuilding))
 )))
 
 (define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)  ; 21
@@ -679,10 +679,10 @@
     (>= (total-score) 10)
 )
 (:scoring (+ 
-    (* 5 (count-nonoverlapping ballThrownToBin))
-    (count-nonoverlapping ballThrownToBed)
-    (count-nonoverlapping ballThrownToChair)
-    (- (count-nonoverlapping ballThrownMissesEverything))
+    (* 5 (count ballThrownToBin))
+    (count ballThrownToBed)
+    (count ballThrownToChair)
+    (- (count ballThrownMissesEverything))
 )))
 
 (define (game 60d432ce6e413e7509dd4b78-22) (:domain medium-objects-room-v1)  ; 22
@@ -714,18 +714,18 @@
     )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 8)
+    (>= (count throwAttempt) 8)
 )
 (:scoring (+ 
-    (* 2 (count-nonoverlapping throwBallToBin:dodgeball:red))
-    (* 3 (count-nonoverlapping throwBallToBin:basketball:red))
-    (* 4 (count-nonoverlapping throwBallToBin:beachball:red))
-    (* 3 (count-nonoverlapping throwBallToBin:dodgeball:pink))
-    (* 4 (count-nonoverlapping throwBallToBin:basketball:pink))
-    (* 5 (count-nonoverlapping throwBallToBin:beachball:pink))
-    (* 4 (count-nonoverlapping throwBallToBin:dodgeball:yellow))
-    (* 5 (count-nonoverlapping throwBallToBin:basketball:yellow))
-    (* 6 (count-nonoverlapping throwBallToBin:beachball:yellow))
+    (* 2 (count throwBallToBin:dodgeball:red))
+    (* 3 (count throwBallToBin:basketball:red))
+    (* 4 (count throwBallToBin:beachball:red))
+    (* 3 (count throwBallToBin:dodgeball:pink))
+    (* 4 (count throwBallToBin:basketball:pink))
+    (* 5 (count throwBallToBin:beachball:pink))
+    (* 4 (count throwBallToBin:dodgeball:yellow))
+    (* 5 (count throwBallToBin:basketball:yellow))
+    (* 6 (count throwBallToBin:beachball:yellow))
 )))
 
 
@@ -752,8 +752,8 @@
     )
 ))
 (:scoring (+
-    (count-nonoverlapping throwBallToBin)
-    (- (/ (count-nonoverlapping throwAttempt) 5))
+    (count throwBallToBin)
+    (- (/ (count throwAttempt) 5))
 )))
 
 
@@ -778,18 +778,18 @@
     (>= (total-score) 300)
 )
 (:scoring (+ 
-    (* 5 (count-nonoverlapping throwBallToBin:blue_dodgeball:red))
-    (* 10 (count-nonoverlapping throwBallToBin:pink_dodgeball:red))
-    (* 10 (count-nonoverlapping throwBallToBin:blue_dodgeball:pink))
-    (* 20 (count-nonoverlapping throwBallToBin:pink_dodgeball:pink))
-    (* 15 (count-nonoverlapping throwBallToBin:blue_dodgeball:orange))
-    (* 30 (count-nonoverlapping throwBallToBin:pink_dodgeball:orange))
-    (* 15 (count-nonoverlapping throwBallToBin:blue_dodgeball:green))
-    (* 30 (count-nonoverlapping throwBallToBin:pink_dodgeball:green))
-    (* 20 (count-nonoverlapping throwBallToBin:blue_dodgeball:purple))
-    (* 40 (count-nonoverlapping throwBallToBin:pink_dodgeball:purple))
-    (* 20 (count-nonoverlapping throwBallToBin:blue_dodgeball:yellow))
-    (* 40 (count-nonoverlapping throwBallToBin:pink_dodgeball:yellow))
+    (* 5 (count throwBallToBin:blue_dodgeball:red))
+    (* 10 (count throwBallToBin:pink_dodgeball:red))
+    (* 10 (count throwBallToBin:blue_dodgeball:pink))
+    (* 20 (count throwBallToBin:pink_dodgeball:pink))
+    (* 15 (count throwBallToBin:blue_dodgeball:orange))
+    (* 30 (count throwBallToBin:pink_dodgeball:orange))
+    (* 15 (count throwBallToBin:blue_dodgeball:green))
+    (* 30 (count throwBallToBin:pink_dodgeball:green))
+    (* 20 (count throwBallToBin:blue_dodgeball:purple))
+    (* 40 (count throwBallToBin:pink_dodgeball:purple))
+    (* 20 (count throwBallToBin:blue_dodgeball:yellow))
+    (* 40 (count throwBallToBin:pink_dodgeball:yellow))
 )))
 
 ; 25 and 26 are the same participant and are invalid -- hiding games
@@ -886,12 +886,12 @@
     (>= (total-score) 50)
 ))
 (:scoring (+
-    (* 10 (count-nonoverlapping thrownBallReachesEnd))
-    (* (- 5) (count-nonoverlapping thrownBallHitsBlock:red))
-    (* (- 3) (count-nonoverlapping thrownBallHitsBlock:green))
-    (* (- 3) (count-nonoverlapping thrownBallHitsBlock:pink))
-    (- (count-nonoverlapping thrownBallHitsBlock:yellow))
-    (- (count-nonoverlapping thrownBallHitsBlock:purple))
+    (* 10 (count thrownBallReachesEnd))
+    (* (- 5) (count thrownBallHitsBlock:red))
+    (* (- 3) (count thrownBallHitsBlock:green))
+    (* (- 3) (count thrownBallHitsBlock:pink))
+    (- (count thrownBallHitsBlock:yellow))
+    (- (count thrownBallHitsBlock:purple))
 )))
 
 (define (game 5bb511c6689fc5000149c703-29) (:domain few-objects-room-v1)  ; 29
@@ -907,7 +907,7 @@
     )
 ))
 (:scoring 
-    (count-nonoverlapping objectOnBed)
+    (count objectOnBed)
 ))
 
 
@@ -942,8 +942,8 @@
     )
 ))
 (:scoring (+
-    (count-nonoverlapping objectThrownFromRug:side_table)
-    (* 2 (count-nonoverlapping objectThrownFromRug:bed))
+    (count objectThrownFromRug:side_table)
+    (* 2 (count objectThrownFromRug:bed))
 )))
 
 
@@ -1013,14 +1013,14 @@
     )
 ))
 (:terminal (or 
-    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 2)
-    (>= (count-nonoverlapping throwAttempt) 12)
+    (> (external-forall-maximize (count throwAttempt)) 2)
+    (>= (count throwAttempt) 12)
 ))
 (:scoring (* 
     (>=     
         (+
-            (count-nonoverlapping ballThrownToBin:dodgeball)
-            (* 2 (count-nonoverlapping ballThrownToBin:golfball))
+            (count ballThrownToBin:dodgeball)
+            (* 2 (count ballThrownToBin:golfball))
         ) 
         2
     )
@@ -1094,10 +1094,10 @@
     (<= (total-score) (- 30))
 ))
 (:scoring (+
-    (count-nonoverlapping throwObjectToBin:dodgeball)
+    (count throwObjectToBin:dodgeball)
     (* 10 (count-once throwObjectToBin:book))
-    (* 2 (count-nonoverlapping throwBallToBinOffObject))
-    (- (count-nonoverlapping throwMissesBin))
+    (* 2 (count throwBallToBinOffObject))
+    (- (count throwMissesBin))
 )))
 
 
@@ -1128,10 +1128,10 @@
     )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 5)
+    (>= (count throwAttempt) 5)
 )
 (:scoring 
-    (count-nonoverlapping throwToBin)
+    (count throwToBin)
 ))
 
 
@@ -1163,10 +1163,10 @@
     )
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
 )
 (:scoring 
-    (count-nonoverlapping throwToBin)
+    (count throwToBin)
 ))
 
 ; projected 38 onto the space of feasible games, but could also ignore
@@ -1185,7 +1185,7 @@
     )
 ))
 (:scoring 
-    (* 5 (count-nonoverlapping throwToBin))
+    (* 5 (count throwToBin))
 ))
 
 
@@ -1206,7 +1206,7 @@
     )
 ))
 (:scoring 
-    (count-nonoverlapping ballThrownToWallToAgent)
+    (count ballThrownToWallToAgent)
 ))
 
 
@@ -1231,12 +1231,12 @@
     )
 ))
 (:scoring (+
-    (count-nonoverlapping ballRolledOnRampToRug:pink)
-    (* 2 (count-nonoverlapping ballRolledOnRampToRug:yellow))
-    (* 3 (count-nonoverlapping ballRolledOnRampToRug:orange))
-    (* 3 (count-nonoverlapping ballRolledOnRampToRug:green))
-    (* 4 (count-nonoverlapping ballRolledOnRampToRug:purple))
-    (- (count-nonoverlapping ballRolledOnRampToRug:white))
+    (count ballRolledOnRampToRug:pink)
+    (* 2 (count ballRolledOnRampToRug:yellow))
+    (* 3 (count ballRolledOnRampToRug:orange))
+    (* 3 (count ballRolledOnRampToRug:green))
+    (* 4 (count ballRolledOnRampToRug:purple))
+    (- (count ballRolledOnRampToRug:white))
 )))
 
 
@@ -1318,7 +1318,7 @@
     )
 ))
 (:terminal 
-    (>= (count-nonoverlapping throwAttempt) 5)
+    (>= (count throwAttempt) 5)
 )
 (:scoring 
     (count-same-positions throwBallFromOtherBallToBin)
@@ -1355,12 +1355,12 @@
     ))
 ))
 (:scoring (+
-    (count-nonoverlapping throwBallToBin:basketball)
-    (* 2 (count-nonoverlapping throwBallToBin:beachball))
-    (* 3 (count-nonoverlapping throwBallToBin:dodgeball))
-    (* 2 (count-nonoverlapping throwBallToBinOffWall:basketball))
-    (* 3 (count-nonoverlapping throwBallToBinOffWall:beachball))
-    (* 4 (count-nonoverlapping throwBallToBinOffWall:dodgeball))
+    (count throwBallToBin:basketball)
+    (* 2 (count throwBallToBin:beachball))
+    (* 3 (count throwBallToBin:dodgeball))
+    (* 2 (count throwBallToBinOffWall:basketball))
+    (* 3 (count throwBallToBinOffWall:beachball))
+    (* 4 (count throwBallToBinOffWall:dodgeball))
 )))
 
 ; 44 is another find the hidden object game
@@ -1403,7 +1403,7 @@
     ))
 ))
 (:terminal (or 
-    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 1)
+    (> (external-forall-maximize (count throwAttempt)) 1)
     (>= (count-once-per-objects throwAttempt) 6)
 ))
 (:scoring (+
@@ -1440,8 +1440,8 @@
     ))
 ))
 (:scoring (+ 
-    (count-nonoverlapping ballThrownToRampToBed)
-    (- (count-nonoverlapping ballThrownHitsAgent))
+    (count ballThrownToRampToBed)
+    (- (count ballThrownHitsAgent))
 )))
 
 
@@ -1464,9 +1464,9 @@
     )
 ))
 (:scoring (+ 
-    (count-nonoverlapping beachballBouncedOffRamp:red)
-    (* 3 (count-nonoverlapping beachballBouncedOffRamp:pink))
-    (* 10 (count-nonoverlapping beachballBouncedOffRamp:pink))
+    (count beachballBouncedOffRamp:red)
+    (* 3 (count beachballBouncedOffRamp:pink))
+    (* 10 (count beachballBouncedOffRamp:pink))
 )))
 
 ; TODO: this is a crude approximation of 48 -- let's hope it's reasonable?
@@ -1521,13 +1521,13 @@
     )
 ))
 (:scoring (+ 
-    (* 5 (count-nonoverlapping ballThrownToBin:dodgeball))
-    (* 7 (count-nonoverlapping ballThrownToBin:basketball))
-    (* 15 (count-nonoverlapping ballThrownToBin:beachball))
+    (* 5 (count ballThrownToBin:dodgeball))
+    (* 7 (count ballThrownToBin:basketball))
+    (* 15 (count ballThrownToBin:beachball))
     (* 10 (count-once-per-objects itemsHidingScreens))
     (* 10 (count-once-per-objects objectsHidden))
     (* 10 (count-once-per-objects blindsOpened))
-    (* (- 5) (count-nonoverlapping objectMoved))
+    (* (- 5) (count objectMoved))
 )))
 
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
@@ -1562,7 +1562,7 @@
     ))
 ))
 (:terminal (or 
-    (> (external-forall-maximize (count-nonoverlapping throwAttemptFromDoor)) 1)
+    (> (external-forall-maximize (count throwAttemptFromDoor)) 1)
     (>= (count-once-per-objects throwAttemptFromDoor) 3)
 ))
 (:scoring 
@@ -1600,7 +1600,7 @@
     )
 ))
 (:scoring 
-    (count-nonoverlapping throwToBin)  
+    (count throwToBin)  
 ))
 
 
@@ -1677,7 +1677,7 @@
     )
 ))
 (:terminal
-    (>= (external-forall-maximize (count-nonoverlapping blockPickedUp)) 3)
+    (>= (external-forall-maximize (count blockPickedUp)) 3)
 )
 (:scoring (external-forall-maximize
     (count-overlapping blockPlacedInBuilding)
@@ -1727,10 +1727,10 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 3)
+    (>= (count throwAttempt) 3)
 )
 (:scoring 
-    (count-nonoverlapping throwFromDoorToBin)
+    (count throwFromDoorToBin)
 ))
 
 (define (game 61623853a4ccad551beeb11a-57) (:domain medium-objects-room-v1)  ; 57
@@ -1838,7 +1838,7 @@
 (:scoring (+ 
     (* 5 (count-once-per-objects gameBlockFound))
     (* 100 (count-once matchingBuildingBuilt))
-    (* (-10) (count-nonoverlapping towerFallsWhileBuilding))
+    (* (-10) (count towerFallsWhileBuilding))
 )))
 
 (define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
@@ -1857,9 +1857,9 @@
     )
 ))
 (:scoring (+ 
-    (* 2 (count-nonoverlapping ballThrownToBin:golfball))
-    (* 3 (count-nonoverlapping ballThrownToBin:dodgeball))
-    (* 4 (count-nonoverlapping ballThrownToBin:beachball))
+    (* 2 (count ballThrownToBin:golfball))
+    (* 3 (count ballThrownToBin:dodgeball))
+    (* 4 (count ballThrownToBin:beachball))
 )))
 
 ; 60 is invalid
@@ -1895,9 +1895,9 @@
     ))
 ))
 (:scoring (+ 
-    (* 10 (count-nonoverlapping dodgeballFromBlockToBin:yellow_pyramid_block))
-    (* 25 (count-nonoverlapping dodgeballFromBlockToBin:red_pyramid_block))
-    (* 50 (count-nonoverlapping dodgeballFromBlockToBin:blue_pyramid_block))
+    (* 10 (count dodgeballFromBlockToBin:yellow_pyramid_block))
+    (* 25 (count dodgeballFromBlockToBin:red_pyramid_block))
+    (* 50 (count dodgeballFromBlockToBin:blue_pyramid_block))
     (* 100 (= (count-once-per-objects dodgeballFromBlockToBin:blue_pyramid_block) 3))
     (* 10 (count-once-per-objects cubeBlockInBuilding))
     (* 100 (= (count-once-per-objects cubeBlockInBuilding) 3))
@@ -1933,9 +1933,9 @@
     ))
 ))
 (:scoring (+
-    (count-nonoverlapping smallObjectThrownToBed)
-    (* 5 (count-nonoverlapping bigObjectThrownToBed))
-    (* (- 5) (count-nonoverlapping failedThrowAttempt))
+    (count smallObjectThrownToBed)
+    (* 5 (count bigObjectThrownToBed))
+    (* (- 5) (count failedThrowAttempt))
 )))
 
 
@@ -2006,9 +2006,9 @@
     )
 ))
 (:scoring (+ 
-    (count-nonoverlapping ballThrownFromObjectToBin:hexagonal_bin)   
-    (* 2 (count-nonoverlapping ballThrownFromObjectToBin:rug))
-    (* 3 (count-nonoverlapping ballThrownFromObjectToBin:wall))
+    (count ballThrownFromObjectToBin:hexagonal_bin)   
+    (* 2 (count ballThrownFromObjectToBin:rug))
+    (* 3 (count ballThrownFromObjectToBin:wall))
 )))
 
 
@@ -2088,7 +2088,7 @@
 )
 (:scoring (+ 
     (* 10 (count-once-per-external-objects blockCorrectlyPicked))
-    (- (count-nonoverlapping blockIncorrectlyPicked))
+    (- (count blockIncorrectlyPicked))
     ( * 100 (>= (count-once-per-external-objects blockCorrectlyPicked) 4))
 )))
 
@@ -2129,7 +2129,7 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 16)
+    (>= (count throwAttempt) 16)
 )
 (:scoring (+ 
     (count-once-per-objects ballKnocksBlockFromRug:dodgeball)
@@ -2156,7 +2156,7 @@
     ))
 ))
 (:scoring 
-    (count-nonoverlapping ballThrownThroughRampToBin)
+    (count ballThrownThroughRampToBin)
 ))
 
 (define (game 5fbbf3f438be4c025df6cdd4-70) (:domain many-objects-room-v1)  ; 70
@@ -2201,12 +2201,12 @@
     ))
 ))
 (:scoring (+ 
-    (count-nonoverlapping objectLandsInBin:triangle_block)
-    ( * 2 (count-nonoverlapping objectLandsInBin:pyramid_block))
-    ( * 2 (count-nonoverlapping objectLandsInBin:dodgeball))
-    ( * 3 (count-nonoverlapping objectLandsInBin:golfball))
-    ( * 3 (count-nonoverlapping golfballLandsInBinThroughRamp))
-    (- (count-nonoverlapping thrownObjectHitsComputer))
+    (count objectLandsInBin:triangle_block)
+    ( * 2 (count objectLandsInBin:pyramid_block))
+    ( * 2 (count objectLandsInBin:dodgeball))
+    ( * 3 (count objectLandsInBin:golfball))
+    ( * 3 (count golfballLandsInBinThroughRamp))
+    (- (count thrownObjectHitsComputer))
 )))
 
 (define (game 60a696c3afad1b7f16b0c744-71) (:domain many-objects-room-v1)  ; 71
@@ -2238,8 +2238,8 @@
     ))
 ))
 (:scoring (+ 
-    (count-nonoverlapping dodgeballHitsPillowWithoutTouchingBlock)
-    (count-nonoverlapping golfballUnderBridgeWithoutTouchingBlock)
+    (count dodgeballHitsPillowWithoutTouchingBlock)
+    (count golfballUnderBridgeWithoutTouchingBlock)
 )))
 
 (define (game 5fa23c9b64b18a4067cc842e-72) (:domain many-objects-room-v1)  ; 72
@@ -2265,10 +2265,10 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping ballKnocksTeddy) 7)
+    (>= (count ballKnocksTeddy) 7)
 )
 (:scoring 
-    (count-nonoverlapping ballKnocksTeddy)
+    (count ballKnocksTeddy)
 ))
 
 (define (game 60ef5b1cf52939a80af77543-73) (:domain many-objects-room-v1)  ; 73
@@ -2286,7 +2286,7 @@
     ))
 ))
 (:scoring 
-    (count-nonoverlapping dodgeballThrownToBinFromDesk)
+    (count dodgeballThrownToBinFromDesk)
 ))
 
 (define (game 613bd3a683a2ac56a4119aa6-74) (:domain many-objects-room-v1)  ; 74
@@ -2310,10 +2310,10 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
 )
 (:scoring 
-    (* 5 (count-nonoverlapping golfballInBinFromPillow))
+    (* 5 (count golfballInBinFromPillow))
 ))
 
 
@@ -2335,11 +2335,11 @@
     ))
 ))
 (:terminal (or 
-    (>= (count-nonoverlapping dropAttempt) 5)
-    (>= (count-nonoverlapping ballDroppedInBin) 1)
+    (>= (count dropAttempt) 5)
+    (>= (count ballDroppedInBin) 1)
 ))
 (:scoring 
-    (* 5 (count-nonoverlapping ballDroppedInBin))
+    (* 5 (count ballDroppedInBin))
 ))
 
 
@@ -2397,15 +2397,15 @@
 (:terminal (and 
     (or 
         (>= (count-once-per-objects blockToBinFromRug) 6)
-        (>= (count-nonoverlapping blockThrowAttempt) 18)
+        (>= (count blockThrowAttempt) 18)
     )
-    (>= (count-nonoverlapping ballThrowAttempt) 2)  
+    (>= (count ballThrowAttempt) 2)  
 ))
 (:scoring (+ 
     (* 10 (count-once-per-objects blockToBinFromRug:pink))
     (* 10 (count-once-per-objects blockToBinFromRug:yellow))
     (* 15 (= (count-once-per-objects blockToBinFromRug:yellow) 6))
-    (* 15 (<= (count-nonoverlapping blockThrowAttempt) 18))
+    (* 15 (<= (count blockThrowAttempt) 18))
     (* 20 (count-once-per-objects blockKnockedFromBuildingInBin))
 )))
 
@@ -2421,7 +2421,7 @@
         )
     ))
 )) 
-(:scoring (count-nonoverlapping-measure throwToBinFromDistance)
+(:scoring (count-measure throwToBinFromDistance)
 ))
 
 
@@ -2460,8 +2460,8 @@
     ))
 ))
 (:scoring (+ 
-    (* 3 (count-nonoverlapping throwMovesBeachballWithoutKnockingTeddy))
-    (- (count-nonoverlapping throwKnocksOverBear))
+    (* 3 (count throwMovesBeachballWithoutKnockingTeddy))
+    (- (count throwKnocksOverBear))
 )))
 
 
@@ -2475,7 +2475,7 @@
         )
     ))
 ))
-(:scoring (count-nonoverlapping throwGolfballToBin)
+(:scoring (count throwGolfballToBin)
 ))
 
 
@@ -2584,10 +2584,10 @@
     ))
 ))
 (:terminal 
-    (>= (count-nonoverlapping dodgeballFromRugToBin) 3)
+    (>= (count dodgeballFromRugToBin) 3)
 )
 (:scoring 
-    (count-nonoverlapping dodgeballFromRugToBin)
+    (count dodgeballFromRugToBin)
 ))
 
 (define (game 6172378d423fdf1acdc2d212-82) (:domain many-objects-room-v1)  ; 82
@@ -2604,7 +2604,7 @@
     (>= (total-time) 300)
 )
 (:scoring 
-    (count-nonoverlapping ballThrownToBin)
+    (count ballThrownToBin)
 ))
 
 (define (game 5bdfb648484288000130dad0-83) (:domain many-objects-room-v1)  ; 83
@@ -2662,7 +2662,7 @@
     )
 ))
 (:terminal (or 
-    (>= (external-forall-maximize (count-nonoverlapping throwAttempt)) 2)
+    (>= (external-forall-maximize (count throwAttempt)) 2)
     (>= (count-once-per-objects throwAttempt) 6)
 ))
 (:scoring (+ 
@@ -2693,8 +2693,8 @@
     )
 ))
 (:scoring (+ 
-    (count-nonoverlapping basketMadeFromRug:dodgeball)
-    (* 2 (count-nonoverlapping basketMadeFromRug:block))
+    (count basketMadeFromRug:dodgeball)
+    (* 2 (count basketMadeFromRug:block))
 )))
 
 
@@ -2760,13 +2760,13 @@
     ))
 ))
 (:terminal (or 
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
     ; TODO: there's also a "streak of three misses ends the game" constraint that I'm currently omittting
     (>= (count-once throwAttemptKnocksBlock) 1)
     (>= (total-score) 5)
 ))
 (:scoring 
-    (count-nonoverlapping throwFromEdgeOfRug)
+    (count throwFromEdgeOfRug)
 ))
 
 (define (game 6103ec2bf88328284fd894bc-89) (:domain medium-objects-room-v1)  ; 89
@@ -2792,9 +2792,9 @@
     (>= (total-score) 10)
 ))
 (:scoring (+ 
-    (count-nonoverlapping ballThrownFromRug:dodgeball)
-    (* 2 (count-nonoverlapping ballThrownFromRug:basketball))
-    (* 10 (count-nonoverlapping ballThrownFromRug:beachball))
+    (count ballThrownFromRug:dodgeball)
+    (* 2 (count ballThrownFromRug:basketball))
+    (* 10 (count ballThrownFromRug:beachball))
 )))
 
 (define (game 5f511e9381da7d30c91a46a2-90) (:domain many-objects-room-v1)  ; 90
@@ -2810,7 +2810,7 @@
     ))
 ))
 (:scoring 
-    (count-nonoverlapping dodgeballBouncesOnceToDoggieBed)
+    (count dodgeballBouncesOnceToDoggieBed)
 ))
 
 ; 91 is a dup of 89 with slightly different scoring numbers
@@ -2828,7 +2828,7 @@
     ))
 ))
 (:scoring 
-    (count-nonoverlapping throwBallToBin)
+    (count throwBallToBin)
 ))
 
 
@@ -2852,11 +2852,11 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttemptFromDoor) 8)
+    (>= (count throwAttemptFromDoor) 8)
 )
 (:scoring (+ 
-    (* 3 (count-nonoverlapping ballThrownFromDoor:dodgeball))
-    (* 6 (count-nonoverlapping ballThrownFromDoor:golfball))
+    (* 3 (count ballThrownFromDoor:dodgeball))
+    (* 6 (count ballThrownFromDoor:golfball))
 )))
 
 ; 95 requires counting something that happens during a preference
@@ -2878,7 +2878,7 @@
     (>= (total-time) 60)
 )
 (:scoring 
-    (count-nonoverlapping ballThrownToRug)
+    (count ballThrownToRug)
 ))
 
 
@@ -2926,10 +2926,10 @@
     ))
 ))
 (:terminal 
-    (>= (count-nonoverlapping cubeBlockThrowAttempt) 3)
+    (>= (count cubeBlockThrowAttempt) 3)
 )
 (:scoring 
-    (count-nonoverlapping cubeBlockFromBedToShelf)
+    (count cubeBlockFromBedToShelf)
 ))
 
 (define (game 5c7ceda01d2afc0001f4ad1d-100) (:domain medium-objects-room-v1)  ; 100
@@ -2953,8 +2953,8 @@
     )
 ))
 (:scoring (+ 
-    (* 2 (count-nonoverlapping dodgeballFromDeskToTarget:doggie_bed))
-    (* 3 (count-nonoverlapping dodgeballFromDeskToTarget:hexagonal_bin))
+    (* 2 (count dodgeballFromDeskToTarget:doggie_bed))
+    (* 3 (count dodgeballFromDeskToTarget:hexagonal_bin))
 )))
 
 
@@ -2998,14 +2998,14 @@
     ))
 ))
 (:terminal (or 
-    (>= (count-nonoverlapping throwAttemptFromBehindBlock) 2)
+    (>= (count throwAttemptFromBehindBlock) 2)
     (>= (total-score) 50)
 ))
 (:scoring (+ 
-    (* 10 (count-nonoverlapping ballThrownFromBehindBlock:blue_cube_block))
-    (* 5 (count-nonoverlapping ballThrownFromBehindBlock:yellow_cube_block))
-    (* 30 (= (count-nonoverlapping ballThrownFromBehindBlock:blue_cube_block) 2))
-    (* 15 (= (count-nonoverlapping ballThrownFromBehindBlock:yellow_cube_block) 2))
+    (* 10 (count ballThrownFromBehindBlock:blue_cube_block))
+    (* 5 (count ballThrownFromBehindBlock:yellow_cube_block))
+    (* 30 (= (count ballThrownFromBehindBlock:blue_cube_block) 2))
+    (* 15 (= (count ballThrownFromBehindBlock:yellow_cube_block) 2))
 )))
 
 
@@ -3049,11 +3049,11 @@
     ))
 ))
 (:terminal
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
 )
 (:scoring (+ 
-    (count-nonoverlapping dodgeballHitsBin)
-    (* 2 (count-nonoverlapping dodgeballHitsBinBottom))
+    (count dodgeballHitsBin)
+    (* 2 (count dodgeballHitsBinBottom))
 )))
 
 
@@ -3076,7 +3076,7 @@
     (>= (total-time) 300)
 )
 (:scoring 
-    (count-nonoverlapping throwFromEdgeOfRug)
+    (count throwFromEdgeOfRug)
 ))  
 
 
@@ -3135,10 +3135,10 @@
 ))
 (:terminal (or 
     (>= (total-score) 6)
-    (>= (count-nonoverlapping throwAttempt) 15)
+    (>= (count throwAttempt) 15)
 ))
 (:scoring 
-    (count-nonoverlapping throwInBin)
+    (count throwInBin)
 ))
 
 ; 107 and 109 are by the same participant, and 109 is actually mostly valid
@@ -3286,16 +3286,16 @@
     ))
 ))
 (:terminal (or 
-    (> (external-forall-maximize (count-nonoverlapping throwAttempt:dodgeball)) 3)
-    (> (count-nonoverlapping throwAttempt:cube_block) 1)
-    (> (count-nonoverlapping throwAttempt:book) 1)
-    (> (count-nonoverlapping throwAttempt:alarm_clock) 1)
+    (> (external-forall-maximize (count throwAttempt:dodgeball)) 3)
+    (> (count throwAttempt:cube_block) 1)
+    (> (count throwAttempt:book) 1)
+    (> (count throwAttempt:alarm_clock) 1)
 ))
 (:scoring (+ 
-    (* 8 (count-nonoverlapping throwFromBehindChairsInBin:dodgeball))
-    (* 5 (count-nonoverlapping throwFromBehindChairsInBin:cube_block))
-    (* 20 (count-nonoverlapping throwFromBehindChairsInBin:alarm_clock))
-    (* 50 (count-nonoverlapping throwFromBehindChairsInBin:book))
+    (* 8 (count throwFromBehindChairsInBin:dodgeball))
+    (* 5 (count throwFromBehindChairsInBin:cube_block))
+    (* 20 (count throwFromBehindChairsInBin:alarm_clock))
+    (* 50 (count throwFromBehindChairsInBin:book))
 )))
 
 ; 111 requires evaluation that one preference takes place before another preference is evaluated, and it's underconstrained
@@ -3329,7 +3329,7 @@
     ))
 ))
 (:scoring 
-    (count-nonoverlapping ballThrownThroughRampAndBlocksToBin)
+    (count ballThrownThroughRampAndBlocksToBin)
 ))
 
 (define (game 61087e4fc006ee7d6be38641-114) (:domain medium-objects-room-v1)  ; 114
@@ -3385,8 +3385,8 @@
     ))
 ))
 (:scoring (+ 
-    (* 5 (count-nonoverlapping teddyBearLandsInBin))
-    (count-nonoverlapping teddyBearHitsBall)
+    (* 5 (count teddyBearLandsInBin))
+    (count teddyBearHitsBall)
 )))
 
 (define (game 60bb404e01d599dfb1c3d71c-116) (:domain medium-objects-room-v1)  ; 116
@@ -3412,10 +3412,10 @@
     ))
 ))
 (:terminal 
-    (> (external-forall-maximize (count-nonoverlapping throwAttempt)) 4)
+    (> (external-forall-maximize (count throwAttempt)) 4)
 )
 (:scoring 
-    (count-nonoverlapping ballThrownToBin)
+    (count ballThrownToBin)
 ))
 
 
@@ -3447,17 +3447,17 @@
     ))
 ))
 (:terminal (or 
-    (>= (count-nonoverlapping throwAttempt) 10)
+    (>= (count throwAttempt) 10)
     (>= (count-once redDodgeballThrownToBinWithoutTouchingFloor) 1)
     (>= (count-once redDodgeballThrownToBin) 1)
 ))
 (:scoring (+ 
     (* 3
-        (= (count-nonoverlapping throwAttempt) 1) 
+        (= (count throwAttempt) 1) 
         (count-once redDodgeballThrownToBinWithoutTouchingFloor)
     )
     (* 2
-        (< (count-nonoverlapping throwAttempt) 5) 
+        (< (count throwAttempt) 5) 
         (count-once redDodgeballThrownToBinWithoutTouchingFloor)
     )
     (* 5 (count-once redDodgeballThrownToBin))

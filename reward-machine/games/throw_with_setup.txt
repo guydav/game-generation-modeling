@@ -15,5 +15,5 @@
     )
 ))
 (:scoring (+ 
-    (* (count-nonoverlapping throwToBin) 1)
+    (* (count throwToBin) 1)
 )))

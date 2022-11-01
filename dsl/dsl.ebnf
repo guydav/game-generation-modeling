@@ -206,7 +206,7 @@ scoring_equals_comp = '(=' {expr:scoring_expr}+ ')';
 
 
 preference_eval = count_method:(
-    count_nonoverlapping |
+    count |
     count_overlapping |
     count_once |
     count_once_per_objects |
@@ -221,10 +221,10 @@ preference_eval = count_method:(
     # count_maximal_nonoverlapping | 
     # count_maximal_overlapping |
     count_once_per_external_objects |
-    count_nonoverlapping_measure
+    count_measure
     );
 
-count_nonoverlapping = '(count-nonoverlapping' name_and_types:pref_name_and_types ')';
+count = '(count' name_and_types:pref_name_and_types ')';
 count_overlapping = '(count-overlapping' name_and_types:pref_name_and_types ')';
 count_once = '(count-once' name_and_types:pref_name_and_types ')';
 count_once_per_objects = '(count-once-per-objects' name_and_types:pref_name_and_types ')';
@@ -239,7 +239,7 @@ count_same_positions = '(count-same-positions' name_and_types:pref_name_and_type
 # count_maximal_nonoverlapping = '(count-maximal-nonoverlapping' name_and_types:pref_name_and_types ')';
 # count_maximal_overlapping = '(count-maximal-overlapping' name_and_types:pref_name_and_types ')';
 count_once_per_external_objects = '(count-once-per-external-objects' name_and_types:pref_name_and_types ')';
-count_nonoverlapping_measure = '(count-nonoverlapping-measure' name_and_types:pref_name_and_types ')';
+count_measure = '(count-measure' name_and_types:pref_name_and_types ')';
 
 pref_name_and_types = pref_name:preference_name {object_types:pref_object_type}*;
 

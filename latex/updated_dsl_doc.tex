@@ -358,22 +358,18 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
     
 
 <preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
-        \alt <count-nonoverlapping>
+        \alt <count>
         \alt <count-overlapping>
         \alt <count-once> 
         \alt <count-once-per-objects> 
-        \alt <count-nonoverlapping-measure> 
+        \alt <count-measure> 
         \alt <count-unique-positions> 
         \alt <count-same-positions> 
-        \alt <count-maximal-nonoverlapping> 
-        \alt <count-maximal-overlapping> 
-        \alt <count-maximal-once-per-objects> 
-        \alt <count-maximal-once> 
         \alt <count-once-per-external-objects> 
 
     
 
-<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.
+<count> ::= (count <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.
 
 <count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.
 
@@ -381,7 +377,7 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
 
 <count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.
 
-<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.
+<count-measure> ::= (count-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.
 
 <count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.
 

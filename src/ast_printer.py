@@ -380,7 +380,7 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
     arg = ast.arg
 
     if isinstance(arg, tatsu.ast.AST): 
-        if  arg.parseinfo.rule == 'function_eval':  # type: ignore
+        if arg.parseinfo.rule == 'function_eval':  # type: ignore
             return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
@@ -400,8 +400,12 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
             _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]    
 
     else:
+        comp_args = ast.equal_comp_args
+        if isinstance(comp_args, tatsu.ast.AST):
+            comp_args = [comp_args]
+         
         args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) if isinstance(arg, tatsu.ast.AST) else str(arg)
-            for arg in ast.equal_comp_args
+            for arg in comp_args
         ]
 
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)

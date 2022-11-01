@@ -64,7 +64,11 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "--print-samples", "--validate-samples", "--parse-counter",
+                // "--print-samples",
+                 "--validate-samples", 
+                // "--parse-counter", 
+                "--save-samples",
+                "--num-samples", "100",
             ],
             "console": "integratedTerminal",
             "notes": "--parse-counter",

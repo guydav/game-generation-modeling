@@ -508,6 +508,23 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return False
 
+def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    # Two objects are adjacent either if they're touching or if the minimum distance between any pair of
+    # sides between their bounding boxes is less than some threshold. We use the bottom of each object's
+    # bounding box for this
+
+    object_1_corners = _object_corners(objects[0], "bottom")
+    object_2_corners = _object_corners(objects[1], "bottom")
+
+    # We can check if two objects are adjacent from the corners by first making sure there's some overlap in their
+    # y extents. To check the distance between pairs of sides, we can make use of the fact that they're always
+    # axis-aligned. 
+
+    object_1_sides = [(object_1_corners[idx], object_1_corners[(idx+1)%4]) for idx in range(4)]
+    object_2_sides = [(object_2_corners[idx], object_2_corners[(idx+1)%4]) for idx in range(4)]
+
 
 # ====================================== FUNCTION DEFINITIONS =======================================
 

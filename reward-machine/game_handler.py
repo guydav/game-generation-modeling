@@ -435,7 +435,7 @@ class GameHandler():
         # Count the number of satisfactions of the given preference that don't overlap in both
         # (a) the mapping of variables to objects
         # (b) the temporal states involved
-        elif rule == "count_nonoverlapping":
+        elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
             satisfactions = self._filter_satisfactions(preference_name, object_types)
 
@@ -477,8 +477,8 @@ class GameHandler():
 
             return count
 
-        # For each nonoverlapping satisfaction (see count_nonoverlapping above), sum the value of the measurement
-        elif rule == "count_nonoverlapping_measure":
+        # For each satisfaction (see count above), sum the value of the measurement
+        elif rule == "count_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
             satisfactions = self._filter_satisfactions(preference_name, object_types)

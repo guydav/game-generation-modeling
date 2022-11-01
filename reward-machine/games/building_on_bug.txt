@@ -9,6 +9,6 @@
     ))
 ))
 (:scoring (+
-    (* (count-nonoverlapping chairOnTallRectBlock) 1)
+    (* (count chairOnTallRectBlock) 1)
 ))
 )

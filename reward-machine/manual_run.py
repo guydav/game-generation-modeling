@@ -50,8 +50,8 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
 
 # (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
 # (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
-# (:terminal (or (>= (count-nonoverlapping throwAttempt) 5) (not (= (count-nonoverlapping throwBallToBin) 2) )))
-# (:terminal (>= (count-nonoverlapping throwAttempt) 5))
+# (:terminal (or (>= (count throwAttempt) 5) (not (= (count throwBallToBin) 2) )))
+# (:terminal (>= (count throwAttempt) 5))
 TEST_THROWING_GAME = """
     (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
 
@@ -79,8 +79,8 @@ TEST_THROWING_GAME = """
     ))
 
     (:scoring maximize (+
-        (count-nonoverlapping throwBallToBin)
-        (- (/ (count-nonoverlapping throwAttempt) 5))
+        (count throwBallToBin)
+        (- (/ (count throwAttempt) 5))
     )))
     """
 
@@ -101,7 +101,7 @@ TEST_THROW_BOUNCE_GAME = """
     ))
 
     (:scoring maximize (+
-        (* (count-nonoverlapping throwToWallToBin) 10)
+        (* (count throwToWallToBin) 10)
     )))
 """
 
@@ -126,7 +126,7 @@ TEST_THROW_BALL_AT_WALL_GAME = """
     ))
 
     (:scoring maximize (+
-        (* (count-nonoverlapping throwToWall) 1)
+        (* (count throwToWall) 1)
     )))
 """
 
@@ -151,7 +151,7 @@ TEST_SETUP_GAME = """
     )
 ))
 (:scoring maximize (+ 
-    (* (count-nonoverlapping throwToBin) 1)
+    (* (count throwToBin) 1)
 )))
 """
 
@@ -190,7 +190,7 @@ TEST_BLOCK_STACK_GAME = """
         )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockOnBlock) 1)
+    (* (count blockOnBlock) 1)
 )))
 """
 
@@ -209,7 +209,7 @@ TEST_BUILDING_GAME = """
     )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockInBuildingAtEnd) 1)
+    (* (count blockInBuildingAtEnd) 1)
 ))
 )
 """
@@ -227,7 +227,7 @@ TEST_ON_BUG_GAME = """
     ))
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping chairOnTallRectBlock) 1)
+    (* (count chairOnTallRectBlock) 1)
 ))
 )
 """
@@ -248,7 +248,7 @@ TEST_BUILDING_ON_CHAIR_GAME = """
     )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockInBuildingOnChairAtEnd) 2)
+    (* (count blockInBuildingOnChairAtEnd) 2)
 ))
 )
 """
@@ -269,7 +269,7 @@ TEST_BUILDING_IN_BIN_GAME = """
     )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockInBuildingInBinAtEnd) 2)
+    (* (count blockInBuildingInBinAtEnd) 2)
 ))
 )
 """
@@ -290,7 +290,7 @@ TEST_BUILDING_TOUCHES_WALL_GAME = """
     )
 ))
 (:scoring maximize (+
-    (* (count-nonoverlapping blockInBuildingTouchingWallAtEnd) 2)
+    (* (count blockInBuildingTouchingWallAtEnd) 2)
 ))
 )
 """
@@ -307,7 +307,7 @@ TEST_MEASURE_GAME = """
         )
     ))
 )) 
-(:scoring maximize (count-nonoverlapping-measure throwToBinFromDistance)
+(:scoring maximize (count-measure throwToBinFromDistance)
 ))
 """
 

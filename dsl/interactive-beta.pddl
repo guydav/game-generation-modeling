@@ -273,7 +273,7 @@
             (at-end
                 (and 
                     (in ?b ?l)
-                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?l))))
+                    (not (exists (?o - game_object) (and (not (same_type ?o block)) (touch ?o ?l))))
                     (not (on floor ?l))
                 )
             )
@@ -283,7 +283,7 @@
                 (and
                     (in ?b ?p)   
                     (not (exists (?l - block) (on ?p ?l)))
-                    (not (exists (?o - game_object) (and (not (type ?o block)) (touch ?o ?p))))
+                    (not (exists (?o - game_object) (and (not (same_type ?o block)) (touch ?o ?p))))
                 )
             )
         )) 
@@ -900,7 +900,7 @@
     (preference objectOnBed
         (exists (?g - game_object)
             (at-end (and 
-                (not (type ?g pillow))  
+                (not (same_type ?g pillow))  
                 (on bed ?g)
             ))
         )
@@ -1249,7 +1249,7 @@
             (= (distance ?w1 ?b) (distance ?w2 ?b))    
         )))
         (forall (?g - game_object) (game-optional (or 
-            (type ?g bridge_block)
+            (same_type ?g bridge_block)
             (> (distance ?w1 ?g) (distance ?w2 ?g))
         )))
     ))
@@ -1261,7 +1261,7 @@
                 (once (and 
                     (not (agent_holds ?g))
                     (not (in_motion ?g))
-                    (not (type ?g bridge_block))
+                    (not (same_type ?g bridge_block))
                     (> (distance ?w1 ?b) (distance ?w2 ?b))
                 ))
                 (hold (or 
@@ -1510,9 +1510,9 @@
             (then
                 (once (and 
                     (not (in_motion ?g)) 
-                    (not (type ?g ball))
-                    (not (type ?g drawer))
-                    (not (type ?g blinds))
+                    (not (same_type ?g ball))
+                    (not (same_type ?g drawer))
+                    (not (same_type ?g blinds))
                 ))
                 (hold (in_motion ?g))
                 (once (not (in_motion ?g)))
@@ -1975,7 +1975,7 @@
         ))
         (preference nonBlockPlacedInBuilding (exists (?o - game_object)
             (then
-                (once (and (agent_holds ?o) (not (type ?o block))))
+                (once (and (agent_holds ?o) (not (same_type ?o block))))
                 (hold (and (in_motion ?l) (not (agent_holds ?l))))
                 (hold (in ?b ?l))
                 (once (or (not (in ?b ?l)) (game_over)))

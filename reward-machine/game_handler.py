@@ -1,5 +1,6 @@
 from collections import defaultdict
 import itertools
+import numpy as np
 import tatsu
 import tatsu.ast
 import typing
@@ -16,6 +17,9 @@ from predicate_handler import _pred_in_motion
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
+class ObjectMove(typing.NamedTuple):
+    time: int
+    pos: np.ndarray
 
 class GameHandler():
     domain_name: str
@@ -173,7 +177,7 @@ class GameHandler():
         if state.n_objects_changed > 0:
             for obj in state.objects:
                 if _pred_in_motion(state.agent_state, [obj]):
-                    self.object_movements[obj.object_id].append((self.cur_step, obj.position))
+                    self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
 
 
         # The game is in its last step if the terminal conditions are met or if the trajectory is over
@@ -618,7 +622,11 @@ class GameHandler():
 
             # Maps from an object ID to the list of positions that it has remained stationary at throughout a satisfaction
             used_positions = defaultdict(list)
+            UNIQUE_POSITION_TOL = 5
 
+            count = 0
+
+            # TODO: do we need to filter out overlapping satisfactions?
 
             # For each satisfaction, we need to determine which of its quantified objects are stationary within the
             # duration of the satisfaction
@@ -626,6 +634,17 @@ class GameHandler():
                 all_unique = True
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
+                        # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                                            key=lambda move: move.time).pos
+
+                        # Check whether this position is too close to any previously used unique positions
+                        if any([np.linalg.norm(last_position - pos) < UNIQUE_POSITION_TOL for pos in used_positions[obj]]):
+                            all_unique = False
+                            break
+
+                        used_positions[obj].append(last_position)
+
                         # object is stationary during this satisfaction
                         # determine its position by finding the index at which it moved closest to the start of the satisfaction
                         #    TODO: for objects that never move, we need to know their initial positions nonetheless
@@ -633,10 +652,13 @@ class GameHandler():
                         #    if it is: then this stationary object is not in a unique position, and we don't count this satisfaction
                         #    if it's not: then this stationary object *is* in a unique position (though it's possible other objects
                         #                 in this satisfaction aren't), so we proceed for now, and add its position to used_positions
-                        pass
                 
                 # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
                 # can count this satisfaction
+                if all_unique:
+                    count += 1
+
+            return count
 
         elif rule == "count_same_positions":
             pass # TODO

@@ -16,6 +16,7 @@ SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
 CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
+THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -69,13 +70,14 @@ TEST_GAME_LIBRARY = {
     'test-setup': load_game("throw_with_setup"),
     'test-external-scoring': load_game("throw_external_maximize"),
     'test-score-once-per-external': load_game("throw_count_once_per_external_objects"),
+    'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-score-once-per-external'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-unique-positions'])
     score = None
 
-    trace_path = THROW_ALL_DODGEBALLS_TRACE.resolve().as_posix()
+    trace_path = THROW_BALL_UNIQUE_POSITIONS_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

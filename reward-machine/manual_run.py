@@ -3,7 +3,7 @@ import pathlib
 import typing
 
 from game_handler import GameHandler
-from utils import FullState
+from utils import FullState, get_project_dir
 
 
 BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
@@ -48,271 +48,28 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
             for idx, event in enumerate(batch['events']):
                 yield (event, (idx == len(batch['events']) - 1) and (batch_idx == len(trace) - 1)) # make sure we're in the last batch and the last event
 
-# (once (and (agent_holds ?d) (< (distance agent ?d) 5)))
-# (hold-while (and (not (agent_holds ?d)) (in_motion ?d)) (agent_crouches) (agent_holds ?h))
-# (:terminal (or (>= (count throwAttempt) 5) (not (= (count throwBallToBin) 2) )))
-# (:terminal (>= (count throwAttempt) 5))
-TEST_THROWING_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-    (:constraints (and 
-        (forall (?b - (either dodgeball golfball)) 
-            (preference throwBallToBin (exists (?h - hexagonal_bin)
-                (then
-                    (once (agent_holds ?b))
-                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
-                    (once (and (not (in_motion ?b)) (in ?h ?b)))
-                )
-            ))
-        )
-
-        (preference throwAttempt
-            (exists (?d - ball)
-                (then 
-                    (once (agent_holds ?d))
-                    (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                    (once (not (in_motion ?d)))
-                )
-            )
-        )
-
-    ))
-
-    (:scoring maximize (+
-        (count throwBallToBin)
-        (- (/ (count throwAttempt) 5))
-    )))
-    """
-
-TEST_THROW_BOUNCE_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-    (:constraints (and 
-
-        (preference throwToWallToBin
-            (exists (?w - wall ?b - ball ?h - hexagonal_bin) 
-                (then 
-                    (once (agent_holds ?b))
-                    (hold-while (and (not (agent_holds ?b)) (in_motion ?b)) (touch ?w ?b))
-                    (once  (and (in ?h ?b) (not (in_motion ?b))))
-                )
-            )
-        )
-    ))
-
-    (:scoring maximize (+
-        (* (count throwToWallToBin) 10)
-    )))
-"""
+def load_game(game_name: str):
+    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt') 
+    with open(game_path, 'r') as f:
+        game = f.read()
+    return game
 
 
-TEST_THROW_BALL_AT_WALL_GAME = """
-    (define (game 61267978e96853d3b974ca53-23) (:domain many-objects-room-v1)
-
-    (:constraints (and 
-
-        (preference throwToWall
-            (exists (?w - wall ?b - ball) 
-                (then 
-                    (once (agent_holds ?b))
-                    (hold-while  
-                        (and (not (agent_holds ?b)) (in_motion ?b))
-                        (touch ?b ?w)
-                    ) 
-                    (once (not (in_motion ?b)))
-                )
-            )
-        )
-    ))
-
-    (:scoring maximize (+
-        (* (count throwToWall) 1)
-    )))
-"""
-
-# (game-optional (not (exists (?g - game_object) (on desk ?g))))
-# (forall (?g - game_object) (game-optional (not (on desk ?g))))
-
-TEST_SETUP_GAME = """
-(define (game 60d432ce6e413e7509dd4b78-22) (:domain many-objects-room-v1)  ; 22
-(:setup (and 
-    (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
-    (forall (?b - ball) (game-optional (on desk ?b)))
-))
-(:constraints (and 
-    (preference throwToBin
-        (exists (?b - ball ?h - hexagonal_bin) 
-            (then 
-                (once (agent_holds ?b))
-                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once  (and (in ?h ?b) (not (in_motion ?b))))
-            )
-        )
-    )
-))
-(:scoring maximize (+ 
-    (* (count throwToBin) 1)
-)))
-"""
-
-TEST_AT_END_GAME = """
-(define (game 613e4bf960ca68f8de00e5e7-17) (:domain many-objects-room-v1)  ; 17/18
-
-(:constraints (and 
-    (preference castleBuilt (exists (?b - bridge_block ?f - flat_block ?t - tall_cylindrical_block ?c - cube_block ?p - pyramid_block)
-        (at-end
-            (and 
-                (on ?b ?f)
-                (on ?f ?t)
-                (on ?t ?c)
-                (on ?c ?p)
-            )
-        )
-    ))
-))
-(:scoring maximize (+ 
-    (* 10 (count-once-per-objects castleBuilt))
-)))
-"""
-
-TEST_BLOCK_STACK_GAME = """
-(define (game block-test) (:domain many-objects-room-v1)
-(:constraints (and 
-        (preference blockOnBlock
-            (exists (?b1 ?b2 - block)
-                (then 
-                    (once (agent_holds ?b1))
-                    (hold (or (in_motion ?b1) (on ?b2 ?b1)))
-                    (hold (on ?b2 ?b1))
-                    (once (or (in_motion ?b1) (in_motion ?b2)))
-                )
-            )
-        )
-))
-(:scoring maximize (+
-    (* (count blockOnBlock) 1)
-)))
-"""
-
-
-TEST_BUILDING_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingAtEnd (exists (?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingAtEnd) 1)
-))
-)
-"""
-
-
-TEST_ON_BUG_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (preference chairOnTallRectBlock (exists (?c - chair ?l - tall_rect_block)
-        (at-end
-            (and 
-                (on ?l ?c)
-            )
-        )
-    ))
-))
-(:scoring maximize (+
-    (* (count chairOnTallRectBlock) 1)
-))
-)
-"""
-
-
-TEST_BUILDING_ON_CHAIR_GAME = """
-(define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingOnChairAtEnd (exists (?c - chair ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (on ?c ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingOnChairAtEnd) 2)
-))
-)
-"""
-
-
-TEST_BUILDING_IN_BIN_GAME = """
-(define (game building-test) (:domain medium-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingInBinAtEnd (exists (?h - hexagonal_bin ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (in ?h ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingInBinAtEnd) 2)
-))
-)
-"""
-
-
-TEST_BUILDING_TOUCHES_WALL_GAME = """
-(define (game building-test) (:domain medium-objects-room-v1)
-(:constraints (and 
-    (forall (?b - building) 
-        (preference blockInBuildingTouchingWallAtEnd (exists (?w - wall ?l - block)
-            (at-end
-                (and 
-                    (in ?b ?l)
-                    (touch ?w ?b)
-                )
-            )
-        ))
-    )
-))
-(:scoring maximize (+
-    (* (count blockInBuildingTouchingWallAtEnd) 2)
-))
-)
-"""
-
-TEST_MEASURE_GAME = """
-(define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
-
-(:constraints (and 
-    (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
-        (then 
-            (once-measure (agent_holds ?d) (distance agent ?h))
-            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-            (once (and (not (in_motion ?d)) (in ?h ?d)))
-        )
-    ))
-)) 
-(:scoring maximize (count-measure throwToBinFromDistance)
-))
-"""
+TEST_GAME_LIBRARY = {
+    'on-chair-bug': load_game("building_on_bug"),
+    'test-building': load_game("building_base"),
+    'test-building-on-chair': load_game("building_on_chair"),
+    'test-building-in-bin': load_game("building_in_bin"),
+    'test-building-touches-wall': load_game("building_touches_wall"),
+    'test-throwing': load_game("throw_to_bin"),
+    'test-throw-to-wall': load_game("throw_at_wall"),
+    'test-measure': load_game("throw_measure_dist"),
+    'test-wall-bounce': load_game("throw_bounce_wall_bin"),
+    'test-setup': load_game("throw_with_setup"),
+}
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_SETUP_GAME)
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-setup'])
     score = None
 
     trace_path = SETUP_TEST_TRACE.resolve().as_posix()

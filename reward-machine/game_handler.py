@@ -123,8 +123,8 @@ class GameHandler():
             elif rule == "terminal":
                 self.terminal = ast["terminal"]
 
-            elif rule == "scoring":
-                self.scoring = ast["scoring"]
+            elif rule == "scoring_expr":
+                self.scoring = ast
 
     def process(self, state: FullState, is_final: bool, debug: bool = False,
         debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:  
@@ -364,15 +364,7 @@ class GameHandler():
         
         rule = scoring_expression["parseinfo"].rule  # type: ignore
 
-        # TODO: clearly there needs to be some logic here for handling maximize vs. minimize. Maybe we should
-        # pass an argument down the recursive calls?
-        if rule == "scoring_maximize":
-            return self.score(scoring_expression["expr"])
-
-        elif rule == "scoring_minimize":
-            return self.score(scoring_expression["expr"])
-
-        elif rule == "scoring_expr":
+        if rule == "scoring_expr":
             return self.score(scoring_expression["expr"])
 
         elif rule == "scoring_multi_expr":

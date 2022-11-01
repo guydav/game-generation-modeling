@@ -432,10 +432,9 @@ The following enumerates all predicates currently found in our game dataset:
 (rug_color_under <arg1> <arg2>) [11 references] ; Is the color of the rug under the object (first argument) the color specified by the second argument?
 (same_color <2 or 3 arguments>) [23 references] ; If two objects, do they have the same color? If one is a color, does the object have that color?
 (same_object <arg1> <arg2>) [7 references] ; Are these two variables bound to the same object?
-(same_type <arg1> <arg2>) [5 references] ; Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?
+(same_type <arg1> <arg2>) [14 references] ; Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?
 (toggled_on <arg1> <arg2>) [4 references] ; Is this object toggled on?
 (touch <arg1> <arg2>) [49 references] ; Are these two objects touching?
-(type <arg1> <arg2>) [9 references] ; Is the first argument, an object, an instance of the type specified by the second argument?
 \end{lstlisting}
 
 
@@ -460,103 +459,100 @@ The types are also not defined as part of the grammar, and we envision them oper
 The following describes all types currently found in our game dataset: 
         
 \begin{lstlisting}
-game_object [2 references] ; Parent type of all objects
-(*\color{gray} agent [N/A references] ; The agent*)
-(*\color{gray} building [N/A references] ; Not a real game object, but rather, a way to refer to structures the agent builds*)
+game_object [33 references] ; Parent type of all objects
+agent [87 references] ; The agent
+building [20 references] ; Not a real game object, but rather, a way to refer to structures the agent builds
 ---------- (* \textbf{Blocks} *) ----------
-block [2 references] ; Parent type of all block types:
-bridge_block [5 references] 
-cube_block [12 references] 
-blue_cube_block [7 references] 
-(*\color{gray} tan_cube_block [N/A references] *)
-yellow_cube_block [7 references] 
-flat_block [2 references] 
-pyramid_block [9 references] 
-blue_pyramid_block [2 references] 
-red_pyramid_block [1 reference] 
+block [27 references] ; Parent type of all block types:
+bridge_block [11 references] 
+cube_block [40 references] 
+blue_cube_block [8 references] 
+tan_cube_block [1 reference] 
+yellow_cube_block [8 references] 
+flat_block [5 references] 
+pyramid_block [14 references] 
+blue_pyramid_block [3 references] 
+red_pyramid_block [2 references] 
 triangle_block [3 references] 
-yellow_pyramid_block [1 reference] 
-cylindrical_block [8 references] 
-tall_cylindrical_block [5 references] 
+yellow_pyramid_block [2 references] 
+cylindrical_block [12 references] 
+tall_cylindrical_block [7 references] 
 ---------- (* \textbf{Balls} *) ----------
-ball [2 references] ; Parent type of all ball types:
-beachball [17 references] 
+ball [40 references] ; Parent type of all ball types:
+beachball [23 references] 
 basketball [18 references] 
-dodgeball [49 references] 
+dodgeball [110 references] 
 blue_dodgeball [6 references] 
-(*\color{gray} red_dodgeball [N/A references] *)
-pink_dodgeball [6 references] 
-golfball [23 references] 
-(*\color{gray} green_golfball [N/A references] *)
+red_dodgeball [4 references] 
+pink_dodgeball [18 references] 
+golfball [28 references] 
+green_golfball [2 references] 
 ---------- (* \textbf{Colors} *) ----------
-(*\color{gray} color [N/A references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object*)
-blue [1 reference] 
-brown [1 reference] 
-green [5 references] 
-pink [12 references] 
+color [7 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object
+blue [6 references] 
+brown [5 references] 
+green [7 references] 
+pink [20 references] 
 orange [3 references] 
 purple [4 references] 
 red [8 references] 
-tan [1 reference] 
+tan [2 references] 
 white [1 reference] 
-yellow [12 references] 
+yellow [14 references] 
 ---------- (* \textbf{Other moveable/interactable objects} *) ----------
 alarm_clock [8 references] 
-book [9 references] 
-(*\color{gray} blinds [N/A references] ; The blinds on the windows*)
-chair [2 references] 
+book [11 references] 
+blinds [2 references] ; The blinds on the windows
+chair [17 references] 
 cellphone [6 references] 
 cd [6 references] 
 credit_card [1 reference] 
-curved_wooden_ramp [1 reference] 
-desktop [4 references] 
-doggie_bed [9 references] 
-hexagonal_bin [12 references] 
+curved_wooden_ramp [17 references] 
+desktop [6 references] 
+doggie_bed [26 references] 
+hexagonal_bin [124 references] 
 key_chain [5 references] 
 lamp [2 references] 
 laptop [7 references] 
-main_light_switch [2 references] ; The main light switch on the wall
+main_light_switch [3 references] ; The main light switch on the wall
 mug [3 references] 
-triangular_ramp [1 reference] 
-(*\color{gray} green_triangular_ramp [N/A references] *)
+triangular_ramp [10 references] 
+green_triangular_ramp [1 reference] 
 pen [2 references] 
 pencil [2 references] 
-pillow [3 references] 
-teddy_bear [2 references] 
-watch [1 reference] 
+pillow [14 references] 
+teddy_bear [14 references] 
+watch [2 references] 
 ---------- (* \textbf{Immoveable objects} *) ----------
-bed [2 references] 
+bed [48 references] 
 (*\color{gray} corner [N/A references] ; Any of the corners of the room*)
-(*\color{gray} south_west_corner [N/A references] ; The corner of the room where the south and west walls meet*)
-(*\color{gray} door [N/A references] ; The door out of the room*)
-(*\color{gray} desk [N/A references] *)
-(*\color{gray} desk_shelf [N/A references] ; The shelves under the desk*)
-(*\color{gray} drawer [N/A references] ; Either drawer in the side table*)
-top_drawer [2 references] ; The top of the two drawers in the nightstand near the bed.
-floor [2 references] 
-rug [2 references] 
-(*\color{gray} shelf [N/A references] *)
-(*\color{gray} bottom_shelf [N/A references] *)
-(*\color{gray} top_shelf [N/A references] *)
-side_table [2 references] ; The side table/nightstand next to the bed
-(*\color{gray} sliding_door [N/A references] ; The sliding doors on the south wall (big windows)*)
-(*\color{gray} east_sliding_door [N/A references] ; The eastern of the two sliding doors (the one closer to the desk)*)
-wall [4 references] ; Any of the walls in the room
-(*\color{gray} north_wall [N/A references] ; The wall with the door to the room*)
-(*\color{gray} south_wall [N/A references] ; The wall with the sliding doors*)
-(*\color{gray} west_wall [N/A references] ; The wall the bed is aligned to*)
+south_west_corner [2 references] ; The corner of the room where the south and west walls meet
+door [9 references] ; The door out of the room
+desk [40 references] 
+desk_shelf [2 references] ; The shelves under the desk
+drawer [5 references] ; Either drawer in the side table
+top_drawer [6 references] ; The top of the two drawers in the nightstand near the bed.
+floor [25 references] 
+rug [37 references] 
+shelf [10 references] 
+bottom_shelf [1 reference] 
+top_shelf [5 references] 
+side_table [4 references] ; The side table/nightstand next to the bed
+sliding_door [2 references] ; The sliding doors on the south wall (big windows)
+east_sliding_door [1 reference] ; The eastern of the two sliding doors (the one closer to the desk)
+wall [17 references] ; Any of the walls in the room
+north_wall [1 reference] ; The wall with the door to the room
+south_wall [1 reference] ; The wall with the sliding doors
+west_wall [2 references] ; The wall the bed is aligned to
 ---------- (* \textbf{Non-object-type predicate arguments} *) ----------
-(*\color{gray} back [N/A references] *)
-(*\color{gray} front [N/A references] *)
-(*\color{gray} left [N/A references] *)
-(*\color{gray} right [N/A references] *)
-(*\color{gray} sideways [N/A references] *)
-(*\color{gray} upright [N/A references] *)
-(*\color{gray} upside_down [N/A references] *)
-(*\color{gray} front_left_corner [N/A references] ; The front-left corner of a specific object (as determined by its front)*)
----------- (* \textbf{Undescribed types} *) ----------
-(*\color{red} parseinfo [657 references]*)
-(*\color{red} term [657 references]*)
+back [3 references] 
+front [8 references] 
+left [2 references] 
+right [2 references] 
+sideways [3 references] 
+upright [10 references] 
+upside_down [2 references] 
+front_left_corner [1 reference] ; The front-left corner of a specific object (as determined by its front)
 \end{lstlisting}
 
 

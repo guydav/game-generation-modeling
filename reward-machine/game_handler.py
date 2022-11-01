@@ -622,7 +622,7 @@ class GameHandler():
 
             # Maps from an object ID to the list of positions that it has remained stationary at throughout a satisfaction
             used_positions = defaultdict(list)
-            UNIQUE_POSITION_TOL = 5
+            UNIQUE_POSITION_TOL = 0.01
 
             count = 0
 
@@ -635,6 +635,7 @@ class GameHandler():
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
                         # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
+                        # TODO: for objects that never move, we need to know their initial positions nonetheless
                         last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
                                             key=lambda move: move.time).pos
 
@@ -644,14 +645,6 @@ class GameHandler():
                             break
 
                         used_positions[obj].append(last_position)
-
-                        # object is stationary during this satisfaction
-                        # determine its position by finding the index at which it moved closest to the start of the satisfaction
-                        #    TODO: for objects that never move, we need to know their initial positions nonetheless
-                        # check to see if the position is close to any of the positions in used_positions[obj]
-                        #    if it is: then this stationary object is not in a unique position, and we don't count this satisfaction
-                        #    if it's not: then this stationary object *is* in a unique position (though it's possible other objects
-                        #                 in this satisfaction aren't), so we proceed for now, and add its position to used_positions
                 
                 # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
                 # can count this satisfaction

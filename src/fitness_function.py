@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import argparse
 from collections import namedtuple, defaultdict
 import tatsu
@@ -7,7 +8,7 @@ import tqdm
 import pandas as pd
 import numpy as np
 import os
-from re import Pattern
+import re
 import typing
 
 from parse_dsl import load_tests_from_file
@@ -22,6 +23,7 @@ DEFAULT_TEST_FILES = (
     # './dsl/problems-medium-objects.pddl',
     # './dsl/problems-many-objects.pddl',
     './dsl/interactive-beta.pddl',
+    './dsl/ast-mle-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
@@ -30,21 +32,30 @@ parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
 ContextDict = typing.Dict[str, typing.Union[str, int, typing.Dict[str, typing.Any]]]
+Number = typing.Union[int, float]
 
 
-class FitnessTerm:
-    rules: typing.Sequence[typing.Union[str, Pattern]]
+class FitnessTerm(ABC):
+    rules: typing.Sequence[typing.Union[str, re.Pattern]]
     header: str
 
-    def __init__(self, rule_or_rules: typing.Union[str, Pattern, typing.Sequence[typing.Union[str, Pattern]]], header: str):
-        if isinstance(rule_or_rules, str) or isinstance(rule_or_rules, Pattern):
+    def __init__(self, rule_or_rules: typing.Union[str, re.Pattern, typing.Sequence[typing.Union[str, re.Pattern]]], header: str):
+        if isinstance(rule_or_rules, str) or isinstance(rule_or_rules, re.Pattern):
             rule_or_rules = [rule_or_rules]
 
         self.rules = rule_or_rules
         self.header = header
     
-    def __call__(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], context: ContextDict) -> typing.Optional[float]:
-        raise NotImplementedError
+    def game_start(self) -> None:
+        pass
+
+    @abstractmethod
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict) -> None:
+        pass
+
+    @abstractmethod
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        pass
 
 
 DEFAULT_HEADERS = ('src_file', 'game_name', 'domain_name')
@@ -53,13 +64,13 @@ DEFAULT_HEADERS = ('src_file', 'game_name', 'domain_name')
 class ASTFitnessFunction:
     headers: typing.List[str]
     header_registry: typing.Dict[str, FitnessTerm]
-    list_reduce: typing.Callable[[typing.Sequence[float]], float]
-    regex_rules: typing.List[typing.Tuple[Pattern, FitnessTerm]]
+    list_reduce: typing.Callable[[typing.Sequence[Number]], Number]
+    regex_rules: typing.List[typing.Tuple[re.Pattern, FitnessTerm]]
     rows: typing.List
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]] 
 
-    def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS, list_reduce: typing.Callable[[typing.Sequence[float]], float] = np.sum):
+    def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS, list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum):
         self.headers = list(headers)
         self.list_reduce = list_reduce
 
@@ -78,7 +89,7 @@ class ASTFitnessFunction:
 
     def register(self, term: FitnessTerm, tuple_rule: bool = False) -> None:
         for rule in term.rules:
-            if isinstance(rule, Pattern):
+            if isinstance(rule, re.Pattern):
                 self.regex_rules.append((rule, term))
             else:
                 self._register(term, rule, tuple_rule)
@@ -90,19 +101,24 @@ class ASTFitnessFunction:
         return pd.DataFrame.from_records(self.rows, columns=self.headers)
 
     def parse(self, ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str):
-        row = defaultdict(list)
-        row['src_file'].append(os.path.basename(src_file))
-        row['game_name'].append(ast[1]["game_name"])  # type: ignore
-        row['domain_name'].append(ast[2]["domain_name"])  # type: ignore
+        row = {}
+        row['src_file'] = os.path.basename(src_file)
+        row['game_name'] = ast[1]["game_name"]  # type: ignore
+        row['domain_name'] = ast[2]["domain_name"]  # type: ignore
         ast = ast[3:]  # type: ignore
-        self._parse(ast, row)
 
-        for header in row:
-            if row[header]:
-                if len(row[header]) == 1:
-                    row[header] = row[header][0]
+        for term in self.header_registry.values():
+            term.game_start()
+
+        self._parse(ast)
+
+        for header, term in self.header_registry.items():
+            term_result = term.game_end()
+            if term_result is not None:
+                if isinstance(term_result, (int, float)):
+                    row[header] = term_result
                 else:
-                    row[header] = self.list_reduce(row[header])  # type: ignore
+                    row[header] = self.list_reduce(row[header])
 
         self.rows.append(row)
 
@@ -126,7 +142,7 @@ class ASTFitnessFunction:
             for var_name in var_names:  # type: ignore
                 context_vars[var_name] = var_type  # type: ignore
 
-    def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST], row: typing.Dict[str, typing.List[float]], 
+    def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST],
         context: typing.Optional[ContextDict] = None):
         if context is None:
             context = dict(depth=0)
@@ -137,11 +153,9 @@ class ASTFitnessFunction:
         elif isinstance(ast, (tuple, list)):
             if len(ast) > 0 and isinstance(ast[0], str):
                 for tuple_stat in self.tuple_registry[ast[0]]:
-                    result = tuple_stat(ast, context)
-                    if result:
-                        row[tuple_stat.header].append(result)
+                    tuple_stat.update(ast, '', context)
 
-            [self._parse(element, row, context) for element in ast]
+            [self._parse(element, context) for element in ast]
 
         elif isinstance(ast, tatsu.ast.AST):
             # Look for variable definitions
@@ -152,31 +166,26 @@ class ASTFitnessFunction:
             elif len(vars_keys) > 0:
                 vars_key = vars_keys[0]
                 context_vars = typing.cast(dict, context['variables']) if 'variables' in context else {}
-
                 self._extract_variables(ast, vars_key, context_vars) 
-
                 context = context.copy()
                 context['variables'] = context_vars
 
             if ast.parseinfo is not None:
-                stat_parsers = self.rule_registry[ast.parseinfo.rule]
+                rule = ast.parseinfo.rule
+                stat_parsers = self.rule_registry[rule]
                 for stat in stat_parsers:
-                    result = stat(ast, context)
-                    if result:
-                        row[stat.header].append(result)
+                    stat.update(ast, rule, context)
                 
                 for regex_pattern, regex_term in self.regex_rules:
-                    if regex_pattern.match(ast.parseinfo.rule):
-                        result = regex_term(ast, context)
-                        if result:
-                            row[regex_term.header].append(result)
+                    if regex_pattern.match(rule):
+                        regex_term.update(ast, rule, context)
 
             child_context = context.copy()
             child_context['depth'] += 1  # type: ignore
 
             for child_key in ast:
                 if child_key != 'parseinfo':
-                    self._parse(ast[child_key], row, child_context)  # type: ignore
+                    self._parse(ast[child_key], child_context)  # type: ignore
 
         else:
             print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
@@ -199,10 +208,17 @@ class ASTNodeCounter(ASTParser):
 
 
 class VariablesDefinedFitnessTerm(FitnessTerm):
+    defined_count: int = 0
+    undefined_count: int = 0
+
     def __init__(self):
         super().__init__('predicate', 'variables_defined')
 
-    def __call__(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], context: ContextDict):
+    def game_start(self) -> None:
+        self.defined_count = 0
+        self.undefined_count = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if 'variables' not in context:
             return
 
@@ -219,11 +235,43 @@ class VariablesDefinedFitnessTerm(FitnessTerm):
 
             for arg in args:  # type: ignore
                 term = arg.term
-                if isinstance(term, str) and term.startswith('?') and term in context['variables']:  # type: ignore
-                    fitness += 1
+                if isinstance(term, str) and term.startswith('?'):
+                    if term in context['variables']:  # type: ignore
+                        self.defined_count += 1
+                    else:
+                        self.undefined_count += 1
 
-        return fitness
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.defined_count == 0:
+            return 0
+
+        return self.defined_count / (self.defined_count + self.undefined_count)
         
+
+class AllPreferencesUsed(FitnessTerm):
+    defined_preferences: typing.Set[str] = set()
+    used_preferences: typing.Set[str] = set()
+
+    def __init__(self):
+        super().__init__(('preference', re.compile('count.*')), 'all_preferences_used')
+
+    def game_start(self) -> None:
+        self.defined_preferences = set()
+        self.used_preferences = set()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if rule == 'preference':
+            self.defined_preferences.add(ast.pref_name)  # type: ignore
+
+        else:
+            self.used_preferences.add(ast.name_and_types.pref_name)  # type: ignore 
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if len(self.defined_preferences) == 0:
+            return 0
+
+        return len(self.defined_preferences.intersection(self.used_preferences)) / len(self.defined_preferences.union(self.used_preferences))
+
 
 def build_aggregator(args):
     fitness = ASTFitnessFunction()
@@ -231,6 +279,8 @@ def build_aggregator(args):
     variables_defined = VariablesDefinedFitnessTerm()
     fitness.register(variables_defined)
     
+    all_preferences_used = AllPreferencesUsed()
+    fitness.register(all_preferences_used)
 
     # length_of_then = StatExtractor('then', 'length_of_then', lambda ast, context: len(ast.then_funcs), lambda x: x)
     # agg.register(length_of_then)
@@ -404,7 +454,7 @@ def main(args):
             aggregator.parse(ast, test_file)
 
     df = aggregator.to_df()
-    print(df.head)
+    print(df.groupby('src_file').mean())
     # df.to_csv(args.output_path, index_label='Index')    
 
 

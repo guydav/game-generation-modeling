@@ -36,7 +36,7 @@ parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
 parser.add_argument('--counter-output-path', default=DEFAULT_COUNTER_OUTPUT_PATH)
-DEFAULT_SAMPLES_OUTPUT_PATH = './dsl/ast_mle_samples.pddl'
+DEFAULT_SAMPLES_OUTPUT_PATH = './dsl/ast-mle-samples.pddl'
 parser.add_argument('--samples-output-path', default=DEFAULT_SAMPLES_OUTPUT_PATH)
 parser.add_argument('-s', '--save-samples', action='store_true')
 parser.add_argument('-c', '--parse-counter', action='store_true')

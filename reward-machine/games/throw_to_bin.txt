@@ -24,6 +24,6 @@
 ))
 
 (:scoring (+
-    (count-nonoverlapping throwBallToBin)
-    (- (/ (count-nonoverlapping throwAttempt) 5))
+    (count throwBallToBin)
+    (- (/ (count throwAttempt) 5))
 )))

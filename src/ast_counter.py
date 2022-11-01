@@ -34,8 +34,11 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/ast_counter.pickle'
-parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
+DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
+parser.add_argument('--counter-output-path', default=DEFAULT_COUNTER_OUTPUT_PATH)
+DEFAULT_SAMPLES_OUTPUT_PATH = './dsl/ast_mle_samples.pddl'
+parser.add_argument('--samples-output-path', default=DEFAULT_SAMPLES_OUTPUT_PATH)
+parser.add_argument('-s', '--save-samples', action='store_true')
 parser.add_argument('-c', '--parse-counter', action='store_true')
 parser.add_argument('-n', '--num-samples', type=int, default=10)
 parser.add_argument('-p', '--print-samples', action='store_true')
@@ -245,7 +248,7 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'type_name',
     ('comparison_arg', 'arg'): 'number',
-    ('function_term', 'term'): ('type_name', 'variable'),
+    ('function_term', 'term'): ('type_name', 'variable', 'number'),
     ('predicate_term', 'term'): ('type_name', 'variable'),
     ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
 }
@@ -766,15 +769,16 @@ def main(args):
                 ast = grammar_parser.parse(test_case)
                 counter(ast)
 
-        with open(args.output_path, 'wb') as out_file:
+        with open(args.counter_output_path, 'wb') as out_file:
             pickle.dump(counter, out_file)
 
     else:
-        with open(args.output_path, 'rb') as pickle_file:
+        with open(args.counter_output_path, 'rb') as pickle_file:
             counter = pickle.load(pickle_file)
 
     sampler = ASTSampler(grammar_parser, counter)
     samples = []
+    samples_text = []
 
     for _ in range(args.num_samples):
         first_print_out = ''
@@ -788,11 +792,15 @@ def main(args):
                 ast_printer.pretty_print_ast(ast)
                 print()
 
-            if args.validate_samples:
+            if args.validate_samples or args.save_samples:
                 ast_printer.BUFFER = []
                 ast_printer.pretty_print_ast(ast)
                 first_print_out = ''.join(ast_printer.BUFFER)
+                if args.save_samples:
+                    samples_text.extend([line + '\n' for line in ast_printer.BUFFER])
+                    samples_text.append('\n')
 
+            if args.validate_samples:
                 second_ast = grammar_parser.parse(first_print_out)
                 ast_printer.BUFFER = []
                 ast_printer.pretty_print_ast(second_ast)
@@ -812,6 +820,10 @@ def main(args):
     # the inner rules (`setup_game_conserved` / `setup_game_optional`), 
     # or `then` for preferences) are overrepreesnted, and more likely
     # to be sampled at the root of this expression than they are in the corpus
+
+    if args.save_samples:
+        with open(args.samples_output_path, 'w') as out_file:
+            out_file.writelines(samples_text)
 
     return
 

@@ -1,3 +1,4 @@
+from collections import defaultdict
 import itertools
 import tatsu
 import tatsu.ast
@@ -10,6 +11,7 @@ from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
 from utils import extract_variable_type_mapping, get_object_assignments, ast_cache_key, FullState
+from predicate_handler import _pred_in_motion
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -48,6 +50,10 @@ class GameHandler():
 
         self.building_handler = BuildingHandler(self.domain_name)
         self.predicate_handler = PredicateHandler(self.domain_name)
+
+        # Maps from an object ID to a list of the time indexes in which it moves and the corresponding position at that time
+        self.object_movements = defaultdict(list)
+        self.cur_step = 0
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
         # evaluate that preference
@@ -150,6 +156,9 @@ class GameHandler():
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+
+        self.cur_step += 1
+
         self.predicate_handler.update_cache(state)
         self.building_handler.process(state, debug=debug or debug_building_handler)
 
@@ -160,6 +169,13 @@ class GameHandler():
         if not setup:
             return
 
+        # Check for object updates. If an object moves, then the current time is added to its list of motion times
+        if state.n_objects_changed > 0:
+            for obj in state.objects:
+                if _pred_in_motion(state.agent_state, [obj]):
+                    self.object_movements[obj.object_id].append((self.cur_step, obj.position))
+
+
         # The game is in its last step if the terminal conditions are met or if the trajectory is over
         is_last_step = is_final or self.evaluate_terminals(self.terminal)
 
@@ -168,7 +184,7 @@ class GameHandler():
                 satisfactions = handlers.process(state, is_last_step, debug=debug or debug_preference_handlers)
                 self.preference_satisfactions[preference_name] += satisfactions
 
-            elif isinstance(handlers, list):
+            elif isinstance(handlers, list): # TODO: is this case safe to remove?
                 pass
 
         if is_last_step:
@@ -549,6 +565,10 @@ class GameHandler():
 
             return count
 
+        # Count the largest set of satisfactions that share a mapping and overlap in their start / ends (solve with DP?)
+        elif rule == "count_overlapping":
+            pass
+
         # Count whether the preference has been satisfied at all
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
@@ -593,7 +613,30 @@ class GameHandler():
             return count
 
         elif rule == "count_unique_positions":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+
+            # Maps from an object ID to the list of positions that it has remained stationary at throughout a satisfaction
+            used_positions = defaultdict(list)
+
+
+            # For each satisfaction, we need to determine which of its quantified objects are stationary within the
+            # duration of the satisfaction
+            for satisfaction in satisfactions:
+                all_unique = True
+                for obj in satisfaction.mapping.values():
+                    if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
+                        # object is stationary during this satisfaction
+                        # determine its position by finding the index at which it moved closest to the start of the satisfaction
+                        #    TODO: for objects that never move, we need to know their initial positions nonetheless
+                        # check to see if the position is close to any of the positions in used_positions[obj]
+                        #    if it is: then this stationary object is not in a unique position, and we don't count this satisfaction
+                        #    if it's not: then this stationary object *is* in a unique position (though it's possible other objects
+                        #                 in this satisfaction aren't), so we proceed for now, and add its position to used_positions
+                        pass
+                
+                # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
+                # can count this satisfaction
 
         elif rule == "count_same_positions":
             pass # TODO

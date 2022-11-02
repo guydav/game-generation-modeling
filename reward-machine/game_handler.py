@@ -58,6 +58,7 @@ class GameHandler():
         # Maps from an object ID to a list of the time indexes in which it moves and the corresponding position at that time
         self.object_movements = defaultdict(list)
         self.cur_step = 0
+        self.initial_update_complete = False
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
         # evaluate that preference
@@ -179,6 +180,12 @@ class GameHandler():
                 if _pred_in_motion(state.agent_state, [obj]):
                     self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
 
+        # When we get our first full state update, we treat every object as though it moved. This is so that we can
+        # evaluate whether an object is stationary even in situations where it never moves (see count_unique_positions)
+        if state.n_objects_changed > 15 and not self.initial_update_complete:
+            for obj in state.objects:
+                self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
+            self.initial_update_complete = True
 
         # The game is in its last step if the terminal conditions are met or if the trajectory is over
         is_last_step = is_final or self.evaluate_terminals(self.terminal)

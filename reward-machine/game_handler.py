@@ -639,6 +639,8 @@ class GameHandler():
             # duration of the satisfaction
             for satisfaction in satisfactions:
                 all_unique = True
+                encountered_stationary = False
+
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
                         # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
@@ -651,12 +653,11 @@ class GameHandler():
                             break
 
                         used_positions[obj].append(last_position)
-
-                    # TODO: need to handle the case where no quantified objects are stationary! This shouldn't give you a point
+                        encountered_stationary = True
                 
                 # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
-                # can count this satisfaction
-                if all_unique:
+                # can count this satisfaction as long as at least one object was stationary
+                if all_unique and encountered_stationary:
                     count += 1
 
             return count

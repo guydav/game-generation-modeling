@@ -497,7 +497,7 @@ class GameHandler():
         elif rule == "scoring_external_maximize":
             maximized_preferences = self._extract_scoring_preferences(scoring_expression)
             
-            # Make sure that at least once of the predicates is under an external forall, and that the predicates
+            # Make sure that at least one of the predicates is under an external forall, and that the predicates
             # in total are not under more than one external forall
             external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in maximized_preferences
                                         if self.preference_handlers[pref_name].additional_variable_mapping != {}]
@@ -578,7 +578,37 @@ class GameHandler():
 
         # Count the largest set of satisfactions that share a mapping and overlap in their start / ends (solve with DP?)
         elif rule == "count_overlapping":
-            pass
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+
+            overall_count = 0
+
+            # Group the satisfactions by their mappings. Within each group, determine the largest set of satisfactions
+            # that overlap by sorting the start / end times. Whenever we encounter a new start time, we increment a
+            # counter. Whenever we encounter an end time, we decrement the counter. The maximum value of the counter
+            # is the largest set of satisfactions that overlap
+
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+                group_max = 0
+                group_count = 0
+                starts_and_ends = []
+
+                for satisfaction in group:
+                    starts_and_ends.append((satisfaction.start, "start"))
+                    starts_and_ends.append((satisfaction.end, "terminal")) # because of sorting, the string here needs to be "terminal" and not "end"
+
+                for _, type in sorted(starts_and_ends):
+                    if type == "start":
+                        group_count += 1
+                    elif type == "end":
+                        group_count -= 1
+
+                    group_max = max(group_max, group_count)
+
+                overall_count = max(overall_count, group_max)
+
+            return overall_count
 
         # Count whether the preference has been satisfied at all
         elif rule == "count_once":

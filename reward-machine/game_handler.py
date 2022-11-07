@@ -642,7 +642,6 @@ class GameHandler():
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
                         # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
-                        # TODO: for objects that never move, we need to know their initial positions nonetheless
                         last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
                                             key=lambda move: move.time).pos
 
@@ -652,6 +651,8 @@ class GameHandler():
                             break
 
                         used_positions[obj].append(last_position)
+
+                    # TODO: need to handle the case where no quantified objects are stationary! This shouldn't give you a point
                 
                 # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
                 # can count this satisfaction
@@ -661,7 +662,29 @@ class GameHandler():
             return count
 
         elif rule == "count_same_positions":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+
+            # Maps from a set of objects and their stationary positions to the number of satisfactions that use that mapping
+            # E.g. if we have two objects, A and B, and A is stationary at position (0, 0) and B is stationary at position (1, 1)
+            # for two satisfactions, then we would have the mapping {((A, (0, 0)), (B, (1, 1))): 2}
+            stationary_position_counts = defaultdict(int)
+
+            for satisfaction in satisfactions:
+                stationary_position_key = []
+                for obj in satisfaction.mapping.values():
+                    if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                                            key=lambda move: move.time).pos
+                        
+                        stationary_position_key.append((obj, tuple(last_position)))
+
+                # If the mapping has at least one stationary object, then increment the appropriate count
+                if stationary_position_key != []:
+                    stationary_position_counts[tuple(stationary_position_key)] += 1
+
+            # We return the maximal count if there are any satisfactions that have at least one stationary object, otherwise we return 0
+            return max(stationary_position_counts.values()) if stationary_position_counts else 0
 
         # Count the number of satisfactions of the given preference that use distinct variable mappings for the externally 
         # quantified variables

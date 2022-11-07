@@ -71,10 +71,11 @@ TEST_GAME_LIBRARY = {
     'test-external-scoring': load_game("throw_external_maximize"),
     'test-score-once-per-external': load_game("throw_count_once_per_external_objects"),
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
+    'test-count-same-positions': load_game("throw_to_bin_same_positions"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-unique-positions'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-same-positions'])
     score = None
 
     trace_path = THROW_BALL_UNIQUE_POSITIONS_TRACE.resolve().as_posix()

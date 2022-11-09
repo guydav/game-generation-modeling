@@ -596,10 +596,10 @@ class GameHandler():
                 starts_and_ends.append((satisfaction.start, "start"))
                 starts_and_ends.append((satisfaction.end, "terminal")) # because of sorting, the string here needs to be "terminal" and not "end"
 
-            for _, type in sorted(starts_and_ends):
+            for time, type in sorted(starts_and_ends):
                 if type == "start":
                     cur_count += 1
-                elif type == "end":
+                elif type == "terminal":
                     cur_count -= 1
 
                 cur_max = max(cur_max, cur_count)

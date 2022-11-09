@@ -44,6 +44,7 @@ class PredicateHandler:
 
     def __init__(self, domain: str):
         self.domain = domain
+        self.is_last_step = False
         self._new_game()
     
     def _new_game(self):
@@ -134,6 +135,10 @@ class PredicateHandler:
         predicate_rule = predicate["parseinfo"].rule  # type: ignore
 
         if predicate_rule == "predicate":
+            # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
+            if predicate["pred_name"] == "game_over":
+                return self.is_last_step
+
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
 
@@ -346,10 +351,6 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[O
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
-
-def _pred_game_over(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
-    assert len(objects) == 0
-    return False # TODO
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
     return other_object.object_id in building.building_objects

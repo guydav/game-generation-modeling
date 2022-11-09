@@ -45,6 +45,8 @@ parser.add_argument('-p', '--print-samples', action='store_true')
 parser.add_argument('-v', '--validate-samples', action='store_true')
 parser.add_argument('--sample-tqdm', action='store_true')
 
+parser.
+
 
 class RuleKeyValueCounter:
     def __init__(self, rule: str, key:str):
@@ -765,10 +767,7 @@ class ASTSampler:
         return output, None
 
 
-def main(args):
-    grammar = open(args.grammar_file).read()
-    grammar_parser = tatsu.compile(grammar)
-
+def _parse_or_load_counter(args: argparse.Namespace, grammar_parser):
     if args.parse_counter:
         counter = ASTRuleValueCounter()
 
@@ -789,9 +788,10 @@ def main(args):
         with open(args.counter_output_path, 'rb') as pickle_file:
             counter = pickle.load(pickle_file)
 
-    sampler = ASTSampler(grammar_parser, counter)
+
+def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser):
     samples = []
-    samples_text = []
+    text_samples = []
     sample_id = 0 
 
     sample_iter = range(args.num_samples)
@@ -816,8 +816,8 @@ def main(args):
                 ast_printer.pretty_print_ast(ast)
                 first_print_out = ''.join(ast_printer.BUFFER)
                 if args.save_samples:
-                    samples_text.extend([line + '\n' for line in ast_printer.BUFFER])
-                    samples_text.append('\n')
+                    text_samples.extend([line + '\n' for line in ast_printer.BUFFER])
+                    text_samples.append('\n')
 
             if args.validate_samples:
                 second_ast = grammar_parser.parse(first_print_out)
@@ -833,6 +833,17 @@ def main(args):
             if len(first_print_out) > e.pos:
                 print(first_print_out[e.pos:])
 
+    return samples, text_samples
+
+def main(args):
+    grammar = open(args.grammar_file).read()
+    grammar_parser = tatsu.compile(grammar)
+    counter = _parse_or_load_counter(args, grammar_parser)
+
+
+    sampler = ASTSampler(grammar_parser, counter)
+    samples, text_samples = _generate_mle_samples(args, sampler, grammar_parser)
+
     # TODO: conceptual issue: in places where the expansion is recursive 
     # (e.g. `setup`` expands to rules that all contain setup, or 
     # `preference`` expand to exists/forall that contain preferences) 
@@ -842,7 +853,7 @@ def main(args):
 
     if args.save_samples:
         with open(args.samples_output_path, 'w') as out_file:
-            out_file.writelines(samples_text)
+            out_file.writelines(text_samples)
 
     return
 

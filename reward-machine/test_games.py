@@ -19,6 +19,7 @@ THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-mach
 THROW_ALL_DODGEBALLS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_all_dodgeballs.json')
 SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
+COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
 
 
 def load_game(game_name: str):
@@ -41,6 +42,7 @@ TEST_GAME_LIBRARY = {
     'test-setup': load_game("throw_with_setup"),
     'test-external-scoring': load_game("throw_external_maximize"),
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
+    'test-count-overlapping': load_game("building_count_overlapping"),
 }
 
 TEST_CASES = [
@@ -176,6 +178,26 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1220, end=1304, measures={}),
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1483, end=1545, measures={}),
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1647, end=1719, measures={})
+        ],
+    },),
+    ('test-count-overlapping', COMPLEX_STACKING_TRACE, 3.0, {
+        'blockPlacedInBuilding' : [
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=31, end=391, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_4', '?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=391, end=638, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=638, end=706, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=442, end=754, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_0', '?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=549, end=754, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=442, end=754, measures={}),
+            PreferenceSatisfaction(mapping={'?b': 'building_1', '?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=549, end=754, measures={})
+        ],
+        'blockPickedUp' : [
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=59, end=116, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=59, end=214, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=54, end=404, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.96|+01.26|-01.72'}, start=117, end=530, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=215, end=611, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=405, end=681, measures={}),
+            PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=682, end=753, measures={})
         ],
     },),
 ]

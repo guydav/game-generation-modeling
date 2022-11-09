@@ -187,8 +187,10 @@ class GameHandler():
                 self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
             self.initial_update_complete = True
 
-        # The game is in its last step if the terminal conditions are met or if the trajectory is over
+        # The game is in its last step if the terminal conditions are met or if the trajectory is over. We pass this
+        # value to the PredicateHandler so that it can evaluate game-over
         is_last_step = is_final or self.evaluate_terminals(self.terminal)
+        self.predicate_handler.is_last_step = is_last_step
 
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):

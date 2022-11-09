@@ -1486,7 +1486,7 @@
             (then
                 (once (agent_holds ?d))
                 (hold (and (in_motion ?d) (not (agent_holds ?d))))
-                (once (and (not (in_motion ?d)) (or (in ?h ?d) (on ?h ?d))))
+                (once (and (not (in_motion ?d)) (or (in ?h ?d) (on ?h ?d)) (or (in ?b ?h) (on ?b ?h))))
             )
         ))
     )

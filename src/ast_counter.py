@@ -43,6 +43,7 @@ parser.add_argument('-c', '--parse-counter', action='store_true')
 parser.add_argument('-n', '--num-samples', type=int, default=10)
 parser.add_argument('-p', '--print-samples', action='store_true')
 parser.add_argument('-v', '--validate-samples', action='store_true')
+parser.add_argument('--sample-tqdm', action='store_true')
 
 
 class RuleKeyValueCounter:
@@ -146,15 +147,25 @@ PREDICATE_NAMES = []
 
 
 def generate_game_id(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
-    return 'game-id'
+    game_id = global_context['original_game_id'] if 'original_game_id' in global_context else 'game-id'    
+    if 'sample_id' in global_context:
+        game_id = f'{game_id}-{global_context["sample_id"]}'
+    return game_id
+
+
+DOMAINS = ('few-objects-room-v1', 'medium-objects-room-v1', 'many-objects-room-v1',)
 
 
 def generate_domain_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
-    return 'domain-name'
+    if 'rng' not in global_context:
+        rng = np.random.default_rng()
+    else:
+        rng = global_context['rng']
+    return rng.choice(DOMAINS)
     
 
 def _preference_name(i):
-    return f'preference{chr(ord("A") + i - 1)}'
+    return f'preference{i}'
 
 
 def sample_new_preference_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
@@ -694,6 +705,8 @@ class ASTSampler:
 
         if global_context is None:
             global_context = dict(rng=self.rng)
+        elif 'rng' not in global_context:
+            global_context['rng'] = self.rng
         
         if local_context is None:
             local_context = dict()
@@ -779,12 +792,18 @@ def main(args):
     sampler = ASTSampler(grammar_parser, counter)
     samples = []
     samples_text = []
+    sample_id = 0
 
-    for _ in range(args.num_samples):
+    sample_iter = range(args.num_samples)
+    if args.sample_tqdm:
+        sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
+
+    for _ in sample_iter:
         first_print_out = ''
 
         try:     
-            ast = sampler.sample()
+            ast = sampler.sample(global_context=dict(sample_id=sample_id))
+            sample_id += 1 
             samples.append(ast)
 
             if args.print_samples:
@@ -811,7 +830,7 @@ def main(args):
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
             print(f'Parse failed: at position {e.pos} expected {e.item}:')
-            if len(first_print_out > e.pos):
+            if len(first_print_out) > e.pos:
                 print(first_print_out[e.pos:])
 
     # TODO: conceptual issue: in places where the expansion is recursive 

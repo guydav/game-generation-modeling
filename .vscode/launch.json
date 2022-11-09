@@ -65,10 +65,11 @@
             "program": "${file}",
             "args": [
                 // "--print-samples",
-                 "--validate-samples", 
+                "--validate-samples", 
                 // "--parse-counter", 
                 "--save-samples",
                 "--num-samples", "100",
+                "--sample-tqdm",
             ],
             "console": "integratedTerminal",
             "notes": "--parse-counter",

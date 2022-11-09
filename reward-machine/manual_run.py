@@ -18,6 +18,7 @@ BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNai
 THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
 STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blocks.json')
+COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-overlapping'])
     score = None
 
-    trace_path = STACK_THREE_CUBES_TRACE.resolve().as_posix()
+    trace_path = COMPLEX_STACKING_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

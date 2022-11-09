@@ -46,7 +46,7 @@ The optional ones are the \dsl{setup} section, which defines how the environment
   (:terminal <terminal>) \\
   (:scoring <scoring>) \\)
 
-<name> ::= /[A-z]+(_[A-z0-9]+)*/ "#" a letter, optionally followed by letters, numbers, and underscores
+<name> ::= /[A-z][A-z0-9_]*/ "#" a letter, optionally followed by letters, numbers, and underscores
 \end{grammar}
 
 We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types. 

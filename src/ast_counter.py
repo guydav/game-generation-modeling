@@ -792,7 +792,7 @@ def main(args):
     sampler = ASTSampler(grammar_parser, counter)
     samples = []
     samples_text = []
-    sample_id = 0
+    sample_id = 0 
 
     sample_iter = range(args.num_samples)
     if args.sample_tqdm:

@@ -1,10 +1,83 @@
-(define (game game-id) (:domain domain-name)
+(define (game game-id-0) (:domain medium-objects-room-v1)
 (:setup
-  (exists (?d - (either dodgeball yellow))
-    (or
-      (or
-        (game-conserved
-          (in ?d pink)
+  (game-conserved
+    (and
+      (and
+        (rug_color_under ?xxx)
+        (not
+          (in_motion ?xxx bed)
+        )
+      )
+      (agent_holds ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?q - hexagonal_bin ?q - beachball)
+      (and
+        (preference preference1
+          (at-end
+            (and
+              (touch ?q)
+              (and
+                (faces ?q)
+                (in_motion ?q)
+              )
+              (in_motion ?q)
+              (< (distance ?q ?q) (distance ?q 7))
+              (agent_holds ?q)
+              (on ?q ?q)
+            )
+          )
+        )
+        (preference preference2
+          (then
+            (once (not (and (not (and (agent_holds ?q) (agent_holds ?q) (and (not (not (touch ?q ?q) ) ) (exists (?a - ball ?w - shelf) (and (touch pink ?q) (not (and (in_motion ?w) (not (and (on ?q ?q) (and (exists (?n - triangular_ramp) (agent_holds ?q) ) (rug_color_under ?q) (< (distance front ?w) 1) (exists (?p - dodgeball) (agent_holds ?q agent) ) ) ) ) ) ) ) ) ) (agent_holds ?q ?q) ) ) (or (and (toggled_on ?q) (in ?q) ) (agent_holds ?q) ) ) ) )
+            (once (> (distance room_center ?q) 2) )
+            (once (between ?q) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (then
+        (once (in_motion ?xxx ?xxx) )
+        (once (not (on ?xxx) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 5 (- 5 (total-score) ) )
+)
+(:scoring
+  (count-once-per-objects preference2:book:dodgeball:hexagonal_bin)
+)
+)
+
+
+(define (game game-id-1) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?n - (either ball yellow_cube_block) ?n - (either book cylindrical_block) ?b - ball)
+      (exists (?g - block ?m ?o - (either basketball dodgeball bridge_block))
+        (forall (?g - doggie_bed)
+          (game-conserved
+            (agent_holds ?o)
+          )
+        )
+      )
+    )
+    (and
+      (game-conserved
+        (not
+          (or
+            (not
+              (agent_holds ?xxx)
+            )
+            (in_motion agent ?xxx)
+          )
         )
       )
     )
@@ -12,13 +85,13 @@
 )
 (:constraints
   (and
-    (forall (?i - dodgeball)
+    (forall (?m - (either blue_cube_block tall_cylindrical_block golfball))
       (and
-        (preference preferenceA
+        (preference preference1
           (then
-            (once (touch ?i ?i) )
-            (hold (in_motion bed) )
-            (once (not (on agent) ) )
+            (hold (equal_z_position ?m ?m) )
+            (once (in_motion ?m desk) )
+            (once (and (in_motion ?m) (and (and (and (agent_holds ?m) (and (agent_holds ?m) (in_motion floor) ) ) (not (on ?m desk) ) ) (adjacent ?m) (not (in_motion ?m ?m) ) ) ) )
           )
         )
       )
@@ -26,99 +99,149 @@
   )
 )
 (:terminal
-  (> 10 1 )
+  (> 15 3 )
 )
 (:scoring
-  (+ (count-once-per-objects preferenceA:pink_dodgeball:white) (count-once-per-external-objects preferenceA:dodgeball) )
+  3
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-2) (:domain few-objects-room-v1)
 (:setup
-  (game-conserved
-    (in_motion door agent)
+  (exists (?e - block)
+    (forall (?y - wall)
+      (game-optional
+        (= 2 0 8)
+      )
+    )
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?j - doggie_bed)
-        (exists (?m - dodgeball)
-          (exists (?u - hexagonal_bin)
-            (then
-              (once (and (<= 1 (distance agent bed)) (in brown) (in ?m) ) )
-              (once (on ?m ?j) )
-              (once (agent_holds ?j) )
+    (preference preference1
+      (exists (?t ?b - dodgeball)
+        (then
+          (once (in_motion ?t ?t) )
+          (once (not (exists (?x - block ?z - hexagonal_bin) (on ?t) ) ) )
+          (hold (and (on agent) (touch ?t ?b) ) )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?y - game_object)
+        (at-end
+          (not
+            (not
+              (not
+                (agent_holds ?y)
+              )
             )
           )
         )
       )
     )
-    (preference preferenceB
-      (at-end
-        (in_motion ?xxx)
+  )
+)
+(:terminal
+  (>= (count-once-per-objects preference2:pink:dodgeball) (+ (count-unique-positions preference2:pink_dodgeball:golfball) (= (* (count preference1:dodgeball:pink_dodgeball) (* (* (count-once-per-objects preference2:dodgeball) (count preference2:blue_pyramid_block) )
+            (* 4 (* (count preference2:hexagonal_bin) (count-once-per-objects preference2:yellow) )
+              3
+              (* 10 (count preference1:dodgeball) )
+              (* 1 10 )
+              (count-measure preference2:green)
+            )
+            2
+          )
+        )
+        (* 5 (* (count preference1:golfball) (* (count-once-per-external-objects preference2:dodgeball:yellow:green) 2 (total-score) )
+          )
+        )
       )
     )
   )
 )
-(:terminal
-  (>= (- 10 )
-    (count-once-per-objects preferenceA:basketball)
-  )
-)
 (:scoring
-  (count preferenceA:beachball)
+  30
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-3) (:domain many-objects-room-v1)
 (:setup
-  (exists (?d - flat_block)
+  (exists (?u - game_object ?a - bridge_block)
     (and
       (and
         (and
-          (game-conserved
-            (not
-              (in_motion ?d)
-            )
-          )
-        )
-      )
-      (forall (?k - shelf)
-        (and
-          (and
-            (forall (?e - cylindrical_block)
-              (game-conserved
-                (agent_holds ?e)
-              )
-            )
-          )
-        )
-      )
-      (forall (?u - teddy_bear)
-        (and
-          (and
+          (forall (?f - game_object ?h - hexagonal_bin)
             (game-conserved
-              (not
-                (in_motion ?u)
+              (< 1 1)
+            )
+          )
+          (forall (?k - hexagonal_bin)
+            (and
+              (game-conserved
+                (in ?k)
               )
             )
-            (forall (?c ?y ?z - ball)
-              (exists (?e - sliding_door)
-                (and
-                  (exists (?v - (either laptop pillow) ?s - bridge_block)
+          )
+        )
+        (forall (?o ?c - hexagonal_bin)
+          (and
+            (game-optional
+              (and
+                (not
+                  (not
                     (and
-                      (exists (?l - building)
-                        (and
-                          (game-conserved
-                            (agent_holds agent)
+                      (on ?o ?c)
+                      (and
+                        (not
+                          (in_motion ?c)
+                        )
+                        (not
+                          (and
+                            (agent_holds ?o agent)
+                            (and
+                              (not
+                                (and
+                                  (adjacent desk)
+                                  (not
+                                    (in_motion ?c ?c)
+                                  )
+                                )
+                              )
+                              (< 1 1)
+                            )
                           )
                         )
                       )
                     )
                   )
+                )
+                (in_motion ?c)
+              )
+            )
+            (and
+              (forall (?b ?u ?k ?j ?g - yellow_cube_block ?m - red_dodgeball)
+                (exists (?y - ball)
+                  (game-conserved
+                    (in_motion agent)
+                  )
+                )
+              )
+            )
+            (game-conserved
+              (in ?o ?a)
+            )
+          )
+        )
+        (exists (?e - hexagonal_bin ?p - wall ?k - hexagonal_bin)
+          (exists (?i - rug ?w - dodgeball ?l - game_object ?w - (either lamp curved_wooden_ramp))
+            (game-conserved
+              (not
+                (and
+                  (in ?a)
+                  (on ?a upside_down)
                 )
               )
             )
@@ -130,40 +253,44 @@
 )
 (:constraints
   (and
-    (forall (?u - block)
+    (forall (?q - hexagonal_bin ?v - dodgeball ?e - cylindrical_block)
       (and
-        (preference preferenceA
-          (exists (?g - chair)
+        (preference preference1
+          (exists (?p - (either dodgeball golfball cube_block))
             (then
-              (hold (not (in ?g agent) ) )
-              (once (in_motion ?g ?g) )
-              (once (agent_holds ?u) )
+              (once (on ?e ?p) )
+              (once (in_motion agent ?p ?p) )
+              (once (agent_holds ?e) )
             )
           )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?e - wall)
+        (then
+          (once (and (touch agent) (and (or (and (not (and (same_type ?e ?e) (and (exists (?q - red_dodgeball ?y - beachball ?q - (either key_chain)) (agent_holds rug ?q ?q) ) (adjacent ?e) ) (not (agent_holds top_shelf) ) ) ) (and (adjacent ?e ?e) (< 1 0.5) (in_motion front_left_corner) (and (touch ?e ?e) (adjacent ?e ?e) ) ) ) ) (and (in_motion south_west_corner) (broken rug ?e) ) (in_motion rug) ) ) )
+          (once (and (in ?e agent) (and (and (in_motion ?e) (< 1 1) (and (on agent) (not (agent_holds ?e) ) ) (and (on ?e agent) (and (not (on bed ?e) ) (not (agent_holds ?e bed) ) (agent_holds ?e) (and (adjacent ?e ?e) (on agent ?e) ) ) ) ) (in rug) ) ) )
+          (once (or (and (adjacent ?e ?e) (in_motion agent ?e) ) (in_motion ?e) ) )
+        )
+      )
+    )
+    (preference preference3
+      (exists (?b - color ?n - dodgeball)
+        (then
+          (once-measure (and (and (and (in_motion bed) (and (in_motion agent ?n) (agent_holds ?n) ) (in_motion ?n ?n) (in_motion ?n ?n) (and (in ?n) (or (not (not (agent_holds ?n ?n) ) ) (in ?n) ) (agent_holds ?n ?n) ) (in ?n) ) (not (and (not (on ?n) ) (in ?n ?n) ) ) ) (in ?n top_drawer) ) (building_size 4 ?n) )
+          (once (agent_holds ?n) )
+          (hold-while (touch ?n ?n) (not (> 5 1) ) )
         )
       )
     )
   )
 )
 (:terminal
-  (or
-    (and
-      (or
-        (and
-          (<= 10 (count preferenceA:yellow_cube_block) )
-        )
-        (or
-          (> (count-shortest preferenceA:blue_dodgeball) (* (count-once-per-external-objects preferenceA:blue_dodgeball) (* (count preferenceA:green) (count preferenceA:hexagonal_bin) )
-              (+ (* 1 2 )
-                5
-                (count preferenceA:yellow_cube_block:yellow)
-              )
-            )
-          )
-        )
-      )
-    )
-    (= (external-forall-maximize (count-once-per-objects preferenceA:hexagonal_bin) ) 10 )
+  (and
+    (>= (count-same-positions preference1:alarm_clock:dodgeball) (count preference3:doggie_bed:hexagonal_bin) )
+    (>= 5 2 )
+    (>= (count-once-per-objects preference2:dodgeball) (count-once-per-objects preference1:basketball) )
   )
 )
 (:scoring
@@ -172,57 +299,18 @@
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-4) (:domain medium-objects-room-v1)
 (:setup
   (and
-    (game-conserved
-      (in_motion ?xxx ?xxx)
-    )
     (and
-      (game-optional
+      (game-conserved
         (not
           (or
             (and
-              (in_motion bed ?xxx)
-              (not
-                (and
-                  (exists (?g - game_object ?t - ball)
-                    (and
-                      (or
-                        (in ?t ?t)
-                        (agent_holds agent)
-                      )
-                      (<= (distance ?t bed ?t) 5)
-                    )
-                  )
-                  (in_motion ?xxx ?xxx)
-                )
-              )
+              (on ?xxx ?xxx)
+              (adjacent ?xxx)
             )
-            (adjacent ?xxx ?xxx)
           )
-        )
-      )
-      (game-optional
-        (not
-          (in_motion bed ?xxx)
-        )
-      )
-      (exists (?r - hexagonal_bin)
-        (game-conserved
-          (not
-            (open ?r ?r)
-          )
-        )
-      )
-    )
-    (and
-      (game-optional
-        (and
-          (not
-            (touch ?xxx)
-          )
-          (adjacent )
         )
       )
     )
@@ -230,617 +318,81 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?i - pillow)
-        (at-end
-          (and
-            (is_setup_object ?i)
-            (in_motion ?i)
-            (on upside_down)
-          )
-        )
-      )
-    )
-    (forall (?k - dodgeball)
-      (and
-        (preference preferenceB
-          (then
-            (once (in_motion ?k ?k) )
-            (once (and (not (agent_holds agent) ) (not (agent_holds ?k ?k) ) (in agent) ) )
-            (hold (and (in ?k) (agent_holds ?k) (agent_holds ?k) (= (distance bed ?k)) ) )
-          )
-        )
+    (preference preference1
+      (then
+        (once (touch ?xxx door) )
+        (once (in ?xxx) )
+        (once (and (in_motion ?xxx ?xxx) (< 3 (distance desk ?xxx)) ) )
       )
     )
   )
 )
 (:terminal
-  (>= (+ 9 (* (- (>= 10 30 )
-        )
-        (< (count preferenceA:pink_dodgeball:purple) 4 )
-      )
-    )
-    30
+  (or
+    (>= (count preference1:pink_dodgeball) (count preference1:top_drawer) )
+    (>= (count preference1:dodgeball:red) 2 )
   )
 )
 (:scoring
-  8
+  (count preference1:dodgeball)
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-5) (:domain many-objects-room-v1)
 (:setup
   (game-conserved
-    (>= (distance_side ?xxx ?xxx) (distance ?xxx ?xxx))
+    (faces ?xxx ?xxx)
   )
 )
 (:constraints
   (and
-    (forall (?o - hexagonal_bin)
+    (forall (?i - hexagonal_bin)
       (and
-        (preference preferenceA
-          (exists (?l - (either golfball rug tall_cylindrical_block))
-            (exists (?q - hexagonal_bin ?c - hexagonal_bin)
-              (then
-                (once (in_motion ?c) )
-                (once (and (not (not (and (and (adjacent ?l front) (not (not (in_motion ?o) ) ) (agent_holds ?o) ) (touch ?l pink_dodgeball) ) ) ) (in_motion ?c ?c) (agent_holds floor) ) )
-                (once (and (on ?l ?l) (and (in ?c) (not (and (in_motion ?c ?c ?o) (on right ?o) (and (and (not (agent_holds ?l) ) (not (adjacent ?o) ) ) (on ?l) (not (agent_holds ?l ?o) ) (in ?l) ) (and (= 6 4 1) (and (same_object ?l ?c) (not (and (in ?l ?o) (touch ?o) (in desk ?l) (above ?l ?c) ) ) ) ) (touch ?l) (and (agent_holds ?l) (in_motion ?c) ) (agent_holds ?l) ) ) (and (on ?o ?c) (agent_holds ?o) ) (< 1 (distance 1 ?o)) ) ) )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?t - dodgeball)
-        (then
-          (once (and (agent_holds ?t rug) (touch ?t) ) )
-          (once (agent_holds ?t) )
-          (hold (faces bed right) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 4 20 )
-)
-(:scoring
-  (+ 1 (count-longest preferenceB:bed) (<= (* (count-once-per-objects preferenceB:golfball:golfball) (+ 5 (count preferenceB:yellow) )
-        (count preferenceA:beachball)
-      )
-      (* (+ (+ (count preferenceA:yellow) 4 )
-        )
-        3
-        (count preferenceB:pink)
-        (* 4 )
-        (* (count-total preferenceA:tall_cylindrical_block) (- (count-measure preferenceA:cube_block) )
-        )
-        (count preferenceB:red:dodgeball:pink)
-      )
-    )
-    (* (count-once-per-objects preferenceA:block) 3 )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?h - red_dodgeball)
-    (game-conserved
-      (on ?h agent)
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?b ?u ?j - (either cylindrical_block cube_block key_chain))
-      (and
-        (preference preferenceA
+        (preference preference1
           (then
-            (once (and (and (exists (?q - cube_block ?p - hexagonal_bin) (not (adjacent agent ?b) ) ) (and (adjacent ?u) (touch ?b) ) ) (in_motion agent ?j) ) )
-            (once (in_motion ?j) )
-            (hold (in ?b) )
-          )
-        )
-        (preference preferenceB
-          (exists (?a - teddy_bear)
-            (exists (?q - hexagonal_bin)
-              (exists (?e - red_dodgeball)
-                (exists (?w - shelf ?x - building)
-                  (exists (?d - (either blue_cube_block golfball) ?o - (either yellow_cube_block))
-                    (exists (?w - teddy_bear)
-                      (then
-                        (once (agent_holds ?e) )
-                        (once (< 0.5 1) )
-                        (hold-for 10 (in_motion bed ?u) )
-                      )
-                    )
-                  )
-                )
-              )
-            )
+            (any)
+            (once (touch desk ?i) )
+            (once (not (> 1 (distance agent ?i)) ) )
           )
         )
       )
     )
-  )
-)
-(:terminal
-  (< (* (> 6 3 )
-      (count-once-per-objects preferenceA:beachball:yellow_cube_block)
-    )
-    (total-score)
-  )
-)
-(:scoring
-  (count-increasing-measure preferenceB:orange:basketball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (not
-    (game-conserved
-      (in_motion ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?c - cube_block)
-        (then
-          (once (and (agent_holds ?c floor) (not (same_object ?c) ) ) )
-          (once (and (and (and (not (in_motion bed ?c) ) (agent_holds top_shelf) ) (and (not (touch ?c front_left_corner) ) (<= (distance agent room_center agent) 2) ) ) (in_motion ?c) ) )
-          (hold (and (< (distance ?c 4) 1) (on ?c) (in ?c) ) )
+    (preference preference2
+      (exists (?b - curved_wooden_ramp ?z - cube_block)
+        (exists (?j - hexagonal_bin)
+          (then
+            (hold (forall (?a - (either dodgeball)) (agent_holds ?j ?a) ) )
+            (hold (and (and (and (not (not (in ?j) ) ) (and (not (agent_holds ?j ?j) ) (in ?z) ) ) (and (on tan) (exists (?x - hexagonal_bin) (not (exists (?a - shelf) (in_motion ?x) ) ) ) ) ) (not (agent_holds pink ?z) ) (and (and (and (on upright ?z) (and (same_type ?j agent) (on ?z brown) ) ) (= (distance ?j ?j) 1 (distance ?z 10)) (and (on ?j) (and (on ?j ?z) (agent_holds ?z) ) ) ) (not (agent_holds ?z) ) ) ) )
+            (once (agent_holds ?z) )
+          )
         )
       )
     )
-    (preference preferenceB
-      (then
-        (once (and (exists (?h - beachball) (agent_holds ?h) ) (in_motion rug ?xxx) (<= 10 (distance_side 9 agent)) (not (in sideways ?xxx) ) ) )
-        (hold (and (agent_holds ?xxx) (< (distance 5 ?xxx) 0.5) ) )
-        (once (touch ?xxx) )
-      )
-    )
-    (forall (?c - ball)
+    (forall (?r - dodgeball)
       (and
-        (preference preferenceC
-          (exists (?t - (either laptop hexagonal_bin))
-            (exists (?p - shelf)
-              (then
-                (once (exists (?q - (either cellphone blue_cube_block dodgeball) ?l - curved_wooden_ramp) (in_motion ?c) ) )
-                (once (< (distance ?p ?c) 0.5) )
-              )
-            )
-          )
-        )
-        (preference preferenceD
-          (exists (?m - pillow)
-            (then
-              (hold-while (and (not (agent_holds ?m) ) (not (agent_holds ?c agent) ) ) (not (agent_holds ?c ?c) ) )
-              (hold (not (not (not (on tan) ) ) ) )
-              (once (and (in agent ?m) (on ?c) (not (= (distance desk 9 room_center) 4) ) ) )
-            )
-          )
-        )
-        (preference preferenceE
-          (exists (?w ?q ?t ?u ?i ?o - (either doggie_bed alarm_clock))
-            (exists (?v - curved_wooden_ramp)
-              (then
-                (once (= (distance ?o ?c) 1 (distance ?t 10)) )
-                (once (agent_holds ?t ?q) )
-                (once (adjacent ?t) )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count preferenceA:green) (count-once-per-objects preferenceA:dodgeball) )
-)
-(:scoring
-  (+ (count preferenceD:beachball) (count-once-per-objects preferenceE:red) )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (in_motion ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (at-end
-        (not
-          (and
-            (not
-              (not
+        (preference preference3
+          (exists (?q - hexagonal_bin)
+            (exists (?z - building)
+              (at-end
                 (not
-                  (not
-                    (and
-                      (not
-                        (toggled_on ?xxx)
-                      )
-                      (agent_holds ?xxx)
-                      (in_motion agent)
-                    )
-                  )
-                )
-              )
-            )
-            (not
-              (not
-                (and
                   (and
-                    (agent_holds door ?xxx)
-                    (in_motion ?xxx ?xxx ?xxx)
-                  )
-                  (adjacent ?xxx top_drawer ?xxx)
-                  (and
-                    (and
-                      (agent_holds ?xxx ?xxx)
+                    (not
                       (not
-                        (agent_holds ?xxx)
-                      )
-                      (exists (?k - (either pen doggie_bed doggie_bed dodgeball))
-                        (on ?k ?k)
-                      )
-                    )
-                    (agent_holds ?xxx ?xxx)
-                  )
-                  (not
-                    (in_motion ?xxx)
-                  )
-                  (agent_holds ?xxx ?xxx)
-                  (in_motion agent rug)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count preferenceA:golfball:yellow:doggie_bed) (count-once preferenceA:yellow) )
-    (>= 2 10 )
-  )
-)
-(:scoring
-  (total-time)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (forall (?m - hexagonal_bin)
-      (game-conserved
-        (in ?m ?m)
-      )
-    )
-    (forall (?h ?d - hexagonal_bin)
-      (exists (?t - hexagonal_bin)
-        (and
-          (forall (?w - ball)
-            (game-optional
-              (in_motion ?h)
-            )
-          )
-          (exists (?i - chair)
-            (exists (?m - building)
-              (exists (?q - (either cd beachball book dodgeball))
-                (game-conserved
-                  (in ?d desk)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (forall (?q - (either cylindrical_block dodgeball))
-      (and
-        (game-conserved
-          (on ?q)
-        )
-        (game-conserved
-          (touch ?q ?q)
-        )
-        (and
-          (and
-            (game-conserved
-              (is_setup_object ?q ?q)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?n - game_object ?h - hexagonal_bin)
-        (exists (?m - (either teddy_bear mug dodgeball))
-          (exists (?w - hexagonal_bin ?y - (either dodgeball blue_cube_block pyramid_block yellow))
-            (then
-              (once (same_color ?m ?m) )
-              (once (and (in ?h) (adjacent ?m ?h) (and (and (on ?h ?y) (and (and (and (same_color ?m) (agent_holds ?m) ) (in_motion ?m) ) (and (not (same_color green_golfball ?y) ) (exists (?b - (either triangular_ramp)) (on ?h) ) ) ) ) (and (in_motion ?m) (not (in ?m ?h) ) ) ) (and (or (and (agent_holds bed ?h) (in_motion ?y) ) (not (in_motion ?y ?h) ) ) (agent_holds ?h) ) ) )
-              (once (in_motion rug ?h) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?d - hexagonal_bin)
-        (exists (?r ?f ?g ?s - shelf ?g - dodgeball ?b - hexagonal_bin)
-          (then
-            (hold-while (not (on ?b) ) (in_motion ?b) )
-            (once (and (agent_holds ?b) (exists (?l - (either mug hexagonal_bin) ?p - curved_wooden_ramp) (and (agent_holds ?d ?b) (not (and (in rug) (not (agent_crouches ?b ?b) ) (and (exists (?h - (either yellow_cube_block golfball)) (not (on desk bed) ) ) (adjacent agent) ) (adjacent ?d ?p) ) ) ) ) (agent_holds ?b ?d) (agent_holds ?d ?d) (and (not (on agent ?d) ) (not (in_motion ?b agent) ) ) (broken ?b ?d) (not (on ?d) ) ) )
-            (once (in_motion ?d ?d) )
-          )
-        )
-      )
-    )
-    (forall (?s - hexagonal_bin ?r - ball ?l - hexagonal_bin)
-      (and
-        (preference preferenceC
-          (exists (?a - cube_block ?b - hexagonal_bin ?i - (either book pyramid_block) ?n - cylindrical_block)
-            (then
-              (hold (agent_holds ?n) )
-              (forall-sequence (?e - cylindrical_block ?p - curved_wooden_ramp)
-                (then
-                  (hold-while (in ?l agent) (on ?l ?p) )
-                  (once (and (agent_holds ?p) (not (agent_holds agent) ) ) )
-                  (once (exists (?g - dodgeball) (on desk) ) )
-                )
-              )
-              (hold-while (and (not (and (on ?l) (and (not (or (not (not (on ?l) ) ) (and (and (agent_holds ?l ?l) (and (or (= 0.5 1) (>= 1 4) ) (in ?n) (and (and (agent_holds ?n agent) (agent_holds ?n ?l) ) (not (in ?n) ) ) ) ) (same_color ?n) ) ) ) (not (on ?l) ) ) ) ) (in_motion ?n ?n) (and (in rug) (in_motion ?n) ) (in ?n ?n) (in_motion ?l) (and (and (not (> 1 2) ) (and (on ?l) (not (and (in_motion ?l) (agent_holds ?n) ) ) ) ) (same_type ?l ?l) ) ) (and (agent_holds ?n) (on ?n) ) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (- (total-score) )
-    (count-once-per-objects preferenceC:dodgeball)
-  )
-)
-(:scoring
-  (count preferenceA:golfball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (agent_holds ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (in ?xxx desk) )
-        (once (not (agent_holds ?xxx ?xxx) ) )
-        (once (adjacent ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (* (count preferenceA:pink) 10 (* (count-once-per-objects preferenceA:yellow) 0 )
-      )
-      (count preferenceA:doggie_bed)
-    )
-    (>= (count preferenceA:yellow) 4 )
-    (or
-      (>= 25 (count-same-positions preferenceA:blue_dodgeball) )
-      (> 2 (+ 4 2 )
-      )
-    )
-    (>= (* (count preferenceA:basketball:book) (count-once preferenceA:green) )
-      (<= (count-once preferenceA:pink_dodgeball:golfball) (count preferenceA:beachball:pink) )
-    )
-  )
-)
-(:scoring
-  (count-increasing-measure preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (forall (?h - dodgeball ?b - game_object)
-        (and
-          (forall (?i - beachball ?m - hexagonal_bin)
-            (forall (?x - block)
-              (and
-                (forall (?w - (either yellow pillow))
-                  (exists (?h - hexagonal_bin)
-                    (and
-                      (game-optional
-                        (and
-                          (touch ?h)
+                        (not
                           (not
                             (and
-                              (= (distance ?m ?h 10) (distance ))
                               (not
-                                (not
-                                  (agent_holds ?w)
-                                )
+                                (toggled_on ?q)
                               )
-                              (not
-                                (adjacent_side ?w ?m)
-                              )
-                            )
-                          )
-                        )
-                      )
-                      (game-optional
-                        (not
-                          (and
-                            (in_motion ?w)
-                            (on ?b)
-                          )
-                        )
-                      )
-                      (exists (?a - pyramid_block)
-                        (or
-                          (and
-                            (exists (?c - book ?n - dodgeball)
-                              (game-conserved
-                                (not
-                                  (and
-                                    (on ?a)
-                                    (and
-                                      (in_motion ?x ?n ?b)
-                                      (and
-                                        (< 1 4)
-                                        (and
-                                          (not
-                                            (and
-                                              (in ?m)
-                                              (in ?m)
-                                              (not
-                                                (and
-                                                  (agent_holds ?n)
-                                                  (and
-                                                    (and
-                                                      (game_start ?b)
-                                                      (not
-                                                        (in_motion ?n ?m)
-                                                      )
-                                                    )
-                                                    (= 1 (distance 7 7))
-                                                  )
-                                                  (adjacent ?h)
-                                                )
-                                              )
-                                            )
-                                          )
-                                          (not
-                                            (in_motion ?x rug)
-                                          )
-                                        )
-                                      )
-                                    )
-                                    (and
-                                      (in_motion ?x)
-                                      (not
-                                        (< 1 (distance agent ?b))
-                                      )
-                                    )
-                                  )
-                                )
-                              )
-                            )
-                          )
-                          (or
-                            (game-conserved
-                              (in_motion ?a)
+                              (agent_holds ?q)
+                              (in_motion ?r)
                             )
                           )
                         )
                       )
                     )
-                  )
-                )
-              )
-            )
-          )
-          (and
-            (exists (?w - red_dodgeball)
-              (forall (?s - hexagonal_bin)
-                (exists (?g - block)
-                  (and
-                    (exists (?m ?k - wall)
-                      (and
-                        (game-conserved
-                          (and
-                            (agent_holds ?g)
-                            (= (distance_side ?w agent))
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-            (and
-              (exists (?f - dodgeball)
-                (and
-                  (forall (?m - hexagonal_bin)
-                    (game-conserved
-                      (in_motion ?m ?b)
-                    )
-                  )
-                )
-              )
-              (game-conserved
-                (and
-                  (agent_holds ?b agent)
-                  (agent_holds ?b front)
-                )
-              )
-            )
-            (game-conserved
-              (and
-                (or
-                  (and
-                    (and
-                      (agent_holds ?b)
-                    )
-                    (not
-                      (touch ?b)
-                    )
-                  )
-                  (forall (?s - red_dodgeball)
-                    (adjacent ?s ?b)
-                  )
-                )
-                (and
-                  (in ?b ?b)
-                  (not
-                    (agent_holds ?b ?b)
-                  )
-                  (is_setup_object ?b ?b)
-                )
-                (agent_holds ?b ?b)
-                (object_orientation ?b)
-              )
-            )
-          )
-          (exists (?y ?h - (either dodgeball hexagonal_bin rug))
-            (exists (?v - dodgeball)
-              (and
-                (exists (?z - dodgeball ?u - hexagonal_bin)
-                  (game-optional
-                    (agent_holds agent)
+                    (< (distance ?q ?q) 1)
                   )
                 )
               )
@@ -848,9 +400,183 @@
           )
         )
       )
+    )
+  )
+)
+(:terminal
+  (>= (- (count preference3:pink_dodgeball) )
+    (count preference2:dodgeball)
+  )
+)
+(:scoring
+  50
+)
+)
+
+
+(define (game game-id-6) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (in ?xxx)
+      (agent_holds ?xxx)
+      (agent_holds ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?h - dodgeball ?w - hexagonal_bin)
+        (then
+          (hold (same_object ?w) )
+          (hold (and (and (in ?w) (touch ?w) (not (on ?w) ) ) (exists (?k - teddy_bear) (adjacent ?k) ) ) )
+          (once (in_motion ?w ?w) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (not
+    (>= 5 (count preference1) )
+  )
+)
+(:scoring
+  (count preference1:golfball:yellow)
+)
+)
+
+
+(define (game game-id-7) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (not
+      (in ?xxx ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?e - pillow)
+        (then
+          (once (agent_holds ?e) )
+          (once (> 1 (distance ?e)) )
+          (hold (= 1) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (count preference1:tan) (count preference1:yellow) )
+    (= (+ (count-total preference1:dodgeball:golfball) (count-once-per-external-objects preference1:dodgeball) )
+      5
+    )
+  )
+)
+(:scoring
+  5
+)
+)
+
+
+(define (game game-id-8) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (> (distance ?xxx 9) 2)
+  )
+)
+(:constraints
+  (and
+    (forall (?o - dodgeball)
+      (and
+        (preference preference1
+          (exists (?r - watch)
+            (exists (?m - cube_block)
+              (forall (?d - block)
+                (then
+                  (once (and (agent_holds ?o) (not (equal_z_position ?d ?m) ) ) )
+                  (once (= 1 1) )
+                  (once (not (in_motion ?o bed) ) )
+                )
+              )
+            )
+          )
+        )
+        (preference preference2
+          (then
+            (once (on ?o ?o) )
+            (hold (agent_holds bed) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (then
+        (hold-while (and (agent_holds ?xxx) (in_motion ?xxx ?xxx) (touch ?xxx ?xxx) ) (not (< (distance 4 ?xxx) 7) ) )
+        (once (agent_holds ?xxx) )
+        (once (< (distance agent ?xxx) (distance ?xxx ?xxx)) )
+      )
+    )
+    (preference preference4
+      (then
+        (once (same_color ?xxx) )
+        (hold-while (not (> (distance 1 2) 7) ) (and (not (not (and (< 1 1) (agent_holds ?xxx ?xxx ?xxx) ) ) ) (and (not (and (and (on ?xxx) (not (on ?xxx) ) ) (not (= 1 (x_position ?xxx ?xxx)) ) ) ) (not (and (in_motion ?xxx) (or (agent_holds ?xxx) (and (agent_holds floor ?xxx) (agent_holds ?xxx sideways) ) ) ) ) ) ) (exists (?y - game_object) (< (distance room_center 4) (distance ?y desk)) ) (on ?xxx) )
+        (once (and (and (adjacent ?xxx ?xxx) (not (in ?xxx ?xxx) ) ) (and (adjacent agent) (in_motion ?xxx) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (< (count-once-per-objects preference4:red) 12 )
+)
+(:scoring
+  40
+)
+)
+
+
+(define (game game-id-9) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (and
+      (exists (?h - ball)
+        (exists (?u - (either cube_block hexagonal_bin) ?j - beachball ?g - hexagonal_bin)
+          (game-conserved
+            (adjacent ?g green_golfball)
+          )
+        )
+      )
+    )
+    (exists (?n - rug)
       (game-conserved
-        (not
-          (touch ?xxx ?xxx)
+        (and
+          (and
+            (and
+              (in_motion ?n ?n)
+              (touch ?n)
+            )
+            (agent_holds ?n)
+          )
+          (in_motion ?n ?n)
+          (on ?n)
+        )
+      )
+    )
+    (exists (?q - doggie_bed ?q - (either yellow_cube_block wall) ?f - hexagonal_bin)
+      (forall (?s - dodgeball)
+        (game-optional
+          (and
+            (and
+              (in_motion ?f ?f)
+              (< (distance ?s ?f) 2)
+            )
+            (in ?s)
+            (< 0 (distance ?s ?f))
+          )
         )
       )
     )
@@ -858,262 +584,259 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (at-end
-        (agent_holds right ?xxx)
+    (preference preference1
+      (exists (?k - (either pyramid_block cube_block))
+        (at-end
+          (is_setup_object bed ?k)
+        )
       )
     )
-    (preference preferenceB
+    (preference preference2
       (then
-        (once (in_motion ?xxx) )
-        (hold (in_motion ?xxx) )
-        (any)
+        (once (and (not (agent_holds ?xxx) ) (and (object_orientation ?xxx bed) (agent_holds ?xxx desk) ) ) )
+        (once (on rug) )
+        (once (and (not (broken ?xxx) ) (in_motion ?xxx) ) )
       )
     )
   )
 )
 (:terminal
-  (>= (* (count preferenceA:basketball:basketball) )
-    (total-time)
+  (> 2 (count preference1:dodgeball) )
+)
+(:scoring
+  (* (count-once-per-objects preference2:dodgeball) (count-total preference2:purple) )
+)
+)
+
+
+(define (game game-id-10) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (>= (distance desk door ?xxx) 0.5)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?k - building)
+        (exists (?c - block ?j - golfball)
+          (exists (?b - game_object)
+            (exists (?s - doggie_bed)
+              (exists (?g - triangular_ramp ?r - game_object)
+                (exists (?z ?w - teddy_bear ?t - (either yellow_cube_block laptop) ?i - hexagonal_bin ?q - (either tall_cylindrical_block hexagonal_bin pyramid_block))
+                  (exists (?l - hexagonal_bin)
+                    (then
+                      (once (in ?k) )
+                      (hold-while (not (in_motion ?r pink) ) (touch ?q) (and (opposite ?r) ) )
+                      (hold-for 3 (in_motion bed rug) )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (> (count preference1:basketball) (not (count-once-per-objects preference1:pink:red) ) )
+    (not
+      (>= (count preference1:blue_pyramid_block:wall) (count-same-positions preference1:blue_dodgeball) )
+    )
   )
 )
 (:scoring
-  (+ (count-once preferenceB:purple) 2 )
+  (count-once-per-external-objects preference1:yellow)
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-11) (:domain medium-objects-room-v1)
 (:setup
-  (exists (?s - (either golfball lamp wall dodgeball key_chain cd cylindrical_block))
-    (exists (?v ?u - (either laptop golfball))
-      (game-conserved
+  (not
+    (game-optional
+      (agent_holds bed)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (not (exists (?g - doggie_bed) (not (and (and (and (and (adjacent ?g) (in_motion ?g) ) (in ?g agent) ) (agent_holds agent ?g) ) (not (< (distance side_table) 6) ) ) ) ) ) )
+        (once (in_motion door) )
+        (once (in_motion ?xxx ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 15 (count preference1:cube_block) )
+)
+(:scoring
+  (count preference1:pyramid_block)
+)
+)
+
+
+(define (game game-id-12) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (and
+      (and
+        (game-conserved
+          (in ?xxx ?xxx)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold-while (in_motion ?xxx ?xxx) (and (same_color ?xxx) (exists (?j - hexagonal_bin) (and (not (adjacent_side ?j ?j) ) (in_motion ?j agent) ) ) ) )
+        (once (in_motion ?xxx ?xxx) )
+        (once (same_type ?xxx desk) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (not
+      (>= (>= (count-same-positions preference1:basketball:brown) (* 4 (* (= (count preference1:dodgeball) (not (count preference1:red:pink) ) )
+              (* (external-forall-maximize (* 5 3 )
+                )
+                (* (+ (* 10 (or (count preference1:green) (count preference1:dodgeball:basketball) ) )
+                    (count preference1:dodgeball:rug)
+                  )
+                  4
+                )
+              )
+              25
+            )
+          )
+        )
+        (* 10 16 )
+      )
+    )
+    (or
+      (or
+        (>= (+ (count preference1:purple:dodgeball) (count preference1:beachball) )
+          (+ (* (+ (/ (external-forall-maximize (count-measure preference1:yellow) ) (* (* (total-score) 0 )
+                    (* (* (count-once-per-objects preference1:yellow) 2 )
+                      3
+                    )
+                  )
+                )
+                (count preference1:pink)
+              )
+              (+ 9 (* (= (or 8 ) (total-time) )
+                  (count-once-per-objects preference1:pink)
+                  2
+                )
+              )
+            )
+            (count-once-per-objects preference1:red)
+          )
+        )
+        (or
+          (or
+            (and
+              (or
+                (>= (count preference1:beachball:dodgeball) (count-once-per-objects preference1:dodgeball) )
+                (>= 9 (+ (* (* (count preference1:dodgeball) 5 )
+                      (- (* (count preference1:dodgeball) (count-measure preference1:green:dodgeball:yellow) )
+                      )
+                    )
+                    (count-once-per-objects preference1:dodgeball)
+                  )
+                )
+              )
+            )
+            (>= (count preference1:dodgeball) (count-once-per-objects preference1:pink) )
+          )
+          (or
+            (>= (count-once-per-objects preference1:basketball:pink) 5 )
+            (or
+              (>= (count preference1:pink_dodgeball:yellow) 2 )
+            )
+          )
+        )
+        (>= 3 (* (count preference1:cylindrical_block:hexagonal_bin) 2 )
+        )
+      )
+      (>= (count preference1:pink) 5 )
+      (> 7 (+ (- (count-once-per-external-objects preference1:beachball) )
+          (count preference1:rug:dodgeball)
+        )
+      )
+    )
+    (or
+      (<= (count preference1:orange:hexagonal_bin) (count-once-per-objects preference1:dodgeball) )
+      (< 10 (external-forall-minimize (count preference1:orange) ) )
+    )
+  )
+)
+(:scoring
+  (count preference1:red:yellow)
+)
+)
+
+
+(define (game game-id-13) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (and
+        (in_motion pink)
         (or
           (not
             (and
               (not
                 (< 10 6)
               )
-              (exists (?l ?w - game_object)
-                (agent_holds ?l ?s)
+              (exists (?z ?q - game_object)
+                (agent_holds ?q ?q)
               )
             )
           )
-          (agent_holds ?v)
+          (agent_holds ?xxx)
         )
       )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (any)
-        (once (agent_holds front ?xxx) )
-        (hold-while (same_object ?xxx ?xxx) (in_motion ?xxx ?xxx) (and (and (object_orientation ?xxx ?xxx) (not (not (not (not (and (and (in_motion ?xxx ?xxx) (and (and (agent_holds ?xxx ?xxx) (or (not (on sideways ?xxx) ) (in ?xxx) ) ) (= 9 2 7) ) ) (not (not (agent_holds ?xxx) ) ) ) ) ) ) ) ) (in_motion agent) (same_color ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (+ (+ (or 10 (+ 4 )
-          (+ (* (count-once-per-objects preferenceA:doggie_bed) 8 )
-            (* 2 (count preferenceA:basketball) (count-once-per-objects preferenceA:dodgeball:book) )
-          )
-        )
-        50
-        4
-        (* (total-score) 3 )
-        (count preferenceA:tall_cylindrical_block)
-        (= (+ (- (+ 7 (count preferenceA:yellow) )
-            )
-            (count-once preferenceA:golfball)
-          )
-          5
-        )
-      )
-      (count preferenceA:golfball:hexagonal_bin)
-    )
-    (* (+ (* 9 (count preferenceA:red) )
-        (count preferenceA:golfball)
-      )
-    )
-  )
-)
-(:scoring
-  (total-time)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (exists (?j - hexagonal_bin)
-        (game-optional
+      (not
+        (exists (?r - chair ?l - hexagonal_bin ?y - ball)
           (and
-            (touch ?j)
-            (not
-              (agent_holds ?j)
-            )
-          )
-        )
-      )
-      (game-conserved
-        (not
-          (in_motion ?xxx ?xxx)
-        )
-      )
-      (and
-        (and
-          (game-conserved
+            (on ?y ?y)
+            (agent_holds ?y ?y)
+            (agent_holds ?y)
             (and
-              (same_color ?xxx)
-              (agent_holds rug ?xxx)
-            )
-          )
-          (game-conserved
-            (in_motion ?xxx)
-          )
-          (forall (?k - dodgeball)
-            (forall (?e - (either doggie_bed doggie_bed) ?x - hexagonal_bin)
-              (forall (?q - wall)
-                (exists (?d - ball)
-                  (exists (?y - hexagonal_bin ?f - hexagonal_bin ?i - chair)
-                    (game-optional
-                      (in ?i ?k)
-                    )
-                  )
-                )
-              )
-            )
-          )
-          (exists (?b ?s - block ?q - hexagonal_bin)
-            (and
-              (exists (?h - cube_block)
-                (game-optional
-                  (touch floor)
-                )
-              )
-            )
-          )
-          (forall (?t - (either blue_cube_block pyramid_block) ?a - hexagonal_bin)
-            (not
-              (forall (?k - (either tall_cylindrical_block laptop) ?x - flat_block)
-                (and
-                  (and
-                    (exists (?f - shelf)
-                      (game-conserved
-                        (in ?f rug floor)
-                      )
-                    )
-                    (game-conserved
-                      (in_motion ?a)
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (and
-      (game-conserved
-        (< 8 (distance 2 ?xxx))
-      )
-      (and
-        (exists (?x ?m - cube_block)
-          (exists (?z - drawer)
-            (and
-              (game-conserved
-                (in ?z ?m)
-              )
               (and
+                (adjacent ?y desk)
                 (and
-                  (forall (?b - hexagonal_bin)
-                    (and
-                      (forall (?u - (either bed cd) ?i - ball ?v ?e - pyramid_block)
-                        (forall (?t - (either cube_block dodgeball hexagonal_bin watch))
-                          (exists (?f - hexagonal_bin)
-                            (game-optional
-                              (adjacent ?f ?f)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                  (exists (?k - hexagonal_bin)
-                    (and
-                      (and
-                        (exists (?t - triangular_ramp ?h ?g - wall ?t - hexagonal_bin)
-                          (exists (?d - hexagonal_bin)
-                            (game-conserved
-                              (in_motion ?z ?x)
-                            )
-                          )
-                        )
-                        (game-optional
-                          (in_motion east_sliding_door desk)
-                        )
-                      )
-                    )
-                  )
+                  (agent_holds ?y)
+                  (adjacent ?y)
                 )
-              )
-              (exists (?j - game_object)
                 (and
                   (and
-                    (game-optional
-                      (and
-                        (not
-                          (and
-                            (in_motion bed)
-                            (agent_holds ?x)
-                          )
-                        )
-                        (and
-                          (not
-                            (not
-                              (in ?j bed)
-                            )
-                          )
-                          (in_motion bed ?j)
-                        )
-                      )
-                    )
-                    (and
-                      (game-optional
-                        (and
-                          (on ?z)
-                          (not
-                            (not
-                              (not
-                                (agent_holds ?x)
-                              )
-                            )
-                          )
-                        )
-                      )
-                      (exists (?u - chair)
-                        (game-optional
-                          (not
-                            (adjacent ?j)
-                          )
-                        )
-                      )
-                    )
-                  )
-                  (not
-                    (game-optional
+                    (agent_holds ?y ?y)
+                    (or
                       (not
-                        (touch ?j ?x)
+                        (on sideways ?y)
                       )
+                      (in ?y)
                     )
                   )
+                  (= 9 2 7)
+                )
+              )
+              (not
+                (not
+                  (agent_holds ?y)
                 )
               )
             )
@@ -1125,158 +848,296 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?m ?k - bridge_block)
+    (preference preference1
+      (exists (?i ?x ?e ?s - hexagonal_bin)
         (then
-          (once (in_motion agent ?m) )
-          (once (and (not (not (in ?m) ) ) (agent_holds ?k ?m) ) )
-          (once (forall (?b - (either pyramid_block red)) (in_motion ?k ?b) ) )
+          (once (in_motion ?e ?s) )
+          (once (agent_holds ?x) )
+          (hold (adjacent ?e) )
         )
       )
     )
-    (forall (?a - cube_block ?s - color ?o - red_pyramid_block)
+  )
+)
+(:terminal
+  (>= 5 2 )
+)
+(:scoring
+  (count-once-per-objects preference1:yellow)
+)
+)
+
+
+(define (game game-id-14) (:domain few-objects-room-v1)
+(:setup
+  (game-optional
+    (not
+      (in ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?v - dodgeball ?n - (either block blue_cube_block))
+        (at-end
+          (in ?n)
+        )
+      )
+    )
+    (preference preference2
+      (exists (?f - hexagonal_bin)
+        (then
+          (hold-to-end (touch ?f) )
+          (hold (not (rug_color_under ?f ?f) ) )
+          (hold-while (not (and (not (and (not (and (agent_holds ?f) (not (agent_holds ?f) ) ) ) (adjacent floor) ) ) (on ?f) ) ) (and (and (same_object ?f) (touch ?f) ) (not (agent_holds ?f) ) ) )
+        )
+      )
+    )
+    (forall (?r - pillow)
       (and
-        (preference preferenceB
-          (exists (?n - dodgeball ?x - (either cd dodgeball golfball laptop) ?f - game_object ?j - doggie_bed)
-            (then
-              (once (in agent ?o) )
-              (once (and (in ?j) (in_motion ?j) (exists (?p - cube_block) (on desk) ) ) )
-              (once (in_motion ?o ?o) )
+        (preference preference3
+          (then
+            (once (and (in_motion ?r) (and (in_motion ?r ?r) (agent_holds ?r ?r) ) ) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (= (and 2 (* (count preference3:golfball:dodgeball) (count preference3:pink) )
+      (-
+        2
+        60
+      )
+    )
+    (+ (+ (external-forall-maximize 2 ) 4 )
+      (* 40 (count preference2:blue_dodgeball:hexagonal_bin) )
+    )
+  )
+)
+(:scoring
+  (count-once-per-objects preference3:yellow:basketball:red)
+)
+)
+
+
+(define (game game-id-15) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (exists (?y - (either cd dodgeball))
+      (and
+        (exists (?b - hexagonal_bin)
+          (forall (?g - block ?a - (either blue_cube_block pyramid_block))
+            (game-conserved
+              (in_motion ?a)
             )
           )
         )
-        (preference preferenceC
-          (then
-            (hold (or (and (rug_color_under ?o ?o) (in ?o) (and (and (agent_holds ?o) ) (in ?o) ) (and (not (in_motion ?o) ) (in_motion ?o ?o) ) ) (object_orientation ?o ?o) (same_color ?o front) ) )
-            (once (in_motion ?o ?o) )
-            (once (not (and (agent_holds upright) (on ?o ?o) ) ) )
-          )
-        )
-        (preference preferenceD
-          (at-end
-            (object_orientation green)
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 1 (count preferenceA:orange:basketball) )
-)
-(:scoring
-  (- 5 )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (game_start ?xxx ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once-measure (agent_holds ?xxx) (distance ?xxx room_center) )
-        (once (game_over ?xxx ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count preferenceA:yellow:pink) (external-forall-minimize (count-once-per-objects preferenceA:yellow_pyramid_block) ) )
-)
-(:scoring
-  (count preferenceA:beachball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (game-conserved
-      (on ?xxx)
-    )
-    (exists (?w - building ?h - (either pyramid_block book))
-      (game-optional
-        (not
-          (agent_holds ?h)
-        )
       )
     )
     (game-conserved
-      (on ?xxx)
+      (and
+        (in_motion ?xxx)
+        (agent_holds ?xxx)
+      )
+    )
+    (not
+      (game-conserved
+        (on ?xxx)
+      )
     )
   )
 )
 (:constraints
   (and
-    (forall (?r - ball ?e - tall_cylindrical_block)
-      (and
-        (preference preferenceA
-          (then
-            (once (not (agent_holds ?e) ) )
-            (hold (touch ?e ?e) )
-            (once (in ?e ?e) )
-            (once (and (exists (?n ?i - hexagonal_bin) (in_motion bed desk) ) (open ?e) ) )
-          )
-        )
-      )
-    )
-    (forall (?b - dodgeball)
-      (and
-        (preference preferenceB
-          (then
-            (hold (exists (?w - red_pyramid_block) (not (in_motion ?b) ) ) )
-            (once-measure (on ?b ?b) (distance ?b agent) )
-            (once (not (not (and (in_motion ?b brown) (in ?b) ) ) ) )
-          )
-        )
-      )
-    )
-    (preference preferenceC
+    (preference preference1
       (then
-        (once (in ?xxx ?xxx) )
-        (once (in agent) )
-        (once (< (distance ?xxx bed) (distance ?xxx ?xxx)) )
+        (hold-while (and (and (and (not (adjacent agent) ) ) (not (and (in_motion ?xxx ?xxx) (and (not (and (in_motion ?xxx) ) ) (> (distance ?xxx ?xxx) (distance 7 green_golfball)) ) ) ) ) (touch blue ?xxx) (or (in upright) (not (not (agent_holds ?xxx) ) ) ) ) (in_motion ?xxx) (and (agent_holds ?xxx) (in_motion ?xxx ?xxx ?xxx) ) )
+        (once (not (and (in_motion rug) ) ) )
+        (once (agent_holds ?xxx) )
+        (once (agent_holds ?xxx ?xxx) )
+      )
+    )
+    (forall (?t - hexagonal_bin)
+      (and
+        (preference preference2
+          (exists (?f - (either book wall))
+            (at-end
+              (in_motion ?f)
+            )
+          )
+        )
       )
     )
   )
 )
 (:terminal
-  (>= (count-total preferenceB:orange) (count preferenceA:basketball) )
+  (or
+    (<= (* (count-once-per-objects preference2:book) (count-measure preference2:pink:basketball) )
+      (count-once-per-objects preference2:red)
+    )
+    (>= (count preference1:brown:golfball) (count-unique-positions preference2:pink:basketball:basketball) )
+  )
 )
 (:scoring
-  (count preferenceA:dodgeball)
+  (* (count preference1:basketball) (count-once preference1:beachball) )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-16) (:domain many-objects-room-v1)
 (:setup
   (game-optional
-    (exists (?l - hexagonal_bin)
-      (on ?l ?l)
-    )
+    (adjacent ?xxx)
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (then
-        (hold (on agent) )
-        (once (and (agent_holds ?xxx ?xxx) (< 8 1) ) )
-        (once (and (adjacent ?xxx ?xxx) (agent_holds ?xxx ?xxx) (touch agent) (in ?xxx ?xxx) ) )
+    (preference preference1
+      (exists (?f - hexagonal_bin)
+        (then
+          (once (adjacent_side side_table) )
+          (once (not (agent_holds ?f) ) )
+          (forall-sequence (?q - cube_block)
+            (then
+              (once (and (agent_holds ?f ?f) (and (in_motion ?q ?q) ) ) )
+              (hold-while (not (in_motion agent) ) (adjacent ?q) (on agent ?q) (and (< 1 1) (not (>= 1 1) ) ) )
+              (once (on ?f ?q) )
+            )
+          )
+        )
+      )
+    )
+    (forall (?f - cube_block)
+      (and
+        (preference preference2
+          (exists (?s - (either pyramid_block dodgeball beachball))
+            (at-end
+              (in_motion bed ?s)
+            )
+          )
+        )
       )
     )
   )
 )
 (:terminal
-  (> (count preferenceA:green) 1 )
+  (and
+    (>= (count preference1:beachball) (count preference2:blue_pyramid_block) )
+    (or
+      (and
+        (>= (count-once-per-objects preference2:hexagonal_bin) 50 )
+        (>= (external-forall-minimize (* (count preference1:green:pink) (count-once-per-objects preference2) )
+          )
+          (-
+            (count-once-per-objects preference1:green)
+            (* 2 (count-once-per-objects preference1:beachball:yellow) )
+          )
+        )
+      )
+      (>= 15 (+ (count preference1:blue_dodgeball) )
+      )
+      (>= (count preference2:dodgeball:side_table:basketball) (count-once-per-objects preference2:beachball:basketball) )
+    )
+  )
+)
+(:scoring
+  (* (= (+ (count preference2:purple) 15 )
+      (count-measure preference2:yellow)
+    )
+    (count preference1:yellow_pyramid_block:book)
+  )
+)
+)
+
+
+(define (game game-id-17) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (not
+      (equal_z_position ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?h - game_object ?h - ball)
+        (then
+          (hold (and (< 4 1) (adjacent ?h) ) )
+          (hold-while (in_motion ?h) (not (and (in agent agent) ) ) )
+          (once (in_motion bed ?h) )
+          (once (in_motion agent ?h) )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?o ?j ?x ?i ?k ?l - (either yellow_cube_block bridge_block pyramid_block) ?l - dodgeball ?s - drawer)
+        (exists (?i - game_object)
+          (then
+            (hold-to-end (agent_holds ?i ?s) )
+            (once (on ?i) )
+            (hold-while (not (not (in_motion ?s) ) ) (agent_holds ?s ?s) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (or
+      (or
+        (>= 100 (count-once-per-objects preference2:purple) )
+        (>= (count-once preference1:dodgeball) (* (* 4 (count preference1:block) )
+            (* (count preference2:pink) (total-score) )
+          )
+        )
+      )
+    )
+    (>= (count-once-per-objects preference1:hexagonal_bin) (count preference2:basketball) )
+  )
+)
+(:scoring
+  (* (count-once preference1:pink) (* (- (count-once preference2:wall) )
+      (+ (count preference2:golfball) 2 )
+    )
+  )
+)
+)
+
+
+(define (game game-id-18) (:domain medium-objects-room-v1)
+(:setup
+  (exists (?k - pyramid_block ?c - game_object)
+    (game-optional
+      (in_motion agent ?c)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (and (agent_holds ?xxx) (or (not (adjacent ?xxx ?xxx) ) (and (in_motion ?xxx) (not (agent_holds back) ) ) ) ) )
+        (once (on ?xxx ?xxx) )
+        (forall-sequence (?e - building)
+          (then
+            (once (not (adjacent pink_dodgeball) ) )
+            (once-measure (and (between ?e ?e) ) (distance desk ?e) )
+            (once (in_motion ?e) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (< (* (count-once-per-objects preference1:golfball:basketball) 3 )
+    (count preference1:cube_block:golfball)
+  )
 )
 (:scoring
   3
@@ -1284,142 +1145,398 @@
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-19) (:domain few-objects-room-v1)
 (:setup
-  (exists (?s - block ?l - building)
-    (game-optional
-      (and
-        (not
-          (< 1 (distance 5 room_center))
-        )
-        (in_motion agent ?l)
-      )
+  (forall (?b - beachball)
+    (game-conserved
+      (agent_holds ?b ?b)
     )
   )
 )
 (:constraints
   (and
-    (forall (?p - dodgeball)
-      (and
-        (preference preferenceA
-          (exists (?g ?l ?u ?x ?d ?o - chair)
-            (at-end
-              (agent_holds ?g)
-            )
-          )
-        )
-        (preference preferenceB
-          (then
-            (once (agent_holds ?p agent) )
-            (once (in_motion ?p ?p) )
-            (once (in_motion ?p) )
-          )
-        )
-        (preference preferenceC
-          (exists (?m - block)
-            (at-end
-              (same_type ?m ?m)
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceD
-      (exists (?j - (either dodgeball dodgeball))
-        (then
-          (once (agent_holds ?j ?j) )
-          (once (agent_holds ?j) )
-          (any)
-        )
-      )
-    )
-    (preference preferenceE
+    (preference preference1
       (then
-        (hold (not (agent_holds ?xxx) ) )
-        (once (game_start ?xxx ?xxx) )
-        (once (object_orientation ?xxx) )
-      )
-    )
-    (forall (?v - hexagonal_bin)
-      (and
-        (preference preferenceF
-          (exists (?g - cube_block)
-            (exists (?n ?r ?q - cube_block ?l ?t - (either cylindrical_block hexagonal_bin laptop))
-              (then
-                (once (in_motion ?t) )
-                (once (in_motion ?l) )
-                (once (on ?t ?g) )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceG
-      (exists (?c - hexagonal_bin)
-        (then
-          (once (not (not (not (on agent) ) ) ) )
-          (once (or (not (and (in_motion ?c) (in_motion ?c ?c) (exists (?m - curved_wooden_ramp) (or (adjacent ?c) (in_motion bed ?m) ) ) ) ) (exists (?f - game_object) (in_motion ?c ?f ?c) ) ) )
-          (once (forall (?n - chair) (on ?n) ) )
-          (once (in ?c ?c) )
-        )
-      )
-    )
-    (forall (?p - dodgeball ?s - beachball)
-      (and
-        (preference preferenceH
-          (then
-            (hold (or (game_over agent ?s) (in ?s) ) )
-            (hold (agent_holds desk) )
-            (hold (= (building_size ) 0.5 (distance ?s agent)) )
-          )
-        )
-        (preference preferenceI
-          (exists (?q - ball)
-            (then
-              (once (in_motion ?q) )
-              (hold (in_motion pink ?s) )
-              (once (and (agent_holds ?s ?q) (not (and (> 1 3) ) ) ) )
-            )
-          )
-        )
+        (once (agent_holds ?xxx) )
+        (hold-while (touch ?xxx) (and (not (on green_golfball) ) (on ?xxx ?xxx) ) (and (in_motion ?xxx) (and (in ?xxx ?xxx) (and (between ?xxx ?xxx) (in_motion ?xxx) ) ) ) )
+        (once (and (not (agent_holds ?xxx) ) (in ?xxx) (is_setup_object ?xxx) ) )
       )
     )
   )
 )
 (:terminal
   (not
-    (>= (count preferenceA:doggie_bed) 5 )
+    (>= 5 1 )
   )
 )
 (:scoring
-  (total-time)
+  (external-forall-maximize
+    (count preference1:basketball:purple)
+  )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-20) (:domain many-objects-room-v1)
 (:setup
-  (game-optional
-    (is_setup_object ?xxx ?xxx)
+  (game-conserved
+    (agent_holds ?xxx ?xxx)
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?v - hexagonal_bin)
+    (preference preference1
+      (at-end
+        (in_motion ?xxx)
+      )
+    )
+    (preference preference2
+      (exists (?q - hexagonal_bin)
         (then
-          (hold (not (and (and (and (forall (?o - hexagonal_bin) (and (not (exists (?c - hexagonal_bin) (agent_holds ?c ?c) ) ) (in ?v ?o) (exists (?p - doggie_bed ?b - game_object) (not (object_orientation agent) ) ) (touch ?o) (agent_holds ?v ?v) (and (in ?o) (in upright floor ?o ?o) ) ) ) (faces ?v) ) (not (same_object agent) ) ) (agent_holds ?v ?v) ) ) )
-          (once (= 2 1) )
-          (hold (agent_holds ?v ?v) )
+          (once (> 1 (distance )) )
+          (once (adjacent ?q) )
+          (once (agent_holds ?q) )
         )
       )
     )
   )
 )
 (:terminal
-  (> (- 1 )
-    (count preferenceA:dodgeball)
+  (>= (count preference1:purple) (count-once-per-objects preference2:orange:hexagonal_bin) )
+)
+(:scoring
+  (and
+    9
+  )
+)
+)
+
+
+(define (game game-id-21) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?y - cube_block)
+      (or
+        (game-conserved
+          (and
+            (not
+              (on ?y ?y ?y)
+            )
+            (and
+              (not
+                (agent_holds ?y)
+              )
+              (agent_holds ?y ?y)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?w - chair ?l - (either main_light_switch))
+        (then
+          (any)
+          (hold (on floor ?l) )
+          (once (in_motion agent desk) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (> (count-overlapping preference1:dodgeball) (- (count-shortest preference1) )
+    )
+    (>= (count-once-per-objects preference1:dodgeball) 9 )
+  )
+)
+(:scoring
+  7
+)
+)
+
+
+(define (game game-id-22) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (not
+      (exists (?d - game_object)
+        (in_motion ?d ?d ?d)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?g - beachball ?f - dodgeball)
+        (exists (?j - building)
+          (exists (?a - curved_wooden_ramp ?e - desk_shelf)
+            (exists (?a - cube_block)
+              (then
+                (once (same_object ?e) )
+                (once (agent_holds ?a) )
+                (once (< 1 1) )
+                (once (and (adjacent ?e) (on ?e ?f) (not (not (in_motion ?a) ) ) (or (not (and (on ?e) (and (game_over ?a ?j) (on ?a brown) ) (agent_holds ?f) (and (and (and (agent_holds front) (agent_holds ?f) (above ?a) ) (agent_holds ?f ?a) (and (not (or (< (distance front_left_corner ?f) 7) (agent_holds desk ?f) ) ) (or (and (forall (?h - curved_wooden_ramp) (not (in ?j ?e) ) ) (touch ?a ?j) ) (adjacent ?a ?f) ) ) ) (not (agent_holds floor ?a) ) ) (= (distance ) (distance ?a ?a) (distance ?f ?f)) (in ?a) (in upright floor ?f ?f) (faces ?j) ) ) (not (same_object agent) ) ) ) )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference2
+      (at-end
+        (on ?xxx ?xxx)
+      )
+    )
+    (forall (?p - dodgeball)
+      (and
+        (preference preference3
+          (at-end
+            (in_motion ?p agent)
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference1:dodgeball) (count preference3:dodgeball) )
+)
+(:scoring
+  (= (count preference2:golfball) (count preference3:brown) )
+)
+)
+
+
+(define (game game-id-23) (:domain medium-objects-room-v1)
+(:setup
+  (exists (?x - (either key_chain laptop) ?n - tall_cylindrical_block ?o - color)
+    (not
+      (and
+        (game-optional
+          (< (distance ?o) 0)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?z - dodgeball)
+      (and
+        (preference preference1
+          (exists (?g - (either book blue_cube_block))
+            (then
+              (once (on ?z ?z) )
+              (hold (not (in_motion ?z) ) )
+              (once (not (in_motion ?g ?z) ) )
+            )
+          )
+        )
+      )
+    )
+    (forall (?d - dodgeball)
+      (and
+        (preference preference2
+          (at-end
+            (agent_holds ?d)
+          )
+        )
+      )
+    )
+    (preference preference3
+      (then
+        (once (same_color ?xxx agent) )
+        (hold-while (not (agent_holds ?xxx) ) (in ?xxx ?xxx) (exists (?y - (either cube_block)) (agent_holds ?y) ) )
+        (once (not (not (not (and (not (touch ?xxx ?xxx) ) (same_color ?xxx) ) ) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (> 3 (* (* 3 (count-once-per-external-objects preference1:top_drawer) (+ (count preference2:pink) 5 )
+        7
+        (external-forall-maximize
+          (* (count-once preference3:blue_cube_block) (+ (external-forall-maximize (count-once-per-objects preference2:pink) ) (* 2 (count preference2:red) )
+            )
+            (count-once preference3:block)
+          )
+        )
+        (count preference2:dodgeball)
+      )
+      (count preference1:pink)
+    )
+  )
+)
+(:scoring
+  300
+)
+)
+
+
+(define (game game-id-24) (:domain few-objects-room-v1)
+(:setup
+  (forall (?p - hexagonal_bin)
+    (forall (?w - hexagonal_bin)
+      (exists (?e - watch)
+        (or
+          (forall (?f - cube_block ?v - dodgeball)
+            (forall (?s - hexagonal_bin)
+              (and
+                (game-conserved
+                  (agent_holds ?p)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?g - doggie_bed)
+        (exists (?y - dodgeball)
+          (exists (?l - (either cellphone dodgeball) ?s - (either cylindrical_block flat_block pyramid_block))
+            (exists (?x - (either dodgeball book) ?c - (either cd pyramid_block doggie_bed))
+              (exists (?v - wall)
+                (exists (?k - cube_block ?w - dodgeball)
+                  (exists (?b - hexagonal_bin ?j - chair)
+                    (exists (?p ?r - cube_block ?k - (either laptop pillow blue_cube_block) ?x - dodgeball ?u - wall)
+                      (at-end
+                        (in_motion ?y)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference2
+      (then
+        (hold (agent_holds ?xxx) )
+      )
+    )
+    (preference preference3
+      (then
+        (once (agent_holds ?xxx) )
+        (once (agent_holds ?xxx) )
+        (once (not (in_motion ?xxx) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference3:pink) (* (/ 0 50 ) (or (external-forall-maximize (+ (total-time) (total-score) )
+        )
+        3
+        (* (count-once-per-objects preference2:tan) (count preference2:yellow_cube_block) 2 )
+      )
+    )
+  )
+)
+(:scoring
+  (* (+ (* (total-time) (* (count preference2:blue_pyramid_block) (* (* (count-once preference1:beachball) (* (* (count preference2:yellow) (count preference3:yellow:hexagonal_bin) )
+                (count preference3:book)
+              )
+            )
+            0
+          )
+        )
+      )
+      300
+      (count preference3:hexagonal_bin)
+    )
+    (count preference2:dodgeball)
+  )
+)
+)
+
+
+(define (game game-id-25) (:domain medium-objects-room-v1)
+(:setup
+  (game-optional
+    (>= (distance ?xxx ?xxx) 6)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?e - dodgeball)
+        (then
+          (once (and (not (and (not (not (adjacent ?e) ) ) (adjacent pillow) ) ) (same_type ?e) ) )
+          (once (forall (?v - color) (exists (?o - curved_wooden_ramp) (agent_holds ?v) ) ) )
+          (once (adjacent ?e desk) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (<= 12 (= 10 (+ (* (* (* 10 10 )
+            (count-once-per-objects preference1:pink)
+          )
+          (count-same-positions preference1:book)
+          (* (count preference1:yellow) (count-measure preference1:dodgeball) )
+          (count-once-per-external-objects preference1:basketball)
+          (not
+            (total-score)
+          )
+          5
+        )
+        (count-longest preference1:dodgeball:pink_dodgeball)
+      )
+      20
+    )
+  )
+)
+(:scoring
+  (* 6 3 )
+)
+)
+
+
+(define (game game-id-26) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?y - hexagonal_bin)
+    (and
+      (game-optional
+        (in_motion agent)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (touch ?xxx) )
+        (once (not (touch ?xxx ?xxx) ) )
+        (once-measure (adjacent ?xxx) (distance 10 10) )
+      )
+    )
+  )
+)
+(:terminal
+  (and
+    (or
+      (>= 10 (count preference1:pink) )
+      (>= (* (* 15 3 (count preference1:pink_dodgeball) )
+          (count preference1:dodgeball)
+        )
+        (total-time)
+      )
+    )
   )
 )
 (:scoring
@@ -1428,341 +1545,131 @@
 )
 
 
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (not
-      (not
-        (and
-          (not
-            (not
-              (< (distance ?xxx ?xxx) (distance side_table ?xxx))
-            )
-          )
-          (not
-            (and
-              (and
-                (and
-                  (in_motion ?xxx)
-                  (agent_holds agent)
-                )
-                (agent_holds ?xxx ?xxx)
-              )
-              (on ?xxx)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?u - block)
-      (and
-        (preference preferenceA
-          (then
-            (once (agent_holds rug) )
-            (once (not (agent_holds ?u) ) )
-            (once (in_motion agent yellow) )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (same_color ?xxx ?xxx) )
-        (once (on ?xxx) )
-        (once (agent_holds floor) )
-      )
-    )
-  )
-)
-(:terminal
-  (> 2 4 )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
+(define (game game-id-27) (:domain few-objects-room-v1)
 (:setup
   (and
-    (exists (?q - block)
-      (exists (?f - dodgeball ?p - hexagonal_bin ?k - ball)
-        (game-optional
-          (not
-            (same_type ?k)
-          )
-        )
-      )
-    )
-    (exists (?o - (either teddy_bear pen))
-      (game-conserved
-        (and
-          (not
-            (touch ?o ?o)
-          )
-          (same_color ?o)
-        )
-      )
-    )
-    (game-conserved
-      (exists (?m - hexagonal_bin)
-        (not
-          (agent_holds ?m ?m)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?x - color)
-        (exists (?j - block ?k - dodgeball)
-          (exists (?t - dodgeball)
-            (exists (?y - cube_block)
-              (then
-                (once (and (in_motion ?x) (not (adjacent ?t) ) (faces ?y) ) )
-                (once (agent_holds rug ?y) )
-                (once (in_motion ?y) )
-              )
-            )
-          )
-        )
-      )
-    )
-    (forall (?q ?y - (either key_chain golfball tall_cylindrical_block teddy_bear curved_wooden_ramp cube_block main_light_switch))
-      (and
-        (preference preferenceB
-          (exists (?e - dodgeball)
-            (then
-              (hold (in_motion ?e agent) )
-              (once (agent_holds rug) )
-              (hold-while (on ?y ?q) (in_motion ?y) )
-            )
-          )
-        )
-      )
-    )
-    (forall (?a - red_dodgeball ?m - wall ?u - hexagonal_bin)
-      (and
-        (preference preferenceC
-          (exists (?z - game_object)
-            (then
-              (once (and (agent_holds door floor) (in_motion ?u ?z) ) )
-              (once (in_motion blue) )
-              (once (same_color ?z ?u pillow ?z) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (and
-    (>= (* (count preferenceB:pink:green:orange) (count-once-per-objects preferenceC:yellow_cube_block) )
-      50
-    )
-    (>= 2 (total-time) )
-    (< 30 (count preferenceC:dodgeball) )
-  )
-)
-(:scoring
-  (* (* (- 2 )
-    )
-    (* (* (count-once preferenceA:golfball) (count-once-per-objects preferenceA:blue_dodgeball:pink) )
-      (count-unique-positions preferenceB:dodgeball)
-      10
-      (count preferenceB:green:golfball:red_pyramid_block)
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?b - cube_block)
-    (game-optional
-      (not
-        (< 1 (distance desk room_center))
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (in_motion agent) )
-        (once-measure (not (agent_holds ?xxx) ) (distance room_center desk) )
-        (once (in_motion floor) )
-      )
-    )
-  )
-)
-(:terminal
-  (> (= (/ 7 (total-score) ) 3 )
-    (not
-      8
-    )
-  )
-)
-(:scoring
-  (count-once preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?s - color)
-    (game-conserved
-      (in_motion ?s top_shelf)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?k - shelf)
-        (exists (?b - (either dodgeball triangle_block pillow) ?v - triangular_ramp)
-          (exists (?w - building)
-            (then
-              (once (adjacent ?w) )
-              (once (not (and (not (not (adjacent ?w) ) ) (adjacent pillow) ) ) )
-              (hold (not (and (= (distance ?w) (distance ?v ?w)) (agent_holds ?w) ) ) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (* (external-forall-maximize 4 ) (count preferenceA:pink:dodgeball) )
-      6
-    )
-  )
-)
-(:scoring
-  (* (count preferenceA:golfball:doggie_bed) )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (on ?xxx ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?y - cube_block)
-        (then
-          (hold (adjacent ?y top_drawer ?y) )
-          (hold (in_motion ?y ?y) )
-          (once (in_motion ?y) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (and (on door) (agent_holds ?xxx) ) )
-        (once (in ?xxx ?xxx) )
-        (once (exists (?k - (either pyramid_block alarm_clock)) (faces ?k) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (< 7 5 )
-)
-(:scoring
-  (total-score)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (in_motion green_golfball)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?p - hexagonal_bin)
-        (then
-          (once (not (on ?p) ) )
-          (once (in_motion desktop ?p ?p) )
-          (once (agent_holds ?p ?p) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (adjacent_side ?xxx left) )
-        (once (adjacent ?xxx) )
-        (once (in_motion ?xxx ?xxx) )
-      )
-    )
-    (forall (?b - golfball)
-      (and
-        (preference preferenceC
-          (exists (?k - cube_block)
-            (exists (?x - golfball ?t - dodgeball)
-              (exists (?x - (either pyramid_block pencil))
-                (then
-                  (once (or (in bed) (in_motion ?t) ) )
-                  (hold (same_color ?t) )
-                  (once (and (not (not (adjacent rug) ) ) (and (and (in ?b) (not (and (exists (?f - dodgeball) (in_motion ?k ?f) ) (in_motion ?x) ) ) (in_motion ?x west_wall) ) (adjacent ?x ?t) (on ?b) ) (not (in_motion ?t ?t) ) (not (touch ?x ?x) ) (in ?b ?b) (not (in_motion desk) ) (agent_holds door ?t) (agent_holds ?t) ) )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (+ (count-once-per-objects preferenceA:purple) (* (count-once-per-objects preferenceC:cylindrical_block) 12 3 (count-overlapping preferenceA:basketball) (* (count preferenceA:golfball) (* (not 10 ) (count-once-per-objects preferenceC:golfball) )
-        )
-        (or
-          (count preferenceA:pink_dodgeball)
-          (count preferenceC:yellow_cube_block:beachball)
-        )
-      )
-    )
-    8
-  )
-)
-(:scoring
-  (< 5 (* (count-once preferenceB:red:beachball) (* (count-once preferenceA:pink) (count-once-per-external-objects preferenceB:pink) )
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?p - game_object)
-    (forall (?l - (either alarm_clock cylindrical_block))
+    (and
       (game-optional
+        (in_motion ?xxx)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (forall (?m ?i ?b ?f - game_object ?x - doggie_bed ?p - game_object)
+        (then
+          (once (not (on rug) ) )
+          (once (agent_holds sideways) )
+          (hold-while (and (agent_holds ?p) (on ?p ?p) (exists (?m ?a ?r ?c - (either flat_block mug alarm_clock)) (on ?p ?a) ) ) (and (on ?p ?p) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (* (count-overlapping preference1:cube_block) (= (* (* (count preference1:dodgeball) (count-once-per-objects preference1:pink) )
+          5
+        )
+        15
+      )
+      (count-once preference1:hexagonal_bin:cube_block)
+      (external-forall-maximize
+        (* (count preference1:orange) 8 )
+      )
+      6
+      4
+    )
+    (count preference1:basketball)
+  )
+)
+(:scoring
+  (* 2 5 )
+)
+)
+
+
+(define (game game-id-28) (:domain medium-objects-room-v1)
+(:setup
+  (game-optional
+    (and
+      (not
         (and
-          (in_motion ?p)
-          (agent_holds ?l)
+          (agent_holds ?xxx)
+          (not
+            (in_motion ?xxx ?xxx)
+          )
+        )
+      )
+      (agent_holds ?xxx)
+      (on desk)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?k - drawer ?x - hexagonal_bin ?i - building)
+      (and
+        (preference preference1
+          (then
+            (hold (agent_holds agent ?i) )
+            (hold (in_motion ?i) )
+            (hold (in ?i) )
+          )
+        )
+        (preference preference2
+          (then
+            (once (game_over ?i) )
+            (hold (object_orientation ?i) )
+            (once (not (not (not (and (and (not (and (in_motion ?i) (not (in_motion desk ?i) ) (exists (?s - curved_wooden_ramp) (and (and (and (exists (?z - hexagonal_bin) (agent_holds ?z pink_dodgeball) ) (in_motion bed) ) ) (and (and (> 5 1) (and (and (adjacent ?s ?i) (not (on ?s) ) ) (not (agent_holds ?s) ) (on ?s) ) (in ?s ?i) ) (in_motion ?s ?i) ) ) ) (agent_holds ?i) (and (agent_holds ?i) (not (and (agent_holds pink desk) (in ?i ?i) ) ) (not (and (in_motion ?i) ) ) ) (in ?i ?i) (agent_holds ?i ?i) ) ) (in_motion door) ) (not (in_motion agent ?i) ) ) ) ) ) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (exists (?c - (either laptop pen cellphone))
+        (exists (?u - hexagonal_bin ?w - game_object ?o - pyramid_block)
+          (then
+            (once (>= (distance ?c ?o) (distance ?c side_table)) )
+            (once (adjacent ?c) )
+            (hold (adjacent bed) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference2:dodgeball) (* (- 2 )
+      5
+      15
+    )
+  )
+)
+(:scoring
+  (count-once-per-objects preference1:side_table)
+)
+)
+
+
+(define (game game-id-29) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?j - shelf)
+    (exists (?m - dodgeball)
+      (game-conserved
+        (and
+          (and
+            (not
+              (touch ?m)
+            )
+            (and
+              (on ?j)
+              (in_motion ?j)
+            )
+            (< (distance agent ?j) 1)
+          )
+          (in_motion ?j)
         )
       )
     )
@@ -1770,17 +1677,81 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (at-end
-        (not
-          (and
-            (on ?xxx)
-            (and
-              (adjacent ?xxx ?xxx)
-              (and
-                (on ?xxx)
-                (not
-                  (in_motion ?xxx)
+    (forall (?y - dodgeball)
+      (and
+        (preference preference1
+          (then
+            (hold (on ?y bed) )
+            (once (exists (?q - hexagonal_bin) (in_motion ?q) ) )
+            (forall-sequence (?t - game_object)
+              (then
+                (once (and (>= (distance 7 desk) (distance ?y ?y)) (on ?y) ) )
+                (once-measure (in_motion agent) (distance back room_center) )
+                (hold (not (on ?t ?y) ) )
+              )
+            )
+            (once (on ?y) )
+          )
+        )
+        (preference preference2
+          (then
+            (once (agent_holds ?y ?y) )
+            (hold (not (not (not (and (in ?y ?y) (and (and (adjacent pink_dodgeball ?y) (not (not (adjacent pink) ) ) ) (game_start ?y) (in_motion ?y floor) (agent_holds ?y) ) ) ) ) ) )
+            (once (in_motion ?y ?y) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (> (count preference2:blue_cube_block) (count-shortest preference1:dodgeball) )
+)
+(:scoring
+  (count preference1:beachball)
+)
+)
+
+
+(define (game game-id-30) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (forall (?d - ball ?g - teddy_bear)
+      (game-conserved
+        (exists (?v - hexagonal_bin)
+          (touch ?g ?g ?v)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?w - game_object)
+      (and
+        (preference preference1
+          (exists (?x - wall)
+            (then
+              (once (in_motion ?w ?w) )
+              (once (in_motion ?w ?x) )
+              (once (not (agent_holds top_shelf ?w) ) )
+            )
+          )
+        )
+      )
+    )
+    (forall (?y - (either game_object lamp cellphone) ?v - building)
+      (and
+        (preference preference2
+          (exists (?y - dodgeball ?k - ball)
+            (exists (?z - (either blue_cube_block credit_card laptop) ?u - game_object)
+              (exists (?i - dodgeball)
+                (exists (?s - beachball ?x - ball ?r - cube_block)
+                  (then
+                    (once (not (in_motion ?i) ) )
+                    (hold (agent_holds ?u) )
+                    (once (agent_holds ?k ?r) )
+                  )
                 )
               )
             )
@@ -1788,52 +1759,86 @@
         )
       )
     )
-    (forall (?g - hexagonal_bin ?b - ball)
-      (and
-        (preference preferenceB
-          (exists (?r - dodgeball ?f - hexagonal_bin)
-            (then
-              (once (not (not (and (agent_holds pink desk) (in ?b ?f) ) ) ) )
-              (once (and (in_motion ?f ?b) (agent_holds ?f) ) )
-              (once (not (same_type ?f) ) )
-              (once (not (in_motion agent ?b) ) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (exists (?z - pillow)
+    (preference preference3
+      (exists (?r - hexagonal_bin)
         (then
-          (once (adjacent_side ?z) )
-          (once (object_orientation ?z) )
+          (hold (or (not (in ?r) ) (above ?r ?r) (exists (?x - (either dodgeball desktop)) (in ?r) ) (in_motion ?r ?r) ) )
+          (once (adjacent agent ?r) )
+          (once (is_setup_object ?r) )
         )
       )
     )
   )
 )
 (:terminal
-  (or
-    (= (+ (count-once-per-objects preferenceA:purple) (count preferenceC:cube_block:golfball) )
-      3
+  (>= (count-total preference1:pyramid_block) (* (+ 3 (* (* (+ (count-once-per-objects preference1:blue) (count preference1:hexagonal_bin) )
+            (count-once-per-external-objects preference2:basketball)
+          )
+          (+ (count-once preference2:white) (* (count-once-per-external-objects preference3:yellow_cube_block) 10 (count preference2:blue_dodgeball) )
+          )
+          (count preference2:basketball:dodgeball:dodgeball)
+        )
+        (count-once preference1:book:blue:beachball)
+        (* 20 (count preference2:golfball) )
+      )
+      (count-once-per-objects preference2:green)
     )
-    (>= (and 2 15 8 ) 1 )
-    (>= 18 (count preferenceC:dodgeball) )
   )
 )
 (:scoring
-  (count-once-per-external-objects preferenceB:basketball)
+  (* 50 (external-forall-maximize (count-once-per-objects preference2:basketball) ) )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-31) (:domain few-objects-room-v1)
 (:setup
-  (exists (?f - ball)
-    (forall (?u ?h - hexagonal_bin)
+  (forall (?j - game_object)
+    (exists (?x - desk_shelf)
+      (game-optional
+        (in_motion ?x ?x)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (not (agent_holds ?xxx door) ) )
+        (once (not (on agent ?xxx) ) )
+        (once (and (on ?xxx) (not (agent_holds brown) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 5 4 )
+)
+(:scoring
+  300
+)
+)
+
+
+(define (game game-id-32) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (forall (?v - (either tall_cylindrical_block yellow_cube_block) ?k - dodgeball)
       (game-conserved
-        (forall (?w - game_object)
-          (in_motion ?f ?f)
+        (on rug)
+      )
+    )
+    (game-conserved
+      (and
+        (not
+          (in_motion ?xxx ?xxx)
+        )
+        (and
+          (not
+            (agent_holds ?xxx ?xxx)
+          )
+          (faces ?xxx)
         )
       )
     )
@@ -1841,13 +1846,164 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?g - ball)
-        (exists (?x - ball)
+    (forall (?e - block)
+      (and
+        (preference preference1
+          (exists (?q - hexagonal_bin ?p - cube_block)
+            (exists (?r - teddy_bear)
+              (forall (?m - dodgeball)
+                (exists (?o - wall)
+                  (exists (?f - triangular_ramp)
+                    (then
+                      (once (agent_holds ?e) )
+                      (once (on pillow) )
+                      (once (on ?m ?m) )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (forall (?a - hexagonal_bin)
+      (and
+        (preference preference2
           (then
-            (hold (in_motion ?g) )
-            (once (in_motion ?x) )
-            (hold (in_motion ?x) )
+            (once (> (distance ?a ?a) 0) )
+            (hold (in ?a) )
+            (hold-while (exists (?b - building) (adjacent ?b) ) (agent_holds ?a ?a) )
+          )
+        )
+        (preference preference3
+          (at-end
+            (> (distance ?a 9) 2)
+          )
+        )
+        (preference preference4
+          (exists (?c - chair)
+            (exists (?p - ball)
+              (forall (?u - hexagonal_bin ?g - doggie_bed)
+                (exists (?i - chair)
+                  (then
+                    (once (agent_holds ?i ?g) )
+                    (once (exists (?q - chair ?n - block) (in_motion ?n) ) )
+                    (hold (and (touch ?c) (< 9 2) (or (agent_holds ?p ?i) (and (< (distance ?i ?a) (distance_side ?a ?a)) (agent_holds ?a) ) ) (in_motion ?a) (adjacent ?i) (agent_holds ?i ?i) (agent_holds ?i ?c) (not (< (distance ?g ?c) 1) ) (and (not (and (is_setup_object ?a) (touch agent) ) ) (agent_holds ?i) ) (and (and (and (touch ?a) (agent_holds pink) ) (in_motion ?g) ) (not (and (in pillow ?a) (agent_holds ?a ?c) (agent_holds ?i) ) ) (in_motion ?g) ) (in_motion ?i ?g) (agent_holds ?c sideways desk) ) )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference5
+      (then
+        (once (on ?xxx) )
+        (once (in_motion ?xxx) )
+        (once (in_motion desk) )
+      )
+    )
+  )
+)
+(:terminal
+  (and
+    (or
+      (= 3 40 )
+    )
+    (not
+      (or
+        (>= (external-forall-maximize (count preference5:dodgeball) ) (count-once-per-objects preference4:basketball) )
+        (>= 1 (* 10 (count preference4:dodgeball:yellow:pink) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (* (* (count-once-per-objects preference5:dodgeball) (count-once-per-external-objects preference5:beachball) )
+    (* 6 (count-once-per-objects preference1:beachball:pink) )
+    3
+  )
+)
+)
+
+
+(define (game game-id-33) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?n - game_object ?c - chair ?n - block)
+    (game-optional
+      (adjacent_side ?n ?n)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (on desk ?xxx) )
+        (forall-sequence (?l - dodgeball)
+          (then
+            (hold (not (agent_holds bed ?l) ) )
+            (hold (agent_holds ?l) )
+            (hold-while (exists (?u - hexagonal_bin) (in ?u) ) (in_motion ?l) )
+          )
+        )
+        (once (agent_holds ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (> (external-forall-maximize (count preference1:triangle_block) ) (count-once-per-objects preference1:pyramid_block) )
+)
+(:scoring
+  (count-overlapping preference1:beachball:pink)
+)
+)
+
+
+(define (game game-id-34) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (and
+      (and
+        (game-conserved
+          (and
+            (agent_holds agent ?xxx)
+            (in_motion ?xxx)
+            (in_motion ?xxx)
+          )
+        )
+        (exists (?n - (either flat_block desktop))
+          (exists (?y - game_object)
+            (game-conserved
+              (and
+                (not
+                  (equal_z_position ?y ?y)
+                )
+                (in_motion ?n)
+              )
+            )
+          )
+        )
+        (game-optional
+          (< (distance room_center ?xxx) 1)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?a - (either golfball dodgeball))
+        (exists (?v ?k - chair)
+          (then
+            (any)
+            (once (agent_holds ?a ?k) )
+            (once (not (in_motion ?v ?v) ) )
           )
         )
       )
@@ -1855,1123 +2011,627 @@
   )
 )
 (:terminal
-  (= (total-score) 6 )
+  (and
+    (>= (count-once-per-objects preference1:basketball) (count-once-per-objects preference1:blue_cube_block) )
+    (> 4 5 )
+    (or
+      (and
+        (< 20 1 )
+        (>= (count-once-per-objects preference1:golfball) 10 )
+        (<= 12 10 )
+      )
+      (and
+        (>= 2 (count-unique-positions preference1:pink) )
+        (or
+          (and
+            (<= 10 (count preference1:doggie_bed:beachball) )
+            (>= (total-time) (count-same-positions preference1) )
+          )
+          (>= (* 2 (+ 10 (* 3 (count preference1:orange) )
+              )
+            )
+            (<= 2 (/ (* (count preference1:dodgeball) (count-shortest preference1:rug) )
+                (external-forall-maximize
+                  (count-once preference1:beachball)
+                )
+              )
+            )
+          )
+          (or
+            (and
+              (> (count-measure preference1:triangle_block:basketball) (count-once-per-objects preference1:basketball:alarm_clock:beachball) )
+            )
+          )
+        )
+      )
+    )
+  )
 )
 (:scoring
-  10
+  (count-once preference1:pink_dodgeball)
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-35) (:domain few-objects-room-v1)
+(:setup
+  (forall (?x - cube_block)
+    (game-conserved
+      (in ?x)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?f - hexagonal_bin)
+      (and
+        (preference preference1
+          (then
+            (once (in ?f) )
+            (hold (in ?f ?f) )
+            (once-measure (in_motion ?f ?f) (distance ?f front_left_corner) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (not (count-once-per-external-objects preference1:blue_cube_block) ) (count preference1:dodgeball) )
+)
+(:scoring
+  (* (count-once preference1:doggie_bed) (count-once-per-objects preference1:red:pink_dodgeball) )
+)
+)
+
+
+(define (game game-id-36) (:domain few-objects-room-v1)
 (:setup
   (game-conserved
-    (agent_holds ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?w - doggie_bed)
-        (at-end
-          (and
-            (object_orientation back ?w)
-            (on ?w)
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (not (exists (?n - cube_block) (< (distance ) 3) ) ) )
-        (once (in_motion ?xxx ?xxx) )
-        (once (in ?xxx) )
-      )
-    )
-    (preference preferenceC
-      (exists (?z - building)
-        (at-end
-          (not
-            (in_motion ?z)
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-once-per-objects preferenceA:beachball) (count preferenceA:pink) )
-)
-(:scoring
-  (total-score)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (and
-      (adjacent pink_dodgeball ?xxx)
-      (not
-        (not
-          (adjacent pink)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?w - block)
-      (and
-        (preference preferenceA
-          (then
-            (once (< 6 1) )
-            (once (and (not (agent_holds ?w ?w) ) (agent_holds ?w ?w) ) )
-            (once (exists (?m - building) (on ?w ?m) ) )
-          )
-        )
-        (preference preferenceB
-          (then
-            (once-measure (in_motion ?w ?w) (distance 2 door) )
-            (once (not (same_type rug) ) )
-            (once (same_color ?w ?w) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-once-per-objects preferenceA:side_table) (* (count-once-per-objects preferenceB:dodgeball) 10 )
-  )
-)
-(:scoring
-  (* (count-once preferenceB:beachball) (* (count preferenceB:orange:beachball) (< 7 6 )
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?m ?o ?f - teddy_bear ?z - wall)
-    (exists (?n - (either pyramid_block alarm_clock))
-      (exists (?m - dodgeball ?l - hexagonal_bin)
-        (game-optional
-          (and
-            (and
-              (same_color ?n)
-              (< 1 (distance ))
-              (exists (?r - game_object)
-                (< 1 1)
-              )
-              (in_motion ?l agent)
-            )
-            (on ?z right)
-            (not
-              (agent_holds ?l)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?y - block ?t - drawer ?h - book ?z - hexagonal_bin ?w - ball)
-      (and
-        (preference preferenceA
-          (exists (?k - drawer ?f ?q ?j - triangular_ramp)
-            (exists (?t - dodgeball)
-              (then
-                (hold (and (agent_holds rug) (agent_holds ?t) ) )
-                (once (< 2 4) )
-                (once (on ?f ?t) )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (and
-    (and
-      (>= 5 (* 20 5 )
-      )
-      (>= 3 (+ 9 (* (count preferenceA:yellow:dodgeball) (+ 10 (count preferenceA:dodgeball) (* 3 (count-once-per-objects preferenceA:blue_cube_block) )
-              10
-              9
-              8
-              (* (+ (* (count preferenceA:golfball) (count-once-per-objects preferenceA:blue_pyramid_block) )
-                  (count-once preferenceA:basketball:dodgeball)
-                )
-                180
-              )
-              (count preferenceA:dodgeball)
-              (count preferenceA:basketball)
-              5
-              5
-              (count-same-positions preferenceA:dodgeball:dodgeball)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:scoring
-  3
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (game-conserved
-      (= 8 (distance ?xxx agent desk))
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (in upright) )
-        (once (and (in_motion ?xxx) (touch ?xxx) ) )
-        (hold (adjacent ?xxx back) )
-      )
-    )
-    (preference preferenceB
-      (exists (?z - ball)
-        (then
-          (hold-while (and (in ?z) (and (and (and (< (distance ?z) (distance ?z ?z)) (on ?z ?z) ) (in ?z ?z) ) (and (in_motion left ?z) (not (between ?z) ) ) (in agent) ) (and (on ?z) (and (same_type ?z ?z) (not (and (and (in desk) (on ?z) (agent_holds ?z) ) (on pillow) (not (on ?z ?z) ) (and (and (exists (?j - dodgeball) (adjacent ?z ?j) ) (agent_holds ?z ?z) ) (and (> 2 (distance room_center door)) (in ?z) ) (and (and (rug_color_under ?z) (adjacent ?z) ) (> (distance ?z 9) 2) ) ) (in_motion pink) (in ?z) (and (adjacent ?z) (and (touch ?z ?z) ) ) ) ) ) ) (adjacent_side ?z) ) (not (same_color ?z) ) )
-          (once (same_object ?z ?z agent) )
-          (once (not (in ?z ?z) ) )
-        )
-      )
-    )
-    (preference preferenceC
-      (then
-        (hold (agent_holds bed) )
-        (once (in floor ?xxx) )
-        (once (not (not (= 2 2) ) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (not
-    (> (* (count preferenceC:dodgeball) (external-forall-maximize (count preferenceC:beachball) ) )
-      (count-once-per-objects preferenceC:beachball:pink_dodgeball)
-    )
-  )
-)
-(:scoring
-  (count preferenceB)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (on front)
-  )
-)
-(:constraints
-  (and
-    (forall (?k - dodgeball)
-      (and
-        (preference preferenceA
-          (then
-            (once (faces ?k ?k) )
-            (once (agent_holds ?k ?k ?k) )
-            (once (in_motion ?k) )
-          )
-        )
-        (preference preferenceB
-          (then
-            (once (and (touch ?k) (agent_holds pink) ) )
-            (hold-while (forall (?s - (either cellphone desktop mug dodgeball yellow desktop dodgeball)) (adjacent ?s) ) (in_motion ?k) (on ?k) )
-            (once (and (in ?k) (and (on desk floor) (in ?k) ) ) )
-          )
-        )
-      )
-    )
-    (forall (?o - golfball)
-      (and
-        (preference preferenceC
-          (exists (?a - game_object)
-            (exists (?t - doggie_bed)
-              (exists (?h - drawer)
-                (then
-                  (hold (in_motion agent ?a) )
-                  (once (and (agent_holds ?a) (on ?o) ) )
-                  (hold (agent_holds ?o ?o) )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (* 7 5 (count preferenceB:blue_dodgeball) (count-once-per-objects preferenceC:dodgeball:basketball) 3 (+ (+ (count preferenceA:yellow) (= 5 4 )
-        )
-        (count-once-per-external-objects preferenceC:basketball)
-      )
-    )
-    (count-unique-positions preferenceA:red)
-  )
-)
-(:scoring
-  3
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
     (on ?xxx)
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?r - dodgeball)
+    (preference preference1
+      (exists (?w - hexagonal_bin)
         (then
-          (once (agent_holds ?r ?r) )
-          (hold (in_motion ?r ?r) )
-          (hold-while (agent_holds ?r ?r) (agent_holds ?r) )
+          (once-measure (object_orientation ?w) (distance 4 ?w ?w) )
+          (once (touch ?w ?w) )
+          (hold-while (in_motion bed agent) (not (not (equal_z_position ?w) ) ) (and (not (and (in ?w ?w) (agent_holds ?w) ) ) (rug_color_under ?w ?w) ) )
         )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (agent_holds ?xxx) )
-        (hold (agent_holds desk ?xxx) )
-        (once (not (in_motion ?xxx) ) )
-      )
-    )
-    (preference preferenceC
-      (then
-        (once (on ?xxx ?xxx) )
-        (once (agent_holds ?xxx ?xxx) )
-        (once (agent_holds bed) )
       )
     )
   )
 )
 (:terminal
-  (> 30 (count preferenceB:cube_block:basketball:golfball) )
+  (or
+    (>= (+ 15 15 )
+      5
+    )
+  )
 )
 (:scoring
-  (count preferenceA:basketball)
+  6
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-37) (:domain many-objects-room-v1)
 (:setup
-  (exists (?h - drawer)
+  (exists (?x - hexagonal_bin)
     (game-conserved
-      (and
-        (in_motion ?h ?h)
-        (in_motion green_golfball)
+      (not
+        (on desktop front)
       )
     )
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?u ?o - (either cd golfball blue_cube_block yellow_cube_block))
-        (exists (?d - hexagonal_bin)
-          (then
-            (once (not (and (in desk) (and (toggled_on ?d) (not (touch ?o ?d) ) ) ) ) )
-            (hold-while (agent_holds ?o) (or (not (in_motion ?d ?u) ) ) (and (exists (?i - block) (not (and (agent_holds ?o ?i) (in_motion ?u ?o) ) ) ) (broken ?u) (in ?u) ) )
-            (once (not (not (and (in ?d yellow) (agent_holds ?d) ) ) ) )
+    (forall (?z - (either cd teddy_bear blue_cube_block))
+      (and
+        (preference preference1
+          (forall (?t - ball)
+            (exists (?a - hexagonal_bin)
+              (exists (?e - cube_block)
+                (then
+                  (hold (and (in_motion ?a) (agent_holds ?a) ) )
+                  (once (and (and (on ?a) (in_motion ?e) ) (not (on ?e) ) ) )
+                  (once (and (agent_holds ?a ?a) (on ?t ?t) ) )
+                )
+              )
+            )
+          )
+        )
+        (preference preference2
+          (exists (?l - ball ?h - dodgeball)
+            (then
+              (once (in ?h) )
+              (once (agent_holds ?h ?h pink) )
+              (once (touch ?z) )
+            )
           )
         )
       )
     )
-    (forall (?r - teddy_bear ?f - game_object)
-      (and
-        (preference preferenceB
+    (preference preference3
+      (forall (?l - hexagonal_bin ?o - dodgeball)
+        (exists (?n - dodgeball)
           (then
-            (once (not (adjacent ) ) )
-            (hold (in_motion ?f ?f) )
-            (hold (not (in_motion floor ?f) ) )
+            (hold (and (and (agent_holds ?o) (agent_holds ?n) ) (and (not (same_color ?n ?o) ) (or (in_motion ?o ?o) (in_motion ?n) ) ) ) )
+            (once (not (in_motion ?o ?n) ) )
+            (hold (and (on ?n) (in_motion ?n) ) )
           )
         )
-        (preference preferenceC
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (* (* (+ (and (* 180 (>= (total-time) 40 )
+                (external-forall-maximize
+                  2
+                )
+                1
+                (count-once-per-external-objects preference3)
+                2
+                (count-once-per-objects preference3:doggie_bed)
+                (count-unique-positions preference1:beachball)
+                (count preference3:golfball)
+              )
+              (external-forall-maximize
+                2
+              )
+            )
+            4
+            5
+            5
+          )
+          (> 10 300 )
+        )
+        30
+      )
+      10
+    )
+  )
+)
+(:scoring
+  (count-measure preference3:yellow)
+)
+)
+
+
+(define (game game-id-38) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?b - block)
+      (game-conserved
+        (on ?b)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (and
+          (open blue ?xxx)
+          (in_motion ?xxx ?xxx ?xxx)
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 3 (external-forall-maximize (* (count preference1:golfball) (external-forall-maximize (count-same-positions preference1:dodgeball) ) )
+    )
+  )
+)
+(:scoring
+  6
+)
+)
+
+
+(define (game game-id-39) (:domain many-objects-room-v1)
+(:setup
+  (or
+    (forall (?y - doggie_bed ?g - (either pencil pencil) ?c - cube_block)
+      (game-conserved
+        (agent_holds brown)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?j - dodgeball ?s - cube_block)
+      (and
+        (preference preference1
+          (then
+            (once (not (not (and (game_start ?s) (in_motion ?s ?s) ) ) ) )
+            (hold-for 6 (equal_z_position ?s) )
+            (once (in_motion left ?s) )
+          )
+        )
+        (preference preference2
+          (exists (?a - (either floor dodgeball))
+            (exists (?t - dodgeball ?c - dodgeball)
+              (at-end
+                (in block ?a)
+              )
+            )
+          )
+        )
+        (preference preference3
+          (exists (?p - dodgeball ?n ?y ?t - hexagonal_bin ?b - dodgeball)
+            (then
+              (once (on ?s) )
+              (hold-while (in_motion ?s agent) (agent_holds ?b) )
+            )
+          )
+        )
+      )
+    )
+    (forall (?t - doggie_bed)
+      (and
+        (preference preference4
+          (exists (?l - hexagonal_bin)
+            (then
+              (hold (in ?l) )
+              (once (not (and (adjacent ?l ?l ?l) (in_motion ?l) (< 2 1) ) ) )
+              (any)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 7 (count-once-per-objects preference2:purple:golfball:pink) )
+)
+(:scoring
+  (total-score)
+)
+)
+
+
+(define (game game-id-40) (:domain few-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (forall (?o - (either doggie_bed blue_cube_block))
+        (in_motion ?o)
+      )
+      (agent_holds agent)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?p - hexagonal_bin)
+      (and
+        (preference preference1
+          (then
+            (hold (adjacent ?p ?p) )
+            (once (and (agent_holds green ?p) (< 1 9) ) )
+            (once (same_color ?p ?p) )
+            (hold (not (and (in_motion ?p) (not (not (adjacent rug) ) ) ) ) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (and (count-once preference1:hexagonal_bin) ) 20 )
+)
+(:scoring
+  2
+)
+)
+
+
+(define (game game-id-41) (:domain few-objects-room-v1)
+(:setup
+  (forall (?m - doggie_bed)
+    (game-conserved
+      (on ?m)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (and (agent_holds ?xxx ?xxx) (and (not (touch ?xxx) ) (in ?xxx) ) ) )
+        (once (in_motion ?xxx) )
+        (once (in_motion ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference1:pink_dodgeball) (count-once preference1:beachball) )
+)
+(:scoring
+  (* 15 2 (* 8 (count preference1:golfball) 0.7 )
+    (+ 5 (+ (* (count preference1:dodgeball:yellow) (* (* 10 2 )
+            (count-once preference1:dodgeball)
+          )
+        )
+        (* (* (count-once preference1:doggie_bed) )
+          (count preference1:blue_cube_block:book)
+        )
+      )
+    )
+    1
+    (* (count-once-per-objects preference1:yellow:purple) (* (count preference1:pink) (* 2 (- (external-forall-minimize (count preference1:golfball) ) )
+        )
+      )
+      (count-once preference1:blue_dodgeball:golfball)
+    )
+  )
+)
+)
+
+
+(define (game game-id-42) (:domain few-objects-room-v1)
+(:setup
+  (game-optional
+    (in_motion ?xxx)
+  )
+)
+(:constraints
+  (and
+    (forall (?w - ball ?i - shelf)
+      (and
+        (preference preference1
           (at-end
-            (on ?f ?f)
+            (and
+              (not
+                (in ?i)
+              )
+              (agent_holds ?i)
+            )
           )
         )
+        (preference preference2
+          (exists (?m - hexagonal_bin)
+            (exists (?n - block)
+              (exists (?s - hexagonal_bin)
+                (exists (?b - dodgeball)
+                  (exists (?p - ball ?u - block ?a - hexagonal_bin ?u - chair)
+                    (exists (?c - game_object ?x - (either top_drawer cube_block bridge_block))
+                      (then
+                        (once (agent_holds ?s ?n) )
+                        (once (not (on green_golfball) ) )
+                        (hold (not (and (in ?i) (not (not (not (in_motion ?m ?n) ) ) ) ) ) )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (<= 20 (count-once-per-objects preference2:green:red_pyramid_block) )
+      5
+    )
+  )
+)
+(:scoring
+  (* (external-forall-minimize 3 ) (count preference1:yellow_cube_block) )
+)
+)
+
+
+(define (game game-id-43) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (agent_holds ?xxx ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?e - teddy_bear ?l - (either dodgeball golfball))
+        (then
+          (once (on ?l ?l) )
+          (once (and (and (in_motion ?l) (touch ?l) ) (and (rug_color_under ?l ?l) (agent_holds ) ) ) )
+          (once (in_motion rug ?l) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference1:golfball) 1 )
+)
+(:scoring
+  (-
+    (- (count-once-per-objects preference1:blue_dodgeball) )
+    (+ (count preference1:dodgeball:yellow) (* 8 (total-time) )
+      (total-time)
+      (count preference1:basketball)
+    )
+  )
+)
+)
+
+
+(define (game game-id-44) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (< (distance 6) (distance ?xxx 0))
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (agent_holds ?xxx ?xxx) )
+        (once (on ?xxx brown) )
+        (once (in_motion ?xxx ?xxx) )
+      )
+    )
+    (preference preference2
+      (then
+        (once (not (agent_holds ?xxx) ) )
+        (once (agent_holds desk) )
+        (once (in_motion ?xxx) )
       )
     )
   )
 )
 (:terminal
   (not
-    (and
-      (>= (= 3 (count preferenceC:pyramid_block) 5 )
-        (external-forall-minimize
-          (* 4 18 )
-        )
-      )
-      (>= (count-once-per-objects preferenceA:pink:rug) (count preferenceB) )
+    (>= 15 (* 3 (count-once preference1:purple) )
     )
   )
 )
 (:scoring
-  3
+  (count preference2:dodgeball)
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (forall (?b - dodgeball)
-      (forall (?l - hexagonal_bin)
-        (forall (?e - tall_cylindrical_block)
-          (exists (?z - hexagonal_bin)
-            (game-conserved
-              (and
-                (adjacent ?z ?b)
-                (on ?b ?b)
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?s - hexagonal_bin)
-      (and
-        (preference preferenceA
-          (exists (?k - (either blue_cube_block wall))
-            (exists (?w - shelf)
-              (at-end
-                (not
-                  (in_motion ?s)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (and (and (and (in_motion ?xxx ?xxx) (agent_holds ?xxx desk) ) (adjacent ?xxx ?xxx) ) (on ?xxx ?xxx) ) )
-        (hold (in ?xxx) )
-        (hold (and (not (on bed) ) (and (agent_holds agent ?xxx) (agent_holds ?xxx) ) ) )
-      )
-    )
-    (preference preferenceC
-      (at-end
-        (touch desk)
-      )
-    )
-  )
-)
-(:terminal
-  (>= 8 (- (count preferenceB:cube_block) )
-  )
-)
-(:scoring
-  (count-once-per-objects preferenceB:golfball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?y - (either tall_cylindrical_block curved_wooden_ramp) ?k - shelf ?b - teddy_bear)
-    (forall (?a - curved_wooden_ramp)
-      (game-conserved
-        (agent_holds ?b)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?u - cube_block)
-      (and
-        (preference preferenceA
-          (exists (?e - blue_pyramid_block ?p - tall_cylindrical_block ?o - building ?j - teddy_bear)
-            (exists (?f - dodgeball)
-              (then
-                (hold-while (and (in_motion ?j ?f) (exists (?i - hexagonal_bin ?t - dodgeball) (and (agent_holds ?t ?f) (and (not (in_motion desktop) ) (not (not (and (in_motion ?t) (touch ?t) ) ) ) ) ) ) ) (and (not (on ?f) ) (not (< 5 1) ) (agent_holds ?j ?f) ) )
-                (once (not (agent_holds ?u rug) ) )
-                (hold (and (< (distance ?f ?j) (distance ?u desk)) (not (and (same_type side_table ?f) (exists (?p - hexagonal_bin) (adjacent ?u) ) ) ) ) )
-              )
-            )
-          )
-        )
-      )
-    )
-    (forall (?d - hexagonal_bin)
-      (and
-        (preference preferenceB
-          (exists (?x - rug)
-            (exists (?j - hexagonal_bin ?n - (either tall_cylindrical_block triangle_block))
-              (exists (?w ?q - hexagonal_bin)
-                (at-end
-                  (in_motion ?x)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (+ 3 3 )
-    3
-  )
-)
-(:scoring
-  (count-once-per-external-objects preferenceB:red_pyramid_block)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (or
-      (or
-        (game-conserved
-          (and
-            (and
-              (in ?xxx ?xxx)
-              (in_motion ?xxx ?xxx)
-            )
-            (and
-              (rug_color_under ?xxx)
-              (and
-                (agent_holds agent)
-                (in_motion ?xxx)
-                (= 1 1)
-              )
-              (touch ?xxx ?xxx)
-              (<= (distance ?xxx back) (distance agent))
-              (not
-                (adjacent_side ?xxx ?xxx)
-              )
-              (agent_holds ?xxx side_table)
-              (< 3 8)
-              (agent_holds ?xxx)
-              (and
-                (and
-                  (same_color agent ?xxx)
-                  (< (distance ?xxx) (distance ?xxx))
-                )
-                (agent_holds ?xxx)
-                (in_motion ?xxx ?xxx ?xxx)
-              )
-              (agent_holds ?xxx)
-              (faces ?xxx)
-              (exists (?g - hexagonal_bin)
-                (and
-                  (and
-                    (not
-                      (adjacent ?g)
-                    )
-                    (not
-                      (in_motion ?g ?g)
-                    )
-                    (>= 9 1)
-                    (on ?g)
-                  )
-                  (and
-                    (in_motion ?g ?g)
-                    (in ?g ?g)
-                    (not
-                      (between ?g ?g yellow)
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-        (exists (?r ?u - book)
-          (game-optional
-            (exists (?m - cube_block ?h - red_pyramid_block)
-              (and
-                (not
-                  (in_motion left ?h)
-                )
-                (agent_holds ?r)
-                (and
-                  (agent_holds ?u ?h)
-                  (or
-                    (agent_holds bed)
-                    (and
-                      (in ?u)
-                      (on ?r)
-                    )
-                    (agent_holds ?u)
-                  )
-                )
-              )
-            )
-          )
-        )
-        (forall (?p - (either pencil))
-          (exists (?q - hexagonal_bin ?u - cube_block)
-            (game-optional
-              (in_motion ?p agent)
-            )
-          )
-        )
-      )
-      (forall (?b - doggie_bed)
-        (or
-          (game-conserved
-            (agent_holds ?b)
-          )
-          (game-optional
-            (adjacent agent ?b)
-          )
-        )
-      )
-      (and
-        (and
-          (exists (?b - (either key_chain beachball yellow_cube_block))
-            (and
-              (and
-                (and
-                  (forall (?m - hexagonal_bin)
-                    (and
-                      (game-optional
-                        (and
-                          (agent_holds bed ?m)
-                          (and
-                            (agent_holds ?b)
-                            (not
-                              (not
-                                (not
-                                  (and
-                                    (forall (?h - ball)
-                                      (agent_holds rug)
-                                    )
-                                    (not
-                                      (agent_holds agent)
-                                    )
-                                  )
-                                )
-                              )
-                            )
-                            (in ?b)
-                            (on ?b)
-                            (on ?b ?m ?m)
-                            (in_motion desk)
-                            (on ?m blue)
-                            (exists (?x - curved_wooden_ramp)
-                              (and
-                                (and
-                                  (agent_holds ?m)
-                                  (on ?x ?b)
-                                )
-                              )
-                            )
-                            (and
-                              (exists (?e - hexagonal_bin)
-                                (not
-                                  (in_motion ?e ?m)
-                                )
-                              )
-                              (agent_holds pink_dodgeball)
-                              (> (distance room_center ?b) (distance room_center 2))
-                            )
-                            (and
-                              (in bed)
-                              (in upside_down ?m floor)
-                            )
-                            (in desk)
-                            (agent_holds ?b ?m)
-                          )
-                          (in ?m)
-                        )
-                      )
-                      (game-conserved
-                        (= (distance ?m ?b) 1)
-                      )
-                      (exists (?q - game_object)
-                        (and
-                          (exists (?l - golfball)
-                            (game-optional
-                              (agent_holds ?l)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-                (and
-                  (game-conserved
-                    (agent_holds ?b ?b)
-                  )
-                )
-              )
-              (forall (?w - hexagonal_bin)
-                (and
-                  (forall (?v - hexagonal_bin)
-                    (and
-                      (exists (?l - (either beachball desktop))
-                        (and
-                          (forall (?n - hexagonal_bin)
-                            (and
-                              (game-optional
-                                (and
-                                  (and
-                                    (and
-                                      (agent_holds ?w)
-                                      (and
-                                        (on floor)
-                                        (on ?l ?n)
-                                      )
-                                    )
-                                    (agent_holds ?n ?l)
-                                  )
-                                  (agent_holds ?b)
-                                )
-                              )
-                              (exists (?d - hexagonal_bin)
-                                (game-conserved
-                                  (and
-                                    (and
-                                      (in_motion ?l ?n)
-                                      (in ?n top_shelf)
-                                    )
-                                    (adjacent ?n)
-                                  )
-                                )
-                              )
-                              (game-optional
-                                (in_motion ?w ?v)
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                  (game-optional
-                    (on bridge_block)
-                  )
-                )
-              )
-              (and
-                (and
-                  (and
-                    (forall (?c - doggie_bed)
-                      (exists (?i - hexagonal_bin ?w - chair)
-                        (game-conserved
-                          (in_motion ?w)
-                        )
-                      )
-                    )
-                  )
-                )
-                (forall (?h - (either chair))
-                  (and
-                    (game-optional
-                      (in_motion ?h ?h ?b)
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?j - wall ?y - hexagonal_bin ?y - hexagonal_bin ?z - dodgeball)
-        (exists (?k - dodgeball)
-          (exists (?u - hexagonal_bin)
-            (then
-              (once (in_motion agent ?u) )
-              (hold (in_motion pink) )
-              (once (exists (?n - (either credit_card key_chain)) (and (not (not (on ?z) ) ) (and (same_color ?n agent) (same_color ?k) ) ) ) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?t - hexagonal_bin)
-        (exists (?y - hexagonal_bin ?u ?c - game_object)
-          (then
-            (once (and (exists (?i - hexagonal_bin) (agent_holds floor sideways) ) (not (and (< (distance ?u 8) 1) (and (in_motion ?c ?t ?t) (on ?t) (same_type ?u ?c) (agent_holds agent ?c) ) (on ?t) (is_setup_object agent) ) ) ) )
-            (once (not (or (and (and (agent_holds ?u rug) (agent_holds ?u ?c) ) (or (agent_holds ?u) (< (distance 6) (distance ?u ?t)) ) (not (in ?t ?u) ) ) (or (< 0.5 0.5) (in ?c) ) ) ) )
-            (once (on ?c) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (= 30 (count preferenceA:basketball) )
-)
-(:scoring
-  3
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
+(define (game game-id-45) (:domain many-objects-room-v1)
 (:setup
   (game-optional
-    (in ?xxx)
+    (in_motion ?xxx)
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?z - dodgeball)
-        (then
-          (once (not (and (not (in_motion ?z) ) (not (agent_holds ?z) ) ) ) )
-          (hold (in_motion ?z) )
-          (once (and (is_setup_object ?z ?z) (exists (?i - block) (in_motion ?z ?i) ) (and (agent_holds ?z) (agent_holds ?z) ) ) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (hold (not (agent_holds ?xxx ?xxx) ) )
-        (once (on east_sliding_door ?xxx) )
-        (once (in_motion ?xxx ?xxx) )
-      )
-    )
-    (preference preferenceC
-      (then
-        (once (in_motion ?xxx) )
-        (hold-for 1 (on desk) )
-        (once (on ?xxx) )
-      )
-    )
-    (preference preferenceD
-      (exists (?x ?m - building ?f - doggie_bed)
-        (exists (?n - hexagonal_bin ?y - (either hexagonal_bin cellphone))
-          (exists (?k - building)
-            (then
-              (hold-while (in_motion ?k ?f) (on rug ?f) )
-              (once (not (in_motion ?f) ) )
-              (hold (agent_holds ?k ?k) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceE
-      (then
-        (once (agent_holds ?xxx) )
-        (hold-while (and (exists (?z - chair) (on ?z) ) (adjacent_side ?xxx ?xxx) ) (in bed ?xxx) )
-        (once (in_motion ?xxx ?xxx) )
-      )
-    )
-    (preference preferenceF
-      (exists (?y - (either cd alarm_clock) ?s - hexagonal_bin ?g - curved_wooden_ramp ?h - hexagonal_bin)
-        (exists (?o - hexagonal_bin ?e - pyramid_block)
+    (preference preference1
+      (exists (?u - wall)
+        (exists (?l - (either chair triangular_ramp))
           (then
-            (once (in_motion ?e) )
-            (once (and (is_setup_object ?e front) (and (in_motion ?h ?h) (not (and (agent_holds ?e ?h) (in desk) (< 1 (x_position ?e 3)) (or (in_motion ?h) (and (in_motion ?e ?e ?e) (and (exists (?j - dodgeball ?q ?r ?y - dodgeball ?s ?v - curved_wooden_ramp ?b - building) (<= 2 5) ) (< 2 (distance ?h agent)) ) ) ) (on ?h) (not (not (in ?e) ) ) (in_motion ?h) (exists (?l - (either hexagonal_bin bridge_block)) (on ?e) ) ) ) ) ) )
-            (hold (in_motion ?e) )
+            (hold (on ?u) )
+            (once (and (and (in_motion desk) (same_color ?u) ) (and (in ?u ?u) (on ?l ?l) (not (not (not (not (in_motion ?u ?u) ) ) ) ) (in_motion ?u) ) ) )
+            (once (agent_holds ?l ?u) )
           )
         )
       )
     )
-  )
-)
-(:terminal
-  (or
-    (>= (count-same-positions preferenceC:yellow) (count-shortest preferenceE:triangle_block:dodgeball) )
-    (>= (+ (count preferenceC:side_table) (/ (* (count-once-per-objects preferenceF:cube_block:pink) (count preferenceD:orange) )
-          10
-        )
-        (* (* (* 1 (+ 3 (count-measure preferenceD:dodgeball:pink) (count preferenceE:golfball:dodgeball) (* (* (count preferenceA:beachball) (count-once-per-objects preferenceF:cube_block) )
-                  40
-                )
-              )
-            )
-            15
-          )
-          (external-forall-maximize
-            (not
-              (count preferenceB:pink)
-            )
-          )
-        )
-      )
-      6
-    )
-  )
-)
-(:scoring
-  (count-unique-positions preferenceC:golfball:golfball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?w - teddy_bear ?o - chair)
-    (or
-      (game-optional
-        (or
-          (in_motion ?o ?o)
-          (in ?o ?o)
-          (agent_holds ?o ?o)
-        )
-      )
-      (exists (?y - hexagonal_bin)
-        (and
-          (exists (?u - hexagonal_bin ?g - hexagonal_bin)
-            (game-optional
-              (same_type ?y ?y)
-            )
-          )
-        )
-      )
-      (and
-        (game-conserved
-          (in ?o)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b - block)
-        (then
-          (once (and (not (in rug) ) (on ?b) (in_motion ?b) ) )
-          (hold (in ?b) )
-          (hold (and (and (exists (?z - cube_block ?l - cube_block) (touch ?l ?b) ) (agent_holds ?b) ) (agent_holds ?b) ) )
-        )
-      )
-    )
-    (preference preferenceB
+    (preference preference2
       (then
-        (once (in_motion ?xxx) )
-        (hold-while (and (exists (?m - teddy_bear ?m ?j - bridge_block) (and (agent_holds ?m ?m) (in agent) (equal_x_position ?j) (and (on ?j) (object_orientation bridge_block ?j) ) (not (in_motion ?m) ) (and (and (on ?m) (agent_holds ?j) ) (same_color ?m) (agent_holds ?j) ) (not (same_color ?j ?m) ) (agent_holds agent green) (on ?j) (and (on agent ?m) (in_motion agent ?m) ) ) ) (on ?xxx ?xxx desk ?xxx) ) (and (agent_holds desk) (= (distance 7 ?xxx) (distance bed ?xxx)) ) (in_motion ?xxx) )
-        (hold (not (not (not (in_motion ?xxx ?xxx) ) ) ) )
+        (once (and (agent_holds ?xxx ?xxx) ) )
+        (once (on ?xxx) )
+        (once (agent_holds ?xxx ?xxx) )
       )
     )
   )
 )
 (:terminal
-  (>= 10 (count preferenceB:golfball) )
-)
-(:scoring
-  (* (* (- (count preferenceA:pink_dodgeball) )
-      (count-measure preferenceB:basketball)
-      (total-time)
-      (or
-        (count-once-per-objects preferenceA:cube_block)
-      )
-      7
-      (+ 1 (count preferenceA:yellow) )
-    )
-    4
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (agent_holds ?xxx)
-  )
-)
-(:constraints
   (and
-    (preference preferenceA
-      (at-end
-        (and
-          (touch ?xxx ?xxx)
-          (and
-            (and
-              (on ?xxx ?xxx)
-              (not
-                (exists (?f - hexagonal_bin)
-                  (exists (?w - curved_wooden_ramp)
-                    (in_motion rug ?w)
-                  )
-                )
-              )
-            )
-            (and
-              (not
-                (same_color rug)
-              )
-            )
-          )
-          (agent_holds ?xxx)
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (not
-      (= 6 (* (external-forall-maximize (count preferenceA:hexagonal_bin) ) (/ (count preferenceA:blue_dodgeball:yellow_cube_block) (* (count-once-per-objects preferenceA:red) (count-once preferenceA:golfball) )
-          )
-        )
-      )
-    )
-    (>= (+ 30 (count preferenceA:purple) )
+    (= (* 2 (count-total preference1:wall:bed) )
       3
     )
   )
 )
 (:scoring
-  (count preferenceA:golfball)
+  (count-once-per-objects preference2:dodgeball:dodgeball)
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-46) (:domain many-objects-room-v1)
 (:setup
-  (exists (?t - dodgeball)
+  (and
     (and
       (game-conserved
-        (agent_holds ?t)
+        (not
+          (in ?xxx)
+        )
       )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?r - teddy_bear)
       (and
-        (preference preferenceA
-          (at-end
+        (game-conserved
+          (or
+            (agent_holds ?xxx ?xxx)
+            (toggled_on brown)
+          )
+        )
+        (exists (?f - ball)
+          (game-conserved
+            (in ?f)
+          )
+        )
+      )
+      (and
+        (and
+          (game-optional
             (and
+              (same_color ?xxx ?xxx)
+              (in_motion ?xxx yellow)
+            )
+          )
+        )
+        (and
+          (forall (?e - hexagonal_bin ?e - wall)
+            (game-conserved
               (not
-                (not
-                  (on ?r)
+                (< (distance ?e 9) (distance agent ?e))
+              )
+            )
+          )
+          (and
+            (exists (?j - dodgeball)
+              (game-conserved
+                (on ?j ?j)
+              )
+            )
+          )
+          (forall (?j - ball)
+            (and
+              (game-optional
+                (agent_holds ?j ?j)
+              )
+            )
+          )
+          (forall (?w - dodgeball)
+            (exists (?a - block)
+              (and
+                (and
+                  (forall (?p - hexagonal_bin ?v - dodgeball)
+                    (game-conserved
+                      (in_motion upright)
+                    )
+                  )
+                  (and
+                    (and
+                      (game-conserved
+                        (agent_holds bed ?a)
+                      )
+                      (game-conserved
+                        (agent_holds ?w ?a)
+                      )
+                    )
+                  )
                 )
               )
-              (agent_holds ?r ?r)
-              (in_motion ?r)
             )
           )
-        )
-        (preference preferenceB
-          (exists (?p - blinds ?z ?e - yellow_cube_block)
-            (then
-              (once (and (and (agent_holds ?z ?z) (forall (?b ?j - hexagonal_bin) (in_motion ?b ?j) ) (touch ?e top_shelf) ) (between ?z) ) )
-              (once (in_motion ?z) )
-              (any)
-            )
-          )
-        )
-        (preference preferenceC
-          (exists (?b - golfball ?u - cube_block)
-            (exists (?x ?b - doggie_bed)
-              (then
-                (once (in desk ?x) )
-                (hold (on ?u) )
-                (once (in_motion ?x ?x) )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 10 (count-once-per-objects preferenceA:golfball) )
-)
-(:scoring
-  (* (+ 1 7 )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?e - (either chair cd cellphone))
-    (game-optional
-      (and
-        (agent_holds ?e)
-        (in ?e ?e)
-        (in_motion ?e)
-        (same_type ?e)
-        (in_motion ?e)
-        (exists (?j - dodgeball)
-          (adjacent ?j ?e ?e)
-        )
-        (not
-          (and
-            (agent_holds ?e)
-            (not
-              (not
-                (forall (?a - teddy_bear)
+          (exists (?v - flat_block ?b - (either main_light_switch cube_block) ?n - curved_wooden_ramp)
+            (forall (?c - (either dodgeball bridge_block) ?h - pyramid_block)
+              (game-conserved
+                (not
                   (not
-                    (and
+                    (exists (?q - hexagonal_bin)
                       (not
-                        (and
-                          (in_motion right)
-                          (and
-                            (not
-                              (agent_holds ?a)
-                            )
-                            (in ?a)
-                          )
-                          (not
-                            (and
-                              (not
-                                (and
-                                  (in_motion ?a)
-                                  (not
-                                    (in ?e ?e)
-                                  )
-                                )
-                              )
-                              (touch ?a agent)
-                              (agent_holds pink_dodgeball ?e)
-                            )
-                          )
-                        )
+                        (same_color ?n)
                       )
-                      (in_motion ?e)
                     )
                   )
                 )
@@ -2979,40 +2639,394 @@
             )
           )
         )
-        (in ?e)
-        (in_motion bed ?e)
-        (or
-          (agent_holds ?e sideways)
+        (forall (?g ?t ?d ?w ?z ?x - hexagonal_bin ?d - hexagonal_bin)
+          (exists (?r - ball)
+            (and
+              (forall (?s - (either pillow book))
+                (and
+                  (forall (?t - (either key_chain yellow))
+                    (game-optional
+                      (on ?r ?s)
+                    )
+                  )
+                )
+              )
+              (and
+                (game-optional
+                  (touch ?r ?r)
+                )
+                (not
+                  (and
+                    (game-conserved
+                      (and
+                        (and
+                          (not
+                            (agent_holds ?r ?d)
+                          )
+                          (adjacent ?d)
+                          (not
+                            (same_color ?d)
+                          )
+                          (not
+                            (in_motion ?r)
+                          )
+                          (and
+                            (not
+                              (not
+                                (not
+                                  (same_color ?d)
+                                )
+                              )
+                            )
+                            (agent_holds ?d)
+                          )
+                          (in_motion ?d)
+                        )
+                        (same_color ?d)
+                      )
+                    )
+                    (exists (?o - wall ?k - triangular_ramp ?j - (either bridge_block doggie_bed))
+                      (and
+                        (game-optional
+                          (agent_holds ?r ?d)
+                        )
+                        (forall (?c - chair)
+                          (game-conserved
+                            (game_start ?d)
+                          )
+                        )
+                      )
+                    )
+                    (game-conserved
+                      (in_motion ?d ?r)
+                    )
+                  )
+                )
+                (game-conserved
+                  (not
+                    (in_motion bridge_block ?d)
+                  )
+                )
+              )
+            )
+          )
         )
-        (not
-          (agent_holds rug)
+      )
+    )
+    (and
+      (game-conserved
+        (in_motion ?xxx)
+      )
+      (exists (?t - game_object)
+        (and
+          (forall (?u - hexagonal_bin ?g - block ?c - dodgeball)
+            (and
+              (exists (?j - dodgeball)
+                (game-conserved
+                  (object_orientation desk agent)
+                )
+              )
+              (and
+                (forall (?a - hexagonal_bin)
+                  (forall (?f - (either triangular_ramp yellow_cube_block))
+                    (not
+                      (and
+                        (game-conserved
+                          (on ?a)
+                        )
+                        (and
+                          (game-conserved
+                            (touch ?t)
+                          )
+                          (forall (?j - hexagonal_bin)
+                            (game-conserved
+                              (agent_holds ?a)
+                            )
+                          )
+                          (exists (?h - dodgeball)
+                            (or
+                              (game-conserved
+                                (not
+                                  (touch ?c)
+                                )
+                              )
+                              (game-optional
+                                (and
+                                  (and
+                                    (in_motion ?f ?c)
+                                    (not
+                                      (agent_holds ?c)
+                                    )
+                                  )
+                                  (object_orientation bridge_block ?t)
+                                  (and
+                                    (forall (?j - block)
+                                      (on ?f ?a)
+                                    )
+                                    (not
+                                      (in ?t rug)
+                                    )
+                                  )
+                                )
+                              )
+                              (game-optional
+                                (agent_holds ?t ?a)
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+                (exists (?a - rug ?d - ball)
+                  (forall (?i - hexagonal_bin ?r ?x ?n - dodgeball)
+                    (exists (?j - game_object ?p - cube_block ?k - golfball ?v - hexagonal_bin)
+                      (and
+                        (and
+                          (game-conserved
+                            (on ?r)
+                          )
+                        )
+                        (game-conserved
+                          (in upright ?t)
+                        )
+                        (and
+                          (forall (?y - ball)
+                            (game-optional
+                              (not
+                                (agent_holds desk ?y)
+                              )
+                            )
+                          )
+                          (and
+                            (forall (?k - game_object ?z - hexagonal_bin)
+                              (forall (?f ?l - (either alarm_clock pyramid_block))
+                                (forall (?h - ball ?e - ball ?u - (either chair yellow_cube_block dodgeball))
+                                  (and
+                                    (and
+                                      (forall (?y - hexagonal_bin)
+                                        (and
+                                          (game-optional
+                                            (and
+                                              (and
+                                                (not
+                                                  (agent_holds ?u)
+                                                )
+                                                (and
+                                                  (touch ?v ?d)
+                                                  (touch ?u)
+                                                  (in_motion bed ?l)
+                                                )
+                                              )
+                                              (< (distance agent desk) 1)
+                                            )
+                                          )
+                                          (and
+                                            (forall (?q - ball ?j - triangular_ramp ?o - triangular_ramp)
+                                              (exists (?m - dodgeball)
+                                                (game-conserved
+                                                  (touch ?r ?c)
+                                                )
+                                              )
+                                            )
+                                          )
+                                          (game-conserved
+                                            (agent_holds ?n ?f)
+                                          )
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                            (and
+                              (forall (?w - hexagonal_bin)
+                                (forall (?f - building)
+                                  (forall (?j - color ?l ?i ?p - game_object)
+                                    (or
+                                      (game-conserved
+                                        (agent_holds ?n)
+                                      )
+                                      (and
+                                        (exists (?j - doggie_bed)
+                                          (and
+                                            (and
+                                              (game-optional
+                                                (in_motion ?j agent)
+                                              )
+                                              (or
+                                                (and
+                                                  (game-conserved
+                                                    (in ?v)
+                                                  )
+                                                  (exists (?u - cube_block)
+                                                    (exists (?o - (either golfball wall))
+                                                      (game-conserved
+                                                        (in_motion agent)
+                                                      )
+                                                    )
+                                                  )
+                                                  (and
+                                                    (and
+                                                      (exists (?e - blinds ?s ?g - yellow_cube_block)
+                                                        (forall (?u - desktop ?b - wall)
+                                                          (or
+                                                            (game-conserved
+                                                              (and
+                                                                (on ?w door)
+                                                                (touch ?s agent)
+                                                              )
+                                                            )
+                                                            (forall (?a - wall)
+                                                              (game-conserved
+                                                                (in_motion ?a ?w)
+                                                              )
+                                                            )
+                                                            (game-conserved
+                                                              (in ?w)
+                                                            )
+                                                          )
+                                                        )
+                                                      )
+                                                    )
+                                                    (and
+                                                      (game-optional
+                                                        (on ?r ?p)
+                                                      )
+                                                    )
+                                                    (exists (?z - dodgeball)
+                                                      (game-conserved
+                                                        (on ?l)
+                                                      )
+                                                    )
+                                                    (game-optional
+                                                      (agent_holds ?p ?r)
+                                                    )
+                                                    (game-conserved
+                                                      (not
+                                                        (in_motion ?f)
+                                                      )
+                                                    )
+                                                  )
+                                                )
+                                              )
+                                            )
+                                          )
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                              )
+                              (game-conserved
+                                (agent_holds ?r)
+                              )
+                              (and
+                                (and
+                                  (and
+                                    (game-optional
+                                      (in_motion ?c ?r)
+                                    )
+                                    (game-optional
+                                      (agent_holds ?r)
+                                    )
+                                    (game-optional
+                                      (not
+                                        (and
+                                          (in ?c ?t)
+                                          (and
+                                            (in_motion ?t)
+                                            (agent_holds ?t)
+                                          )
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                                (game-conserved
+                                  (touch ?n)
+                                )
+                              )
+                            )
+                          )
+                          (forall (?f ?h ?y ?e - red_dodgeball ?e - ball)
+                            (and
+                              (game-conserved
+                                (agent_holds ?e)
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+                (forall (?f - ball ?l - flat_block)
+                  (game-optional
+                    (in_motion ?l ?c)
+                  )
+                )
+              )
+              (and
+                (exists (?s - hexagonal_bin)
+                  (game-optional
+                    (agent_holds ?c ?t)
+                  )
+                )
+                (game-conserved
+                  (and
+                    (not
+                      (in ?t ?t)
+                    )
+                    (touch ?c agent)
+                  )
+                )
+              )
+            )
+          )
         )
-        (agent_holds ?e)
+      )
+      (forall (?j - hexagonal_bin ?n - teddy_bear)
+        (exists (?y - doggie_bed)
+          (exists (?b ?i ?c - hexagonal_bin)
+            (exists (?a - chair)
+              (exists (?u - pillow)
+                (and
+                  (game-conserved
+                    (agent_holds ?c ?y)
+                  )
+                )
+              )
+            )
+          )
+        )
       )
     )
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?c - hexagonal_bin)
-        (exists (?r - ball ?a - curved_wooden_ramp)
-          (exists (?u - dodgeball ?b - building)
-            (exists (?j - teddy_bear)
-              (exists (?y - dodgeball)
+    (forall (?m - wall)
+      (and
+        (preference preference1
+          (exists (?t - dodgeball ?a - building)
+            (exists (?o - teddy_bear)
+              (exists (?c - dodgeball)
                 (at-end
                   (and
                     (and
                       (adjacent bed)
-                      (exists (?l - ball)
-                        (in_motion ?c)
+                      (exists (?r - ball)
+                        (in_motion ?a)
                       )
                     )
                     (and
-                      (< (distance room_center ?y) 1)
+                      (< (distance room_center ?o) 1)
                       (and
                         (and
-                          (agent_holds agent ?c)
+                          (agent_holds agent ?m)
                           (not
                             (not
                               (< (distance 9 3) 1)
@@ -3032,393 +3046,10 @@
         )
       )
     )
-    (preference preferenceB
-      (exists (?d - cylindrical_block)
-        (then
-          (once (< 1 (distance 7 ?d)) )
-          (once (agent_holds south_wall ?d) )
-          (once (not (above ?d) ) )
-        )
-      )
-    )
   )
 )
 (:terminal
-  (>= (* (count preferenceA:hexagonal_bin) (* (+ (count preferenceA) 8 )
-        7
-      )
-    )
-    (count preferenceA:purple:book)
-  )
-)
-(:scoring
-  (+ (count-once-per-objects preferenceB:basketball) (+ (count-shortest preferenceA:pink) 5 (* 3 )
-      (>= (count preferenceA:dodgeball:dodgeball) (count-once-per-objects preferenceA:beachball:pink_dodgeball) )
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (not
-      (and
-        (and
-          (in_motion ?xxx)
-          (not
-            (not
-              (in_motion ?xxx)
-            )
-          )
-        )
-        (and
-          (agent_holds back ?xxx)
-          (and
-            (agent_holds ?xxx)
-            (adjacent ?xxx)
-            (not
-              (not
-                (< 10 (distance ?xxx 5))
-              )
-            )
-          )
-          (agent_holds agent ?xxx)
-          (agent_holds ?xxx)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (in_motion ?xxx) )
-        (hold (and (equal_z_position ?xxx) (< 1 1) ) )
-        (hold-while (and (in_motion ?xxx) (agent_holds bed agent) ) (agent_holds ?xxx) (in_motion ?xxx) )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (agent_holds ?xxx) )
-        (once (exists (?q - cube_block ?a - cube_block ?s - ball) (in_motion ?s ?s) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-once-per-objects preferenceA:orange) 5 )
-)
-(:scoring
-  10
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?k - (either lamp dodgeball key_chain) ?p - (either book red))
-    (game-conserved
-      (in_motion ?p desk ?p)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b ?o - ball ?g - (either dodgeball cube_block) ?s - red_pyramid_block)
-        (at-end
-          (agent_holds ?s)
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (and
-    (> (* 2 (count-unique-positions preferenceA:dodgeball) )
-      (count preferenceA:basketball)
-    )
-    (> (* 3 (total-score) )
-      (external-forall-maximize
-        3
-      )
-    )
-  )
-)
-(:scoring
-  (count preferenceA:basketball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?c ?w ?f - pyramid_block ?i - hexagonal_bin)
-    (game-conserved
-      (exists (?v - block ?m - doggie_bed ?j - hexagonal_bin)
-        (in_motion front ?i)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?b - cube_block)
-      (and
-        (preference preferenceA
-          (then
-            (once (and (not (game_over ?b ?b) ) (on ?b ?b) ) )
-            (once (agent_holds ?b) )
-            (hold (not (adjacent agent ?b) ) )
-          )
-        )
-        (preference preferenceB
-          (then
-            (hold (on ?b) )
-            (hold (in_motion ?b) )
-            (once (not (not (in_motion ?b) ) ) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-once-per-objects preferenceA:basketball:golfball) 30 )
-)
-(:scoring
-  (count-once-per-objects preferenceB:beachball:purple)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (exists (?c - game_object)
-      (and
-        (game-optional
-          (in_motion ?c ?c)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?t - doggie_bed)
-        (at-end
-          (on ?t)
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?d - dodgeball ?q - hexagonal_bin)
-        (then
-          (hold-while (not (and (not (and (not (agent_holds ?q ?q) ) (in ?q) ) ) (touch ?q) ) ) (agent_holds ?q ?q) )
-          (once (not (agent_holds ?q) ) )
-          (hold (and (in_motion agent) (not (and (and (agent_holds ?q) (in_motion ?q) ) (toggled_on ) ) ) ) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (external-forall-maximize (* (total-time) (total-time) )
-      )
-      4
-    )
-    (>= 10 5 )
-  )
-)
-(:scoring
-  (count preferenceA:red:blue_pyramid_block)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (and
-        (game-conserved
-          (and
-            (in_motion ?xxx ?xxx)
-            (agent_holds floor ?xxx)
-          )
-        )
-        (game-conserved
-          (and
-            (< 1 (distance ?xxx ?xxx))
-            (in_motion agent tan)
-            (exists (?c - cube_block ?q - dodgeball)
-              (exists (?f - dodgeball)
-                (and
-                  (and
-                    (not
-                      (and
-                        (in_motion ?q)
-                        (not
-                          (in_motion ?f)
-                        )
-                        (agent_holds ?q ?f)
-                        (above ?f rug)
-                      )
-                    )
-                    (>= (distance room_center ?q) (distance ?q ?q))
-                    (not
-                      (in_motion ?q rug)
-                    )
-                  )
-                  (in ?f)
-                  (< 1 (distance room_center agent))
-                  (agent_holds top_drawer ?f)
-                )
-              )
-            )
-            (in ?xxx)
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?j - game_object)
-        (then
-          (once (and (not (in_motion ?j) ) (forall (?n - cube_block) (in_motion ?j ?j) ) ) )
-          (once (same_color ?j ?j) )
-          (once (not (in bed ?j) ) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (not (not (in ?xxx) ) ) )
-        (once (agent_holds ?xxx ?xxx) )
-        (once (in ?xxx ?xxx) )
-      )
-    )
-    (preference preferenceC
-      (then
-        (once (exists (?w - curved_wooden_ramp ?w - beachball) (not (and (on ?w) (rug_color_under desk) (in floor) ) ) ) )
-        (hold (not (and (and (object_orientation ?xxx ?xxx) (or (agent_holds rug ?xxx) (on ?xxx) ) (and (on ?xxx) (not (in_motion ) ) ) ) (agent_holds west_wall) (in_motion ?xxx ?xxx) (>= 0 1) ) ) )
-        (once (and (on ?xxx) (and (on ?xxx) (on ?xxx ?xxx) ) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count preferenceB:blue_pyramid_block:blue_cube_block) (count-once-per-objects preferenceA:pink_dodgeball:book) )
-)
-(:scoring
-  (count-overlapping preferenceC:dodgeball:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (game-optional
-      (not
-        (in ?xxx ?xxx)
-      )
-    )
-    (and
-      (game-conserved
-        (and
-          (not
-            (< 10 (distance ?xxx ?xxx))
-          )
-          (and
-            (and
-              (in_motion ?xxx)
-              (forall (?h - hexagonal_bin ?r - (either cylindrical_block pencil))
-                (agent_holds ?r ?r)
-              )
-            )
-            (on ?xxx brown)
-            (not
-              (rug_color_under agent)
-            )
-            (in_motion ?xxx ?xxx)
-            (object_orientation ?xxx)
-            (faces ?xxx)
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?t ?d - game_object)
-        (then
-          (once (and (and (not (is_setup_object ?t ?t) ) (same_color ?t) (touch brown) ) (not (agent_holds ?t) ) ) )
-          (hold (agent_holds agent) )
-          (once (not (not (in_motion ?t ?d) ) ) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (and
-    (>= (* 100 3 )
-      (* (count preferenceA:blue_cube_block) (* (count-once-per-objects preferenceA:hexagonal_bin) 1 )
-        (count preferenceA:pink)
-      )
-    )
-    (and
-      (>= (* (count preferenceA:golfball) (count preferenceA:red) )
-        (+ 2 (external-forall-maximize (total-time) ) )
-      )
-    )
-    (= (* (count-same-positions preferenceA:blue_dodgeball) 15 )
-      5
-    )
-  )
-)
-(:scoring
-  (count-overlapping preferenceA:dodgeball:yellow)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (and
-      (in_motion agent ?xxx)
-      (agent_holds ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold (agent_holds ?xxx ?xxx) )
-        (once (in_motion ?xxx) )
-        (hold (not (on ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (not
-    (>= (* 3 16 )
-      (count-once-per-objects preferenceA:hexagonal_bin:dodgeball)
+  (>= 5 (external-forall-maximize (* 10 (count preference1:hexagonal_bin) 100 3 10 3 )
     )
   )
 )
@@ -3428,1277 +3059,190 @@
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-47) (:domain medium-objects-room-v1)
 (:setup
   (game-conserved
-    (agent_holds ?xxx)
+    (in ?xxx ?xxx)
   )
 )
 (:constraints
   (and
-    (preference preferenceA
+    (preference preference1
       (then
-        (hold (game_over ?xxx) )
-        (once (agent_holds ?xxx ?xxx) )
-        (once (and (< (distance 5 room_center) 1) (not (touch ?xxx) ) (not (open upside_down ?xxx ?xxx) ) (and (in_motion ?xxx agent) (not (on ?xxx ?xxx) ) ) (in ?xxx bed) (exists (?r - teddy_bear ?y - building ?u - ball) (in_motion ?u ?u) ) (in_motion bed agent) ) )
+        (hold (touch ?xxx) )
+        (hold (and (and (not (not (agent_holds ?xxx) ) ) (not (not (on ?xxx) ) ) ) (not (in ?xxx) ) ) )
+        (once (agent_holds desk ?xxx) )
       )
     )
-    (preference preferenceB
-      (then
-        (hold (on ?xxx) )
-        (hold (and (in_motion ?xxx) (agent_holds ?xxx) (and (and (not (agent_holds ?xxx) ) (not (in ?xxx ?xxx) ) ) (and (not (agent_holds ?xxx ?xxx) ) (exists (?k - ball ?s - red_pyramid_block ?w ?y - (either mug yellow_cube_block)) (same_color ?w) ) (on ?xxx agent) ) ) (and (touch floor) (agent_holds agent) ) (agent_holds ?xxx) (agent_holds agent) ) )
-        (hold (not (agent_holds agent ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (> (count preferenceB:yellow:yellow) (- 10 )
-  )
-)
-(:scoring
-  (* 5 (or 10 (count-once-per-objects preferenceB:dodgeball) ) )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?c - drawer ?a - hexagonal_bin)
-    (and
-      (game-conserved
-        (agent_holds ?a ?a)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?r - pillow)
-      (and
-        (preference preferenceA
-          (exists (?m - (either cube_block golfball))
-            (exists (?g - (either golfball yellow_cube_block))
-              (exists (?e - cube_block)
-                (exists (?l - (either hexagonal_bin golfball key_chain))
-                  (exists (?y - hexagonal_bin ?w - green_triangular_ramp ?v - chair ?t - blue_cube_block)
-                    (then
-                      (once (in_motion pink_dodgeball) )
-                      (hold (agent_holds desk) )
-                      (once (in_motion upright) )
-                    )
-                  )
-                )
-              )
-            )
-          )
+    (preference preference2
+      (exists (?e - dodgeball ?x - dodgeball)
+        (then
+          (once (agent_holds ?x) )
         )
       )
     )
   )
 )
 (:terminal
-  (> (count preferenceA:beachball) (* 20 (count-once-per-objects preferenceA:pink) )
+  (>= 3 (* (count-total preference2:yellow) 10 )
   )
 )
 (:scoring
-  (count preferenceA:red)
+  (* 300 (count preference2:basketball) 10 6 )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-48) (:domain medium-objects-room-v1)
 (:setup
-  (exists (?u - golfball)
-    (forall (?j - game_object)
+  (exists (?t - hexagonal_bin ?f ?x - dodgeball)
+    (exists (?z - ball)
       (game-conserved
-        (agent_holds ?u ?u)
+        (adjacent ?z)
       )
     )
   )
 )
 (:constraints
   (and
-    (forall (?q - dodgeball)
+    (forall (?z - block ?a - hexagonal_bin ?u - teddy_bear ?w - (either laptop pink chair dodgeball bridge_block pyramid_block desktop))
       (and
-        (preference preferenceA
-          (exists (?y - tall_cylindrical_block ?w ?n - dodgeball)
-            (then
-              (once (and (in_motion ?q ?q) (agent_holds front) ) )
-              (hold-to-end (not (in_motion ?n ?w) ) )
-              (once (not (and (exists (?o ?v - block) (agent_holds ?v) ) (and (not (in_motion rug) ) (and (in_motion agent ?n) (adjacent ?q floor) ) ) ) ) )
-            )
-          )
-        )
-        (preference preferenceB
-          (exists (?b - hexagonal_bin)
-            (exists (?m - dodgeball ?n ?k ?d ?s ?p ?f - hexagonal_bin)
-              (at-end
-                (and
-                  (in_motion sideways ?b)
-                  (in_motion ?k ?p)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (exists (?d - ball ?r - cube_block)
-        (exists (?o - (either triangular_ramp))
+        (preference preference1
           (then
-            (once (same_color agent) )
-            (once (agent_holds ?o) )
-            (once (in_motion ?r) )
+            (hold (in_motion ?w ?w ?w) )
+            (hold (and (in_motion pillow) (on ?w) ) )
+            (once (and (agent_holds ?w) (in agent) (on ?w) ) )
           )
         )
-      )
-    )
-    (preference preferenceD
-      (at-end
-        (in_motion ?xxx)
       )
     )
   )
 )
 (:terminal
-  (>= (not 3 ) (- (count-once-per-objects preferenceA:doggie_bed:tall_cylindrical_block:dodgeball) (count-once-per-objects preferenceA) ) )
-)
-(:scoring
-  (* (+ 12 (- 18 )
+  (> (> (* (count preference1:basketball) 4 )
+      (* 1 (count preference1:pyramid_block:pink) )
     )
-    (count-once-per-objects preferenceD:pyramid_block)
+    5
   )
 )
+(:scoring
+  (+ (count preference1:red_pyramid_block) (count preference1:dodgeball) )
+)
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-49) (:domain medium-objects-room-v1)
 (:setup
-  (and
-    (game-conserved
-      (agent_holds bottom_shelf)
-    )
-    (and
-      (exists (?e - chair ?t - (either pyramid_block book laptop))
-        (forall (?x - cube_block ?y - teddy_bear)
-          (and
-            (game-conserved
-              (and
-                (agent_holds ?y)
-                (agent_holds ?y ?t)
-              )
-            )
+  (or
+    (forall (?u - flat_block)
+      (exists (?l - teddy_bear ?l - sliding_door)
+        (exists (?j - doggie_bed)
+          (exists (?k - color ?s ?k - building)
             (game-optional
-              (not
-                (and
-                  (not
-                    (not
-                      (adjacent agent)
-                    )
-                  )
-                  (not
-                    (in_motion desk)
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (forall (?e - dodgeball)
-      (forall (?x - hexagonal_bin)
-        (and
-          (and
-            (game-optional
-              (agent_holds ?e ?e)
-            )
-            (forall (?b - cube_block)
               (and
-                (and
-                  (and
-                    (game-optional
-                      (< 1 10)
-                    )
-                  )
-                  (and
-                    (exists (?o - doggie_bed ?q - block ?g - hexagonal_bin)
-                      (game-conserved
-                        (< 2 (distance 5 agent))
-                      )
-                    )
-                    (exists (?m - shelf)
-                      (exists (?q - hexagonal_bin)
-                        (and
-                          (and
-                            (game-conserved
-                              (agent_holds ?e)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                  (game-conserved
-                    (in_motion ?x)
-                  )
-                )
-                (and
-                  (game-optional
-                    (not
-                      (touch ?b)
-                    )
-                  )
-                  (forall (?a - hexagonal_bin)
-                    (exists (?t - cube_block ?r ?u ?z - cube_block)
-                      (and
-                        (exists (?j - game_object)
-                          (forall (?m - game_object)
-                            (and
-                              (and
-                                (and
-                                  (game-optional
-                                    (in_motion ?m)
-                                  )
-                                  (game-conserved
-                                    (agent_holds ?b)
-                                  )
-                                )
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-                (game-optional
-                  (in ?e)
-                )
-              )
-            )
-            (game-conserved
-              (not
-                (touch ?e)
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?q - game_object)
-        (exists (?u - hexagonal_bin ?u - hexagonal_bin ?v - cube_block ?a - building)
-          (then
-            (any)
-            (hold (agent_holds ?a) )
-            (once (= (distance ?a ?a) (distance ?q ?q)) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-measure preferenceA:brown) (* 100 5 )
-  )
-)
-(:scoring
-  10
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (not
-    (game-conserved
-      (not
-        (and
-          (in_motion ?xxx ?xxx)
-          (agent_holds agent)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold (and (< 3 (distance_side )) (agent_holds agent ?xxx) ) )
-        (hold (and (in ?xxx ?xxx) (and (same_color back agent) (and (agent_holds ?xxx) (exists (?y - block) (agent_holds pink_dodgeball) ) (in_motion ?xxx ?xxx) ) ) ) )
-        (hold (equal_x_position desk ?xxx) )
-      )
-    )
-    (preference preferenceB
-      (forall (?g - (either basketball key_chain) ?p - chair ?l - (either cylindrical_block golfball teddy_bear))
-        (at-end
-          (in_motion ?l)
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-overlapping preferenceB) 4 )
-)
-(:scoring
-  (* (- (* (* 20 1 )
-        (count preferenceB:doggie_bed)
-      )
-    )
-    (+ (+ (count preferenceA:dodgeball) (count-once preferenceB:dodgeball) (count-shortest preferenceB:dodgeball) )
-      2
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?p - dodgeball ?s - cube_block)
-    (game-conserved
-      (not
-        (agent_holds upright)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b - doggie_bed)
-        (exists (?r - cube_block)
-          (exists (?c - pillow)
-            (then
-              (once (in ?r) )
-              (hold (on ?b) )
-              (once (not (in_motion ?r ?c) ) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count preferenceA:blue_cube_block) (* (count-once preferenceA:top_drawer) (and (* (* (count-once preferenceA:green) (count preferenceA:alarm_clock) )
-        )
-        2
-        (count preferenceA:side_table)
-      )
-      (count preferenceA:dodgeball:dodgeball)
-    )
-  )
-)
-(:scoring
-  10
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (forall (?p - (either lamp triangle_block tall_cylindrical_block) ?i - wall ?s - (either dodgeball laptop) ?d - block ?e - cube_block)
-      (game-conserved
-        (in ?e ?e)
-      )
-    )
-    (exists (?e - (either dodgeball book))
-      (and
-        (game-optional
-          (on ?e)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?r - golfball)
-        (exists (?j - ball)
-          (at-end
-            (on ?r)
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?w - golfball)
-        (exists (?u ?n ?c - triangular_ramp)
-          (exists (?i ?q - cube_block ?d - hexagonal_bin ?t - ball ?q - cube_block)
-            (at-end
-              (agent_holds ?n yellow)
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (then
-        (once (and (adjacent_side ?xxx ?xxx ?xxx) (agent_holds ?xxx) ) )
-        (hold (= 0 (distance_side ?xxx ?xxx)) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 15 (+ (* (count preferenceC:dodgeball) (- 2 )
-      )
-      2
-    )
-  )
-)
-(:scoring
-  (external-forall-maximize
-    3
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (< 7 (distance 9 agent))
-  )
-)
-(:constraints
-  (and
-    (forall (?d - desk_shelf)
-      (and
-        (preference preferenceA
-          (then
-            (once (in bed) )
-            (hold-to-end (and (adjacent rug) (not (not (and (exists (?s ?z - cube_block ?z - hexagonal_bin) (in ?d) ) (on ?d ?d) (and (agent_holds ?d rug) (agent_holds ?d) ) ) ) ) (< (distance 10 ?d) (distance agent)) ) )
-            (once (in_motion ?d ?d) )
-          )
-        )
-        (preference preferenceB
-          (exists (?y - cube_block ?x - dodgeball)
-            (exists (?y - hexagonal_bin ?j - building ?b - hexagonal_bin ?t - hexagonal_bin)
-              (then
-                (once (and (= 1 (distance ?d 10)) (in_motion ?x ?d) (and (and (not (in_motion ?d) ) (not (agent_holds ?x) ) ) (on ?x) ) ) )
-                (once (or (not (adjacent ?d) ) (adjacent brown) ) )
-                (once (and (adjacent_side ?d ?d) (<= 6 1) ) )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (not (count-total preferenceA:beachball:dodgeball) ) (count preferenceA:yellow_cube_block) )
-)
-(:scoring
-  (total-score)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (exists (?y ?q ?k - tan_cube_block ?n - curved_wooden_ramp)
-      (exists (?g - dodgeball)
-        (forall (?b - curved_wooden_ramp ?v - (either mug flat_block dodgeball))
-          (and
-            (and
-              (game-optional
-                (and
-                  (and
-                    (in_motion top_shelf ?v)
-                    (in_motion ?n ?g)
-                  )
-                  (in_motion ?n ?v)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?w - ball ?c ?n - hexagonal_bin)
-      (and
-        (preference preferenceA
-          (exists (?k - building ?j - building ?d - dodgeball)
-            (exists (?h - triangular_ramp ?x ?t ?r - chair ?m - (either main_light_switch alarm_clock credit_card blue_cube_block))
-              (exists (?i - (either bridge_block book))
-                (exists (?g - hexagonal_bin ?r - doggie_bed)
-                  (exists (?w - game_object ?f - hexagonal_bin)
-                    (exists (?s - hexagonal_bin)
-                      (exists (?p ?h ?y - shelf)
-                        (then
-                          (hold-to-end (agent_holds ?p) )
-                          (hold-while (between ?h) (rug_color_under agent) )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 3 3 )
-)
-(:scoring
-  (count-once-per-objects preferenceA:red)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (and
-        (forall (?c - block)
-          (and
-            (forall (?u - game_object)
-              (exists (?j - block ?y - building)
-                (game-conserved
+                (not
                   (not
-                    (agent_holds ?c)
+                    (in_motion ?u)
                   )
                 )
+                (<= (distance ?l ?j) (distance ?u ?k))
               )
             )
-            (forall (?s - block)
-              (exists (?y - chair ?z - ball ?v - blinds)
-                (game-conserved
-                  (in ?c)
-                )
-              )
-            )
-          )
-        )
-        (game-optional
-          (and
-            (agent_holds ?xxx ?xxx)
-            (and
-              (in_motion color ?xxx)
-              (on ?xxx ?xxx)
-              (toggled_on ?xxx)
-              (not
-                (and
-                  (exists (?j - cube_block)
-                    (rug_color_under ?j)
-                  )
-                  (above ?xxx)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (and
-      (and
-        (game-conserved
-          (not
-            (agent_holds agent)
-          )
-        )
-        (game-conserved
-          (and
-            (agent_holds ?xxx)
-            (in_motion ?xxx)
           )
         )
       )
     )
     (game-optional
-      (and
-        (in ?xxx)
-        (not
-          (in_motion south_wall ?xxx)
-        )
-      )
+      (agent_holds ?xxx)
     )
   )
 )
 (:constraints
   (and
-    (forall (?i - dodgeball)
+    (preference preference1
+      (exists (?n - hexagonal_bin)
+        (exists (?a - yellow_cube_block ?t - hexagonal_bin)
+          (then
+            (once (in_motion front) )
+            (once (and (in_motion ?n) ) )
+            (hold (not (exists (?h - block ?v - doggie_bed ?o - hexagonal_bin) (in_motion front ?o) ) ) )
+          )
+        )
+      )
+    )
+    (forall (?p - ball ?n - (either watch cube_block hexagonal_bin))
       (and
-        (preference preferenceA
-          (exists (?y - block)
-            (exists (?g - dodgeball)
-              (exists (?u - hexagonal_bin ?p - dodgeball)
-                (exists (?f - hexagonal_bin ?t - bridge_block)
-                  (exists (?f - (either dodgeball golfball pyramid_block))
-                    (exists (?u - (either pyramid_block basketball dodgeball))
-                      (exists (?v - game_object)
-                        (exists (?m - dodgeball)
-                          (then
-                            (hold (on ?u) )
-                            (once (in_motion ?y) )
-                            (once (in_motion bed ?t ?m) )
-                          )
-                        )
-                      )
-                    )
-                  )
+        (preference preference2
+          (exists (?q - (either chair side_table) ?g - curved_wooden_ramp)
+            (then
+              (hold (exists (?o ?f - dodgeball ?a - doggie_bed) (in ?g ?a) ) )
+              (once-measure (object_orientation ) (distance ?n ?g) )
+              (once (not (not (in_motion ?g) ) ) )
+              (once (adjacent desk ?g) )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 7 5 )
+)
+(:scoring
+  (count-once-per-objects preference2:purple)
+)
+)
+
+
+(define (game game-id-50) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (forall (?f ?z ?d ?s - chair)
+      (forall (?o - dodgeball)
+        (and
+          (exists (?r - (either bridge_block dodgeball triangle_block yellow_cube_block))
+            (game-optional
+              (and
+                (on ?f)
+                (not
+                  (in ?s ?o)
                 )
               )
             )
           )
         )
-        (preference preferenceB
-          (then
-            (once (and (not (in_motion ?i ?i bed) ) (in_motion bed) (in_motion ?i) (exists (?c - (either triangle_block pyramid_block)) (not (in ?c ?i) ) ) (in rug desk) (and (on ?i ?i) (in_motion ?i) ) ) )
-            (once (not (agent_holds ?i) ) )
-            (once (adjacent_side ?i) )
-          )
-        )
       )
     )
   )
 )
-(:terminal
-  (> 4 (* 6 (* 3 6 )
-    )
-  )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (< 7 7)
-  )
-)
 (:constraints
   (and
-    (preference preferenceA
+    (preference preference1
       (then
-        (once (not (in_motion agent blue) ) )
-        (once (exists (?l - hexagonal_bin) (in ?l) ) )
-        (once (agent_holds ?xxx ?xxx) )
+        (once (agent_holds agent) )
+        (once (not (on desk ?xxx) ) )
+        (hold (touch ?xxx ?xxx) )
       )
     )
   )
 )
 (:terminal
-  (>= (count preferenceA:yellow:purple:side_table) 2 )
-)
-(:scoring
-  (count preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (forall (?n - building ?l - block)
-      (and
-        (not
-          (and
-            (game-conserved
-              (in_motion ?l ?l)
+  (<= (/ (+ (- 10 )
+        (count preference1:blue_dodgeball)
+      )
+      (count preference1)
+    )
+    (+ (+ (* (* (external-forall-maximize (count-overlapping preference1:yellow) ) (count preference1:red_pyramid_block:green) )
+          (= (* 10 10 )
+            (* (* 2 (and (count preference1:yellow) 5 2 ) )
+              1
             )
           )
         )
-        (exists (?e - game_object ?b ?y - wall)
-          (game-conserved
-            (not
-              (adjacent ?l)
-            )
-          )
-        )
+        (+ (count-once preference1:hexagonal_bin) (count preference1:basketball) )
       )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (same_object ?xxx ?xxx) )
-        (once (and (in_motion ?xxx) (in_motion ?xxx) (and (exists (?o - (either yellow_cube_block pencil) ?p - blinds) (and (agent_holds ?p) (not (and (and (and (< 1 1) ) (not (agent_holds ?p ?p) ) ) (adjacent ?p) ) ) ) ) (in_motion ?xxx) ) (adjacent_side ?xxx) (= (distance ) (distance ?xxx 8)) (< (distance door ?xxx ?xxx) (distance ?xxx ?xxx)) (same_color ?xxx) (and (= 1 7) (on bed ?xxx) ) ) )
-        (once (game_over agent) )
-      )
-    )
-    (preference preferenceB
-      (then
-        (hold (agent_holds ?xxx ?xxx) )
-        (hold (adjacent ?xxx) )
-        (once (on rug ?xxx) )
-      )
-    )
-    (preference preferenceC
-      (at-end
-        (in_motion ?xxx)
-      )
-    )
-  )
-)
-(:terminal
-  (>= 5 10 )
-)
-(:scoring
-  6
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?n - hexagonal_bin)
-    (exists (?s ?y - bridge_block)
-      (and
-        (game-optional
-          (in_motion ?s)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?g - hexagonal_bin ?p - chair)
-      (and
-        (preference preferenceA
-          (then
-            (hold-for 8 (and (< (distance ?p 2) 4) (agent_holds ?p) ) )
-            (once (in_motion ?p ?p) )
-            (once (agent_holds ?p) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (> (+ (+ (count-once-per-objects preferenceA:blue_pyramid_block) (count preferenceA:hexagonal_bin) )
-        2
-      )
-      (* (+ (+ (* (+ 3 (and 3 2 ) )
-              (-
-                (total-score)
-                (- 20 )
-              )
-              (count-once preferenceA:pink_dodgeball)
-              8
-              5
-              2
-            )
-            (count preferenceA)
-          )
-          2
-        )
-        (count-unique-positions preferenceA:basketball:alarm_clock)
-      )
-    )
-  )
-)
-(:scoring
-  10
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (exists (?m - cube_block)
-        (game-optional
-          (open ?m ?m)
-        )
-      )
-      (and
-        (game-conserved
-          (and
-            (in_motion ?xxx ?xxx)
-            (forall (?f - red_dodgeball)
-              (agent_holds east_sliding_door)
-            )
-          )
-        )
-      )
-      (forall (?g - (either golfball cellphone))
-        (game-conserved
-          (agent_holds ?g ?g)
-        )
-      )
-    )
-    (game-conserved
-      (in_motion ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?g - block ?j - cube_block)
-        (then
-          (hold (in_motion ?j) )
-          (hold (not (agent_holds ?j) ) )
-          (hold-to-end (and (agent_holds back green_golfball ?j) (on color rug) ) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (and (not (agent_holds ?xxx ?xxx) ) (= (distance ?xxx ?xxx ?xxx) (distance ?xxx)) ) )
-        (hold (not (not (agent_holds desk) ) ) )
-        (once (and (on ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= 15 (external-forall-maximize 20 ) )
-    (>= (count preferenceB:dodgeball) (- (count-once-per-objects preferenceA:golfball) )
-    )
-  )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?l - hexagonal_bin)
-    (or
-      (exists (?f - cube_block ?y - hexagonal_bin)
-        (game-optional
-          (agent_holds agent ?y)
-        )
-      )
-      (game-conserved
-        (touch ?l agent)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (agent_holds ?xxx) )
-        (once (in_motion ?xxx) )
-        (hold (and (not (on ?xxx ?xxx) ) (on ?xxx desk) ) )
-      )
-    )
-    (forall (?y - hexagonal_bin ?d ?e ?s ?y ?x ?t - hexagonal_bin)
-      (and
-        (preference preferenceB
-          (then
-            (hold (in_motion ?d) )
-            (once (adjacent pink_dodgeball) )
-            (once (touch ?e ?e) )
-          )
-        )
-        (preference preferenceC
-          (then
-            (hold (on ?s ?s) )
-            (once (agent_holds ?y) )
-            (hold-while (not (in_motion ?x) ) (on ?t) )
-          )
-        )
-        (preference preferenceD
-          (exists (?g - ball)
-            (then
-              (once (< 0.5 0) )
-              (once (and (touch ?y ?t) (in_motion ?x) ) )
-              (hold-while (and (not (and (not (touch ?s) ) (touch ?g) ) ) (not (touch ?x) ) ) (and (< (distance ?s 9) 1) (agent_holds bed) ) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (- (* (count preferenceB:dodgeball) (+ (count-measure preferenceA:dodgeball:green) 3 )
-      )
-    )
-    (count preferenceB:basketball:hexagonal_bin:red)
-  )
-)
-(:scoring
-  (external-forall-minimize
-    10
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?g - hexagonal_bin)
-    (game-conserved
-      (and
-        (and
-          (and
-            (< 2 (distance desk ?g))
-          )
-          (and
-            (agent_holds ?g bed)
-          )
-        )
-        (< (distance ?g 0) (distance agent ?g ?g))
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b - doggie_bed)
-        (exists (?m - curved_wooden_ramp)
-          (exists (?y - hexagonal_bin ?i - hexagonal_bin ?y - game_object)
-            (then
-              (hold (and (touch ?m) (in_motion ?y) ) )
-              (hold (not (agent_holds desk ?b) ) )
-              (hold-while (on upright ?m) (not (not (and (adjacent ?m bridge_block) (not (not (or (and (exists (?h - (either cylindrical_block teddy_bear)) (and (not (agent_holds ?m) ) (touch ?y) (in ?b agent) ) ) (and (or (in ?m ?m) (in_motion ?m) ) (in_motion pink) ) (on desk) (on ?m) ) (in ?y) (in_motion ?b desk) (not (and (in_motion rug floor) (in_motion ?m) (not (agent_holds ?y ?b ?b ?b) ) ) ) ) ) ) (and (in_motion ?b brown) (agent_holds ?y) ) ) ) ) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?b - game_object)
-        (then
-          (hold (and (on ?b ?b) (adjacent ?b) ) )
-          (once (adjacent ?b rug) )
-          (once (not (in_motion ?b ?b) ) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (not
-    (>= (* (count preferenceB:hexagonal_bin) 3 )
-      (* (total-score) 3 (* 2 7 )
-        (total-time)
-      )
-    )
-  )
-)
-(:scoring
-  (count-once-per-external-objects preferenceB:beachball:golfball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (agent_holds ?xxx ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (forall-sequence (?i - red_pyramid_block)
-          (then
-            (once (in ?i agent) )
-            (once (not (and (in ) (agent_holds ?i) ) ) )
-            (hold-while (agent_holds ?i) (not (in_motion ?i) ) )
-          )
-        )
-        (once (object_orientation ?xxx) )
-        (once (in_motion ?xxx) )
-      )
-    )
-    (preference preferenceB
-      (exists (?l - (either dodgeball floor))
-        (exists (?s - (either dodgeball tall_cylindrical_block) ?b - (either cellphone top_drawer) ?g - (either book floor) ?y ?c - doggie_bed ?i - teddy_bear)
-          (exists (?e - (either yellow_cube_block cellphone))
-            (exists (?o - hexagonal_bin)
-              (then
-                (hold-while (not (< 1 1) ) (not (not (touch ?i ?e) ) ) )
-                (hold (agent_holds ?o) )
-                (hold (not (above ?i rug) ) )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (then
-        (hold (same_color ?xxx ?xxx) )
-        (once (and (and (in floor) (on ?xxx ?xxx) ) (game_start ?xxx ?xxx bed) (in agent ?xxx) ) )
-        (once (and (and (and (in_motion ?xxx) (and (adjacent floor ?xxx) (not (and (not (and (not (< (distance side_table ?xxx) 6) ) (not (not (and (not (on ?xxx ?xxx) ) (not (and (on floor ?xxx) (in_motion ?xxx) (and (and (forall (?s - doggie_bed) (in_motion ?s pink_dodgeball) ) (on ?xxx ?xxx) (agent_holds ?xxx) ) (in_motion ?xxx) ) (not (agent_holds ?xxx ?xxx ?xxx) ) ) ) (in_motion ?xxx ?xxx) ) ) ) ) ) (agent_holds ?xxx) ) ) (in_motion ?xxx agent) (not (exists (?p - hexagonal_bin ?s - (either blue_cube_block ball)) (in_motion ?s ?s) ) ) (adjacent_side ?xxx ?xxx) (and (agent_holds ?xxx) (exists (?l - bridge_block ?y - watch) (in_motion agent ?y) ) (on ?xxx) ) ) (and (adjacent ?xxx) (< 2 (distance ?xxx room_center)) ) (on ?xxx bridge_block) ) (and (on ?xxx) (touch ?xxx door) ) ) (agent_holds ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (> (* (count-once preferenceC:blue_dodgeball) (count preferenceB:triangle_block) )
-      (count preferenceB:pink)
-    )
-    3
-  )
-)
-(:scoring
-  (/
-    5
-    (* (count-once-per-external-objects preferenceB:dodgeball) 5 )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?d - cube_block)
-    (game-conserved
-      (in_motion ?d west_wall)
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?s - hexagonal_bin ?b - curved_wooden_ramp)
-      (and
-        (preference preferenceA
-          (then
-            (once (forall (?h - doggie_bed) (in_motion ?h ?h) ) )
-            (once (agent_holds agent) )
-            (hold (in_motion ?b ?b) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (* (* 100 (+ (total-score) (+ 3 (* (+ (count-shortest preferenceA:hexagonal_bin) (count-overlapping preferenceA:triangle_block) )
-              4
-            )
-          )
-        )
-      )
-      (total-score)
-    )
-    3
-  )
-)
-(:scoring
-  (+ (count-once-per-objects preferenceA:pink_dodgeball:hexagonal_bin) 7 )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (exists (?a - hexagonal_bin)
-      (game-conserved
-        (on ?a ?a)
-      )
-    )
-    (and
-      (game-optional
-        (in_motion agent)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?z ?s - color)
-      (and
-        (preference preferenceA
-          (exists (?p ?o - triangular_ramp ?u - curved_wooden_ramp)
-            (then
-              (once (and (exists (?f - (either cube_block)) (and (not (agent_holds ?u) ) (and (exists (?n - block) (same_object ?s) ) (not (rug_color_under desk) ) (in_motion ?s ?z) (in_motion ?f ?z) (same_type ?u ?f) (on ?u) (and (not (and (not (equal_z_position ?f) ) (and (and (not (>= 6 (distance ?u ?u)) ) (is_setup_object rug) (or (on ?z) (in ?f) ) (and (and (in_motion ?s pink) (adjacent_side ?f) ) (not (not (on ?u) ) ) ) (in_motion ?f) (object_orientation ?s) ) (and (in_motion ?z) (in ?u) ) ) ) ) (not (same_object ?f ?z) ) ) (not (and (not (agent_holds ?z) ) (agent_holds ?s) ) ) ) ) ) (< 1 7) ) )
-              (hold (agent_holds ?u) )
-              (once (agent_holds desk ?s) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (in_motion ?xxx ?xxx) )
-        (hold (or (not (game_start ?xxx ?xxx) ) (not (in_motion ?xxx ?xxx) ) (< (distance room_center ?xxx) (distance desk ?xxx)) ) )
-        (once (agent_holds ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (<= 4 (count preferenceB:dodgeball:tan) )
-)
-(:scoring
-  (count-once-per-objects preferenceB:blue_dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (not
-      (and
-        (> 2 (distance ?xxx back))
-        (object_orientation ?xxx ?xxx)
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (and (same_object ?xxx) (agent_holds ?xxx ?xxx) ) )
-        (hold-while (on ?xxx ?xxx) (and (agent_holds ?xxx ?xxx) (on ?xxx) ) (in_motion ?xxx) )
-        (hold (agent_holds ?xxx ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count-once-per-objects preferenceA:dodgeball) (or 4 ) )
-    (< (count-once-per-objects preferenceA:rug) (* (count preferenceA:dodgeball) (count preferenceA:green:blue_pyramid_block) )
-    )
-    (>= 7 (+ 50 8 )
-    )
-  )
-)
-(:scoring
-  8
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (in_motion right)
-  )
-)
-(:constraints
-  (and
-    (forall (?c - ball)
-      (and
-        (preference preferenceA
-          (at-end
-            (agent_holds )
-          )
-        )
-        (preference preferenceB
-          (exists (?r - pillow ?k ?b - dodgeball)
-            (then
-              (once (touch ?c) )
-              (once (and (not (> (distance ?b ?b) 1) ) (not (not (agent_holds ?b ?b) ) ) ) )
-              (once (agent_holds ?b ?k) )
-            )
-          )
-        )
-        (preference preferenceC
-          (then
-            (hold (in ?c ?c) )
-            (once (not (faces ?c ?c) ) )
-          )
-        )
-      )
-    )
-    (preference preferenceD
-      (exists (?x - chair ?g - building ?g - cube_block)
-        (at-end
-          (not
-            (agent_holds ?g)
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (* 4 20 (* (- 2 )
-          (external-forall-maximize
-            (count-once preferenceD:purple)
-          )
-          (external-forall-maximize
-            (* (and (count preferenceB) ) (count preferenceA:pink) )
-          )
-          (count-once preferenceA:dodgeball)
-          5
-        )
-      )
-      (* (and (count preferenceD:purple) (* (count-longest preferenceB:pink_dodgeball) (count preferenceA:pink_dodgeball) )
-          (+ (count preferenceC:blue_dodgeball:dodgeball) (- (total-time) )
-            (= (- (count preferenceB:yellow) )
-            )
-          )
-        )
-        30
-        4
-        8
-        (count preferenceB:yellow)
-      )
-    )
-    (and
-      (or
-        (or
-          (>= (external-forall-maximize 1 ) (+ (count-same-positions preferenceD:beachball:blue_pyramid_block:green) (count-once-per-objects preferenceD:dodgeball) (count-once-per-objects preferenceC:golfball) )
-          )
-          (or
-            (>= (total-time) (count-once-per-objects preferenceD:beachball:basketball) )
-          )
-          (>= (count-once-per-objects preferenceC:dodgeball:yellow_pyramid_block) (count preferenceB:book) )
-          (> (+ (count-once-per-objects preferenceB:dodgeball) (= (+ (count-overlapping preferenceB) (count preferenceD:beachball) )
-                30
-                (count preferenceA:golfball)
-              )
-            )
-            (<= (<= 1 (count preferenceD:red) )
-              (external-forall-maximize
-                (count preferenceB:green:green)
-              )
-            )
-          )
-        )
-        (< (count preferenceC:tan) 10 )
-        (and
-          (>= 5 (count preferenceC:alarm_clock) )
-        )
-      )
-      (>= (count-once-per-objects preferenceB:yellow_cube_block) (* (count preferenceD:blue_pyramid_block) (count preferenceA:beachball) )
-      )
+      1
     )
   )
 )
@@ -4708,244 +3252,52 @@
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-51) (:domain many-objects-room-v1)
 (:setup
   (and
     (and
       (game-conserved
-        (adjacent desk ?xxx)
+        (adjacent ?xxx)
       )
     )
   )
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?e - building)
-        (then
-          (hold (forall (?h - cube_block ?m - hexagonal_bin ?i - (either golfball dodgeball)) (and (in_motion ?e) (agent_holds ?e ?e) ) ) )
-          (once (touch pink_dodgeball ?e) )
-          (once (in_motion ) )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (agent_holds ?xxx ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (= 18 3 )
-)
-(:scoring
-  1
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?x ?z - dodgeball)
-    (game-conserved
-      (on ?x)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?g - cube_block)
-        (exists (?s - hexagonal_bin ?z - block)
-          (then
-            (once (and (agent_holds ?g) (not (and (in ?g ?g) (on desk ?g) (same_color ?z) (agent_holds ?z ?z) ) ) ) )
-            (once (not (not (and (on ?z) (and (and (not (< 1 (distance ?g desk)) ) (on ?g ?g) ) (not (above desk) ) ) ) ) ) )
-            (once (not (in_motion ?g ?z) ) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (> (* 100 (+ (* (count preferenceA:block) (count-once-per-objects preferenceA:doggie_bed) )
-        (* 50 (count preferenceA:pink) )
-      )
-    )
-    0.5
-  )
-)
-(:scoring
-  (* 10 15 (count-once-per-objects preferenceA:pink) (count-once-per-objects preferenceA:pyramid_block) (- (* 4 (* 3 (+ (total-time) (* (not 40 ) (count-once-per-objects preferenceA:top_drawer:orange) )
-          )
-          (* 1 5 )
-        )
-        5
-      )
-    )
-    3
-    (total-score)
-    (count preferenceA:golfball)
-    (* (= (count preferenceA:pink_dodgeball:dodgeball) (count preferenceA:pink) )
-      (count preferenceA:pink)
-      (count-once preferenceA:beachball)
-      10
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?r - dodgeball)
-    (game-conserved
-      (agent_holds ?r ?r)
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?y ?r - hexagonal_bin)
-      (and
-        (preference preferenceA
-          (exists (?d - ball)
-            (then
-              (once (and (on pillow ?d) (touch ?y rug) ) )
-              (once (agent_holds ?d) )
-            )
-          )
-        )
-      )
-    )
-    (forall (?q - tall_cylindrical_block)
-      (and
-        (preference preferenceB
-          (exists (?j - (either dodgeball golfball) ?r - cube_block)
-            (then
-              (hold (agent_holds ?q) )
-              (once (agent_holds ?q) )
-              (hold (on ?q) )
-              (hold (on ?r) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (then
-        (once (in_motion rug) )
-        (hold-while (= 0.5 1) (adjacent pink) )
-        (once (agent_holds ?xxx ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (= (+ 2 (- 3 )
-    )
-    (count-total preferenceA:yellow)
-  )
-)
-(:scoring
-  (count-shortest preferenceB:dodgeball:green)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (exists (?m - wall ?b - ball)
-        (exists (?u ?k - hexagonal_bin ?e - (either tall_cylindrical_block book golfball blue_cube_block dodgeball floor key_chain))
-          (game-conserved
-            (not
-              (in_motion bed ?b)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?m - game_object ?e - shelf)
-        (exists (?l - cube_block)
-          (exists (?x - ball)
-            (at-end
-              (in_motion ?l ?x)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (<= 18 (+ (- (total-time) )
-      (+ (* (count preferenceA:beachball:golfball) (* 0 )
-        )
-        (count-once preferenceA:blue_dodgeball)
-      )
-    )
-  )
-)
-(:scoring
-  (+ (- (external-forall-maximize 4 ) )
-    (count preferenceA)
-    15
-    (* (count preferenceA:beachball) (count-once-per-objects preferenceA:green) (* 6 100 )
-    )
-    (total-time)
-    (count-once-per-objects preferenceA:red:green)
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?u - hexagonal_bin ?j - triangular_ramp)
-    (forall (?y - triangular_ramp ?o - (either rug rug))
-      (exists (?a - (either yellow yellow))
-        (game-conserved
-          (agent_holds ?j ?o)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold (not (and (adjacent bed ?xxx) (not (agent_holds agent ?xxx ?xxx) ) ) ) )
-        (once (on rug) )
-        (once (on ?xxx) )
-      )
-    )
-    (forall (?q - (either cube_block golfball cylindrical_block game_object blue_cube_block dodgeball blue_cube_block))
-      (and
-        (preference preferenceB
-          (then
-            (once (agent_holds ?q ?q) )
-            (hold (agent_holds ?q) )
-            (hold (and (in_motion floor) (faces bed ?q) ) )
-          )
-        )
-        (preference preferenceC
-          (exists (?k - game_object)
-            (exists (?d - (either pillow pyramid_block))
-              (exists (?x - beachball)
-                (exists (?h - building)
-                  (then
-                    (once (not (not (and (on ?q ?d) ) ) ) )
-                    (once (and (agent_holds ?h) (in_motion ?x) ) )
-                    (once (not (not (not (> (distance desk 0 ?q) (distance ?x green_golfball)) ) ) ) )
+    (preference preference1
+      (exists (?o - ball)
+        (exists (?d - curved_wooden_ramp ?m - hexagonal_bin)
+          (exists (?l ?t - hexagonal_bin)
+            (exists (?c - ball)
+              (exists (?z - (either cylindrical_block dodgeball) ?g - cube_block)
+                (at-end
+                  (and
+                    (not
+                      (not
+                        (not
+                          (in ?o ?m)
+                        )
+                      )
+                    )
+                    (not
+                      (and
+                        (in_motion bed)
+                        (not
+                          (exists (?a - dodgeball)
+                            (not
+                              (not
+                                (and
+                                  (not
+                                    (agent_holds ?a)
+                                  )
+                                  (in ?g)
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
                   )
                 )
               )
@@ -4954,19 +3306,477 @@
         )
       )
     )
-    (preference preferenceD
-      (then
-        (once (in_motion ?xxx ?xxx) )
-        (hold (adjacent_side ?xxx) )
-        (once (touch ?xxx) )
+    (preference preference2
+      (exists (?y ?g ?r - hexagonal_bin)
+        (then
+          (hold (in_motion ?r) )
+          (hold-while (agent_holds desk) (in_motion ?g) )
+          (hold (in ?r) )
+        )
       )
     )
-    (preference preferenceE
-      (exists (?v - sliding_door)
+  )
+)
+(:terminal
+  (>= (count preference1:beachball) (count preference2:golfball:top_drawer) )
+)
+(:scoring
+  10
+)
+)
+
+
+(define (game game-id-52) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (game-optional
+      (not
+        (adjacent ?xxx ?xxx)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?s - building)
+        (forall (?c - building ?r - game_object ?w - (either beachball pyramid_block dodgeball pink laptop tall_cylindrical_block lamp))
+          (exists (?r - triangular_ramp)
+            (at-end
+              (and
+                (same_object ?s ?r)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (> (- 1 )
+    7
+  )
+)
+(:scoring
+  8
+)
+)
+
+
+(define (game game-id-53) (:domain many-objects-room-v1)
+(:setup
+  (exists (?s - dodgeball)
+    (game-optional
+      (>= 1 5)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (agent_holds agent ?xxx)
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= 2 (count-once-per-objects preference1:orange) )
+    (>= (count-once-per-objects preference1:dodgeball:bed) (< (+ 10 (count preference1:book) )
+        (- (total-time) )
+      )
+    )
+    (>= (count preference1:basketball) 2 )
+  )
+)
+(:scoring
+  2
+)
+)
+
+
+(define (game game-id-54) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (adjacent ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (and (in door ?xxx) (or (in_motion agent ?xxx) (agent_holds ?xxx) ) ) )
+        (hold (not (adjacent rug) ) )
+        (once (< 1 (distance room_center ?xxx)) )
+      )
+    )
+    (preference preference2
+      (at-end
+        (opposite ?xxx)
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (* (count-once-per-objects preference2:pink_dodgeball:yellow) 5 )
+      (count preference2:blue_cube_block)
+    )
+    (>= (count preference1:dodgeball) (total-time) )
+  )
+)
+(:scoring
+  1
+)
+)
+
+
+(define (game game-id-55) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?e - curved_wooden_ramp)
+    (game-conserved
+      (between ?e)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (adjacent ?xxx ?xxx) )
+        (once (not (agent_holds ?xxx ?xxx front) ) )
+        (once (not (agent_holds ?xxx) ) )
+      )
+    )
+    (preference preference2
+      (then
+        (once (agent_holds ?xxx) )
+        (once (exists (?p - (either bridge_block golfball) ?z - dodgeball) (in ?z ?z) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (< (* (count-once-per-objects preference2:red) (external-forall-maximize (* 1 (count preference2:pink) )
+      )
+    )
+    (count preference1:red_pyramid_block:basketball)
+  )
+)
+(:scoring
+  (count preference1:golfball)
+)
+)
+
+
+(define (game game-id-56) (:domain medium-objects-room-v1)
+(:setup
+  (game-optional
+    (in_motion rug ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (in ?xxx) )
+        (once (and (not (on ?xxx) ) (is_setup_object ?xxx) ) )
+        (hold (in_motion ?xxx agent) )
+        (once (same_object desk floor) )
+        (once (in_motion bed ?xxx ?xxx) )
+      )
+    )
+    (preference preference2
+      (then
+        (once (and (in_motion ?xxx) (agent_holds ?xxx) ) )
+        (once (in_motion ?xxx) )
+        (once (or (in ?xxx) (in ?xxx bed) (and (not (and (agent_holds ?xxx) (agent_holds ?xxx ?xxx) ) ) (in_motion pink_dodgeball ?xxx) ) ) )
+        (once (game_over ?xxx) )
+      )
+    )
+    (forall (?s ?c ?m ?p ?k ?v - shelf)
+      (and
+        (preference preference3
+          (then
+            (once (on ?k ?p) )
+            (once (not (in ?s) ) )
+            (hold (in agent ?p) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 2 (count-once-per-objects preference3:yellow:pink) )
+)
+(:scoring
+  3
+)
+)
+
+
+(define (game game-id-57) (:domain many-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (and
+        (in_motion ?xxx ?xxx)
+        (agent_holds ?xxx)
+      )
+      (and
+        (agent_holds agent)
+        (= 3 10)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?e ?y ?j - block)
+      (and
+        (preference preference1
+          (then
+            (once (not (in_motion ?e) ) )
+            (hold-while (and (and (adjacent ?y) (not (and (in_motion ?y ?y) (on ?j) (agent_holds ?j) ) ) (and (game_start ?y) (touch ?y) (or (in ?j) (not (not (not (touch floor) ) ) ) ) ) (agent_holds agent) ) (agent_holds ?j) (agent_holds agent) ) (same_color ?e) )
+            (hold-while (on pink_dodgeball ?j) (< 1 10) (on pink_dodgeball ?y) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once preference1:pink) (+ (* (external-forall-minimize (total-time) ) (count-once-per-objects preference1:beachball) )
+      (count preference1:orange:blue_dodgeball)
+      (- 15 )
+    )
+  )
+)
+(:scoring
+  (* (* (count-once-per-objects preference1:beachball:hexagonal_bin) (+ 9 (* 4 (count preference1:hexagonal_bin:beachball) )
+      )
+    )
+    (* (count preference1:beachball:dodgeball) (count-once-per-objects preference1:beachball) (count preference1) 10 (- (+ (count preference1:top_drawer) (= (external-forall-minimize (* (* 10 (- (count preference1:blue_dodgeball:pink_dodgeball) )
+                )
+                (external-forall-maximize
+                  (count-once-per-objects preference1:yellow)
+                )
+              )
+            )
+            (<= 1 6 )
+          )
+          10
+        )
+      )
+      (* 50 10 )
+    )
+  )
+)
+)
+
+
+(define (game game-id-58) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (on agent ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (agent_holds ?xxx ?xxx) )
+        (once (agent_holds ?xxx) )
+        (once (not (and (same_color ?xxx block) (and (touch ?xxx pink_dodgeball) (and (in_motion ?xxx ?xxx) (not (agent_holds ?xxx) ) ) ) (in_motion ?xxx ?xxx) ) ) )
+      )
+    )
+    (preference preference2
+      (exists (?p - (either cd blue_cube_block alarm_clock))
         (then
-          (hold (in_motion ?v) )
-          (once (adjacent ?v ?v) )
-          (once (and (and (same_color ?v south_west_corner) (is_setup_object ?v ?v) (= (distance room_center ?v) (distance ?v) 1 2) ) (agent_holds ?v) ) )
+          (once (in_motion ?p) )
+          (once (object_orientation ?p) )
+          (once (in_motion bed) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference2:blue_pyramid_block) (count-once-per-objects preference2:rug) )
+)
+(:scoring
+  (count preference1:top_drawer)
+)
+)
+
+
+(define (game game-id-59) (:domain few-objects-room-v1)
+(:setup
+  (game-conserved
+    (or
+      (not
+        (agent_holds ?xxx pink)
+      )
+      (agent_holds ?xxx ?xxx ?xxx ?xxx)
+      (and
+        (<= 10 1)
+        (in_motion ?xxx)
+        (in_motion agent)
+      )
+      (adjacent ?xxx ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (same_color ?xxx)
+      )
+    )
+  )
+)
+(:terminal
+  (> (count-once-per-objects preference1:white:blue_cube_block) (count preference1:golfball) )
+)
+(:scoring
+  (count-once-per-objects preference1:pink)
+)
+)
+
+
+(define (game game-id-60) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?t ?z - dodgeball)
+    (and
+      (and
+        (and
+          (game-conserved
+            (not
+              (in ?t)
+            )
+          )
+          (game-conserved
+            (not
+              (not
+                (adjacent ?t ?z)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b ?v ?h ?t - book ?l - block)
+      (and
+        (preference preference1
+          (then
+            (hold (and (not (rug_color_under ?l) ) (forall (?c - (either pen doggie_bed)) (adjacent ?c ?l) ) ) )
+            (once (in ?l) )
+            (hold (agent_holds ?l ?l) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once-per-objects preference1:golfball) 2 )
+)
+(:scoring
+  (count-shortest preference1:doggie_bed)
+)
+)
+
+
+(define (game game-id-61) (:domain medium-objects-room-v1)
+(:setup
+  (forall (?p - shelf)
+    (game-conserved
+      (between ?p ?p)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?c - hexagonal_bin ?e - book)
+      (and
+        (preference preference1
+          (then
+            (once (and (on ?e ?e) (and (not (in_motion south_wall) ) (in_motion agent ?e) ) ) )
+            (once (forall (?w - drawer) (exists (?j - pyramid_block) (agent_holds ?j) ) ) )
+            (hold-while (in_motion ?e agent) (not (not (agent_holds ?e ?e) ) ) )
+          )
+        )
+        (preference preference2
+          (exists (?m - hexagonal_bin)
+            (exists (?t - wall ?l - doggie_bed)
+              (at-end
+                (agent_holds ?l)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (+ (* 2 3 )
+      6
+    )
+    (count preference1:pink)
+  )
+)
+(:scoring
+  2
+)
+)
+
+
+(define (game game-id-62) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?o - teddy_bear ?g - watch)
+      (exists (?b - (either game_object game_object alarm_clock) ?f - triangular_ramp ?c - game_object ?o - hexagonal_bin)
+        (game-conserved
+          (exists (?u - cube_block ?t - cube_block)
+            (and
+              (and
+                (exists (?a - cube_block)
+                  (in_motion ?a)
+                )
+                (in_motion ?t ?t)
+              )
+              (agent_holds ?t ?o)
+              (touch ?o)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (and (in_motion ?xxx) ) )
+        (hold (in ?xxx) )
+        (hold-while (in_motion ?xxx bed) (adjacent ?xxx ?xxx) (in_motion ?xxx ?xxx) )
+        (once (and (forall (?c - pillow ?a - building) (in_motion ?a) ) (in_motion ?xxx ?xxx) ) )
+      )
+    )
+    (preference preference2
+      (exists (?u - ball)
+        (at-end
+          (adjacent ?u)
         )
       )
     )
@@ -4974,40 +3784,873 @@
 )
 (:terminal
   (or
-    (>= (* (* (count-once-per-objects preferenceA:pink) (count preferenceE:purple:yellow) )
-        (count-once-per-objects preferenceB:beachball)
-      )
-      (count preferenceC:yellow)
-    )
-    (<= (count-once-per-objects preferenceE:triangle_block) (* (* (- (+ 9 (- 0 )
+    (> (count preference2:golfball) (* 1 (< (+ (count-measure preference1:golfball) (* (* (count preference1:doggie_bed) (count-once-per-objects preference1:basketball) )
+              (+ (count preference2:brown) (count preference1:blue_cube_block) 3 5 (* (count preference2:side_table:tan) (< (count preference2:beachball) (count preference1:pink) )
+                )
+                (count preference2:blue_pyramid_block:orange)
+              )
             )
           )
-          (< (count preferenceC:dodgeball) 3 )
+          5
         )
-        (- (count preferenceB:brown:beachball) )
       )
     )
-    (>= (* 2 )
-      5
+    (>= (- 20 )
+      3
+    )
+    (and
+      (or
+        (>= (external-forall-maximize (count-once-per-objects preference1:beachball) ) (count-once preference1:pink:dodgeball) )
+        (> 2 (total-score) )
+      )
     )
   )
 )
 (:scoring
-  (* (>= 3 (count-once-per-objects preferenceA:pink:red) )
-    (count-once preferenceA:basketball:pink)
+  (count-once-per-objects preference1:white)
+)
+)
+
+
+(define (game game-id-63) (:domain medium-objects-room-v1)
+(:setup
+  (exists (?h - color)
+    (and
+      (exists (?u - hexagonal_bin)
+        (game-optional
+          (and
+            (and
+              (in_motion agent)
+              (not
+                (touch front bed)
+              )
+              (in ?h ?u)
+            )
+            (in ?u)
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (and
+          (not
+            (not
+              (exists (?b - building)
+                (agent_holds ?b front)
+              )
+            )
+          )
+          (agent_holds pink)
+          (in ?xxx ?xxx)
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= 0 (total-score) )
+    (> (count-once-per-objects preference1:dodgeball) (count-once-per-external-objects preference1:basketball) )
+  )
+)
+(:scoring
+  (* 3 2 )
+)
+)
+
+
+(define (game game-id-64) (:domain many-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (in ?xxx ?xxx)
+      (adjacent rug)
+      (adjacent_side ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (not (not (in_motion ?xxx) ) ) )
+        (once (or (rug_color_under ?xxx) (in_motion ?xxx) (> (distance agent) 1) (in ?xxx) ) )
+        (once (in_motion ?xxx front) )
+      )
+    )
+  )
+)
+(:terminal
+  (> 6 (count preference1:golfball:pink) )
+)
+(:scoring
+  6
+)
+)
+
+
+(define (game game-id-65) (:domain medium-objects-room-v1)
+(:setup
+  (game-optional
+    (and
+      (agent_holds ?xxx pink_dodgeball)
+      (in_motion ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (in_motion ?xxx rug) )
+        (once (and (not (not (and (is_setup_object top_shelf ?xxx) (adjacent ?xxx) ) ) ) (not (and (and (agent_holds ?xxx) (< 1 (distance ?xxx door)) ) (in_motion ?xxx) (and (on ?xxx) (adjacent ?xxx ?xxx) (not (and (not (agent_holds ?xxx) ) (agent_holds bed) ) ) (equal_z_position bed) ) ) ) ) )
+        (once (in_motion pink_dodgeball) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (not
+      (>= 3 100 )
+    )
+    (> (* (* 1 (count preference1:hexagonal_bin) (= (total-score) (count-unique-positions preference1:dodgeball) )
+          (+ (- 5 )
+            5
+            (* (* (and 5 4 30 ) 10 (count-once-per-external-objects preference1:golfball) )
+              (+ 3 5 )
+            )
+          )
+        )
+        1
+        2
+      )
+      (* (count preference1:basketball:book:hexagonal_bin) (- (count preference1:golfball) )
+      )
+    )
+  )
+)
+(:scoring
+  (* (count preference1:beachball) (count preference1:pink:dodgeball) (count-once-per-objects preference1) (count-once-per-external-objects preference1:tall_cylindrical_block) (* 2 (count-once preference1:dodgeball) )
+    10
   )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-66) (:domain medium-objects-room-v1)
 (:setup
-  (exists (?r - game_object)
-    (not
+  (exists (?u - hexagonal_bin)
+    (and
+      (forall (?k - ball)
+        (and
+          (and
+            (and
+              (forall (?n - block)
+                (or
+                  (game-optional
+                    (and
+                      (agent_holds ?k)
+                      (exists (?q - dodgeball)
+                        (not
+                          (on agent ?k)
+                        )
+                      )
+                      (adjacent ?n)
+                    )
+                  )
+                )
+              )
+              (and
+                (game-conserved
+                  (and
+                    (on ?k ?k)
+                    (not
+                      (agent_holds ?u ?k)
+                    )
+                    (not
+                      (not
+                        (not
+                          (game_over ?u ?k)
+                        )
+                      )
+                    )
+                  )
+                )
+                (and
+                  (game-conserved
+                    (agent_holds ?u)
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+      (game-conserved
+        (or
+          (not
+            (in_motion ?u)
+          )
+          (on ?u)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?a - hexagonal_bin)
+        (at-end
+          (same_type ?a ?a)
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (and
+    (>= (not (total-time) ) (* 7 10 (count-once-per-objects preference1:beachball:red) (count-once-per-objects preference1:basketball:green) )
+    )
+    (<= (count-once-per-objects preference1:dodgeball) (total-score) )
+  )
+)
+(:scoring
+  (- (count preference1:golfball) )
+)
+)
+
+
+(define (game game-id-67) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (exists (?y - hexagonal_bin ?s - chair)
+      (game-optional
+        (in_motion ?s)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (agent_holds ?xxx) )
+        (hold (and (and (agent_holds ?xxx) (adjacent_side ?xxx) ) (agent_holds ?xxx) ) )
+        (once (not (and (and (in_motion yellow) (not (< (distance 4 ?xxx ?xxx) 6) ) ) (agent_holds ?xxx ?xxx) (and (in ?xxx ?xxx) (forall (?b - hexagonal_bin) (on ?b) ) ) ) ) )
+      )
+    )
+    (preference preference2
+      (exists (?c - block ?c - teddy_bear)
+        (then
+          (once (touch ?c) )
+          (once (object_orientation ?c ?c) )
+          (hold (in_motion rug) )
+        )
+      )
+    )
+    (forall (?i - shelf)
+      (and
+        (preference preference3
+          (forall (?e ?t - golfball)
+            (exists (?l - cube_block ?z - dodgeball)
+              (then
+                (once (in_motion agent side_table) )
+                (once (= 1 7) )
+                (once (not (and (agent_holds ?i ?i) (and (not (adjacent ?z) ) (not (rug_color_under ?i ?z) ) (on ?z) ) ) ) )
+              )
+            )
+          )
+        )
+        (preference preference4
+          (then
+            (once (not (not (agent_holds agent) ) ) )
+            (hold (agent_holds ?i top_shelf) )
+            (hold (agent_holds ?i ?i) )
+          )
+        )
+      )
+    )
+    (preference preference5
+      (then
+        (hold (in_motion ?xxx ?xxx) )
+        (hold (in ?xxx ?xxx) )
+        (once (agent_holds ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (- (+ (> 3 5 )
+        (count preference4:dodgeball)
+      )
+    )
+    (count preference3:dodgeball)
+  )
+)
+(:scoring
+  4
+)
+)
+
+
+(define (game game-id-68) (:domain medium-objects-room-v1)
+(:setup
+  (not
+    (game-conserved
+      (in_motion agent)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (and (in_motion ?xxx) (agent_holds ?xxx ?xxx) ) )
+        (once (in_motion ?xxx) )
+        (once (in_motion desk ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (> (count preference1:blue) (* (count preference1:pink) (* (count preference1:dodgeball:block) (total-score) )
+      )
+    )
+    (or
+      (not
+        (or
+          (not
+            (or
+              (or
+                (or
+                  (>= 6 (+ 1 (count-once-per-objects preference1:pink) )
+                  )
+                  (>= 7 (+ (total-score) (count-once-per-objects preference1:yellow) )
+                  )
+                )
+                (>= (count preference1:green) (count preference1:dodgeball:purple) )
+              )
+              (>= 5 (count preference1:bed) )
+            )
+          )
+          (>= (* (* (count preference1:beachball) (* (* (* (count-once-per-external-objects preference1:basketball:dodgeball) (count-once-per-objects preference1:green) )
+                    (count preference1:bed)
+                  )
+                  5
+                )
+                1
+                (total-time)
+              )
+              (count preference1:basketball)
+              10
+              (+ (count preference1:dodgeball) (+ 3 (* (count preference1:yellow) 2 (count preference1:golfball) )
+                )
+              )
+            )
+            5
+          )
+        )
+      )
+      (>= 3 4 )
+      (>= (* (<= (count preference1:beachball) (count preference1:pink:pink) )
+          300
+        )
+        (total-score)
+      )
+      (>= (total-score) (count preference1:orange:golfball) )
+    )
+  )
+)
+(:scoring
+  (= (count-once-per-objects preference1:yellow_pyramid_block) 5 )
+)
+)
+
+
+(define (game game-id-69) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (and
+      (game-conserved
+        (agent_holds ?xxx)
+      )
+    )
+    (game-conserved
       (and
         (and
-          (game-conserved
-            (in ?r)
+          (and
+            (and
+              (< 1 1)
+            )
+            (not
+              (agent_holds ?xxx ?xxx)
+            )
+          )
+          (adjacent ?xxx)
+        )
+        (in_motion ?xxx)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?y ?b - (either cellphone cube_block) ?x - blue_pyramid_block)
+        (exists (?t - pyramid_block)
+          (then
+            (once (not (agent_holds ?x ?x) ) )
+            (hold-while (not (exists (?w - dodgeball) (not (on bed ?x) ) ) ) (and (forall (?k - flat_block ?k - dodgeball) (on ?k ?x) ) (adjacent ?x) ) )
+            (once (on rug ?x) )
+          )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?x - (either desktop dodgeball) ?r - book)
+        (then
+          (hold (in_motion ?r ?r ?r) )
+          (hold (not (agent_holds ?r) ) )
+          (once (not (not (or (in_motion ?r) (agent_holds ?r ?r) ) ) ) )
+        )
+      )
+    )
+    (preference preference3
+      (exists (?o - triangular_ramp)
+        (exists (?z - hexagonal_bin)
+          (exists (?g - (either cellphone pen beachball dodgeball dodgeball cube_block chair))
+            (then
+              (once (< (distance ?o side_table agent) (distance ?o 2)) )
+              (once (< 1 2) )
+              (hold (exists (?v - hexagonal_bin) (not (and (not (and (and (not (not (on ?v ?v) ) ) (not (and (agent_holds ?o) (forall (?t - game_object) (not (agent_holds agent ?z) ) ) ) ) ) (adjacent_side ?o) ) ) (in ?o floor ?g) ) ) ) )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= 3 (count-unique-positions preference1:beachball) )
+    (>= (count preference1:beachball) 3 )
+    (> (= (* (+ 0 (count-once-per-objects preference2:green:beachball) )
+          (count-once-per-objects preference1:purple)
+        )
+        (count-once-per-external-objects preference3:basketball:side_table)
+      )
+      (count preference3:golfball:pink)
+    )
+  )
+)
+(:scoring
+  (count preference1:dodgeball:green)
+)
+)
+
+
+(define (game game-id-70) (:domain few-objects-room-v1)
+(:setup
+  (exists (?u - curved_wooden_ramp ?b - game_object ?y - block)
+    (and
+      (and
+        (game-conserved
+          (on ?y ?y)
+        )
+      )
+      (game-optional
+        (is_setup_object bed)
+      )
+      (forall (?k - color)
+        (exists (?b - game_object)
+          (exists (?o - cylindrical_block)
+            (game-optional
+              (exists (?p - ball)
+                (not
+                  (in_motion ?k ?p)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?r - cylindrical_block)
+      (and
+        (preference preference1
+          (then
+            (once (agent_holds agent) )
+            (once-measure (agent_holds ?r) (distance ?r room_center ?r) )
+            (hold (same_object top_shelf ?r) )
+            (hold-while (agent_holds ?r) (agent_holds ?r) )
+          )
+        )
+      )
+    )
+    (forall (?p - block ?u - teddy_bear)
+      (and
+        (preference preference2
+          (then
+            (hold (in ?u) )
+            (hold (not (and (on yellow) (agent_holds ?u) ) ) )
+          )
+        )
+        (preference preference3
+          (then
+            (once (and (and (and (not (on ?u ?u) ) (on ?u desk) ) (agent_holds ?u ?u) ) (on ?u ?u) (not (in ?u) ) ) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (and
+    (= 10 (count-once-per-objects preference2:dodgeball) )
+    (or
+      (or
+        (>= 3 (count preference3:beachball) )
+        (>= (count preference2:dodgeball) 5 )
+      )
+      (> (count preference2:yellow) (<= (count preference3:green:basketball) 2 )
+      )
+    )
+    (>= (* 12 4 )
+      (count preference1:yellow_cube_block:yellow)
+    )
+  )
+)
+(:scoring
+  (count-once-per-objects preference2:beachball)
+)
+)
+
+
+(define (game game-id-71) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (or
+      (and
+        (exists (?z - dodgeball ?d - pyramid_block)
+          (or
+            (and
+              (game-conserved
+                (and
+                  (< (distance ?d ?d) (distance back 9))
+                  (in_motion ?d)
+                )
+              )
+            )
+            (and
+              (game-conserved
+                (in_motion bridge_block)
+              )
+              (and
+                (game-optional
+                  (agent_holds ?d)
+                )
+                (exists (?j - hexagonal_bin)
+                  (and
+                    (exists (?i - (either pencil golfball yellow_cube_block))
+                      (forall (?k - hexagonal_bin)
+                        (exists (?w - ball)
+                          (game-conserved
+                            (same_type rug ?i)
+                          )
+                        )
+                      )
+                    )
+                    (and
+                      (forall (?o - block)
+                        (forall (?b - dodgeball)
+                          (and
+                            (game-optional
+                              (agent_holds ?o bed)
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+                (game-optional
+                  (on ?d)
+                )
+              )
+              (game-conserved
+                (adjacent ?d)
+              )
+            )
+          )
+        )
+        (forall (?t - shelf ?q - chair)
+          (and
+            (game-conserved
+              (on ?q bed)
+            )
+          )
+        )
+      )
+      (and
+        (game-conserved
+          (in ?xxx ?xxx)
+        )
+      )
+      (not
+        (game-conserved
+          (and
+            (and
+              (and
+                (exists (?w - block)
+                  (touch agent ?w)
+                )
+                (on ?xxx ?xxx)
+              )
+              (agent_holds ?xxx)
+            )
+            (not
+              (or
+                (and
+                  (exists (?r - curved_wooden_ramp)
+                    (not
+                      (and
+                        (not
+                          (agent_holds ?r)
+                        )
+                        (not
+                          (exists (?m - dodgeball ?g - cube_block ?b - dodgeball)
+                            (on bed)
+                          )
+                        )
+                        (agent_holds floor)
+                      )
+                    )
+                  )
+                  (exists (?p - hexagonal_bin)
+                    (in ?p)
+                  )
+                  (in ?xxx ?xxx)
+                  (and
+                    (in ?xxx)
+                    (agent_holds ?xxx ?xxx)
+                  )
+                )
+                (in_motion rug floor)
+                (in_motion ?xxx)
+                (not
+                  (agent_holds ?xxx west_wall floor rug)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (on ?xxx) )
+        (once (in_motion ?xxx) )
+        (once (on ?xxx ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= 7 (count preference1:beachball:blue_pyramid_block) )
+  )
+)
+(:scoring
+  (external-forall-maximize
+    (count-once-per-objects preference1:rug)
+  )
+)
+)
+
+
+(define (game game-id-72) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?i - beachball ?f - block)
+      (and
+        (not
+          (forall (?w - hexagonal_bin ?a - cube_block)
+            (exists (?e - block)
+              (and
+                (exists (?g - hexagonal_bin ?x - (either bridge_block wall mug alarm_clock main_light_switch dodgeball game_object) ?w - ball)
+                  (game-optional
+                    (agent_holds ?e ?a)
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (game-conserved
+      (adjacent ?xxx ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?z - wall)
+        (then
+          (once (and (touch ?z ?z) (toggled_on ?z ?z) (= (distance 1 ?z) 1) ) )
+          (hold (toggled_on ?z) )
+          (once (not (agent_holds ?z ?z) ) )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?c - hexagonal_bin ?a - cylindrical_block)
+        (exists (?h - game_object)
+          (exists (?n - wall)
+            (at-end
+              (agent_holds ?a agent)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (and
+      (>= (* 18 (* (+ 2 (* (+ (count preference2:hexagonal_bin:basketball) (* (<= (count preference1:wall) (count-once-per-objects preference2:doggie_bed:pink) )
+                    4
+                  )
+                )
+                (* (count-increasing-measure preference2:hexagonal_bin) (count-once-per-objects preference1) )
+              )
+            )
+            (count-once-per-objects preference1:hexagonal_bin)
+          )
+          (total-score)
+        )
+        (>= (* (count preference2:dodgeball) (* (* 10 (* (- 4 )
+                  (count preference1:hexagonal_bin:purple)
+                  (+ 7 (count-once-per-objects preference1:hexagonal_bin) )
+                  (count-once preference1:pink_dodgeball)
+                )
+              )
+              (count-once-per-external-objects preference2:dodgeball:pink)
+              (count preference2:yellow)
+              (count preference1:hexagonal_bin)
+            )
+          )
+          30
+        )
+      )
+      (>= 7 (* (* (* (count-overlapping preference2:purple) (* (total-time) 2 )
+              (count-once-per-objects preference2:hexagonal_bin:green)
+            )
+            (count preference1:brown)
+          )
+          15
+        )
+      )
+    )
+  )
+)
+(:scoring
+  30
+)
+)
+
+
+(define (game game-id-73) (:domain few-objects-room-v1)
+(:setup
+  (forall (?m - (either doggie_bed wall))
+    (game-conserved
+      (not
+        (in_motion ?m agent)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?r - game_object)
+      (and
+        (preference preference1
+          (exists (?a - dodgeball ?g - dodgeball ?y - (either dodgeball laptop))
+            (exists (?c - hexagonal_bin)
+              (exists (?q - bridge_block)
+                (then
+                  (hold-while (in_motion agent ?r) (touch ?r ?c) )
+                  (hold (< (distance 0 ?q 4) 1) )
+                  (hold (agent_holds ?q pink_dodgeball) )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?h - curved_wooden_ramp)
+        (exists (?v - chair)
+          (then
+            (hold-to-end (on ?v) )
+            (hold (and (agent_holds ?v ?h) (opposite ?v ?h) ) )
+            (once (in ?h ?v) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (exists (?n - dodgeball ?u - dodgeball ?o - hexagonal_bin)
+        (exists (?q - chair ?w - (either curved_wooden_ramp golfball))
+          (then
+            (once (not (touch agent ?o) ) )
+            (once (< 1 (distance 5 ?w)) )
+            (once (not (and (in_motion ?w) (in_motion ?o ?o) ) ) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 5 (count-once preference1:cube_block:golfball) )
+)
+(:scoring
+  (count-shortest preference3:beachball)
+)
+)
+
+
+(define (game game-id-74) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (< 3 (distance 0 ?xxx))
+    )
+    (exists (?r - hexagonal_bin ?r - hexagonal_bin)
+      (exists (?e - building ?s - block ?l - hexagonal_bin ?p - hexagonal_bin ?h - hexagonal_bin)
+        (game-optional
+          (not
+            (adjacent ?r)
           )
         )
       )
@@ -5018,79 +4661,26 @@
   (and
     (forall (?c - dodgeball)
       (and
-        (preference preferenceA
-          (exists (?p - game_object)
-            (then
-              (hold-while (is_setup_object ?c) (not (not (< (distance room_center ?p) (distance front_left_corner agent)) ) ) )
-              (once (in_motion ?p) )
-              (once (not (object_orientation floor) ) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (not
-    (< (count preferenceA:yellow) (* (* 15 (count preferenceA:doggie_bed) (external-forall-maximize (count-once-per-external-objects preferenceA:pink) ) )
-        (count-once-per-objects preferenceA:dodgeball)
-        (count preferenceA:alarm_clock)
-      )
-    )
-  )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (game-optional
-      (in_motion desk pink)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b - triangular_ramp)
-        (exists (?y - hexagonal_bin)
+        (preference preference1
           (then
-            (once (and (touch ?y) (and (not (in_motion ?y floor) ) (in ?b agent) (and (and (agent_holds ?b ?y) (in_motion ?b) ) (in_motion ?b) (and (in_motion ?b) (not (agent_holds ?y) ) (on ?y ?y) (and (adjacent_side ?b ?y) (and (not (not (on ?b) ) ) (not (on ?y ?b) ) ) ) (in_motion ?b) ) (exists (?s - color) (in ?y) ) ) ) (and (agent_holds ?b ?b) (in ?b ?b) ) (on ?y) ) )
+            (hold (not (in ?c) ) )
+            (once (is_setup_object rug) )
+            (hold (in_motion ?c ?c) )
           )
         )
       )
     )
-    (preference preferenceB
-      (at-end
-        (and
-          (not
-            (= 1 1 1)
-          )
-          (and
-            (agent_holds ?xxx rug)
-            (and
-              (not
-                (in_motion rug)
+    (preference preference2
+      (exists (?b - building)
+        (exists (?m - wall ?h - block)
+          (exists (?x - (either blue_cube_block pillow) ?p - dodgeball)
+            (exists (?m - book ?r - color)
+              (then
+                (once-measure (on ?p) (distance door green_golfball) )
+                (once (in_motion ?h ?p) )
+                (once (in_motion ?h ?h) )
               )
-              (in_motion ?xxx)
-              (adjacent ?xxx)
             )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (exists (?j - teddy_bear)
-        (exists (?a - cube_block)
-          (then
-            (hold (not (not (in ?a) ) ) )
-            (hold-while (forall (?r - hexagonal_bin) (in_motion ?j ?j) ) (not (in_motion ?a) ) (and (on ?j) (and (or (and (not (in_motion ?a agent) ) (and (and (not (agent_holds ?j) ) (in_motion front) ) (not (agent_holds ?j) ) ) ) (on ?a ?j ?a) ) (in_motion ?a) ) ) )
-            (hold (not (and (agent_holds ?a) (and (and (agent_holds ?a ?j) (not (in_motion ?a) ) ) (and (and (not (in_motion ?j floor) ) (not (in_motion ?j ?j) ) ) (on ?a) ) ) ) ) )
           )
         )
       )
@@ -5098,29 +4688,45 @@
   )
 )
 (:terminal
-  (>= 6 (* (+ 50 (count preferenceB:dodgeball) )
-      (total-score)
-      2
+  (and
+    (or
+      (>= 40 300 )
+      (>= (* (count preference2:dodgeball) 30 )
+        (count preference2:top_drawer)
+      )
+      (not
+        (<= (* (count preference1:yellow:pink_dodgeball) (/ (* 300 (count-once preference1:rug) (count-once-per-objects preference2:dodgeball:rug) )
+              (* 3 3 )
+            )
+            10
+          )
+          10
+        )
+      )
     )
+    (>= (count preference2:beachball) (count preference2:green) )
   )
 )
 (:scoring
-  (count-once preferenceA:yellow)
+  (* (external-forall-maximize (* 5 2 )
+    )
+    (count-once preference2:yellow)
+  )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-75) (:domain many-objects-room-v1)
 (:setup
   (and
     (and
-      (exists (?h - teddy_bear ?s - color)
-        (exists (?n - (either pyramid_block pink pyramid_block wall wall flat_block ball) ?d - ball)
-          (exists (?z - hexagonal_bin ?t - hexagonal_bin)
-            (game-conserved
-              (in_motion ?d ?d)
-            )
+      (game-conserved
+        (and
+          (and
+            (agent_holds ?xxx)
+            (on ?xxx ?xxx)
           )
+          (in ?xxx)
         )
       )
     )
@@ -5128,12 +4734,108 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (exists (?u ?a - ball ?m - (either mug cellphone golfball) ?j - hexagonal_bin)
+    (preference preference1
+      (exists (?n - curved_wooden_ramp)
         (then
-          (hold (agent_holds ?j) )
-          (once (and (and (forall (?z ?v - rug) (not (in ?z desk) ) ) (on bed) ) (in_motion desk ?j) ) )
-          (hold (touch ?j) )
+          (once (not (< (distance ?n ?n) (distance ?n ?n)) ) )
+          (once (rug_color_under ?n) )
+          (hold-while (agent_holds ?n agent) (and (not (not (adjacent ?n ?n) ) ) (not (and (> 2 (distance ?n back)) (object_orientation ?n ?n) ) ) ) (< 0.5 (x_position 8 8)) (agent_holds pink_dodgeball) )
+        )
+      )
+    )
+    (forall (?n ?m ?d ?z - game_object)
+      (and
+        (preference preference2
+          (exists (?a - game_object ?q - block ?r - dodgeball ?u - wall)
+            (then
+              (once (agent_holds ?u) )
+              (hold (on ?u) )
+              (once (in_motion ?u) )
+            )
+          )
+        )
+        (preference preference3
+          (then
+            (hold (not (not (not (agent_holds ?m) ) ) ) )
+            (once (not (exists (?a - cube_block ?w - tall_cylindrical_block) (not (in ?n ?w) ) ) ) )
+            (once (on ?d) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference3:beachball) (* 1 10 )
+  )
+)
+(:scoring
+  100
+)
+)
+
+
+(define (game game-id-76) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (or
+      (in_motion ?xxx)
+      (exists (?g - curved_wooden_ramp)
+        (in_motion ?g)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (and (and (not (rug_color_under ?xxx ?xxx) ) (< 2 (distance ?xxx desk)) (and (agent_holds ?xxx ?xxx) (not (and (adjacent ?xxx) (adjacent_side ?xxx front) (exists (?s - hexagonal_bin ?r - doggie_bed ?p - drawer) (in_motion ?p left) ) (in ?xxx ?xxx) (and (agent_holds ?xxx) (touch ?xxx ?xxx) ) (agent_holds ?xxx) ) ) ) ) (forall (?t - (either cylindrical_block pyramid_block golfball) ?g - building) (not (and (and (agent_holds ?g) (and (in_motion ?g ?g) (not (and (< (x_position 3 ?g) (distance ?g)) (adjacent ?g) ) ) ) ) (and (touch floor) (in ?g ?g) ) ) ) ) ) )
+        (once (exists (?a - ball) (and (in_motion desk) (< 10 1) ) ) )
+        (once (on ?xxx ?xxx) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (= 2 (* 3 (count preference1) )
+    )
+    (or
+      (<= (count-same-positions preference1:beachball:blue_pyramid_block:green) 15 )
+      (>= (count-shortest preference1:basketball) 7 )
+    )
+  )
+)
+(:scoring
+  (count-once-per-objects preference1:tan)
+)
+)
+
+
+(define (game game-id-77) (:domain many-objects-room-v1)
+(:setup
+  (game-conserved
+    (adjacent agent ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold-while (and (in_motion ) (on desk ?xxx) ) (and (in_motion ball) (on ?xxx ?xxx) (adjacent agent ?xxx) (touch ?xxx south_wall) ) (not (agent_holds ?xxx) ) )
+        (once (agent_holds ?xxx ?xxx) )
+        (hold (not (and (and (on ?xxx ?xxx) (in_motion ?xxx ?xxx) ) ) ) )
+      )
+    )
+    (forall (?q - cube_block)
+      (and
+        (preference preference2
+          (then
+            (once (in ?q) )
+            (once (same_type ?q rug) )
+            (hold (same_color desk) )
+          )
         )
       )
     )
@@ -5141,24 +4843,29 @@
 )
 (:terminal
   (or
-    (> 3 (count-once-per-objects preferenceA:pink) )
-    (>= (count preferenceA:golfball) (count preferenceA:pink) )
-    (or
-      (not
-        (>= 1 (count-once preferenceA:top_drawer:hexagonal_bin) )
-      )
-      (>= 4 (* (count preferenceA:triangle_block) (count preferenceA:dodgeball:basketball) )
+    (>= (external-forall-maximize 3 ) (+ (- 6 )
+        (- 2 )
       )
     )
+    (>= (* (* 10 2 )
+        (* 18 (* (count preference1) (* (count preference2:pink_dodgeball:beachball) (total-score) )
+          )
+        )
+        (* 100 (count-increasing-measure preference2:dodgeball) )
+        (- (and 15 ) )
+      )
+      (count-once-per-objects preference1:hexagonal_bin:beachball)
+    )
+    (>= (total-score) (external-forall-maximize 1 ) )
   )
 )
 (:scoring
-  (count preferenceA:golfball)
+  (+ (count preference1:tan:dodgeball) 5 )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-78) (:domain few-objects-room-v1)
 (:setup
   (game-conserved
     (not
@@ -5168,55 +4875,13 @@
 )
 (:constraints
   (and
-    (preference preferenceA
-      (then
-        (once (not (in_motion floor) ) )
-        (once (not (in ?xxx) ) )
-        (once (touch ?xxx color) )
-      )
-    )
-    (forall (?w - block)
+    (forall (?f - block)
       (and
-        (preference preferenceB
-          (exists (?y - color)
-            (exists (?b - ball)
-              (exists (?x - shelf)
-                (then
-                  (once (on ?x) )
-                  (once (and (and (not (not (and (and (adjacent ?b) (in_motion ) ) (exists (?l - ball) (in_motion ?y agent) ) ) ) ) (not (exists (?d - dodgeball) (and (and (adjacent_side bed) (agent_holds ?x bed) ) (agent_holds ?d door) (agent_holds ?y) ) ) ) ) (on ?x) ) )
-                  (hold (in_motion desk) )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (exists (?t - hexagonal_bin ?l - doggie_bed)
-        (exists (?x - dodgeball ?z - chair)
+        (preference preference1
           (then
-            (once (not (and (broken ?z upside_down) (not (in_motion upright) ) ) ) )
-            (once (same_color ?l ?l) )
-            (hold (in_motion ?l) )
-          )
-        )
-      )
-    )
-    (preference preferenceD
-      (exists (?d - hexagonal_bin)
-        (then
-          (once (agent_holds ?d ?d) )
-          (once (in_motion ?d) )
-          (once (in_motion ?d) )
-        )
-      )
-    )
-    (preference preferenceE
-      (exists (?x - cylindrical_block ?y - dodgeball)
-        (at-end
-          (not
-            (on ?y)
+            (hold (and (agent_holds ?f) (on ?f) (and (on ?f desk) (agent_holds ?f ?f) ) (agent_holds pink) ) )
+            (once (and (agent_holds ?f) (and (open floor) (and (touch ?f) (touch ?f ?f) ) ) ) )
+            (once (not (not (in_motion ?f) ) ) )
           )
         )
       )
@@ -5224,1133 +4889,418 @@
   )
 )
 (:terminal
-  (>= (count preferenceA:golfball:dodgeball) (not (+ (count-same-positions preferenceB) (count-unique-positions preferenceC:block:doggie_bed) )
-    )
-  )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (not
-      (agent_holds ?xxx)
-    )
-  )
-)
-(:constraints
   (and
-    (preference preferenceA
-      (then
-        (hold (agent_holds ?xxx ?xxx) )
-        (hold (not (touch desk ?xxx) ) )
-        (once (on ?xxx) )
-      )
+    (>= (count-once preference1:blue_dodgeball) (* (or (count-once-per-external-objects preference1:beachball) (count-once-per-external-objects preference1:cube_block:yellow) ) 1 )
     )
-  )
-)
-(:terminal
-  (>= (count-overlapping preferenceA:basketball) (count preferenceA:basketball) )
-)
-(:scoring
-  (count-once preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?u - desk_shelf)
-    (game-optional
-      (on bed agent)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?y - hexagonal_bin)
-        (exists (?g - game_object ?v - (either cube_block cube_block) ?v - hexagonal_bin ?l - triangular_ramp)
-          (exists (?j - color ?t - hexagonal_bin)
-            (then
-              (once (not (object_orientation ?l ?t) ) )
-              (once (in ?l) )
-              (once (not (same_object ?y) ) )
-            )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?s - wall)
-        (exists (?r - dodgeball)
-          (then
-            (hold (on ?r ?s) )
-            (once (and (and (in ?s) (not (in_motion ?s) ) ) (in_motion ?s ?r) ) )
-            (once (<= 1 (distance side_table 10)) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (* (count-once-per-objects preferenceB:dodgeball) (>= (+ (* (- (+ (* (* (* (external-forall-maximize 3 ) (* 1 6 )
-                    )
-                    5
-                  )
-                  (* (* (count preferenceA:pink) (* (count-shortest preferenceB) (* (count-once-per-objects preferenceA:alarm_clock) (external-forall-maximize (count-once-per-objects preferenceA:basketball) ) )
-                      )
-                    )
-                    (count preferenceA:hexagonal_bin)
-                  )
-                )
-                (* 10 10 )
-              )
-            )
-            (* (* (count-once-per-objects preferenceB:red:doggie_bed) 2 )
-              6
-              (= (+ (count-once-per-objects preferenceB:dodgeball) (count preferenceB:golfball) )
-                (+ 8 7 )
-                (count-once-per-objects preferenceB:red)
-              )
-            )
-            (count preferenceA:golfball)
-          )
-          (<= (count-once-per-objects preferenceB:hexagonal_bin) (count preferenceA:tan:beachball) )
-        )
-        (- 7 )
-      )
-    )
-    (external-forall-minimize
-      (count preferenceA:beachball)
-    )
-  )
-)
-(:scoring
-  (count-once-per-objects preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (and
-      (in agent ?xxx)
-      (adjacent ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?u - block ?u - pyramid_block)
-        (then
-          (hold-while (on ?u) (in_motion bed) )
-          (hold (not (not (in_motion desk) ) ) )
-          (once (or (not (touch ?u) ) (on ?u) (and (adjacent ?u) (and (toggled_on desk) (not (or (not (and (agent_holds ?u) (and (agent_holds ?u ?u) (and (or (not (and (on ?u ?u) (and (agent_holds ?u ?u) (and (and (or (on ?u ?u) (touch ?u) ) (> 2 1) ) (not (in_motion ?u ?u) ) ) (agent_holds ?u) ) ) ) (in_motion ?u) ) (not (agent_holds ?u ?u) ) (not (adjacent_side ?u) ) ) ) ) ) (not (agent_holds ?u ?u) ) ) ) ) ) ) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (> (count preferenceA:beachball) 0 )
-    (and
-      (>= (+ (* (* (- (* 10 )
-              )
-              (count-total preferenceA:pyramid_block:dodgeball)
-            )
-            5
-          )
-          50
-        )
-        (total-score)
-      )
-    )
-    (= (count preferenceA:golfball) 3 )
-  )
-)
-(:scoring
-  5
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (agent_holds ?xxx)
-  )
-)
-(:constraints
-  (and
-    (forall (?v - beachball ?i - teddy_bear)
-      (and
-        (preference preferenceA
-          (exists (?r - dodgeball)
-            (exists (?n - teddy_bear)
-              (forall (?k - (either floor pencil dodgeball))
-                (then
-                  (once-measure (adjacent ?k ?n) (distance ?i 7) )
-                  (once (and (agent_holds ?i) (and (on ?n) (not (and (agent_holds ?k) (agent_holds ?i) ) ) ) ) )
-                  (once (not (not (on top_drawer ?i) ) ) )
-                )
-              )
-            )
-          )
-        )
-        (preference preferenceB
-          (then
-            (hold-while (in_motion ?i ?i) (on ?i ?i) )
-            (once-measure (agent_holds ?i desk) (distance ?i desk) )
-            (once (agent_holds ?i ?i) )
-          )
-        )
-      )
-    )
-    (preference preferenceC
-      (at-end
-        (same_color ?xxx)
-      )
-    )
-  )
-)
-(:terminal
-  (>= (count-once-per-objects preferenceC:dodgeball) (* 25 4 )
-  )
-)
-(:scoring
-  (* (+ (= (count-longest preferenceA:golfball) (count-once-per-objects preferenceB:dodgeball:yellow_pyramid_block) )
-      (* (* 5 (external-forall-maximize (external-forall-maximize 0.7 ) ) )
-        (count preferenceB:brown)
-      )
-    )
-    7
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?h - golfball)
-    (game-optional
-      (in_motion ?h ?h)
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?j - color)
-      (and
-        (preference preferenceA
-          (exists (?u - (either tall_cylindrical_block alarm_clock))
-            (then
-              (hold (not (not (not (touch ?j agent) ) ) ) )
-              (once (agent_holds ?j ?u) )
-              (once (agent_holds ?u ?u) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (> (count preferenceA:basketball:orange) 20 )
-)
-(:scoring
-  2
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (game-optional
-      (and
-        (adjacent ?xxx)
-        (and
-          (= 8 (distance_side ?xxx ?xxx) (distance room_center agent))
-          (same_color ?xxx)
-        )
-      )
-    )
-    (game-conserved
-      (agent_holds ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold-while (agent_holds ?xxx ?xxx) (not (in ?xxx) ) (agent_holds ?xxx) )
-        (hold (not (on ?xxx) ) )
-        (once (adjacent_side ?xxx ?xxx) )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (< 8 1) )
-        (once (not (agent_holds front) ) )
-        (once (in ?xxx ?xxx) )
-      )
-    )
-  )
-)
-(:terminal
-  (= (count-once-per-objects preferenceB:dodgeball) (count-once-per-objects preferenceA:blue_dodgeball:dodgeball) )
-)
-(:scoring
-  (* (count preferenceA:beachball:red:green) (* (count-overlapping preferenceB:cube_block) (count-once preferenceA:basketball) )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?o - ball)
-    (and
-      (exists (?e - hexagonal_bin)
-        (and
-          (game-conserved
-            (on ?e ?o)
-          )
-          (game-conserved
-            (adjacent_side ?o)
-          )
-          (and
-            (and
-              (or
-                (game-conserved
-                  (adjacent ?o)
-                )
-                (game-conserved
-                  (in_motion agent)
-                )
-                (game-conserved
-                  (on ?e ?e)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold (and (not (not (agent_holds ?xxx) ) ) (and (not (between ?xxx) ) (in ?xxx) ) ) )
-        (hold-while (> 1 1) (agent_holds ?xxx) )
-        (hold-while (not (in ?xxx ?xxx) ) (faces agent) )
-      )
-    )
-  )
-)
-(:terminal
-  (= (- (* (count preferenceA:basketball) (count-longest preferenceA:doggie_bed) (count-once-per-objects preferenceA:dodgeball) (- (* 2 15 )
-        )
-        (+ (= (* (count-once-per-objects preferenceA:dodgeball:hexagonal_bin) (count-longest preferenceA:beachball) )
-            (+ 5 (* 10 (* (* (* (external-forall-maximize (- 10 )
+    (or
+      (= (+ (* 1 (* 1 (count-overlapping preference1:tan) )
+            (count preference1:basketball)
+            (+ (count-unique-positions preference1:green) (count preference1:beachball) )
+            (* (count preference1:orange) (count-same-positions preference1:dodgeball:book) )
+            (* (+ 1 (+ (- (* 4 (* 3 (+ (total-time) (* (not 40 ) (count-once-per-objects preference1:top_drawer:orange) )
+                        )
+                        (* 1 5 )
                       )
                       5
-                      2
-                    )
-                    (+ 5 )
-                  )
-                  (count-once-per-objects preferenceA:golfball:dodgeball)
-                )
-              )
-              (count-unique-positions preferenceA:yellow)
-              (count preferenceA:alarm_clock)
-              (* 6 1 )
-              (* (* (+ (count preferenceA:top_drawer) )
-                  (* 2 )
-                )
-                (total-score)
-              )
-              (count preferenceA:basketball)
-            )
-            (count-once-per-objects preferenceA:beachball:dodgeball)
-          )
-          (* (* (= 1 6 )
-              (+ 5 (* (+ (count-once-per-objects preferenceA:dodgeball) (count-once-per-objects preferenceA:beachball:golfball) (count preferenceA:hexagonal_bin:green) (count preferenceA:basketball:alarm_clock) (count-unique-positions preferenceA) (count preferenceA:dodgeball) )
-                  5
-                )
-              )
-            )
-            (count-once-per-objects preferenceA:beachball)
-            (count preferenceA:dodgeball)
-          )
-        )
-        3
-        (count preferenceA:hexagonal_bin)
-        (count-increasing-measure preferenceA:yellow_pyramid_block)
-        (+ (* (count preferenceA:beachball) (total-score) )
-          (count-once-per-objects preferenceA:book)
-          3
-          (count preferenceA:basketball)
-          3
-          (count-once preferenceA:golfball:bed)
-        )
-      )
-    )
-    (= 2 (count-once-per-objects preferenceA:blue_pyramid_block) )
-  )
-)
-(:scoring
-  (= (* (* 5 10 )
-      (count preferenceA:red:dodgeball)
-    )
-    (count-once-per-objects preferenceA:beachball)
-    (+ (external-forall-maximize (* (count preferenceA:pink_dodgeball:basketball) 1 )
-      )
-      (count preferenceA:beachball)
-      (* 8 10 (or (* (total-time) (* (* 100 (- (= (* (count preferenceA:dodgeball) (count preferenceA:golfball:book) )
-                    (external-forall-minimize
-                      (+ (count-shortest preferenceA:dodgeball) (* (count preferenceA:yellow) 2 (+ (* (count-shortest preferenceA:basketball) (external-forall-maximize (count preferenceA:pink) ) )
-                            (count preferenceA:basketball:red_pyramid_block:hexagonal_bin)
-                          )
-                        )
-                        5
-                        (count-measure preferenceA:basketball:doggie_bed)
-                        (* (count preferenceA:red_pyramid_block:basketball) (count preferenceA:purple:bed:dodgeball) )
-                        (+ 4 (* (- (count-longest preferenceA:dodgeball) (count preferenceA:red) ) (* (count-increasing-measure preferenceA:dodgeball) 1 )
-                          )
-                        )
-                      )
-                    )
-                    (count-once preferenceA:pyramid_block:triangle_block)
-                  )
-                )
-              )
-              (* (* (* (count-overlapping preferenceA:beachball) (* (count preferenceA:brown) (count-once-per-objects preferenceA:dodgeball) )
-                    (/
-                      3
-                      (+ 2 (count preferenceA:purple) )
                     )
                   )
-                  (count-measure preferenceA:dodgeball:blue_dodgeball)
-                  (+ (* 1 (count-once-per-objects preferenceA:basketball:white) (count-longest preferenceA:basketball) )
-                    3
-                  )
-                )
-                3
-              )
-            )
-          )
-          (count-once preferenceA:pink:hexagonal_bin:beachball)
-          (* (* (+ 6 (- (* 4 (count preferenceA:beachball) 4 (+ (total-time) (+ (count-once preferenceA:dodgeball) 5 )
-                    )
-                    (count preferenceA:red)
-                    2
-                  )
+                  3
+                  (total-score)
                 )
               )
-              (* (count preferenceA:dodgeball:beachball) (+ (count-increasing-measure preferenceA:dodgeball) (count preferenceA:beachball) (count-once-per-objects preferenceA:yellow) (count preferenceA:orange) (count preferenceA:dodgeball:beachball) )
-              )
-            )
-            (count-same-positions preferenceA:side_table)
-          )
-        )
-        (count-overlapping preferenceA:triangle_block:doggie_bed)
-        (+ 7 (* 30 (* (total-score) (+ (count-once-per-objects preferenceA:basketball) 0 )
-              (* (count preferenceA:dodgeball) 5 )
+              (count preference1:golfball)
             )
           )
-        )
-      )
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?u - (either main_light_switch cube_block))
-    (forall (?f - hexagonal_bin)
-      (game-optional
-        (not
-          (not
-            (in ?f)
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?k - block)
-        (at-end
-          (not
-            (not
-              (and
-                (agent_holds ?k ?k)
-                (>= (distance front) 2)
-                (in ?k)
-                (not
-                  (not
-                    (in_motion ?k ?k)
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (> 40 (* (count preferenceA:basketball:golfball) )
-  )
-)
-(:scoring
-  (count-once preferenceA:dodgeball:block)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (not
-      (agent_holds ?xxx ?xxx)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (once (not (on ?xxx pillow) ) )
-        (hold (< 1 (distance ?xxx ?xxx)) )
-        (hold (and (is_setup_object ?xxx ?xxx) (not (in_motion ?xxx) ) (< (distance room_center ?xxx 10) (building_size 8 10)) ) )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (in_motion ?xxx) )
-        (once (and (agent_holds ?xxx) (in_motion ?xxx ?xxx) ) )
-        (once (not (not (in_motion ?xxx ?xxx) ) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (* 10 (count-overlapping preferenceB:beachball) )
-    3
-  )
-)
-(:scoring
-  (* (count-shortest preferenceB:beachball) (+ (* (count-once-per-objects preferenceB:pink:beachball) 7 )
-      5
-    )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (not
-      (not
-        (not
-          (agent_holds ?xxx ?xxx)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?w - (either basketball dodgeball))
-      (and
-        (preference preferenceA
-          (then
-            (once (not (not (and (in ?w ?w) (and (and (agent_holds ?w ?w) (and (and (in_motion ?w) (in_motion ?w brown) ) (in_motion ?w) ) ) (agent_holds ?w) ) ) ) ) )
-            (once (not (in_motion ?w ?w) ) )
-            (once (agent_holds ?w) )
-          )
-        )
-      )
-    )
-    (forall (?f - shelf ?h ?z - cylindrical_block)
-      (and
-        (preference preferenceB
-          (then
-            (forall-sequence (?l - game_object)
-              (then
-                (once (in ?l) )
-                (once (and (and (not (in_motion ?z) ) (touch ?l) ) (in ?z) ) )
-                (hold (not (in south_west_corner) ) )
-              )
-            )
-            (once (or (agent_holds desk ?h) (not (exists (?v - teddy_bear ?y - building) (agent_holds ?z desktop) ) ) (adjacent ?h) (not (agent_holds ?z) ) ) )
-            (hold (agent_holds ?h) )
-          )
-        )
-        (preference preferenceC
-          (then
-            (once (exists (?w - game_object) (agent_holds ?h ?w) ) )
-            (hold (agent_holds ?h ?z) )
-            (once (agent_holds ?z) )
-          )
-        )
-        (preference preferenceD
-          (then
-            (once (same_color ?z floor) )
-            (once (object_orientation ?h) )
-            (once (agent_holds ?z) )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (not
-    (and
-      (>= 5 7 )
-    )
-  )
-)
-(:scoring
-  1
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (in ?xxx ?xxx)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?m - game_object)
-        (then
-          (hold (not (and (agent_holds ?m ?m) (touch ?m ?m) ) ) )
-          (once (agent_holds ?m ?m) )
-          (once (and (in ?m ?m) (in_motion ?m) (on ?m ?m) ) )
-          (hold (and (same_color ?m ?m) (in ?m) ) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= (* (* (* (* 2 (count-once-per-objects preferenceA:pink) )
-          (count preferenceA:yellow)
-        )
-        (* 0 (count preferenceA:basketball) (total-score) )
-      )
-      3
-    )
-    (count-once-per-external-objects preferenceA:beachball)
-  )
-)
-(:scoring
-  (count preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-conserved
-    (forall (?q - pyramid_block)
-      (in_motion ?q agent)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (at-end
-        (and
-          (touch ?xxx ?xxx)
-          (and
-            (and
-              (in_motion ?xxx desk)
-              (agent_holds ?xxx)
-            )
-            (and
-              (not
-                (in_motion ?xxx ?xxx)
-              )
-              (and
-                (touch ?xxx)
-                (forall (?k - drawer)
-                  (agent_holds ?k)
-                )
-              )
-            )
-          )
-          (and
-            (in_motion ?xxx ball)
-            (and
-              (and
-                (and
-                  (agent_holds ?xxx ?xxx)
-                  (not
-                    (not
-                      (or
-                        (< 1 (distance room_center 1))
-                        (agent_holds ?xxx ?xxx)
-                      )
-                    )
-                  )
-                )
-                (agent_holds ?xxx ?xxx)
-                (and
-                  (on ?xxx)
-                  (touch ?xxx floor)
-                )
-                (on agent)
-              )
-              (adjacent bed ?xxx)
-            )
-          )
-          (exists (?u - dodgeball)
-            (in_motion ?u ?u)
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count preferenceA:book) (> (+ (count preferenceA:pink_dodgeball) 30 )
-        (* (count-once-per-objects preferenceA:hexagonal_bin) (* 300 (total-score) )
-        )
-      )
-    )
-    (< (= (count preferenceA:dodgeball) 3 (= (* (count preferenceA:dodgeball:basketball) 5 )
-          10
-        )
-      )
-      (count-once preferenceA:top_drawer)
-    )
-  )
-)
-(:scoring
-  (count preferenceA:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?n - hexagonal_bin ?e - hexagonal_bin)
-    (and
-      (forall (?w - hexagonal_bin)
-        (exists (?m - (either game_object dodgeball))
-          (game-conserved
-            (not
-              (adjacent_side ?e)
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (forall (?n - hexagonal_bin ?z - game_object)
-      (and
-        (preference preferenceA
-          (then
-            (hold (not (not (agent_holds ?z ?z) ) ) )
-            (once (not (and (and (in_motion ?z ?z) (not (not (same_type ?z ?z) ) ) ) (in_motion front ?z) ) ) )
-            (hold-while (agent_holds ?z agent) (in_motion ?z) )
-          )
-        )
-        (preference preferenceB
-          (exists (?e - game_object)
-            (then
-              (hold-while (agent_holds main_light_switch) (not (agent_holds ?e ?e) ) )
-              (once (in_motion ?z ?z) )
-              (hold (in_motion ?e) )
-            )
-          )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (and
-    (>= (count preferenceA:pink) 180 )
-    (>= (count-unique-positions preferenceA:blue_dodgeball) (* (count preferenceB:basketball) (count preferenceB:dodgeball) (* 15 (+ 0 (count-increasing-measure preferenceB:dodgeball) 3 (- 20 )
-            (* (external-forall-maximize (+ (* (* (* (* (count-once-per-objects preferenceA:pink_dodgeball) (count preferenceB:blue_dodgeball) )
-                        30
-                      )
-                      (* (* (count preferenceB:red) (* (count preferenceB:basketball) (* 100 (count preferenceA:yellow_pyramid_block) )
-                            3
-                            2
-                          )
-                        )
-                        (+ (count preferenceA:beachball) (count preferenceB:pink_dodgeball:red_pyramid_block) )
-                        10
-                      )
-                    )
-                    5
-                  )
-                  (+ (count-total preferenceB:hexagonal_bin) )
-                )
-              )
-              (count-total preferenceA:yellow:yellow)
-            )
+          (* (= (count preference1:pink_dodgeball:dodgeball) (count preference1:pink) )
+            (count preference1:pink)
+            (count-once preference1:beachball)
             10
           )
         )
+        (count-once preference1:purple)
+      )
+      (or
+        (or
+          (and
+            (>= (count-once preference1:pink:dodgeball:beachball) (+ (+ (+ (+ (count preference1:dodgeball:blue_pyramid_block) 5 )
+                    (count-unique-positions preference1:red)
+                    3
+                    (count preference1:bed)
+                    (external-forall-maximize
+                      1
+                    )
+                  )
+                  (* (- (+ 15 (count-shortest preference1:basketball:hexagonal_bin:yellow_cube_block) )
+                    )
+                    (count-once-per-objects preference1:beachball)
+                  )
+                )
+                5
+              )
+            )
+            (>= (count-once preference1:pink) 3 )
+            (>= (count-once-per-external-objects preference1:dodgeball) (external-forall-maximize (count preference1:block) ) )
+          )
+          (= (count preference1) (count preference1:pink) )
+          (>= (count preference1:hexagonal_bin:pyramid_block) (= 9 2 )
+          )
+          (< 1 (count preference1:basketball) )
+        )
+        (>= (* (count preference1:beachball) (* (total-score) (total-time) )
+          )
+          3
+        )
+      )
+      (>= 1 (- (count preference1:golfball) )
       )
     )
   )
 )
 (:scoring
-  (total-score)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (and
-    (and
-      (exists (?q ?u ?o - cube_block ?b - hexagonal_bin)
-        (forall (?r ?v - ball)
-          (game-conserved
-            (and
-              (open ?b ?v)
-              (equal_z_position floor)
+  (- (+ 40 (count preference1:pyramid_block) (count-once-per-objects preference1:pink) (* 3 (* (- (* (* (* (count-once preference1:basketball) 1 )
+                (* 18 8 (* 3 2 )
+                )
+              )
+              (* (count preference1:basketball) (* (- (* (count-once preference1:blue_dodgeball) )
+                    (+ (+ (count preference1:beachball) 20 )
+                      (count-longest preference1:pink)
+                    )
+                  )
+                  (count preference1:golfball:orange:beachball)
+                )
+                (count preference1:dodgeball)
+              )
             )
           )
+          (count preference1:red)
         )
       )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (then
-        (hold-to-end (not (adjacent_side ?xxx) ) )
-        (any)
-        (hold (and (not (not (and (and (on ?xxx) (in ?xxx ?xxx) (agent_holds door ?xxx) ) (in ?xxx ?xxx) ) ) ) (rug_color_under ?xxx ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count preferenceA:dodgeball) 8 )
-    (> (count-once-per-objects preferenceA:pink:blue_pyramid_block) (* (count preferenceA:dodgeball) (count preferenceA:white) )
-    )
-    (>= (- 5 )
-      100
-    )
-  )
-)
-(:scoring
-  (* (* (count preferenceA:orange) (count preferenceA:pink) )
-    (total-score)
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?p - dodgeball)
-    (game-optional
-      (> (distance ?p) (distance ?p desk))
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (at-end
-        (agent_holds ?xxx)
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (<= (* (count-shortest preferenceA:beachball) (count preferenceA:dodgeball) 0 (count-once-per-external-objects preferenceA:yellow) (count preferenceA:dodgeball:dodgeball) 2 )
-      (count-once-per-objects preferenceA:pink)
-    )
-    (= 10 (count-unique-positions preferenceA:dodgeball:basketball) )
-  )
-)
-(:scoring
-  (* (count preferenceA:dodgeball:hexagonal_bin) (count preferenceA:book) (count-increasing-measure preferenceA:pyramid_block) )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?n - (either basketball ball book cylindrical_block key_chain cellphone pen) ?q - (either laptop laptop) ?z - dodgeball)
-    (game-optional
-      (agent_holds ?z)
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?t - ball)
-        (exists (?g - hexagonal_bin)
-          (then
-            (hold (and (and (equal_z_position ?t ?t) (on ?g) ) ) )
-            (once (touch ?g) )
-            (once (and (not (not (on ?t ?t) ) ) (and (not (in_motion ?t ?t) ) (and (and (and (exists (?p - game_object ?z - (either basketball basketball)) (and (not (and (on ?g ?z) (agent_holds ?t ?g) (in_motion ?g ?t) ) ) (in_motion ?z top_shelf) ) ) (not (game_over ?t ?t) ) (agent_holds pillow) ) (on ?g ?t) ) (in ?g upright) ) (adjacent ?g) ) (not (and (not (and (not (in ?t ?t) ) (and (in_motion ?g) (< 4 1) ) ) ) (and (adjacent ?t ?g) (in_motion ?g) ) ) ) ) )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (exists (?x ?w - hexagonal_bin)
-        (then
-          (once (agent_holds rug ?x) )
-          (hold (= 1 (distance ?x ?x) (distance_side ?x)) )
-          (hold-while (and (< 2 (distance room_center agent)) (not (not (in_motion ?x ?x) ) ) ) (in_motion ?x ?w ?x) (touch ?x) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count preferenceB:bed:dodgeball) 3 )
-    (>= 8 (= 3 (* (+ 6 10 (count-once-per-external-objects preferenceB:pink) )
-          (* 10 (= (total-time) )
-          )
-        )
-      )
-    )
-    (>= (+ (count preferenceB:pink:beachball) 5 )
-      (* 5 (* 3 40 )
-      )
-    )
-  )
-)
-(:scoring
-  (count-once-per-objects preferenceB:book:pink_dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?h - chair)
-    (game-conserved
-      (not
-        (not
-          (in_motion ?h)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?i - game_object)
-        (then
-          (once (in_motion ?i) )
-          (hold (in_motion agent) )
-          (once (same_type ?i) )
-        )
-      )
-    )
-    (preference preferenceB
-      (at-end
-        (adjacent ?xxx)
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= (count-once-per-objects preferenceA:dodgeball:pink) 3 )
-    (< (count-once-per-objects preferenceB:pink_dodgeball) 30 )
-  )
-)
-(:scoring
-  (+ (count preferenceB:beachball) (* (count preferenceB:doggie_bed) )
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?e - hexagonal_bin)
-    (game-conserved
-      (and
-        (< (distance front 8 ?e) (distance ?e room_center))
-        (not
-          (< (distance ?e ?e) 5)
-        )
-      )
-    )
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?t - hexagonal_bin)
-        (then
-          (once (and (on ?t door) (and (same_color ?t) (in_motion desk) (and (in_motion agent) (not (same_type ?t ?t) ) ) ) ) )
-          (once (not (in ?t) ) )
-          (hold-while (exists (?r - curved_wooden_ramp ?j ?i - (either chair cube_block book red)) (and (touch ?t) (and (and (in_motion ?i) (and (agent_holds ?j ?j) (in ?t) ) ) (agent_holds ?t ?i) ) (not (agent_holds ?i) ) ) ) (in ?t ?t) )
-        )
-      )
-    )
-  )
-)
-(:terminal
-  (>= 5 5 )
-)
-(:scoring
-  (* 100 2 )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (game-optional
-    (in_motion agent)
-  )
-)
-(:constraints
-  (and
-    (preference preferenceA
-      (exists (?b - (either blue_cube_block pyramid_block))
-        (exists (?c - curved_wooden_ramp)
-          (then
-            (once (in_motion tan) )
-            (once (not (agent_holds ?c ?b) ) )
-            (once (or (agent_holds ?b ?c) (not (and (and (and (not (agent_holds ?b ?c) ) (not (and (agent_holds ?c ?b) (on ?b ?b) ) ) ) (not (adjacent ?c) ) ) (in_motion ?b ?b) ) ) (not (and (> 5 1) (and (agent_holds ?c ?c) (and (and (agent_holds bed ?b) (not (in_motion ?b ?c) ) (in_motion ) ) (exists (?j - curved_wooden_ramp ?a - (either dodgeball cylindrical_block)) (not (on ?a) ) ) ) ) (agent_holds ?c bed) ) ) (or (and (not (in agent ?b) ) (on ?c ?c) ) (agent_holds ?b ?c) ) ) )
-          )
-        )
-      )
-    )
-    (preference preferenceB
-      (then
-        (once (not (agent_holds ?xxx) ) )
-        (once (in_motion ?xxx) )
-        (once (and (and (agent_holds ?xxx ?xxx) (not (not (not (not (not (forall (?j - (either teddy_bear golfball)) (adjacent ?j) ) ) ) ) ) ) ) (on ?xxx ?xxx) ) )
-      )
-    )
-  )
-)
-(:terminal
-  (or
-    (>= 18 (count preferenceB:dodgeball) )
-    (> (count-overlapping preferenceA:dodgeball) (count-once preferenceA:purple:green) )
-  )
-)
-(:scoring
-  (count preferenceA:red:dodgeball)
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (forall (?n - hexagonal_bin)
-    (forall (?i - (either bridge_block mug basketball) ?q - dodgeball)
-      (and
-        (exists (?t - pyramid_block ?m - doggie_bed)
-          (and
-            (and
-              (exists (?y - hexagonal_bin)
-                (forall (?u - hexagonal_bin ?b - beachball)
-                  (game-conserved
-                    (not
-                      (agent_holds brown)
-                    )
+      (or
+        1
+        (count-longest preference1:dodgeball:basketball)
+        (+ (count-once-per-objects preference1:blue_dodgeball) (+ (* (external-forall-maximize (external-forall-maximize (>= (count preference1:purple) (* (total-score) (count preference1:white) )
                   )
                 )
               )
-              (game-conserved
-                (or
-                  (in_motion ?q ?q)
+              100
+            )
+            6
+          )
+        )
+      )
+      (+ (count preference1:beachball:pink) )
+      (* (external-forall-maximize 5 ) )
+      (count preference1:green)
+      30
+    )
+  )
+)
+)
+
+
+(define (game game-id-79) (:domain few-objects-room-v1)
+(:setup
+  (forall (?n - game_object)
+    (not
+      (forall (?d - dodgeball ?h - triangular_ramp ?i - hexagonal_bin)
+        (game-optional
+          (not
+            (in_motion ?i ?n)
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (not
+          (in_motion floor)
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference1:blue_dodgeball:yellow) (count preference1:golfball) )
+)
+(:scoring
+  (- (* (* (count preference1:blue_pyramid_block) (count preference1:alarm_clock) )
+      (count-once preference1:basketball)
+    )
+  )
+)
+)
+
+
+(define (game game-id-80) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (in ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?i - triangular_ramp ?p - pillow)
+        (then
+          (once (agent_holds ?p ?p) )
+          (hold (agent_holds ?p ?p desk) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (+ 40 (count preference1:basketball) (* 5 (* (- (count preference1:purple) )
+          (* (external-forall-minimize 3 ) (+ 2 (* 10 (* 1 3 )
+              )
+            )
+          )
+        )
+      )
+      (total-time)
+      (count-once-per-objects preference1:bed)
+      0.5
+      (total-score)
+      (count-once-per-objects preference1:basketball)
+      (count-same-positions preference1)
+    )
+    (count preference1:beachball)
+  )
+)
+(:scoring
+  (+ 2 (+ (count-measure preference1:yellow) (count-once-per-objects preference1:purple:golfball) )
+  )
+)
+)
+
+
+(define (game game-id-81) (:domain few-objects-room-v1)
+(:setup
+  (forall (?t - cube_block)
+    (exists (?e ?z - curved_wooden_ramp)
+      (exists (?v - teddy_bear)
+        (and
+          (exists (?i - chair)
+            (game-optional
+              (toggled_on ?i)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (not (and (not (agent_holds ?xxx) ) (not (agent_holds ?xxx) ) ) ) )
+        (hold-while (adjacent bed) (opposite ?xxx) (agent_holds ?xxx) (on ?xxx) )
+        (once (not (and (agent_holds pink_dodgeball) (< 1 (distance agent ?xxx)) (in ?xxx) ) ) )
+        (once (in_motion ?xxx) )
+        (once (and (< 1 (distance 6 4)) (and (agent_holds ?xxx ?xxx) (< (distance ?xxx ?xxx) (distance 3 ?xxx)) ) (on ?xxx ?xxx) ) )
+        (once (not (not (< (distance room_center ?xxx) (distance ?xxx)) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (* (- (+ 6 20 )
+      )
+      (count preference1:hexagonal_bin)
+    )
+    (count preference1:yellow)
+  )
+)
+(:scoring
+  (* (count-once-per-objects preference1:book:yellow) (* 3 (external-forall-maximize (count-once-per-external-objects preference1:pink) ) )
+  )
+)
+)
+
+
+(define (game game-id-82) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (or
+      (and
+        (and
+          (game-optional
+            (< (distance ?xxx ?xxx) 2)
+          )
+        )
+        (and
+          (and
+            (game-optional
+              (exists (?j - building ?j - desk_shelf ?e - wall ?s - chair)
+                (not
+                  (on agent)
                 )
               )
             )
+            (game-conserved
+              (in_motion ?xxx)
+            )
             (and
-              (or
+              (and
                 (and
-                  (exists (?d - hexagonal_bin)
-                    (forall (?i - book ?f - teddy_bear)
+                  (game-conserved
+                    (and
+                      (in_motion ?xxx)
                       (and
-                        (exists (?r - building)
+                        (not
+                          (< (distance 7 ?xxx) (distance agent ?xxx))
+                        )
+                        (or
                           (and
-                            (game-optional
-                              (exists (?w - cube_block)
-                                (in_motion ?d ?f)
-                              )
-                            )
-                            (forall (?i - golfball)
-                              (exists (?v ?o - dodgeball ?p - (either desktop))
-                                (game-conserved
-                                  (exists (?o - hexagonal_bin ?z - hexagonal_bin ?z - (either dodgeball doggie_bed) ?a - cube_block)
-                                    (in_motion ?p ?i)
-                                  )
-                                )
-                              )
-                            )
-                            (game-conserved
-                              (in_motion block)
-                            )
-                          )
-                        )
-                        (game-optional
-                          (not
-                            (in_motion ?n ?d)
-                          )
-                        )
-                        (and
-                          (exists (?t - cube_block ?s - chair)
-                            (exists (?h - hexagonal_bin ?z ?e - (either triangle_block))
-                              (exists (?v - building)
-                                (exists (?j - hexagonal_bin)
-                                  (forall (?u - game_object)
-                                    (game-optional
-                                      (in_motion ?u)
+                            (and
+                              (touch ?xxx ?xxx)
+                              (and
+                                (adjacent_side ?xxx ?xxx)
+                                (not
+                                  (not
+                                    (and
+                                      (and
+                                        (not
+                                          (not
+                                            (and
+                                              (adjacent_side ?xxx ?xxx)
+                                              (not
+                                                (not
+                                                  (not
+                                                    (in pink ?xxx)
+                                                  )
+                                                )
+                                              )
+                                            )
+                                          )
+                                        )
+                                        (in ?xxx)
+                                        (and
+                                          (in agent)
+                                          (on ?xxx)
+                                        )
+                                        (in_motion bed)
+                                        (on ?xxx)
+                                        (not
+                                          (not
+                                            (and
+                                              (agent_holds bed)
+                                              (and
+                                                (agent_holds ?xxx ?xxx)
+                                                (adjacent ?xxx)
+                                              )
+                                            )
+                                          )
+                                        )
+                                      )
+                                      (not
+                                        (on ?xxx front)
+                                      )
                                     )
                                   )
                                 )
                               )
+                            )
+                            (and
+                              (agent_holds ?xxx upright)
+                              (exists (?t - (either golfball lamp))
+                                (adjacent ?t)
+                              )
+                              (and
+                                (>= (distance_side room_center ?xxx) (distance ?xxx ?xxx))
+                                (exists (?j - dodgeball)
+                                  (and
+                                    (in ?j ?j)
+                                    (in_motion ?j pink_dodgeball)
+                                    (and
+                                      (on ?j)
+                                      (and
+                                        (or
+                                          (and
+                                            (not
+                                              (in_motion ?j ?j)
+                                            )
+                                            (in_motion ?j)
+                                          )
+                                          (not
+                                            (agent_holds ?j)
+                                          )
+                                        )
+                                        (in_motion front)
+                                      )
+                                    )
+                                  )
+                                )
+                                (not
+                                  (agent_holds ?xxx)
+                                )
+                                (and
+                                  (not
+                                    (adjacent pink_dodgeball)
+                                  )
+                                  (and
+                                    (not
+                                      (object_orientation agent ?xxx)
+                                    )
+                                    (in ?xxx ?xxx)
+                                  )
+                                  (and
+                                    (in_motion ?xxx)
+                                    (< 7 1)
+                                  )
+                                )
+                              )
+                            )
+                          )
+                          (not
+                            (and
+                              (not
+                                (and
+                                  (not
+                                    (in_motion ?xxx floor)
+                                  )
+                                  (not
+                                    (in_motion ?xxx ?xxx)
+                                  )
+                                )
+                              )
+                              (and
+                                (on ?xxx)
+                                (and
+                                  (on ?xxx)
+                                  (or
+                                    (not
+                                      (not
+                                        (and
+                                          (not
+                                            (and
+                                              (same_type ?xxx)
+                                              (> 1 3)
+                                            )
+                                          )
+                                          (agent_holds ?xxx ?xxx)
+                                          (and
+                                            (adjacent ?xxx)
+                                            (not
+                                              (on top_drawer ?xxx)
+                                            )
+                                          )
+                                        )
+                                      )
+                                    )
+                                    (in_motion ?xxx ?xxx)
+                                  )
+                                  (touch ?xxx ?xxx)
+                                )
+                              )
+                              (agent_holds ?xxx ?xxx)
                             )
                           )
                         )
@@ -6358,20 +5308,965 @@
                     )
                   )
                   (and
-                    (game-optional
+                    (game-conserved
+                      (or
+                        (same_color ?xxx)
+                        (and
+                          (and
+                            (is_setup_object ?xxx ?xxx)
+                            (< (distance room_center ?xxx) (distance ?xxx ?xxx))
+                          )
+                          (on ?xxx)
+                          (exists (?d - hexagonal_bin ?c - cylindrical_block ?b - cube_block)
+                            (touch ?b)
+                          )
+                        )
+                      )
+                    )
+                  )
+                  (game-optional
+                    (and
                       (and
-                        (agent_holds ?n)
-                        (on desk)
+                        (not
+                          (adjacent ?xxx ?xxx)
+                        )
+                        (in_motion rug ?xxx)
+                        (in_motion ?xxx ?xxx)
+                      )
+                      (not
                         (not
                           (not
                             (not
-                              (not
-                                (and
-                                  (agent_holds ?m)
-                                  (agent_holds ?m)
-                                )
-                              )
+                              (in_motion ?xxx rug)
                             )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+          (game-conserved
+            (not
+              (and
+                (agent_holds ?xxx)
+                (in_motion ?xxx ?xxx)
+                (and
+                  (in_motion rug)
+                  (agent_holds ?xxx ?xxx)
+                )
+                (and
+                  (agent_holds rug ?xxx)
+                  (opposite ?xxx)
+                  (game_over ?xxx)
+                )
+              )
+            )
+          )
+          (exists (?d - (either dodgeball pyramid_block))
+            (game-conserved
+              (in_motion ?d)
+            )
+          )
+        )
+      )
+    )
+    (not
+      (exists (?c - ball)
+        (game-conserved
+          (forall (?h - drawer ?e - doggie_bed)
+            (not
+              (agent_holds ?c ?c)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (and
+          (touch ?xxx)
+          (agent_holds ?xxx)
+        )
+      )
+    )
+    (preference preference2
+      (exists (?m - hexagonal_bin)
+        (exists (?r - hexagonal_bin ?j - curved_wooden_ramp)
+          (then
+            (once (agent_holds ?m) )
+            (hold (agent_holds desk) )
+            (once (and (and (not (and (not (agent_holds ?j) ) (in_motion ?m) ) ) ) ) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (at-end
+        (and
+          (same_object pink_dodgeball)
+          (not
+            (and
+              (and
+                (on ?xxx ?xxx ?xxx)
+                (exists (?s - shelf)
+                  (not
+                    (in_motion ?s)
+                  )
+                )
+              )
+              (between ?xxx)
+            )
+          )
+        )
+      )
+    )
+    (forall (?l - (either cylindrical_block rug) ?z ?m - ball)
+      (and
+        (preference preference4
+          (then
+            (hold (in_motion ?m ?z) )
+            (any)
+            (once (in_motion ?m ?m) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count preference3:basketball) (and (* (count preference4:book) 4 (count preference3:red) (+ 30 (+ (* (* 6 (count-once preference4:pink) )
+            )
+            4
+          )
+        )
+      )
+      (= (* 3 4 )
+        6
+      )
+    )
+  )
+)
+(:scoring
+  4
+)
+)
+
+
+(define (game game-id-83) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (= 5 (distance ?xxx agent))
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?s - shelf ?e - hexagonal_bin)
+        (exists (?l - hexagonal_bin)
+          (at-end
+            (touch ?l)
+          )
+        )
+      )
+    )
+    (preference preference2
+      (exists (?m - yellow_pyramid_block ?w - (either book yellow_cube_block))
+        (exists (?l ?i - dodgeball)
+          (then
+            (once (< 9 (distance door bed)) )
+            (once (= (distance ?l ?l) (distance ?i ?w)) )
+            (once (adjacent ?w) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 3 (count-once preference1:book) )
+)
+(:scoring
+  2
+)
+)
+
+
+(define (game game-id-84) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (and
+      (and
+        (or
+          (and
+            (in ?xxx)
+            (in ?xxx)
+          )
+          (not
+            (and
+              (and
+                (on ?xxx)
+                (and
+                  (agent_holds ?xxx ?xxx)
+                  (in_motion ?xxx)
+                )
+                (not
+                  (agent_holds ?xxx)
+                )
+              )
+            )
+          )
+        )
+        (or
+          (on block ?xxx)
+          (in_motion ?xxx)
+        )
+      )
+      (in_motion ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (adjacent upright) )
+        (hold (not (not (not (in_motion ?xxx) ) ) ) )
+        (hold (agent_holds desk ?xxx) )
+      )
+    )
+    (preference preference2
+      (exists (?z - doggie_bed)
+        (exists (?d - (either key_chain desktop key_chain yellow_cube_block cd yellow doggie_bed))
+          (exists (?x - (either golfball tall_cylindrical_block) ?a - teddy_bear)
+            (then
+              (once (not (not (agent_holds ?z) ) ) )
+              (once (not (not (and (on ?d ?z) (adjacent ?z ?d) ) ) ) )
+              (hold (agent_holds ?z ?d) )
+              (hold (agent_crouches side_table) )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (count preference1:dodgeball) (* (count-shortest preference2:alarm_clock) (* 3 (count-once-per-objects preference1) (count-once-per-objects preference1:yellow) )
+      )
+    )
+    (or
+      (>= 3 (count-once-per-objects preference2:dodgeball) )
+      (<= (* (total-score) (count-overlapping preference1:dodgeball:golfball) )
+        15
+      )
+    )
+  )
+)
+(:scoring
+  (count preference1:red)
+)
+)
+
+
+(define (game game-id-85) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (and
+      (game-conserved
+        (and
+          (not
+            (object_orientation floor)
+          )
+        )
+      )
+      (game-conserved
+        (or
+          (and
+            (agent_holds ?xxx)
+            (and
+              (not
+                (in_motion ?xxx ?xxx)
+              )
+              (and
+                (in ?xxx)
+                (not
+                  (in_motion ?xxx)
+                )
+                (not
+                  (or
+                    (adjacent ?xxx)
+                    (on ?xxx pink)
+                  )
+                )
+                (adjacent ?xxx ?xxx)
+                (in_motion ?xxx)
+              )
+              (or
+                (not
+                  (not
+                    (< (distance ?xxx ?xxx) (distance green_golfball))
+                  )
+                )
+                (agent_holds ?xxx)
+                (agent_holds ?xxx ?xxx)
+              )
+            )
+          )
+          (and
+            (in ?xxx)
+            (is_setup_object ?xxx)
+          )
+        )
+      )
+      (exists (?d - (either tall_cylindrical_block golfball) ?g - tall_cylindrical_block)
+        (and
+          (and
+            (game-optional
+              (not
+                (agent_holds ?g)
+              )
+            )
+          )
+          (forall (?e - hexagonal_bin)
+            (game-conserved
+              (not
+                (not
+                  (in_motion ?e agent)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold (and (and (and (in_motion ?xxx) (on ?xxx) ) (on agent ?xxx) (and (or (on ?xxx ?xxx) (touch ?xxx) ) (> 2 1) ) (not (in_motion ?xxx ?xxx) ) ) (agent_holds ?xxx) (in_motion ?xxx) ) )
+        (once (agent_holds ?xxx ?xxx) )
+        (once (adjacent_side ?xxx) )
+      )
+    )
+    (preference preference2
+      (exists (?a ?y - block ?p ?o - drawer)
+        (exists (?k - game_object)
+          (then
+            (hold (agent_holds agent) )
+            (hold (not (not (exists (?t - hexagonal_bin) (in ?o) ) ) ) )
+            (once (adjacent ?k) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= (external-forall-maximize (* (* 3 (= (count-once preference1:yellow) )
+            0.5
+          )
+          3
+        )
+      )
+      (count preference2:yellow)
+    )
+    (or
+      (or
+        (> (/ 6 (+ 5 (+ 6 (total-score) (count-once-per-objects preference2:beachball) )
+            )
+          )
+          (external-forall-maximize
+            5
+          )
+        )
+        (or
+          (>= (* 2 (external-forall-maximize (* (- 6 )
+                  1
+                )
+              )
+              (>= (* 100 (- (+ (+ (* 1 (+ (count-once-per-objects preference1:purple:dodgeball) (count-once-per-objects preference1:pink:blue_pyramid_block) )
+                        )
+                        2
+                      )
+                      (* (total-time) (count preference1:green) (+ (* 10 2 )
+                          (* (* 2 (count-overlapping preference1:blue_dodgeball) )
+                            (>= 3 (count preference1:green:yellow) )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+                (* 25 4 )
+              )
+              5
+              3
+              (* (count-shortest preference1:yellow_cube_block:yellow) (count preference1:pink) )
+              6
+              (count preference2:beachball)
+              5
+            )
+            (total-score)
+          )
+          (> 0 3 )
+        )
+      )
+    )
+    (>= (count preference1:green) (count-unique-positions preference2:basketball:beachball) )
+  )
+)
+(:scoring
+  (count preference2:green)
+)
+)
+
+
+(define (game game-id-86) (:domain many-objects-room-v1)
+(:setup
+  (game-optional
+    (not
+      (in ?xxx)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (once (in_motion desk) )
+        (hold (in_motion ?xxx) )
+        (once-measure (agent_holds ?xxx) (distance 3 ?xxx) )
+      )
+    )
+    (forall (?l - shelf)
+      (and
+        (preference preference2
+          (then
+            (hold-while (not (adjacent ?l) ) (in_motion ?l ?l) )
+            (once (adjacent ?l ?l) )
+            (once (agent_holds ?l ?l) )
+          )
+        )
+        (preference preference3
+          (then
+            (once (agent_holds agent) )
+            (hold-while (and (not (and (not (and (in_motion ?l) (not (and (in_motion ?l ?l) (in agent) ) ) ) ) (in ?l) ) ) (not (agent_holds ?l green) ) ) (agent_holds ?l ?l) )
+            (once (not (between ?l ?l) ) )
+          )
+        )
+      )
+    )
+    (forall (?f - hexagonal_bin)
+      (and
+        (preference preference4
+          (exists (?w - wall)
+            (exists (?o - (either doggie_bed curved_wooden_ramp) ?l - dodgeball ?i - pillow)
+              (then
+                (once (< (distance ?w ?f) 0) )
+                (hold (not (and (or (agent_holds ?w ?w) (not (in_motion ?f ?i) ) ) (same_type desk ?w) (exists (?g - hexagonal_bin) (and (adjacent ?f) (and (not (forall (?e ?x - hexagonal_bin) (agent_holds ?w) ) ) (not (agent_holds ?f ?w) ) ) (not (in_motion agent) ) ) ) ) ) )
+                (hold (rug_color_under ?i) )
+              )
+            )
+          )
+        )
+        (preference preference5
+          (exists (?p - doggie_bed ?j - doggie_bed)
+            (exists (?y - block ?u - block)
+              (then
+                (any)
+                (hold-while (and (in_motion ?j ?u) (< 1 (distance 6 ?u)) ) (and (agent_holds ?j) (in ?u ?f) ) )
+                (once (above ?f) )
+                (once (in_motion ?u) )
+                (once (adjacent ?f south_wall) )
+                (once (not (exists (?i - dodgeball ?x - building) (agent_holds ?j) ) ) )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (> (count-once-per-external-objects preference3:beachball:dodgeball) (count-increasing-measure preference4:dodgeball) )
+    (>= (count preference5:yellow_cube_block) 4 )
+  )
+)
+(:scoring
+  (/
+    (count-once-per-objects preference1:alarm_clock:dodgeball)
+    (* 5 (count-once-per-objects preference4:blue_dodgeball) (total-time) 6 2 30 )
+  )
+)
+)
+
+
+(define (game game-id-87) (:domain many-objects-room-v1)
+(:setup
+  (game-conserved
+    (touch ?xxx ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?z - hexagonal_bin)
+        (exists (?j - ball)
+          (exists (?a - dodgeball)
+            (exists (?v - (either cd cellphone) ?k - dodgeball ?i - building)
+              (exists (?o ?y - teddy_bear)
+                (exists (?s - hexagonal_bin ?g - hexagonal_bin ?p ?r ?x - dodgeball)
+                  (exists (?g - dodgeball ?l - hexagonal_bin ?h - hexagonal_bin)
+                    (then
+                      (once (on ?x) )
+                      (once (exists (?e - shelf) (< 1 (distance ?a)) ) )
+                      (once (agent_holds ?z ?i) )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (- 5 )
+    (count-once preference1:purple)
+  )
+)
+(:scoring
+  (count-once-per-objects preference1:basketball:blue_cube_block)
+)
+)
+
+
+(define (game game-id-88) (:domain few-objects-room-v1)
+(:setup
+  (forall (?k - hexagonal_bin)
+    (exists (?u - (either cube_block pyramid_block) ?s - red_pyramid_block)
+      (and
+        (and
+          (and
+            (game-conserved
+              (in ?s ?k ?s)
+            )
+          )
+          (game-conserved
+            (in_motion ?k bed)
+          )
+          (not
+            (game-conserved
+              (adjacent ?s)
+            )
+          )
+        )
+        (game-optional
+          (agent_holds floor ?k)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?q - hexagonal_bin)
+      (and
+        (preference preference1
+          (exists (?g - game_object)
+            (exists (?v - shelf ?c - hexagonal_bin)
+              (at-end
+                (and
+                  (agent_holds ?q)
+                  (or
+                    (not
+                      (in ?q)
+                    )
+                    (between ?c ?g)
+                  )
+                )
+              )
+            )
+          )
+        )
+        (preference preference2
+          (then
+            (once (in ?q) )
+            (once (agent_holds ?q ?q) )
+            (hold (and (on ?q tan) (and (and (agent_holds ?q) (in_motion ?q ?q) ) (and (not (agent_holds ?q) ) (in_motion ?q ?q) ) ) (in ?q agent) (and (< (distance 6 9) (distance ?q 10)) (not (in_motion ?q ?q) ) ) ) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (at-end
+        (agent_holds ?xxx ?xxx)
+      )
+    )
+    (forall (?p - dodgeball ?r - (either golfball yellow book))
+      (and
+        (preference preference4
+          (then
+            (once (in ?r ?r) )
+            (once (not (or (and (and (opposite floor) (in_motion ?r) (not (not (and (adjacent_side ?r ?r) (not (touch ?r) ) ) ) ) ) (and (and (agent_holds ?r ?r) (not (in ?r ?r ?r) ) ) (agent_holds ?r) (in ?r ?r) ) ) (in_motion ?r) ) ) )
+            (once (object_orientation ?r ?r) )
+          )
+        )
+        (preference preference5
+          (at-end
+            (agent_holds ?r)
+          )
+        )
+        (preference preference6
+          (exists (?d - pillow)
+            (then
+              (once (and (not (and (not (< (building_size 8 ?r) 1) ) (and (exists (?o - (either basketball dodgeball dodgeball)) (agent_holds ?r) ) (not (or (and (not (not (in_motion bed) ) ) (in floor) ) (on ?d ?r) (in_motion rug) ) ) (not (not (in_motion ?d ?d) ) ) ) ) ) (in ?d ?d) ) )
+              (once (not (and (in_motion ?r upright) (not (and (agent_holds ?d) (on pink_dodgeball) (not (exists (?p - (either dodgeball alarm_clock) ?p - color) (in_motion ?p) ) ) (and (not (= (distance agent ?d) 4) ) (and (agent_holds ?r ?r) (on ?r) (agent_holds ?d door) (adjacent ?d) (not (in ) ) (exists (?x - cube_block) (not (in_motion agent ?x) ) ) ) ) ) ) ) ) )
+              (once (in_motion ?r ?d) )
+            )
+          )
+        )
+      )
+    )
+    (preference preference7
+      (then
+        (once (agent_holds ?xxx) )
+        (once (agent_holds ?xxx ?xxx) )
+        (once (and (in_motion ?xxx) (agent_holds ?xxx rug) ) )
+      )
+    )
+    (preference preference8
+      (then
+        (once (touch ?xxx ?xxx) )
+        (hold-while (forall (?r - chair) (agent_holds ?r floor) ) (in ?xxx ?xxx) )
+        (hold (not (adjacent ?xxx) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (or
+      (>= (count-same-positions preference2:golfball) 12 )
+      (> (count-once preference4:beachball) 5 )
+    )
+    (or
+      (>= 7 2 )
+      (not
+        (= (* (count-once-per-objects preference4:alarm_clock) (+ (count preference2:doggie_bed) (* 5 0 (count preference6:beachball:tall_cylindrical_block) (* (= (+ (count preference3:beachball) (* 3 (count preference7:golfball) )
+                    )
+                    (count preference1:yellow)
+                  )
+                  10
+                )
+                (+ (count preference6:golfball) (count preference8:basketball:blue_pyramid_block) )
+                (* (* (count preference2:dodgeball) (external-forall-maximize (count-once-per-objects preference6:block) ) )
+                  (count preference8:blue_dodgeball:basketball)
+                )
+              )
+            )
+          )
+          (/
+            (count-once-per-objects preference4:pink)
+            (* (* (+ (+ 5 10 )
+                  (external-forall-maximize
+                    (count preference7:beachball)
+                  )
+                )
+                (count-once-per-objects preference2:green)
+              )
+              (and
+                (* 2 (+ (count-once-per-objects preference4:basketball:alarm_clock) (- (count preference7:blue_cube_block) )
+                  )
+                  (count preference1:red)
+                  (count preference6:triangle_block)
+                  (count preference6:yellow_cube_block)
+                  2
+                )
+                (count preference5:dodgeball)
+                (count preference6:dodgeball)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count-once-per-objects preference2:beachball)
+)
+)
+
+
+(define (game game-id-89) (:domain medium-objects-room-v1)
+(:setup
+  (exists (?k - (either yellow_cube_block cube_block cube_block) ?q - block)
+    (and
+      (forall (?f - chair)
+        (exists (?c - triangular_ramp)
+          (game-conserved
+            (on ?f ?c)
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?e - ball)
+        (exists (?m - hexagonal_bin)
+          (exists (?y - block)
+            (then
+              (hold (not (<= 1 (distance room_center ?m)) ) )
+              (once (and (agent_holds ?m ?y) (not (agent_holds ?e) ) ) )
+              (hold (adjacent ?e ?e) )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once preference1:basketball) (+ 10 (count-once-per-objects preference1:book) 3 10 )
+  )
+)
+(:scoring
+  5
+)
+)
+
+
+(define (game game-id-90) (:domain few-objects-room-v1)
+(:setup
+  (game-conserved
+    (agent_holds ?xxx ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (at-end
+        (agent_holds ?xxx)
+      )
+    )
+    (preference preference2
+      (then
+        (once (exists (?c ?m - game_object) (in ?m ?c) ) )
+        (once (agent_holds ?xxx) )
+        (hold (and (or (on ?xxx) (not (touch ?xxx) ) ) (<= 0.5 (distance ?xxx side_table)) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (> (not (* (* 2 (count preference2:cylindrical_block) )
+          (* (count preference2:red) (- (+ (count preference2:yellow) (* 0 (count preference2:basketball:beachball:doggie_bed) 0 )
+              )
+            )
+            30
+            (count-once-per-objects preference1:basketball:doggie_bed)
+            4
+            15
+          )
+          3
+        )
+      )
+      (* 5 )
+    )
+  )
+)
+(:scoring
+  5
+)
+)
+
+
+(define (game game-id-91) (:domain medium-objects-room-v1)
+(:setup
+  (game-conserved
+    (and
+      (in_motion ?xxx bed)
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (then
+        (hold-while (and (and (in_motion ?xxx desk) (agent_holds ?xxx) ) (and (not (in_motion ?xxx ?xxx) ) (and (touch ?xxx) (forall (?k - game_object) (agent_holds ?k) ) ) ) ) (and (in_motion ?xxx ball) (and (and (and (agent_holds ?xxx ?xxx) (not (not (or (< 1 (distance room_center 1)) (agent_holds ?xxx ?xxx) ) ) ) ) (agent_holds ?xxx ?xxx) (and (on ?xxx) (touch ?xxx floor) ) (on agent) ) (adjacent bed ?xxx) ) ) (exists (?r - doggie_bed) (on ?r) ) )
+        (hold (not (in_motion ?xxx) ) )
+        (hold (not (agent_holds front) ) )
+      )
+    )
+    (preference preference2
+      (then
+        (hold (= 1 (distance ?xxx ?xxx)) )
+        (hold (not (not (on agent ?xxx) ) ) )
+        (once (< 1 1) )
+      )
+    )
+    (preference preference3
+      (exists (?h - (either key_chain laptop) ?x - cube_block ?j - blinds ?s - dodgeball ?n - hexagonal_bin)
+        (exists (?e - cube_block)
+          (exists (?q - hexagonal_bin)
+            (exists (?u - doggie_bed)
+              (exists (?c - hexagonal_bin)
+                (forall (?t - hexagonal_bin)
+                  (exists (?v - hexagonal_bin)
+                    (at-end
+                      (not
+                        (< 6 1)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference4
+      (exists (?j - dodgeball ?g - game_object)
+        (at-end
+          (agent_holds ?g)
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (- (>= 10 (count-once-per-objects preference4:red) )
+    )
+    (or
+      (* (count preference3:beachball) (count preference3:basketball) (count preference1:doggie_bed:red) (external-forall-maximize (* (+ (* (count-once-per-objects preference3:golfball) 9 )
+              (external-forall-maximize
+                (> (count-once-per-external-objects preference4:dodgeball) 2 )
+              )
+            )
+            (count-once-per-objects preference1:hexagonal_bin)
+          )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count preference1:beachball)
+)
+)
+
+
+(define (game game-id-92) (:domain few-objects-room-v1)
+(:setup
+  (game-conserved
+    (agent_holds ?xxx)
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?n ?a ?p - wall)
+        (at-end
+          (not
+            (not
+              (in ?p ?p)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (* (* (+ (count preference1:golfball:dodgeball) (count-increasing-measure preference1:basketball:green) (* (* (* 3 )
+              (* (* 4 1 )
+                (count-once-per-objects preference1:dodgeball)
+              )
+            )
+            (+ (count preference1:dodgeball) (* 3 10 )
+            )
+          )
+          (count-once preference1:basketball)
+          (count-once-per-objects preference1:cube_block)
+        )
+        (count preference1:green)
+      )
+      (* (count preference1:pink:basketball) (count-once-per-objects preference1:dodgeball:hexagonal_bin) )
+    )
+    (count preference1:pink)
+  )
+)
+(:scoring
+  5
+)
+)
+
+
+(define (game game-id-93) (:domain few-objects-room-v1)
+(:setup
+  (forall (?e - (either cd) ?b - book ?v - wall ?g - dodgeball)
+    (and
+      (and
+        (and
+          (and
+            (exists (?w ?t ?o - cube_block ?d - hexagonal_bin)
+              (forall (?r ?h - ball)
+                (game-conserved
+                  (and
+                    (open ?d ?r)
+                    (equal_z_position floor)
+                  )
+                )
+              )
+            )
+          )
+        )
+        (game-conserved
+          (in_motion ?g ?g)
+        )
+      )
+      (or
+        (exists (?n - block ?b - building ?b - hexagonal_bin ?h - teddy_bear)
+          (forall (?s - doggie_bed ?s - dodgeball)
+            (and
+              (exists (?a - building)
+                (forall (?n - hexagonal_bin ?f ?j - triangular_ramp)
+                  (and
+                    (game-conserved
+                      (and
+                        (not
+                          (in_motion ?j)
+                        )
+                        (on ?a)
+                      )
+                    )
+                    (forall (?l - doggie_bed)
+                      (game-conserved
+                        (and
+                          (agent_holds bed)
+                          (faces ?g green_golfball)
+                          (not
+                            (in_motion ?f)
                           )
                         )
                       )
@@ -6383,7 +6278,120 @@
           )
         )
         (game-conserved
-          (agent_holds ?q)
+          (in_motion ?g ?g)
+        )
+        (game-conserved
+          (object_orientation ?g)
+        )
+      )
+      (and
+        (and
+          (forall (?o - building)
+            (exists (?w - cube_block ?i - hexagonal_bin ?p - (either teddy_bear mug))
+              (game-optional
+                (and
+                  (not
+                    (on ?o)
+                  )
+                  (and
+                    (on ?o ?g)
+                    (agent_holds ?g)
+                    (not
+                      (and
+                        (agent_holds ?p)
+                        (and
+                          (and
+                            (< (distance ?o 0) 1)
+                            (in_motion rug ?o)
+                            (and
+                              (in ?o)
+                              (<= 1 0.5)
+                              (on ?o)
+                            )
+                          )
+                          (adjacent ?g)
+                        )
+                      )
+                    )
+                    (forall (?x - hexagonal_bin)
+                      (agent_holds agent ?g)
+                    )
+                    (not
+                      (and
+                        (in_motion ?p ?g)
+                        (agent_holds desk)
+                        (in_motion ?p ?p ?o)
+                        (not
+                          (in_motion ?o)
+                        )
+                        (agent_holds ?p)
+                        (and
+                          (not
+                            (above agent ?g)
+                          )
+                          (in_motion upright)
+                        )
+                      )
+                    )
+                    (in_motion ?o ?p)
+                    (not
+                      (on ?o)
+                    )
+                    (adjacent ?g ?g)
+                    (on agent)
+                    (agent_holds ?o ?p)
+                  )
+                )
+              )
+            )
+          )
+          (exists (?z - teddy_bear)
+            (not
+              (exists (?i - dodgeball)
+                (game-optional
+                  (not
+                    (and
+                      (on ?i)
+                      (forall (?m - hexagonal_bin)
+                        (exists (?w - doggie_bed ?n - flat_block ?k - ball)
+                          (object_orientation ?m)
+                        )
+                      )
+                      (and
+                        (forall (?u ?h - curved_wooden_ramp)
+                          (< 2 3)
+                        )
+                        (not
+                          (and
+                            (or
+                              (agent_holds ?g ?g)
+                              (agent_holds ?z ?g)
+                            )
+                            (not
+                              (agent_holds ?g)
+                            )
+                            (exists (?p - teddy_bear)
+                              (not
+                                (in ?z ?g)
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+          (and
+            (game-conserved
+              (opposite ?g ?g)
+            )
+            (game-optional
+              (agent_holds agent)
+            )
+          )
         )
       )
     )
@@ -6391,36 +6399,218 @@
 )
 (:constraints
   (and
-    (forall (?w - (either golfball blue_cube_block) ?y - dodgeball)
-      (and
-        (preference preferenceA
-          (exists (?l - cube_block ?i - game_object)
-            (exists (?o - hexagonal_bin ?j - ball ?o - hexagonal_bin)
-              (then
-                (once (or (and (adjacent ?i) (rug_color_under ?o agent) ) (and (in ?i ?y) (< 7 (distance 3 ?y)) ) ) )
-                (once (not (and (not (in_motion ?i) ) (not (not (and (agent_holds front) (on ?i) (and (between ?i ?i) (and (and (not (and (and (in ?y) (in_motion ?o) ) (in pink) (in_motion ?y ?o) (and (not (same_color ?y) ) ) ) ) (in_motion ?o) ) (adjacent ?i) ) (in_motion ?i) ) ) ) ) ) ) )
-                (hold-while (agent_holds ?i ?y) (in_motion ?y) (and (> (distance_side agent ?o) 1) (in_motion ?o ?y) (and (not (agent_holds ?y) ) (not (< (distance ?o ?y) 1) ) ) ) )
-                (hold-while (on ?i ?o) (and (in_motion ?i ?y) (in_motion ?o ?o) ) )
+    (preference preference1
+      (exists (?k - block ?x - block ?i - ball)
+        (then
+          (hold (or (agent_holds rug ?i) ) )
+          (once (not (agent_holds floor ?i ?i) ) )
+        )
+      )
+    )
+    (preference preference2
+      (then
+        (hold (and (and (< 2 (distance room_center agent)) (not (not (in_motion ?xxx ?xxx) ) ) ) (in_motion ?xxx) (in ?xxx ?xxx) ) )
+        (once (agent_holds ?xxx ?xxx) )
+        (once-measure (in ?xxx ?xxx) (building_size room_center ?xxx) )
+        (once (and (on ?xxx) (and (agent_holds ?xxx ?xxx) (exists (?j - curved_wooden_ramp) (and (and (and (and (and (in ?j ?j) (< 0.5 (distance ?j ?j)) ) (between ?j ?j) ) (between ?j ?j) (adjacent ?j ?j) (in_motion rug) ) (not (< 8 (distance 6 ?j)) ) (and (and (agent_holds bed) (or (adjacent_side ?j ?j) (forall (?z - (either bridge_block key_chain) ?t - hexagonal_bin) (adjacent ?t ?j) ) ) ) (and (object_orientation ?j) (not (between ?j) ) ) ) ) (and (agent_holds desk ?j) (not (and (and (or (agent_holds ?j ?j) ) (not (not (in_motion ?j desk) ) ) ) (not (agent_holds bed) ) ) ) ) ) ) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= 1 (count preference1:yellow) )
+)
+(:scoring
+  3
+)
+)
+
+
+(define (game game-id-94) (:domain many-objects-room-v1)
+(:setup
+  (exists (?b - hexagonal_bin)
+    (exists (?a - hexagonal_bin ?v - (either cube_block top_drawer) ?k - game_object)
+      (exists (?f - (either pyramid_block laptop golfball))
+        (and
+          (game-conserved
+            (and
+              (on ?k ?f)
+              (agent_holds ?b bed)
+            )
+          )
+          (game-conserved
+            (and
+              (not
+                (in_motion agent)
+              )
+              (not
+                (same_type ?f ?f)
+              )
+              (not
+                (agent_holds ?f rug)
               )
             )
           )
         )
       )
     )
-    (forall (?v - triangular_ramp)
+  )
+)
+(:constraints
+  (and
+    (forall (?g - hexagonal_bin)
       (and
-        (preference preferenceB
-          (exists (?n - hexagonal_bin ?d - hexagonal_bin)
-            (at-end
-              (agent_holds ?v)
+        (preference preference1
+          (exists (?f - ball ?l - game_object)
+            (then
+              (once (agent_holds ?l agent) )
+              (once (and (agent_holds ?l ?l) (in ?g) ) )
+              (hold (agent_holds ?l) )
             )
           )
         )
-        (preference preferenceC
+        (preference preference2
           (then
-            (hold-while (in_motion agent ?v) (adjacent ?v) (and (in_motion ?v) (object_orientation ?v ?v) ) (in ?v ?v) )
-            (hold (not (not (in desk ?v) ) ) )
-            (hold (in ?v) )
+            (hold (agent_holds ?g) )
+            (once (adjacent upright ?g) )
+            (hold-while (and (agent_holds agent) (adjacent ?g) (agent_holds ?g) ) (on ?g) )
+          )
+        )
+      )
+    )
+    (preference preference3
+      (then
+        (once (and (and (< 4 1) (adjacent ?xxx) ) (not (agent_holds ?xxx ?xxx) ) ) )
+        (hold (same_object ?xxx ?xxx) )
+        (hold-while (adjacent rug) (and (and (not (agent_holds ?xxx ?xxx) ) (and (and (agent_holds ?xxx ?xxx) (same_color ?xxx bed) ) (agent_holds ?xxx agent) ) ) (on ?xxx ?xxx) ) (and (and (in_motion ?xxx) (touch bed ?xxx) ) ) )
+      )
+    )
+    (preference preference4
+      (at-end
+        (touch ?xxx)
+      )
+    )
+    (preference preference5
+      (exists (?g - game_object)
+        (then
+          (once (in_motion ?g ?g) )
+          (hold-while (not (and (is_setup_object ?g ?g) (on ?g) ) ) (agent_holds ?g) )
+          (hold (in_motion upright ?g) )
+        )
+      )
+    )
+    (preference preference6
+      (then
+        (once (in_motion ?xxx ?xxx) )
+        (once (and (agent_holds agent south_west_corner) (not (< 6 (distance ?xxx room_center)) ) (in_motion ?xxx) ) )
+        (once (and (and (agent_holds ?xxx ?xxx) (not (not (not (not (not (forall (?x - hexagonal_bin) (not (not (on ?x) ) ) ) ) ) ) ) ) ) (agent_holds ?xxx) ) )
+      )
+    )
+    (preference preference7
+      (then
+        (hold (not (agent_holds ?xxx) ) )
+        (once (above ?xxx) )
+        (once (and (not (and (and (object_orientation ?xxx ?xxx) (on ?xxx) ) (and (agent_holds ?xxx ?xxx) (adjacent ?xxx) ) ) ) (agent_holds ?xxx floor) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (+ (not 8 ) (* (* (count preference1:hexagonal_bin) (count-shortest preference1:dodgeball) )
+        (count preference4:hexagonal_bin)
+        (+ 5 )
+        1
+        12
+        (count preference6:yellow)
+      )
+    )
+    (+ 100 (- (count-once-per-external-objects preference5:dodgeball) )
+    )
+  )
+)
+(:scoring
+  (* 5 9 )
+)
+)
+
+
+(define (game game-id-95) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (not
+        (agent_holds ?xxx ?xxx)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?j - hexagonal_bin ?k - curved_wooden_ramp ?l - red_dodgeball)
+      (and
+        (preference preference1
+          (exists (?r - cube_block ?k - chair)
+            (exists (?u - block)
+              (exists (?t - dodgeball ?f - hexagonal_bin ?q - hexagonal_bin)
+                (exists (?n - game_object ?m - hexagonal_bin ?d - hexagonal_bin ?d ?e ?z - cube_block)
+                  (then
+                    (once (or (on ?e rug) (and (not (in_motion ?z) ) (not (in_motion ?u) ) ) ) )
+                    (once (< (distance ?k ?q) 1) )
+                    (once (agent_holds ?l) )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+    (preference preference2
+      (then
+        (once (and (and (= (distance ?xxx 8) 1) (adjacent desktop) ) (agent_holds ?xxx) ) )
+        (once (< 1 1) )
+        (once (and (on desk) (not (not (not (not (and (agent_holds ?xxx) (not (< 1 (distance 5 ?xxx)) ) ) ) ) ) ) ) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (>= 0 (count-once-per-objects preference2:yellow_cube_block) )
+  )
+)
+(:scoring
+  (+ (* 30 (* (count-unique-positions preference1:yellow_cube_block) (external-forall-minimize 6 ) )
+    )
+    (+ (* (count preference1:red:dodgeball) (count preference2:purple:dodgeball) )
+      (count preference2:basketball:dodgeball)
+    )
+  )
+)
+)
+
+
+(define (game game-id-96) (:domain few-objects-room-v1)
+(:setup
+  (game-optional
+    (and
+      (> 2 (distance 2 4))
+      (agent_holds ?xxx ?xxx)
+      (not
+        (in_motion ?xxx)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?a - chair)
+      (and
+        (preference preference1
+          (then
+            (once (in_motion ?a) )
+            (hold (exists (?x - cube_block ?y - pyramid_block) (agent_holds ?a) ) )
+            (once (not (not (agent_holds ?a) ) ) )
           )
         )
       )
@@ -6428,30 +6618,145 @@
   )
 )
 (:terminal
-  (or
-    (>= 3 180 )
-    (< 18 (count preferenceA:yellow_pyramid_block) )
+  (and
+    (or
+      (not
+        (>= (> (and (< 2 (* (total-score) 5 )
+              )
+              (count preference1:yellow)
+              (total-score)
+            )
+            (* (* 0 (* (* 15 (* (* 0 (count preference1:beachball:orange) )
+                      (* (* 2 (- 4 )
+                        )
+                        (+ (* (count preference1:dodgeball:beachball:beachball) 10 )
+                          20
+                          (count preference1:triangle_block:beachball)
+                        )
+                      )
+                      5
+                      (count preference1:beachball)
+                      (count preference1:doggie_bed:golfball:blue_dodgeball)
+                    )
+                  )
+                  (count preference1:blue_dodgeball:dodgeball:pink_dodgeball)
+                )
+              )
+              5
+            )
+          )
+          3
+        )
+      )
+    )
+    (not
+      (= (count-measure preference1:dodgeball) (count preference1) )
+    )
+    (or
+      (>= (+ 1 (+ (count-once-per-objects preference1:pink_dodgeball) (* (count preference1:beachball) (count preference1:yellow:dodgeball) )
+          )
+        )
+        4
+      )
+      (>= 2 (count preference1:basketball:pink) )
+      (>= 10 5 )
+    )
   )
 )
 (:scoring
-  (+ (+ 10 (count preferenceC:dodgeball) )
-    (* 10 (count preferenceB:wall:basketball:pink) )
+  (+ (count-once-per-objects preference1:dodgeball) 30 (- (count-total preference1:pink) )
   )
 )
 )
 
 
-(define (game game-id) (:domain domain-name)
+(define (game game-id-97) (:domain few-objects-room-v1)
 (:setup
-  (exists (?e - red_dodgeball)
-    (exists (?q - shelf)
+  (exists (?a - cube_block ?a ?f ?p - dodgeball)
+    (and
       (and
-        (and
-          (exists (?p - dodgeball)
-            (exists (?d - block ?o - color)
-              (and
-                (game-conserved
-                  (< (distance ?p) (x_position 7 9))
+        (game-conserved
+          (in_motion ?p)
+        )
+        (forall (?h - drawer)
+          (and
+            (game-conserved
+              (in ?p)
+            )
+            (game-conserved
+              (in_motion agent ?h)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference preference1
+      (exists (?b - hexagonal_bin)
+        (exists (?d - pillow)
+          (then
+            (hold-while (agent_holds ?b) (and (in ?b) ) )
+            (once (and (< (distance ?d 10) 0) ) )
+            (once (not (agent_holds ?b) ) )
+          )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (= (* 5 (count-shortest preference1:dodgeball) )
+    (count preference1:red)
+  )
+)
+(:scoring
+  (* (and (count-once-per-objects preference1:golfball:dodgeball:blue_dodgeball) (- 5 )
+    )
+    (count-once-per-external-objects preference1:yellow)
+    (count preference1:beachball)
+  )
+)
+)
+
+
+(define (game game-id-98) (:domain few-objects-room-v1)
+(:setup
+  (exists (?y - hexagonal_bin)
+    (exists (?w - beachball ?j - block)
+      (and
+        (forall (?f - hexagonal_bin)
+          (or
+            (not
+              (forall (?r - bridge_block)
+                (exists (?z - dodgeball)
+                  (game-conserved
+                    (not
+                      (and
+                        (in_motion ?j)
+                        (not
+                          (adjacent block ?r)
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+            (game-conserved
+              (not
+                (and
+                  (exists (?h - hexagonal_bin)
+                    (and
+                      (in_motion agent)
+                      (in_motion agent ?j)
+                    )
+                  )
+                  (not
+                    (agent_holds ?y)
+                  )
                 )
               )
             )
@@ -6463,17 +6768,180 @@
 )
 (:constraints
   (and
-    (forall (?v - block)
-      (and
-        (preference preferenceA
-          (exists (?e - (either cube_block yellow_cube_block))
-            (exists (?d - shelf ?f ?t ?s ?k ?c ?j - (either tall_cylindrical_block dodgeball dodgeball) ?w - curved_wooden_ramp)
-              (then
-                (once (exists (?u - (either cube_block yellow_cube_block)) (and (exists (?x - (either dodgeball yellow_cube_block)) (and (on ?v ?x) (and (agent_holds ?e) (agent_holds desk left) (not (on ?x) ) (or (not (adjacent ?u) ) (exists (?c - hexagonal_bin) (not (same_color ?c ?u) ) ) ) ) ) ) (in_motion ?e ?e) ) ) )
-                (once (<= (distance ?v ?v) (distance bed)) )
-                (once (agent_holds ?v) )
+    (preference preference1
+      (then
+        (hold (on ?xxx) )
+        (once (not (in_motion agent ?xxx) ) )
+        (once (not (not (agent_holds ?xxx ?xxx) ) ) )
+        (once (adjacent upright) )
+      )
+    )
+  )
+)
+(:terminal
+  (or
+    (or
+      (>= 1 (count preference1:dodgeball) )
+      (or
+        (not
+          (and
+            (or
+              (not
+                (>= (+ 1 4 2 )
+                  (+ 6 (* (* (count preference1:block) 3 )
+                      (count-same-positions preference1:white:golfball)
+                      (or
+                        2
+                        (count-once-per-objects preference1:beachball:pink:green)
+                        (count-once-per-objects preference1:pink)
+                      )
+                    )
+                  )
+                )
               )
             )
+          )
+        )
+        (and
+          (and
+            (>= (< 7 5 )
+              (+ 10 (* (count-once-per-objects preference1:purple) 3 )
+              )
+            )
+            (>= 1 (count preference1:book:beachball) )
+            (>= (count-once preference1:green:tall_cylindrical_block) (>= (count-once-per-objects preference1:beachball) (total-score) )
+            )
+          )
+          (> (external-forall-maximize (>= (external-forall-maximize (+ (- (count preference1:hexagonal_bin) )
+                    (* (+ (* 4 (count-once-per-objects preference1:yellow:dodgeball) )
+                        (count preference1:doggie_bed)
+                      )
+                      (count preference1:yellow_cube_block:pink)
+                    )
+                  )
+                )
+                (count preference1:dodgeball)
+              )
+            )
+            (+ (* (+ (* (* (+ (count preference1:beachball) )
+                      (count-once-per-objects preference1:basketball)
+                      (count preference1:dodgeball)
+                    )
+                    (* 3 )
+                  )
+                  3
+                )
+                (count-shortest preference1:red)
+                (total-score)
+                (count-once-per-objects preference1:pink_dodgeball:golfball)
+                (count preference1:green)
+                (total-score)
+                (total-time)
+                (count-once-per-objects preference1:doggie_bed)
+                (count preference1:blue_dodgeball)
+                (* (+ (count-once preference1:beachball:wall) 30 (* 4 (total-time) (count-shortest preference1:basketball:orange) )
+                  )
+                  (count preference1:hexagonal_bin)
+                )
+                3
+                (* 6 (count preference1:tall_cylindrical_block) )
+              )
+              12
+            )
+          )
+          (< (* (+ 3 (count preference1:red:hexagonal_bin) )
+              (+ (count preference1:blue:doggie_bed) (* (* (* 20 2 )
+                    (* (* (* 4 (count-once-per-objects preference1:dodgeball:basketball) (external-forall-maximize (count preference1:pink_dodgeball) ) )
+                        8
+                      )
+                      (+ 10 (* (not 10 ) (* (count-once-per-external-objects preference1:dodgeball:beachball) 30 )
+                        )
+                      )
+                      1
+                    )
+                    20
+                    (count-once preference1:purple:hexagonal_bin)
+                    (* (count preference1:basketball) 4 )
+                    (count preference1:red_pyramid_block:beachball:green)
+                  )
+                  (count-once-per-objects preference1:dodgeball)
+                )
+              )
+            )
+            (* (total-time) 5 )
+          )
+        )
+      )
+      (> (count-once-per-objects preference1:golfball) 2 )
+    )
+    (>= (count preference1:dodgeball) (* 3 (+ 2 (* 2 10 )
+        )
+        (count-overlapping preference1:purple:green)
+        (count-once-per-objects preference1:yellow)
+        (* (count preference1:rug) 1 (+ (- 9 )
+            (* 300 (external-forall-minimize (/ 5 (* (total-time) 2 )
+                )
+              )
+            )
+          )
+        )
+        6
+        (count preference1:golfball)
+        (+ (count-once-per-objects preference1:beachball) (* (* (* (count preference1:dodgeball) (* (* 3 (* 20 (* 7 (count-once-per-objects preference1:purple) (count preference1:yellow) )
+                    )
+                  )
+                  6
+                )
+              )
+              (count preference1:green)
+            )
+            12
+          )
+          (count preference1:beachball)
+        )
+        (count preference1:pink_dodgeball:dodgeball:yellow)
+      )
+    )
+  )
+)
+(:scoring
+  60
+)
+)
+
+
+(define (game game-id-99) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?n - ball)
+      (exists (?t - chair)
+        (game-conserved
+          (in ?n)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?i - hexagonal_bin)
+      (and
+        (preference preference1
+          (at-end
+            (and
+              (agent_holds south_west_corner)
+              (and
+                (agent_holds ?i ?i)
+                (agent_holds front ?i)
+              )
+            )
+          )
+        )
+        (preference preference2
+          (then
+            (hold (in_motion ?i) )
+            (once (or (in_motion ?i ?i) ) )
+            (once (in_motion agent ?i) )
           )
         )
       )
@@ -6481,47 +6949,69 @@
   )
 )
 (:terminal
-  (>= (+ (count-once-per-objects preferenceA:hexagonal_bin) (count-once preferenceA:basketball:hexagonal_bin:pink) 10 7 (count-once-per-objects preferenceA:red) (count preferenceA:beachball) (+ (>= (count-once-per-objects preferenceA:pink) 2 )
-      )
-      (count preferenceA)
-      (+ (count preferenceA:dodgeball) (- (count-same-positions preferenceA:pink_dodgeball) )
-      )
-    )
-    (* (count preferenceA:green:red) 2 )
-  )
-)
-(:scoring
-  (* (* (count preferenceA) 8 )
-    3
-  )
-)
-)
-
-
-(define (game game-id) (:domain domain-name)
-(:setup
-  (exists (?n - watch ?a - chair ?q - (either blue_cube_block basketball top_drawer))
-    (game-conserved
-      (in_motion ?q)
-    )
-  )
-)
-(:constraints
   (and
-    (preference preferenceA
-      (then
-        (once (on ?xxx ?xxx) )
-        (once (in_motion ?xxx) )
-        (hold (in_motion ?xxx) )
+    (>= (count preference2:pink) (* (>= (* 6 (total-score) )
+          (- (total-time) )
+        )
+        (/
+          1
+          (count preference1:purple)
+        )
+      )
+    )
+    (and
+      (>= (<= 4 (count preference1:side_table:bed) )
+        5
+      )
+      (and
+        (>= (* (count-once preference2:yellow:basketball) 6 )
+          (count preference1:block)
+        )
+        (>= (+ (external-forall-maximize (- (count-once preference1:dodgeball:pink_dodgeball) (* (count preference2:pink) (* 2 (* (* 3 (not (* (count-once-per-objects preference2:rug:beachball) (count-once-per-objects preference1:yellow:hexagonal_bin) )
+                        )
+                      )
+                      (total-score)
+                      (count preference1)
+                    )
+                    5
+                  )
+                  4
+                  12
+                  (* 6 (count preference2:dodgeball:blue_pyramid_block:beachball) 50 (* (total-time) 10 (* 15 (+ 5 2 )
+                      )
+                      (count preference2:golfball)
+                    )
+                  )
+                  (* (count-shortest preference2:hexagonal_bin) (count-once-per-external-objects preference1:dodgeball) )
+                  3
+                  (- (count preference2:dodgeball) )
+                  (count preference2:blue_pyramid_block)
+                )
+              )
+            )
+            (count preference1:orange)
+            8
+          )
+          (* (or (count preference2:yellow) (count preference2:basketball) (* (* (count-once-per-objects preference2:green:golfball) (count-same-positions preference1:blue_dodgeball:golfball) (and (* (count-once-per-objects preference1:book) 6 )
+                    (count-increasing-measure preference2:wall:beachball)
+                    3
+                  )
+                  10
+                )
+                (count preference2:doggie_bed)
+                (* (count preference1:golfball:red) (count-once preference1:hexagonal_bin:basketball:dodgeball) )
+                (count-once-per-objects preference2:yellow:dodgeball)
+              )
+            )
+            (count preference1:hexagonal_bin:blue_dodgeball:dodgeball)
+          )
+        )
       )
     )
   )
 )
-(:terminal
-  (>= 18 2 )
-)
 (:scoring
-  (count preferenceA:green)
+  (count preference2:green)
 )
 )
 

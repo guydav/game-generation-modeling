@@ -13,6 +13,7 @@ import typing
 
 from parse_dsl import load_tests_from_file
 from ast_parser import ASTParser
+from ast_to_latex_doc import TYPE_RULES
 
 
 parser = argparse.ArgumentParser()
@@ -27,7 +28,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/fitness_score.csv'
+DEFAULT_OUTPUT_PATH ='./data/fitness_scores.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 
 
@@ -59,6 +60,11 @@ class FitnessTerm(ABC):
 
 
 DEFAULT_HEADERS = ('src_file', 'game_name', 'domain_name')
+SETUP = 'setup'
+PREFERENCES = 'constraints'
+TERMINAL = 'terminal'
+SCORING = 'scoring'
+SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 
 
 class ASTFitnessFunction:
@@ -69,10 +75,14 @@ class ASTFitnessFunction:
     rows: typing.List
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]] 
+    section_keys: typing.List[str]
 
-    def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS, list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum):
+    def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS, 
+        list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
+        section_keys: typing.Sequence[str] = SECTION_KEYS):
         self.headers = list(headers)
         self.list_reduce = list_reduce
+        self.section_keys = list(section_keys)
 
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
@@ -152,6 +162,10 @@ class ASTFitnessFunction:
 
         elif isinstance(ast, (tuple, list)):
             if len(ast) > 0 and isinstance(ast[0], str):
+                # check if should update the section key
+                if ast[0][2:] in self.section_keys:
+                    context['section'] = ast[0][2:]
+
                 for tuple_stat in self.tuple_registry[ast[0]]:
                     tuple_stat.update(ast, '', context)
 
@@ -207,6 +221,18 @@ class ASTNodeCounter(ASTParser):
         super()._handle_ast(ast, **kwargs)
 
 
+def _extract_predicate_terms(ast: tatsu.ast.AST) -> typing.List[str]:
+    args = ast.pred_args
+
+    if args is None:
+        return []
+
+    if isinstance(args, tatsu.ast.AST):
+        args = [args]
+
+    return [str(arg.term) for arg in args]
+
+
 class VariablesDefinedFitnessTerm(FitnessTerm):
     defined_count: int = 0
     undefined_count: int = 0
@@ -222,19 +248,8 @@ class VariablesDefinedFitnessTerm(FitnessTerm):
         if 'variables' not in context:
             return
 
-        fitness = 0
-
         if isinstance(ast, tatsu.ast.AST):
-            args = ast.pred_args
-
-            if args is None:
-                return
-
-            if isinstance(args, tatsu.ast.AST):
-                args = [args]
-
-            for arg in args:  # type: ignore
-                term = arg.term
+            for term in _extract_predicate_terms(ast):  # type: ignore
                 if isinstance(term, str) and term.startswith('?'):
                     if term in context['variables']:  # type: ignore
                         self.defined_count += 1
@@ -273,6 +288,188 @@ class AllPreferencesUsed(FitnessTerm):
         return len(self.defined_preferences.intersection(self.used_preferences)) / len(self.defined_preferences.union(self.used_preferences))
 
 
+class SetupObjectsUsed(FitnessTerm):
+    setup_objects: typing.Set[str] = set()
+    used_objects: typing.Set[str] = set()
+
+    def __init__(self):
+        super().__init__(list(TYPE_RULES.keys()), 'setup_objects_used')
+
+    def game_start(self) -> None:
+        self.setup_objects = set()
+        self.used_objects = set()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if 'section' not in context:
+            raise ValueError('Section not found in context', context)
+
+        if context['section'] == SETUP:
+            result = TYPE_RULES[rule][0](ast)
+            if isinstance(result, (list, tuple)):
+                self.setup_objects.update(result)
+            elif result is not None:
+                self.setup_objects.add(result)
+
+        else: 
+            result = TYPE_RULES[rule][0](ast)
+            if isinstance(result, (list, tuple)):
+                self.used_objects.update(result)
+            elif result is not None:
+                self.used_objects.add(result)
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if len(self.setup_objects) == 0:
+            return 0
+
+        return len(self.setup_objects.intersection(self.used_objects)) / len(self.setup_objects)
+
+
+class NoAdjacentOnce(FitnessTerm):
+    total_prefs: int = 0
+    prefs_with_adjacent_once: int = 0
+
+    def __init__(self):
+        super().__init__('then', 'no_adjacent_once')
+
+    def game_start(self) -> None:
+        self.total_prefs = 0
+        self.prefs_with_adjacent_once = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.total_prefs += 1
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
+            for i in range(len(func_rules) - 1):
+                if func_rules[i] == func_rules[i + 1] == 'once':
+                    self.prefs_with_adjacent_once += 1
+                    break
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_prefs == 0:
+            return 0
+
+        return 1 - (self.prefs_with_adjacent_once / self.total_prefs)
+
+
+class PrefStartsAndEndsWithOnce(FitnessTerm):
+    total_prefs: int = 0
+    prefs_start_and_end_with_once: int = 0
+
+    def __init__(self):
+        super().__init__('then', 'starts_and_ends_once')
+
+    def game_start(self) -> None:
+        self.total_prefs = 0
+        self.prefs_start_and_end_with_once = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.total_prefs += 1
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
+            if len(func_rules) >= 3 and func_rules[0] == func_rules[-1] == 'once':
+                self.prefs_start_and_end_with_once += 1
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_prefs == 0:
+            return 0
+
+        return self.prefs_start_and_end_with_once / self.total_prefs
+
+
+class VariableNotRepeatedInPredicate(FitnessTerm):
+    total_predicates: int = 0
+    predicates_with_repeated_variables: int = 0
+
+    def __init__(self):
+        super().__init__('predicate', 'variable_not_repeated')
+
+    def game_start(self) -> None:
+        self.total_predicates = 0
+        self.predicates_with_repeated_variables = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_predicates += 1
+            predicate_vars = [t for t in _extract_predicate_terms(ast) if isinstance(t, str) and t.startswith('?')]
+            self.predicates_with_repeated_variables += 1 if len(predicate_vars) != len(set(predicate_vars)) else 0
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_predicates == 0:
+            return 0
+
+        return 1 - (self.predicates_with_repeated_variables / self.total_predicates)
+
+
+class NoNestedLogicals(FitnessTerm):
+    total_logicals: int = 0
+    nested_logicals: int = 0
+
+    def __init__(self):
+        super().__init__(('setup_and', 'setup_or', 'setup_not', 'super_predicate_and',
+        'super_predicate_or', 'super_predicate_not', 'terminal_and',
+        'terminal_or', 'terminal_not', 'scoring_and', 'scoring_or', 'scoring_not'), 'no_nested_logicals')
+
+    def game_start(self) -> None:
+        self.total_logicals = 0
+        self.nested_logicals = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_logicals += 1
+            
+            if rule.endswith('_not'):
+                if isinstance(ast.not_args, tatsu.ast.AST) and ast.not_args.parseinfo.rule == rule:  # type: ignore
+                    self.nested_logicals += 1
+
+            else:
+                rule_name = rule.split('_')[-1]
+                children = ast[f'{rule_name}_args']
+                if isinstance(children, tatsu.ast.AST):
+                    children = [children]
+
+                if any([isinstance(child, tatsu.ast.AST) and child.parseinfo.rule == rule for child in children]):  # type: ignore
+                    self.nested_logicals += 1
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_logicals == 0:
+            return 0
+
+        return 1 - (self.nested_logicals / self.total_logicals)
+
+
+class PrefForallUsedCorrectly(FitnessTerm):
+    pref_forall_prefs: typing.Set[str] = set()
+    prefs_used_as_pref_forall_prefs: typing.Set[str] = set()
+
+    def __init__(self):
+        super().__init__(('pref_forall', re.compile('count.*')), 'pref_forall_correct')
+
+    def game_start(self) -> None:
+        self.pref_forall_prefs = set()
+        self.prefs_used_as_pref_forall_prefs = set()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            if rule == 'pref_forall':
+                preferences = ast.forall_pref.preferences  # type: ignore
+                if isinstance(preferences, tatsu.ast.AST):
+                    preferences = [preferences]
+
+                self.pref_forall_prefs.update([pref.pref_name for pref in preferences])  # type: ignore
+
+            else:   # count*
+                pref_name = ast.name_and_types['pref_name']  # type: ignore
+                object_types = ast.name_and_types['object_types']  # type: ignore
+                if object_types is not None:
+                    self.prefs_used_as_pref_forall_prefs.add(pref_name)
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
+            return 1
+
+        return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
+
+
 def build_aggregator(args):
     fitness = ASTFitnessFunction()
 
@@ -282,157 +479,29 @@ def build_aggregator(args):
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
 
-    # length_of_then = StatExtractor('then', 'length_of_then', lambda ast, context: len(ast.then_funcs), lambda x: x)
-    # agg.register(length_of_then)
+    all_setup_objects_used = SetupObjectsUsed()
+    fitness.register(all_setup_objects_used)
 
-    # num_preferences = StatExtractor('preference', 'num_preferences', lambda ast, context: 1, np.sum)
-    # agg.register(num_preferences)
+    no_adjacent_once = NoAdjacentOnce()
+    fitness.register(no_adjacent_once)
 
-    # def objects_quantified(ast, context=None):
-    #     key = 'exists_vars'
-    #     if 'forall_vars' in ast:
-    #         key = 'forall_vars'
+    pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()
+    fitness.register(pref_starts_and_ends_with_once)
 
-    #     return len(ast[key]['variables'])
+    no_repeated_variables_in_predicate = VariableNotRepeatedInPredicate()
+    fitness.register(no_repeated_variables_in_predicate)
 
-    # num_setup_objects_quantified = StatExtractor(
-    #     ('setup_exists', 'setup_forall'), 'setup_objects_quantified', 
-    #     objects_quantified, lambda x: x)
-    # agg.register(num_setup_objects_quantified)
+    no_nested_logicals = NoNestedLogicals()
+    fitness.register(no_nested_logicals)
 
-    # num_preference_objects_quantified = StatExtractor(
-    #     ('pref_body_exists', 'pref_body_forall', 'pref_forall'), 'preference_objects_quantified', 
-    #     objects_quantified, lambda x: x)
-    # agg.register(num_preference_objects_quantified)
+    pref_forall_used_correctly = PrefForallUsedCorrectly()
+    fitness.register(pref_forall_used_correctly)
 
-    # terminal_clause_exists = StatExtractor(
-    #     'terminal_comp', 'terminal_exists', lambda ast, context: True, all
-    # )
-    # agg.register(terminal_clause_exists)
+    # TODO: common sense? predicate role-filler pairs
 
-    # def objects_referenced(ast, context=None):
-    #     results = defaultdict(lambda: 0)
+    # TODO: recurring structures -- generate features for top-k from previous analysis
 
-    #     if ast.parseinfo.rule == 'predicate':
-    #         if 'pred_args' in ast:
-    #             # single pred arg
-    #             if isinstance(ast.pred_args, str) and not ast.pred_args.startswith('?'):
-    #                 results[ast.pred_args] += 1
-
-    #             # multiple pred args
-    #             filtered_args = [arg for arg in ast.pred_args if isinstance(arg, str) and not arg.startswith('?')]
-    #             for arg in filtered_args:
-    #                 results[arg] += 1
-
-    #     elif ast.parseinfo.rule == 'pref_name_and_types':
-    #         if 'object_types' in ast:
-    #             # single object type
-    #             if isinstance(ast.object_types, tatsu.ast.AST):
-    #                 results[ast.object_types.type_name] += 1
-                
-    #             # multiple object types
-    #             else:
-    #                 for type_name in [t.type_name for t in ast.object_types if 'type_name' in t]:
-    #                     results[type_name] += 1
-        
-    #     else:
-    #         key = 'exists_vars'
-    #         if 'forall_vars' in ast:
-    #             key = 'forall_vars'
-            
-    #         for quantification in ast[key]['variables']:
-    #             # single type
-    #             if isinstance(quantification['var_type'], str):
-    #                 results[quantification['var_type']] += 1
-                
-    #             # either types
-    #             else:
-    #                 for name in quantification['var_type'].type_names:
-    #                     results[name] += 1
-
-    #     return results
-
-    # def aggregate_count_dicts(count_dicts):
-    #     results = defaultdict(lambda: 0)
-    #     for cd in count_dicts:
-    #         for key in cd:
-    #             results[key] += cd[key]
-    #     return dict(results)
-
-    # object_types_referenced = StatExtractor(
-    #     ('setup_exists', 'setup_forall', 'setup_exists_predicate', 'setup_forall_predicate',
-    #     'pref_body_exists', 'pref_body_forall', 'pref_forall',
-    #     'pref_predicate_exists', 'pref_predicate_forall', 
-    #     'pref_name_and_types', 'predicate'),
-    #     'object_types_referenced', objects_referenced, aggregate_count_dicts
-    # )
-    # agg.register(object_types_referenced)
-
-    # predicates_referenced = StatExtractor(
-    #     'predicate', 'predicates_referenced', lambda ast, context: {ast.pred_name: 1}, aggregate_count_dicts
-    # )
-    # agg.register(predicates_referenced)
-
-    # max_depth = StatExtractor('predicate', 'max_depth', lambda ast, context: context['depth'], max)
-    # agg.register(max_depth)
-
-    # total_ast_nodes = StatExtractor(re.compile('.*'), 'ast_nodes', lambda ast, context: 1, np.sum)
-    # agg.register(total_ast_nodes)
-
-    # ast_node_counter = ASTNodeCounter()
-
-    # def count_setup_nodes(ast, context=None):
-    #     if isinstance(ast[1], tatsu.ast.AST):
-    #         return ast_node_counter(ast[1], zero_count=True)
-
-    #     return 0
-
-    # setup_nodes = StatExtractor('(:setup', 'setup_nodes', count_setup_nodes, np.sum)
-    # agg.register(setup_nodes, tuple_rule=True)
-
-    # def map_types_to_predicates(ast, context):
-    #     if context is None or not isinstance(context, dict):
-    #         raise ValueError(f'Expected a context dict, received: {context}')
-    #     type_to_pred_counts = defaultdict(lambda: defaultdict(lambda: 0))
-    #     inner_counts = []
-
-    #     variables = context['variables'] if 'variables' in context else {}
-    #     pred_name = ast.pred_name
-    #     pred_args = ast.pred_args
-    #     if isinstance(pred_args, str): pred_args = [pred_args]
-
-    #     for arg in pred_args:
-    #         if isinstance(arg, tatsu.ast.AST) and arg.parseinfo.rule == 'predicate':
-    #             inner_counts.append(map_types_to_predicates(arg, context))
-
-    #         elif arg.startswith('?'):
-    #             if arg not in variables:
-    #                 raise ValueError(f'Encountered undefined argument {arg} in AST: {ast}')
-
-    #             for type_name in variables[arg]:
-    #                 type_to_pred_counts[type_name][pred_name] += 1
-
-    #         else:
-    #             type_to_pred_counts[arg][pred_name] += 1
-
-    #     if len(inner_counts) > 0:
-    #         inner_counts.append(type_to_pred_counts)
-    #         return aggregate_nested_count_dicts(inner_counts)
-
-    #     return type_to_pred_counts
-
-    # def aggregate_nested_count_dicts(nested_count_dicts):
-    #     results = defaultdict(lambda: defaultdict(lambda: 0))
-    #     for nested_count_dict in nested_count_dicts:
-    #         for outer_key, inner_dict in nested_count_dict.items():
-    #             for inner_key, count in inner_dict.items():
-    #                 results[outer_key][inner_key] += count
-
-    #     return {outer_key: dict(inner_dict) for outer_key, inner_dict in results.items()}
-    
-
-    # type_to_pred_counts = StatExtractor('predicate', 'type_to_pred_counts', map_types_to_predicates, aggregate_nested_count_dicts)
-    # agg.register(type_to_pred_counts)
+    # TODO: length/depth/width features, perhaps by section, perhaps discretized by length
 
     return fitness
             
@@ -455,7 +524,7 @@ def main(args):
 
     df = aggregator.to_df()
     print(df.groupby('src_file').mean())
-    # df.to_csv(args.output_path, index_label='Index')    
+    df.to_csv(args.output_path, index_label='Index')    
 
 
 if __name__ == '__main__':

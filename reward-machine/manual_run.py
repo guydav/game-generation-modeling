@@ -17,6 +17,7 @@ CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
 THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
+STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blocks.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -72,18 +73,19 @@ TEST_GAME_LIBRARY = {
     'test-score-once-per-external': load_game("throw_count_once_per_external_objects"),
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
     'test-count-same-positions': load_game("throw_to_bin_same_positions"),
+    'test-count-overlapping': load_game("building_count_overlapping"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-same-positions'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-overlapping'])
     score = None
 
-    trace_path = THROW_BALL_UNIQUE_POSITIONS_TRACE.resolve().as_posix()
+    trace_path = STACK_THREE_CUBES_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state, is_final)
+        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=True)
         if score is not None:
             break
 

@@ -341,13 +341,15 @@ def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Unio
     assert len(objects) == 0
     return agent.crouching
 
-
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
 
+def _pred_game_over(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 0
+    return False # TODO
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
     return other_object.object_id in building.building_objects

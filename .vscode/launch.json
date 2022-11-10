@@ -45,7 +45,7 @@
                 "-c", "-g", "./dsl/dsl.ebnf", "-t", "./dsl/interactive-beta.pddl", "-o", "./latex/updated_dsl_doc.tex", "-e"
             ],
             "console": "integratedTerminal",
-            "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+            // "notes": "\"-n\", \"61541833a06877a656163b10\"", 
         },
         {
             "name": "Python: room object types",
@@ -56,7 +56,7 @@
                 "-b", "-m", "colors",
             ],
             "console": "integratedTerminal",
-            "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+            // "notes": "\"-n\", \"61541833a06877a656163b10\"", 
         },
         {
             "name": "Python: ast counter MLE",
@@ -64,15 +64,18 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                // "--print-samples",
+                "--print-samples",
                 "--validate-samples", 
                 // "--parse-counter", 
                 "--save-samples",
-                "--num-samples", "100",
+                "--num-samples", "16",
+                "--sampling-method", "regrowth",
                 "--sample-tqdm",
+                "--samples-output-path", "./dsl/ast-regrwoth-samples.pddl'" 
             ],
             "console": "integratedTerminal",
-            "notes": "--parse-counter",
+            // "notes": "--parse-counter",
+            // "justMyCode": false,
         },
     ]
 }

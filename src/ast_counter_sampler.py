@@ -1,7 +1,6 @@
 import argparse
 from collections import namedtuple, defaultdict, Counter
 from functools import reduce
-from random import sample
 import tatsu
 import tatsu.ast
 import tatsu.exceptions
@@ -19,8 +18,8 @@ import string
 from uritemplate import variables
 
 from parse_dsl import load_tests_from_file
-from ast_parser import ASTParser
-from ast_utils import update_ast
+from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher
+from ast_utils import replace_child
 import ast_printer
 
 parser = argparse.ArgumentParser()
@@ -44,8 +43,15 @@ parser.add_argument('-n', '--num-samples', type=int, default=10)
 parser.add_argument('-p', '--print-samples', action='store_true')
 parser.add_argument('-v', '--validate-samples', action='store_true')
 parser.add_argument('--sample-tqdm', action='store_true')
+DEFAULT_RANDOM_SEED = 33
+parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 
-parser.
+MLE_SAMPLING = 'mle'
+REGROWTH_SAMPLING = 'regrowth'
+parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLING], required=True)
+
+
+ContextDict = typing.Dict[str, typing.Any]
 
 
 class RuleKeyValueCounter:
@@ -105,7 +111,7 @@ class ASTRuleValueCounter(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         self._handle_value(ast, **kwargs)
-        rule = ast.parseinfo.rule
+        rule = ast.parseinfo.rule  # type: ignore
 
         for key in ast:
             if key != 'parseinfo':
@@ -148,7 +154,7 @@ FUNCTION_NAMES = []
 PREDICATE_NAMES = []
 
 
-def generate_game_id(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def generate_game_id(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     game_id = global_context['original_game_id'] if 'original_game_id' in global_context else 'game-id'    
     if 'sample_id' in global_context:
         game_id = f'{game_id}-{global_context["sample_id"]}'
@@ -158,7 +164,7 @@ def generate_game_id(global_context: typing.Dict[str, typing.Any], local_context
 DOMAINS = ('few-objects-room-v1', 'medium-objects-room-v1', 'many-objects-room-v1',)
 
 
-def generate_domain_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def generate_domain_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if 'rng' not in global_context:
         rng = np.random.default_rng()
     else:
@@ -170,7 +176,7 @@ def _preference_name(i):
     return f'preference{i}'
 
 
-def sample_new_preference_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def sample_new_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if 'preference_count' not in global_context:
         global_context['preference_count'] = 0
 
@@ -178,7 +184,7 @@ def sample_new_preference_name(global_context: typing.Dict[str, typing.Any], loc
     return _preference_name(global_context['preference_count'])
 
 
-def sample_existing_preference_name(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if 'preference_count' not in global_context:
         # TODO: do we want to fail here, or return a nonsensical value
         return 'no-preferences-exist'
@@ -192,13 +198,7 @@ def sample_existing_preference_name(global_context: typing.Dict[str, typing.Any]
     return _preference_name(rng.integers(1, pref_count + 1))
 
 
-# def generate_number(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
-#     # TODO: decide how to handle this -- do we want to look at the existing values?
-#     # TODO: we should return 1 
-#     return str(1)
-
-
-def sample_new_variable(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def sample_new_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if local_context is None:
         local_context = {}
 
@@ -216,7 +216,7 @@ def sample_new_variable(global_context: typing.Dict[str, typing.Any], local_cont
     return f'?{new_var}'
 
 
-def sample_existing_variable(global_context: typing.Dict[str, typing.Any], local_context: typing.Optional[typing.Dict[str, typing.Any]]=None):
+def sample_existing_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if local_context is None:
         local_context = {}
 
@@ -292,7 +292,8 @@ RULE = 'rule'
 TOKEN = 'token'
 NAMED = 'named'
 PATTERN = 'pattern'
-DEFAULT_RANDOM_SEED = 33
+OPTIONAL_VOID = 'void'
+
 
 class ASTSampler:
     """
@@ -345,7 +346,7 @@ class ASTSampler:
         )
         self.parse_prior_to_posterior()
 
-    def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: typing.Dict[str, typing.Any]):
+    def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: ContextDict):
         rule_counter = self.ast_counter.counters[rule_name]
 
         if OPTIONS not in field_prior:
@@ -546,7 +547,7 @@ class ASTSampler:
 
             elif isinstance(rule_prior, list):
                 # The sections that optionally exist
-                if None in rule_prior:
+                if OPTIONAL_VOID in rule_prior:
                     section_name = rule_name.replace('_def', '')
                     if section_name not in self.ast_counter.section_counts:
                         raise ValueError(f'{rule_name} has no section counts')
@@ -580,7 +581,7 @@ class ASTSampler:
 
             self.rules[rule.name] = rule_prior
 
-    def parse_rule_prior(self, rule: tatsu.grammars.Node) -> typing.Union[None, str, typing.Dict[str, typing.Any], typing.List]:
+    def parse_rule_prior(self, rule: tatsu.grammars.Node) -> typing.Union[None, str, ContextDict, typing.List]:
         if isinstance(rule, grammars.EOF):
             return EOF
         
@@ -620,12 +621,18 @@ class ASTSampler:
         if isinstance(rule, grammars.Group):
             if len(rule.children()) == 1:
                 return self.parse_rule_prior(rule.children()[0])
-
             else:
                 return [self.parse_rule_prior(child) for child in rule.children()]
 
         if isinstance(rule, grammars.Choice):
             return [self.parse_rule_prior(child) for child in rule.children()]
+
+        if isinstance(rule, grammars.Option):
+            children = rule.children()
+            if len(children) > 1 :
+                raise ValueError(f'Option rule has more than one child: {rule}')
+
+            return self.parse_rule_prior(children[0])
 
         if isinstance(rule, (grammars.PositiveClosure, grammars.Closure)):
             d = {'_min_length': 1 if isinstance(rule, grammars.PositiveClosure) else 0}
@@ -645,7 +652,7 @@ class ASTSampler:
             return rule.name
 
         if isinstance(rule, grammars.Void):
-            return None
+            return OPTIONAL_VOID
 
         raise ValueError(f'Encountered unknown rule type: {type(rule)}: {rule}')
 
@@ -658,8 +665,8 @@ class ASTSampler:
 
     def _sample_named(self, 
         sample_dict: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
-        global_context: typing.Dict[str, typing.Any],
-        local_context: typing.Dict[str, typing.Any]):
+        global_context: ContextDict,
+        local_context: ContextDict):
 
         if TYPE_POSTERIOR not in sample_dict:
             raise ValueError(f'Missing type_posterior in sample: {sample_dict}')
@@ -676,8 +683,8 @@ class ASTSampler:
             return self._sample_single_named_value(sample_dict, global_context, local_context)
 
     def _sample_single_named_value(self, sample_dict: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
-        global_context: typing.Dict[str, typing.Any],
-        local_context: typing.Dict[str, typing.Any]):
+        global_context: ContextDict,
+        local_context: ContextDict):
 
         sample_type = self._posterior_dict_sample(sample_dict[TYPE_POSTERIOR])  # type: ignore
 
@@ -685,7 +692,7 @@ class ASTSampler:
             if RULE_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
-            rule = self._posterior_dict_sample(sample_dict[RULE_POSTERIOR])  # type: ignore
+            rule = typing.cast(str, self._posterior_dict_sample(sample_dict[RULE_POSTERIOR]))  # type: ignore
             return self.sample(rule, global_context, local_context)
 
         elif sample_type == TOKEN:
@@ -693,7 +700,7 @@ class ASTSampler:
                 raise ValueError(f'Missing token_posterior in sample: {sample_dict}')
 
             token = self._posterior_dict_sample(sample_dict[TOKEN_POSTERIOR])  # type: ignore
-            if SAMPLERS in sample_dict and token in sample_dict[SAMPLERS]:
+            if SAMPLERS in sample_dict and token in sample_dict[SAMPLERS]:  # type: ignore
                 token = sample_dict[SAMPLERS][token](global_context, local_context)     # type: ignore
 
             return token, None
@@ -702,8 +709,8 @@ class ASTSampler:
             raise ValueError(f'Unknown sample type: {sample_type} in sample: {sample_dict}')
 
     def sample(self, rule: str = START, 
-        global_context: typing.Optional[typing.Dict[str, typing.Any]] = None, 
-        local_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        global_context: typing.Optional[ContextDict] = None, 
+        local_context: typing.Optional[ContextDict] = None):
 
         if global_context is None:
             global_context = dict(rng=self.rng)
@@ -719,7 +726,6 @@ class ASTSampler:
         production = rule_dict[PRODUCTION]
         output = []
         return_ast = False
-        # TODO: check production_probability
 
         for prod_type, prod_value in production:
             if prod_type == TOKEN:
@@ -731,14 +737,14 @@ class ASTSampler:
                     output.append(prod_value)
 
             elif prod_type == RULE:
-                value, context_update = self.sample(prod_value, global_context, local_context)
+                value, context_update = self.sample(prod_value, global_context, local_context)  
                 if context_update is not None:
                     local_context.update(context_update)
                 output.append(value)
 
             elif prod_type == NAMED:
                 return_ast = True
-                value, context_update = self._sample_named(rule_dict[prod_value], global_context, local_context)
+                value, context_update = self._sample_named(rule_dict[prod_value], global_context, local_context)  
                 if context_update is not None:
                     local_context.update(context_update)
                 output.append({prod_value: value})
@@ -767,6 +773,124 @@ class ASTSampler:
         return output, None
 
 
+class RegrowthSampler(ASTParentMapper):
+    node_keys: typing.List[tatsu.infos.ParseInfo]
+    original_game_id: str
+    parent_mapping: typing.Dict[tatsu.infos.ParseInfo, 
+        typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, typing.List, ContextDict, ContextDict]]
+    rng: np.random.Generator
+    sampler: ASTSampler
+    seed: int
+    source_ast: typing.Union[tuple, tatsu.ast.AST]
+    
+    def __init__(self, sampler: ASTSampler, seed: int = 0):
+        super().__init__()
+        self.sampler = sampler
+        self.seed = seed
+        self.rng = np.random.RandomState(seed)  # type: ignore
+        self.parent_mapping = dict()
+        self.searcher = ASTParseinfoSearcher()
+
+    def set_source_ast(self, source_ast: typing.Union[tuple, tatsu.ast.AST]):
+        self.source_ast = source_ast
+        # TODO: this will break with games I generate, because they don't have parseinfo
+        # TODO: I should fix this at some point
+        self.parent_mapping = {}
+        self(source_ast)
+        self.node_keys = list(
+            key for key, parent_tuple 
+            in self.parent_mapping.items() 
+            if isinstance(parent_tuple[1], tatsu.ast.AST)
+        )
+
+    def _update_contexts(self, kwargs: typing.Dict[str, typing.Any], retval: typing.Any):
+        if retval is not None and isinstance(retval, tuple) and len(retval) == 2:
+            global_context_update, local_context_update = retval
+            if global_context_update is not None:
+                kwargs['global_context'].update(global_context_update)
+            if local_context_update is not None:
+                kwargs['local_context'].update(local_context_update)
+
+    def __call__(self, ast, **kwargs):
+        self._default_kwarg(kwargs, 'global_context', dict())
+        self._default_kwarg(kwargs, 'local_context', dict())
+        kwargs['local_context'] = copy.deepcopy(kwargs['local_context'])
+        retval = super().__call__(ast, **kwargs)
+        self._update_contexts(kwargs, retval)
+        return retval
+
+    def _build_mapping_value(self, ast, **kwargs):
+        return(*super()._build_mapping_value(ast, **kwargs), 
+            copy.deepcopy(kwargs['global_context']), copy.deepcopy(kwargs['local_context']))
+
+    def _handle_iterable(self, ast, **kwargs):
+        base_selector = kwargs['selector']
+        for i, element in enumerate(ast):
+            kwargs['selector'] = base_selector + [i]
+            retval = self(element, **kwargs)
+            self._update_contexts(kwargs, retval)
+
+        return kwargs['global_context'], kwargs['local_context']
+
+    def _handle_ast(self, ast, **kwargs):
+        rule = ast.parseinfo.rule
+        
+        if rule == 'game_def':
+            self.original_game_id = ast.game_name
+        
+        elif rule == 'preference':
+            if 'preference_count' not in kwargs['global_context']:
+                kwargs['global_context']['preference_count'] = 0
+
+            kwargs['global_context']['preference_count'] += 1
+
+        elif rule == 'variable_type_def':
+            var_names = ast.var_names
+            if isinstance(var_names, str):
+                var_names = [var_names]
+
+            if 'variables' not in kwargs['local_context']:
+                kwargs['local_context']['variables'] = set()
+
+            kwargs['local_context']['variables'].update([v[1:] for v in var_names])
+        
+        self._add_ast_to_mapping(ast, **kwargs)
+
+        for key in ast:
+            if key != 'parseinfo':
+                kwargs['parent'] = ast
+                kwargs['selector'] = [key]
+                retval = self(ast[key], **kwargs)
+                self._update_contexts(kwargs, retval)
+
+        if rule in self.sampler.local_context_propagating_rules:
+            return kwargs['global_context'], kwargs['local_context']
+
+        return kwargs['global_context'], None
+
+    def sample(self, external_global_context: typing.Optional[ContextDict] = None, 
+        external_local_context: typing.Optional[ContextDict] = None):
+
+        node_index = self.rng.choice(len(self.node_keys))
+        node_key = self.node_keys[node_index]
+        node, parent, selector, global_context, local_context = self.parent_mapping[node_key]
+
+        if external_global_context is not None:
+            global_context.update(external_global_context)
+        
+        if external_local_context is not None:
+            local_context.update(external_local_context)
+
+        global_context['original_game_id'] = self.original_game_id
+
+        new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
+        new_source = copy.deepcopy(self.source_ast)
+        new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
+        replace_child(new_parent, selector, new_node)
+
+        return new_source
+
+
 def _parse_or_load_counter(args: argparse.Namespace, grammar_parser):
     if args.parse_counter:
         counter = ASTRuleValueCounter()
@@ -788,61 +912,105 @@ def _parse_or_load_counter(args: argparse.Namespace, grammar_parser):
         with open(args.counter_output_path, 'rb') as pickle_file:
             counter = pickle.load(pickle_file)
 
+    return counter
 
-def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser):
+
+def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[str], grammar_parser: tatsu.grammars.Grammar):
+    first_print_out = ''
+    
+    try:
+        if args.print_samples:
+            ast_printer.BUFFER = None
+            ast_printer.pretty_print_ast(ast)
+            print()
+
+        if args.validate_samples or args.save_samples:
+            ast_printer.BUFFER = []
+            ast_printer.pretty_print_ast(ast)
+            first_print_out = ''.join(ast_printer.BUFFER)
+            if args.save_samples:
+                text_samples.extend([line + '\n' for line in ast_printer.BUFFER])
+                text_samples.append('\n')
+
+        if args.validate_samples:
+            second_ast = grammar_parser.parse(first_print_out)
+            ast_printer.BUFFER = []
+            ast_printer.pretty_print_ast(second_ast)
+            second_print_out = ''.join(ast_printer.BUFFER)
+
+            if first_print_out != second_print_out:
+                print('Mismatch found')
+
+    except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
+        print(f'Parse failed: at position {e.pos} expected {e.item}:')
+        if len(first_print_out) > e.pos:
+            print(first_print_out[e.pos:])
+
+
+def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
     samples = []
     text_samples = []
-    sample_id = 0 
 
     sample_iter = range(args.num_samples)
     if args.sample_tqdm:
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
 
-    for _ in sample_iter:
-        first_print_out = ''
+    for sample_id in sample_iter:
+        ast = sampler.sample(global_context=dict(sample_id=sample_id))
+        samples.append(ast)
 
-        try:     
-            ast = sampler.sample(global_context=dict(sample_id=sample_id))
-            sample_id += 1 
-            samples.append(ast)
-
-            if args.print_samples:
-                ast_printer.BUFFER = None
-                ast_printer.pretty_print_ast(ast)
-                print()
-
-            if args.validate_samples or args.save_samples:
-                ast_printer.BUFFER = []
-                ast_printer.pretty_print_ast(ast)
-                first_print_out = ''.join(ast_printer.BUFFER)
-                if args.save_samples:
-                    text_samples.extend([line + '\n' for line in ast_printer.BUFFER])
-                    text_samples.append('\n')
-
-            if args.validate_samples:
-                second_ast = grammar_parser.parse(first_print_out)
-                ast_printer.BUFFER = []
-                ast_printer.pretty_print_ast(second_ast)
-                second_print_out = ''.join(ast_printer.BUFFER)
-
-                if first_print_out != second_print_out:
-                    print('Mismatch found')
-
-        except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
-            print(f'Parse failed: at position {e.pos} expected {e.item}:')
-            if len(first_print_out) > e.pos:
-                print(first_print_out[e.pos:])
+        _test_ast_sample(ast, args, text_samples, grammar_parser)
 
     return samples, text_samples
+
+
+def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
+    samples = []
+    text_samples = []
+
+    regrowth_sampler = RegrowthSampler(sampler, args.random_seed)
+    
+    real_games = []
+
+    for test_file in args.test_files:
+        test_games = load_tests_from_file(test_file)
+
+        if not args.dont_tqdm:
+            test_games = tqdm.tqdm(test_games, desc='Loading games')
+
+        for test_game in test_games:
+            ast = grammar_parser.parse(test_game)
+            real_games.append(ast)
+
+    for i, real_game in enumerate(real_games):
+        regrowth_sampler.set_source_ast(real_game)
+
+        sample_iter = range(args.num_samples)
+        if args.sample_tqdm:
+            sample_iter = tqdm.tqdm(sample_iter, desc=f'Samples for game #{i}')
+
+        for sample_id in sample_iter:
+            ast = regrowth_sampler.sample(external_global_context=dict(sample_id=sample_id))
+            samples.append(ast)
+            _test_ast_sample(ast, args, text_samples, grammar_parser)
+
+    return samples, text_samples
+
 
 def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
     counter = _parse_or_load_counter(args, grammar_parser)
 
+    sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)
+    samples, text_samples = None, None
 
-    sampler = ASTSampler(grammar_parser, counter)
-    samples, text_samples = _generate_mle_samples(args, sampler, grammar_parser)
+    if args.sampling_method == MLE_SAMPLING:
+        samples, text_samples = _generate_mle_samples(args, sampler, grammar_parser)
+    elif args.sampling_method == REGROWTH_SAMPLING:
+        samples, text_samples = _generate_regrowth_samples(args, sampler, grammar_parser)
+    else:
+        raise ValueError(f'Unknown sampling method: {args.sampling_method}')
 
     # TODO: conceptual issue: in places where the expansion is recursive 
     # (e.g. `setup`` expands to rules that all contain setup, or 
@@ -852,6 +1020,9 @@ def main(args):
     # to be sampled at the root of this expression than they are in the corpus
 
     if args.save_samples:
+        if text_samples is None:
+            raise ValueError('No samples to save')
+
         with open(args.samples_output_path, 'w') as out_file:
             out_file.writelines(text_samples)
 

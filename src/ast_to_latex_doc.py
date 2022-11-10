@@ -8,7 +8,7 @@ import os
 
 import ast_printer
 from ast_parser import ASTParser, ASTParentMapper
-from ast_utils import copy_ast, load_asts, replace_child
+from ast_utils import load_asts
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'

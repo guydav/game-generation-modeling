@@ -1,11 +1,21 @@
 (define (game 613e4bf960ca68f8de00e5e7-17) (:domain many-objects-room-v1)  ; 17/18
 
 (:constraints (and 
-    (preference objectsAdjacent (exists (?g - block ?g2 - block)
-        (at-end
-            (adjacent ?g ?g2)
+    (preference objectsAdjacent 
+        (exists (?g - ball ?g2 - ball)
+            (at-end
+                (adjacent ?g ?g2)
+            )
         )
-    ))
+    )
+    
+    (preference objectsAdjacentBUG 
+        (exists (?g - ball ?g2 - ball)
+            (at-end
+                (and (adjacent ?g ?g2) (not (adjacent ?g2 ?g)))
+            )
+        )
+    )
 ))
 (:scoring (count-once-per-objects objectsAdjacent)
 ))

@@ -471,7 +471,8 @@ class GameHandler():
 
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            # keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(sorted(satisfaction[0].values()))
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1
 

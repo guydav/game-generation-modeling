@@ -11,7 +11,7 @@ import os
 import re
 import typing
 
-from parse_dsl import load_tests_from_file
+from ast_utils import cached_load_and_parse_games_from_file
 from ast_parser import ASTParser
 from ast_to_latex_doc import TYPE_RULES
 
@@ -25,6 +25,7 @@ DEFAULT_TEST_FILES = (
     # './dsl/problems-many-objects.pddl',
     './dsl/interactive-beta.pddl',
     './dsl/ast-mle-samples.pddl',
+    './dsl/ast-regrwoth-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
@@ -513,17 +514,11 @@ def main(args):
     aggregator = build_aggregator(args)
 
     for test_file in args.test_files:
-        test_cases = load_tests_from_file(test_file)
-
-        if not args.dont_tqdm:
-            test_cases = tqdm.tqdm(test_cases)
-
-        for test_case in test_cases:
-            ast = grammar_parser.parse(test_case)
+        for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
             aggregator.parse(ast, test_file)
 
     df = aggregator.to_df()
-    print(df.groupby('src_file').mean())
+    print(df.groupby('src_file').agg([np.mean, np.std]))
     df.to_csv(args.output_path, index_label='Index')    
 
 

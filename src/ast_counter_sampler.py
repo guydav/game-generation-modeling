@@ -17,7 +17,7 @@ import typing
 import string
 from uritemplate import variables
 
-from parse_dsl import load_tests_from_file
+from parse_dsl import load_games_from_file
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher
 from ast_utils import replace_child
 import ast_printer
@@ -896,7 +896,7 @@ def _parse_or_load_counter(args: argparse.Namespace, grammar_parser):
         counter = ASTRuleValueCounter()
 
         for test_file in args.test_files:
-            test_cases = load_tests_from_file(test_file)
+            test_cases = load_games_from_file(test_file)
 
             if not args.dont_tqdm:
                 test_cases = tqdm.tqdm(test_cases)
@@ -973,7 +973,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
     real_games = []
 
     for test_file in args.test_files:
-        test_games = load_tests_from_file(test_file)
+        test_games = load_games_from_file(test_file)
 
         if not args.dont_tqdm:
             test_games = tqdm.tqdm(test_games, desc='Loading games')

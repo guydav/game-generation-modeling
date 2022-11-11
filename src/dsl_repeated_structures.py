@@ -7,7 +7,7 @@ import numpy as np
 import os
 import re
 
-from parse_dsl import load_tests_from_file
+from parse_dsl import load_games_from_file
 from ast_parser import ASTParser
 from ast_utils import update_ast
 import ast_printer
@@ -302,7 +302,7 @@ def main(args):
         raise ValueError(f'Unknown build function: {args.build_function}')
 
     for test_file in args.test_files:
-        test_cases = load_tests_from_file(test_file)
+        test_cases = load_games_from_file(test_file)
 
         if not args.dont_tqdm:
             test_cases = tqdm.tqdm(test_cases)

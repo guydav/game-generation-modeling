@@ -471,8 +471,11 @@ class GameHandler():
 
             count = 0
 
-            # keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
-            keyfunc = lambda satisfaction: "_".join(sorted(satisfaction[0].values()))
+            # Note: we may later decide to enforce that all objects in a mapping must be distinct, rather than
+            # just that they be mapped to distinct variables
+            # keyfunc = lambda satisfaction: "_".join(sorted(satisfaction[0].values()))
+
+            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1
 

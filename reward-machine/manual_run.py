@@ -73,7 +73,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['test-adjacent'])
     score = None
 
-    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
+    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
@@ -88,7 +88,14 @@ if __name__ == "__main__":
         print("\n\nSCORE ACHIEVED:", score)
 
     print("\nPREFERENCE SATISFACTIONS")
+    used_mappings = set()
     for key, val in game_handler.preference_satisfactions.items():
         print(key + ":")
         for sat in val:
             print(f"\t{sat}")
+            # print(f"\t\t{', '.join(sorted(sat.mapping.values()))}")
+
+            # if ", ".join(sorted(sat.mapping.values())) in used_mappings:
+            #     print("DUPLICATE MAPPING")
+            #     exit()
+            # used_mappings.add(", ".join(sorted(sat.mapping.values())))

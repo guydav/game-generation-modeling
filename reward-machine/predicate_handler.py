@@ -509,17 +509,30 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     return False
 
 ADJACENT_DISTANCE_THRESHOLD = 0.15
+Y_EXTENT_GRACE = 0.01
 
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
+    do_print = ("Dodgeball" in objects[0].name and "Dodgeball" in objects[1].name)
+
+    if do_print: print("\nTesting adjacency between: ", objects[0].object_id, objects[1].object_id)
+
     object_1_min, object_1_max = _extract_object_limits(objects[0])
     object_2_min, object_2_max = _extract_object_limits(objects[1])
 
+    # if do_print: print(f"\t{objects[0].object_id} y position: {objects[0].position[1]}")
+    if do_print: print(f"\t{objects[0].object_id} y limits: {object_1_min[1]}, {object_1_max[1]}")
+
+    # if do_print: print(f"\t{objects[1].object_id} y position: {objects[1].position[1]}")
+    if do_print: print(f"\t{objects[1].object_id} y limits: {object_2_min[1]}, {object_2_max[1]}")
+
     # Two extents A and B overlap only if one of the endpoints of B is between the endpoints of A 
-    y_overlap = (object_1_min[1] <= object_2_min[1] <= object_1_max[1]) or \
-                (object_1_min[1] <= object_2_max[1] <= object_1_max[1])
+    y_overlap = (object_1_min[1] - Y_EXTENT_GRACE <= object_2_min[1] <= object_1_max[1] + Y_EXTENT_GRACE) or \
+                (object_1_min[1] - Y_EXTENT_GRACE <= object_2_max[1] <= object_1_max[1] + Y_EXTENT_GRACE)
     
+    if do_print: print("\tY overlap: ", y_overlap)
+
     # Two objects can only be adjacent if there is some overlap in their y extents
     if not y_overlap:
         return False

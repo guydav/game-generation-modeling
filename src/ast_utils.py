@@ -1,4 +1,15 @@
+import argparse
+import gzip
+import hashlib
+import os
+import pickle
 import tatsu
+import tatsu.ast
+import tatsu.infos
+import tatsu.grammars
+import tqdm
+import typing
+
 
 import ast_printer
 
@@ -10,14 +21,16 @@ DEFAULT_TEST_FILES = (
 )
 
 
-def load_asts(args, grammar_parser, should_print=False):
+def load_asts(args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar, 
+    should_print: bool = False):
+
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
 
     if should_print:
         results = []
         for test_file in args.test_files:
-            for game in load_tests_from_file(test_file):
+            for game in load_games_from_file(test_file):
                 print(game)
                 results.append(grammar_parser.parse(game))
         return results
@@ -25,11 +38,15 @@ def load_asts(args, grammar_parser, should_print=False):
     else:
         return [grammar_parser.parse(game) 
             for test_file in args.test_files 
-            for game in load_tests_from_file(test_file)]
+            for game in load_games_from_file(test_file)]
 
 
 DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
-def load_tests_from_file(path, start_token='(define', stop_tokens=None):
+
+
+def load_games_from_file(path: str, start_token: str='(define', 
+    stop_tokens: typing.Optional[typing.Sequence[str]] = None):
+
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS
 
@@ -44,6 +61,7 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
     text = '\n'.join(new_lines)
     results = []
     start = text.find(start_token)
+
     while start != -1:
         end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
         end_matches = [match != -1 and match or len(text) for match in end_matches]
@@ -53,33 +71,97 @@ def load_tests_from_file(path, start_token='(define', stop_tokens=None):
             test_case = text[start:end]
             if end < next_start:
                 test_case += ')'
-            results.append(test_case)
+            
+            yield test_case
+
         start = next_start
 
-    return results
 
 
-def copy_ast(grammar_parser, ast):
+
+CACHE_FOLDER = './dsl/cache'
+CACHE_FILE_PATTERN = '{name}-cache.pkl.gz'
+CACHE_HASHES_KEY = 'hashes'
+CACHE_ASTS_KEY = 'asts'
+
+
+def _generate_cache_file_name(file_path: str):
+    name, _ = os.path.splitext(os.path.basename(file_path))
+    return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+
+
+def _extract_game_id(game_str: str):
+    start = game_str.find('(game') + 6
+    end = game_str.find(')', start)
+    return game_str[start:end]
+
+
+def _fixed_hash(game):
+    return hashlib.md5(bytearray(game, 'utf-8')).hexdigest()
+
+
+def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
+    use_tqdm: bool):
+
+    cache_path = _generate_cache_file_name(games_file_path)
+
+    game_iter = load_games_from_file(games_file_path)
+    if use_tqdm:
+        game_iter = tqdm.tqdm(game_iter)
+
+    if os.path.exists(cache_path):
+        with gzip.open(cache_path, 'rb') as f:
+            cache = pickle.load(f)
+    else:
+        cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {}}
+
+    cache_updated = False
+
+    for game in game_iter:
+        game_id = _extract_game_id(game)
+        game_hash = _fixed_hash(game)
+
+        if game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
+            cache_updated = True
+            ast = grammar_parser.parse(game)
+            cache[CACHE_HASHES_KEY][game_id] = game_hash
+            cache[CACHE_ASTS_KEY][game_id] = ast
+
+        else:
+            ast = cache[CACHE_ASTS_KEY][game_id]
+
+        yield ast
+
+    if cache_updated:
+        with gzip.open(cache_path, 'wb') as f:
+            pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
+
+
+def copy_ast(grammar_parser: tatsu.grammars.Grammar, ast: tatsu.ast.AST):
     ast_printer.reset_buffers(True)
     ast_printer.pretty_print_ast(ast)
-    ast_str = ''.join(ast_printer.BUFFER)
+    ast_str = ''.join(ast_printer.BUFFER)  # type: ignore
     return grammar_parser.parse(ast_str)
 
 
-def update_ast(ast, key, value):
+def update_ast(ast: tatsu.ast.AST, key: str, value: typing.Any):
     if isinstance(ast, tatsu.ast.AST):
         super(tatsu.ast.AST, ast).__setitem__(key, value)
 
 
-def apply_selector_list(parent, selector, max_index=None):
+def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.Union[str, int]], 
+    max_index: typing.Optional[int] = None):
+
     if max_index is None:
         max_index = len(selector)
     for s in selector[:max_index]:
-        parent = parent[s]
+        parent = parent[s]  # type: ignore
     return parent
 
 
-def replace_child(parent, selector, new_value):
+def replace_child(parent: tatsu.ast.AST, selector: typing.Sequence[typing.Union[str, int]], 
+    new_value: typing.Any):
+
     last_parent = apply_selector_list(parent, selector, -1)
     last_selector = selector[-1]
 
@@ -93,9 +175,9 @@ def replace_child(parent, selector, new_value):
         raise ValueError(f'replace_child received last selector of unknown type: {last_selector} ({type(last_selector)})', parent, selector)
 
 
-def find_all_parents(parent_mapping, ast):
+def find_all_parents(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, tuple], ast: tatsu.ast.AST):
     parents = []
-    parent = parent_mapping[ast.parseinfo][1]
+    parent = parent_mapping[ast.parseinfo][1]  # type: ignore
     while parent is not None and parent != 'root':
         parents.append(parent)
         if isinstance(parent, tuple):
@@ -106,11 +188,12 @@ def find_all_parents(parent_mapping, ast):
     return parents
 
 
-def find_selectors_from_root(parent_mapping, ast, root_node='root'):
+def find_selectors_from_root(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, tuple], 
+    ast: tatsu.ast.AST, root_node: typing.Union[str, tatsu.ast.AST] = 'root'):
     selectors = []
     parent = ast
     while parent != root_node:
-        _, parent, selector = parent_mapping[parent.parseinfo]
+        _, parent, selector = parent_mapping[parent.parseinfo]  # type: ignore
         selectors = selector + selectors
 
     return selectors

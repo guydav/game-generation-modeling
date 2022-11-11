@@ -7,7 +7,7 @@ import numpy as np
 import os
 import re
 
-from parse_dsl import load_tests_from_file
+from parse_dsl import load_games_from_file
 from ast_parser import ASTParser
 
 
@@ -330,7 +330,7 @@ def main(args):
     aggregator = build_aggregator(args)
 
     for test_file in args.test_files:
-        test_cases = load_tests_from_file(test_file)
+        test_cases = load_games_from_file(test_file)
 
         if not args.dont_tqdm:
             test_cases = tqdm.tqdm(test_cases)

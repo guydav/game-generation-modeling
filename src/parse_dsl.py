@@ -4,7 +4,7 @@ import tatsu.exceptions
 import tqdm
 
 import ast_printer
-from ast_utils import load_tests_from_file
+from ast_utils import load_games_from_file
 
 
 parser = argparse.ArgumentParser()
@@ -22,7 +22,7 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = load_tests_from_file(args.test_file, stop_tokens=args.stop_tokens)
+    test_cases = load_games_from_file(args.test_file, stop_tokens=args.stop_tokens)
     if not args.dont_tqdm:
         test_cases = tqdm.tqdm(test_cases)
 

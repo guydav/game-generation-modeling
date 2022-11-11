@@ -6,7 +6,7 @@ from collections import defaultdict
 
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
-from ast_utils import load_tests_from_file
+from ast_utils import load_games_from_file
 
 FIRESTORE_ID_TO_PARTICIPANT_ID = {"HMosyugAD4iHS8V6ajD6": "5f9aba6600cdf11f1c9b915c"}
 STATS_PATH = "../data/dsl_statistics_interactive.csv"
@@ -69,7 +69,7 @@ for key in playtrace[0].keys():
     print(key)
     
 
-programs = load_tests_from_file("../dsl/interactive-beta.pddl")
+programs = load_games_from_file("../dsl/interactive-beta.pddl")
 print("\nNumber of programs: ", len(programs))
 print("\nNumber that contain '(then':", sum(["(then" in program for program in programs]))
 

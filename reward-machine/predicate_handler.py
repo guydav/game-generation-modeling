@@ -508,22 +508,35 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return False
 
+ADJACENT_DISTANCE_THRESHOLD = 0.15
+
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
-    # Two objects are adjacent either if they're touching or if the minimum distance between any pair of
-    # sides between their bounding boxes is less than some threshold. We use the bottom of each object's
-    # bounding box for this
+    object_1_min, object_1_max = _extract_object_limits(objects[0])
+    object_2_min, object_2_max = _extract_object_limits(objects[1])
 
-    object_1_corners = _object_corners(objects[0], "bottom")
-    object_2_corners = _object_corners(objects[1], "bottom")
+    # Two extents A and B overlap only if one of the endpoints of B is between the endpoints of A 
+    y_overlap = (object_1_min[1] <= object_2_min[1] <= object_1_max[1]) or \
+                (object_1_min[1] <= object_2_max[1] <= object_1_max[1])
+    
+    # Two objects can only be adjacent if there is some overlap in their y extents
+    if not y_overlap:
+        return False
 
-    # We can check if two objects are adjacent from the corners by first making sure there's some overlap in their
-    # y extents. To check the distance between pairs of sides, we can make use of the fact that they're always
-    # axis-aligned. 
+    # Measures the minimum distance between any pair of parallel sides between the two objects
+    x_displacement = min(abs(object_1_min[0] - object_2_max[0]), abs(object_2_min[0] - object_1_max[0]),
+                         abs(object_1_min[0] - object_2_min[0]), abs(object_2_max[0] - object_1_max[0]))
 
-    object_1_sides = [(object_1_corners[idx], object_1_corners[(idx+1)%4]) for idx in range(4)]
-    object_2_sides = [(object_2_corners[idx], object_2_corners[(idx+1)%4]) for idx in range(4)]
+    z_displacement = min(abs(object_1_min[2] - object_2_max[2]), abs(object_2_min[2] - object_1_max[2]),
+                         abs(object_1_min[2] - object_2_min[2]), abs(object_2_max[2] - object_1_max[2]))
+
+    object_dist = _func_distance(agent, objects)
+
+    return object_dist <= ADJACENT_DISTANCE_THRESHOLD or \
+           (x_displacement <= ADJACENT_DISTANCE_THRESHOLD and z_displacement <= ADJACENT_DISTANCE_THRESHOLD)
+
+    
 
 
 # ====================================== FUNCTION DEFINITIONS =======================================

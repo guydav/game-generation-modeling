@@ -28,6 +28,8 @@ OBJECT_NAME_KEY = 'name'
 class PredicateHandler:
     # Which field in the state to use as the index
     index_key: str
+    # Is the game ending after this step
+    is_last_step: bool
     # Which field in each object to use as an id
     object_id_key: str 
     # The cache from a string representation of the state X predicate X mapping to
@@ -44,7 +46,6 @@ class PredicateHandler:
 
     def __init__(self, domain: str):
         self.domain = domain
-        self.is_last_step = False
         self._new_game()
     
     def _new_game(self):
@@ -53,6 +54,7 @@ class PredicateHandler:
         """
         self.evaluation_cache = {}
         self.evaluation_cache_last_updated = {}
+        self.is_last_step = False
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)

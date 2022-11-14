@@ -67,13 +67,14 @@ TEST_GAME_LIBRARY = {
     'test-wall-bounce': load_game("throw_bounce_wall_bin"),
     'test-setup': load_game("throw_with_setup"),
     'test-adjacent': load_game("adjacent_at_end"),
+    'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
 }
 
 if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['test-adjacent'])
     score = None
 
-    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
+    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

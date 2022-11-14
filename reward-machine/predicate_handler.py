@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import ConvexHull
 import tatsu
 import tatsu.ast
 import typing
@@ -551,6 +552,29 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
     threshold_dist = min(ADJACENT_DISTANCE_THRESHOLD, size)
 
     return object_dist <= threshold_dist or (x_displacement <= threshold_dist and z_displacement <= threshold_dist)
+
+def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 3
+
+    if isinstance(objects[0], AgentState) or isinstance(objects[2], AgentState):
+        raise NotImplementedError("Between predicate not implemented for agent in position 0 or 2")
+
+    object_1_bottom_corners = _object_corners(objects[0], y_offset="bottom")
+    object_1_top_corners = _object_corners(objects[0], y_offset="top")
+
+    object_2_bottom_corners = _object_corners(objects[2], y_offset="bottom")
+    object_2_top_corners = _object_corners(objects[2], y_offset="top")
+
+    test_position = _object_location(objects[1])
+
+    # An object is between two others if its center position is contained in the convex hull formed by the vertices of the
+    # others. We can test this by seeing if that the test position is *not* among the vertices of the hull
+
+    hull = ConvexHull(np.concatenate([object_1_bottom_corners, object_1_top_corners, object_2_bottom_corners, object_2_top_corners,
+                                      np.array(test_position).reshape(1, -1)]))
+    
+    # The test point is always at index 16
+    return 16 not in hull.vertices
 
     
 

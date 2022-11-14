@@ -514,7 +514,7 @@ Y_EXTENT_GRACE = 0.01
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
-    do_print = ("Dodgeball" in objects[0].name and "Dodgeball" in objects[1].name)
+    do_print = ("Dodgeball" in objects[0].name and "Golfball" in objects[1].name)
 
     if do_print: print("\nTesting adjacency between: ", objects[0].object_id, objects[1].object_id)
 
@@ -546,8 +546,20 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
 
     object_dist = _func_distance(agent, objects)
 
-    return object_dist <= ADJACENT_DISTANCE_THRESHOLD or \
-           (x_displacement <= ADJACENT_DISTANCE_THRESHOLD and z_displacement <= ADJACENT_DISTANCE_THRESHOLD)
+    # Intuition: an object is not adjacent to another if it's more than (some scaling >= 1) times its own size away from it. 
+    # Since adjacency is symmetric, we'll use the larger of the two objects to determine the threshold distance. We'll also 
+    # first try determing an object's size by taking the average of its two dimensions (x and z)
+
+    object_1_size = (objects[0].bbox_extents[0] + objects[0].bbox_extents[2]) # don't need to divide by 2 since the extent is half the size
+    object_2_size = (objects[1].bbox_extents[0] + objects[1].bbox_extents[2])
+
+    # Can try average of the two objects' sizes, or just use the larger of the two. Can also try various scaling factors
+    # size = 1.5 * max(object_1_size, object_2_size)
+    size = 1.2 * (object_1_size + object_2_size) / 2
+
+    threshold_dist = min(ADJACENT_DISTANCE_THRESHOLD, size)
+
+    return object_dist <= threshold_dist or (x_displacement <= threshold_dist and z_displacement <= threshold_dist)
 
     
 

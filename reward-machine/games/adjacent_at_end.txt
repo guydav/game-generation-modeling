@@ -2,7 +2,7 @@
 
 (:constraints (and 
     (preference objectsAdjacent 
-        (exists (?g - ball ?g2 - ball)
+        (exists (?g - block ?g2 - block)
             (at-end
                 (adjacent ?g ?g2)
             )

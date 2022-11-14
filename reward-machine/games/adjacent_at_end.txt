@@ -2,9 +2,17 @@
 
 (:constraints (and 
     (preference objectsAdjacent 
-        (exists (?g - block ?g2 - block)
+        (exists (?g - ball ?g2 - ball)
             (at-end
                 (adjacent ?g ?g2)
+            )
+        )
+    )
+
+    (preference objectsBetween
+        (exists (?g - dodgeball ?g2 - dodgeball ?g3 - dodgeball)
+            (at-end
+                (between ?g ?g2 ?g3)
             )
         )
     )

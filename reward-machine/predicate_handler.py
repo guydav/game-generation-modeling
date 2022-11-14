@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial import ConvexHull
+from skspatial.objects import Vector
 import tatsu
 import tatsu.ast
 import typing
@@ -559,11 +560,11 @@ def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[Objec
     if isinstance(objects[0], AgentState) or isinstance(objects[2], AgentState):
         raise NotImplementedError("Between predicate not implemented for agent in position 0 or 2")
 
-    object_1_bottom_corners = _object_corners(objects[0], y_offset="bottom")
-    object_1_top_corners = _object_corners(objects[0], y_offset="top")
+    object_1_bottom_corners = _object_corners(objects[0], y_pos="bottom")
+    object_1_top_corners = _object_corners(objects[0], y_pos="top")
 
-    object_2_bottom_corners = _object_corners(objects[2], y_offset="bottom")
-    object_2_top_corners = _object_corners(objects[2], y_offset="top")
+    object_2_bottom_corners = _object_corners(objects[2], y_pos="bottom")
+    object_2_top_corners = _object_corners(objects[2], y_pos="top")
 
     test_position = _object_location(objects[1])
 
@@ -576,6 +577,38 @@ def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[Objec
     # The test point is always at index 16
     return 16 not in hull.vertices
 
+def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    caster, target = objects
+
+    # For simplicitly, we zero out the y component in each vector
+    projection = np.array([0, 2])
+    
+    caster_pos = _object_location(caster)[projection]
+    caster_facing = caster.rotation[projection]
+
+    target_pos = _object_location(target)[projection]
+
+    target_corners = _object_corners(target, y_pos=0)
+
+    caster_to_target = Vector(target_pos - caster_pos)
+    caster_to_corners = [Vector(corner[projection] - caster_pos) for corner in target_corners]
+
+    angle_to_corners = [caster_to_target.angle_signed(to_corner) for to_corner in caster_to_corners]
+    min_corner_angle, max_corner_angle = min(angle_to_corners), max(angle_to_corners)
+
+    # Clearly this won't work, because the caster's rotation is not the same as its facing direction
+    angle_to_facing = caster_to_target.angle_signed(caster_facing)
+
+    print("\n" + "=" * 100)
+    print("Caster:", caster.object_id)
+    print("\tRotation:", caster.rotation)
+    print("Target:", target.object_id)
+    print("Angle to corners:", angle_to_corners)
+    print("Angle to facing:", angle_to_facing)
+
+    return min_corner_angle <= angle_to_facing <= max_corner_angle
     
 
 

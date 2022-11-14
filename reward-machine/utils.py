@@ -229,10 +229,11 @@ class BuildingPseudoObject(PseudoObject):
 def _object_location(object: typing.Union[AgentState, ObjectState, PseudoObject]) -> np.ndarray:
     return object.bbox_center if hasattr(object, 'bbox_center') and object.bbox_center is not None else object.position  # type: ignore
 
-def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_offset: str = 'center'):
+def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_pos: str = 'center'):
     '''
     Returns the coordinates of each of the 4 corners of the object's bounding box, with the
     y coordinate matching either
+    - a provided integer / float value
     - the center of the object's bounding box (y_offset='center')
     - the minimum y coordinate of the object's bounding box (y_offset='bottom')
     - the maximum y coordinate of the object's bounding box (y_offset='top')
@@ -248,11 +249,13 @@ def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_offset: s
     bbox_center = object.bbox_center
     bbox_extents = object.bbox_extents
 
-    if y_offset == 'center':
+    if isinstance(y_pos, int) or isinstance(y_pos, float):
+        y = y_pos
+    elif y_pos == 'center':
         y = 0
-    elif y_offset == 'bottom':
+    elif y_pos == 'bottom':
         y = -bbox_extents[1]
-    elif y_offset == 'top':
+    elif y_pos == 'top':
         y = bbox_extents[1]
 
     corners = [bbox_center + np.array([bbox_extents[0], y, bbox_extents[2]]),

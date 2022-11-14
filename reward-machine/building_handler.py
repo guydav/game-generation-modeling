@@ -101,7 +101,8 @@ class BuildingHandler:
             # or wait for it to settle? Let's try the former
             if current_objects_in_motion_or_held[obj_id]:
                 self.recently_moved_objects.add(obj_id)
-                self._remove_object_from_building(obj, debug=debug)
+                if obj_id == self.currently_held_object_id:
+                    self._remove_object_from_building(obj, debug=debug)
 
             # maintain collection of moving/held objects that we're monitoring?
             # if an object was in that collection and is no longer moving, check which objects it's touching
@@ -134,6 +135,13 @@ class BuildingHandler:
                 #  a new building, or continue the previous one
                 if not touched_buildings:
                     # has a previous building, check if it can keep it
+                    if obj_id in self.objects_to_buildings:
+                        prev_building_id = self.objects_to_buildings[obj_id]
+                        prev_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[prev_building_id])
+                        if len(prev_building.building_objects) == 1:
+                            # stays in the same building, so nothing to do here
+                            continue
+
                     found = False
                     building_id = ''
                     for building_id in self.building_ids:
@@ -147,19 +155,29 @@ class BuildingHandler:
                     if debug: print(f'Adding {obj_id} to new building {building_id}')
                     self._add_object_to_building(obj, building_id)
 
-                # else:                    
-                    # if len(touched_buildings) < 1:
-                    #     raise ValueError('Object touches valid objects but no buildings found, this should never happen')
-
-                    # touches a single building, add the object to that building
+                # touches a single building, add the object to that building
                 elif len(touched_buildings) == 1:
                     building_id = touched_buildings.pop()
+
+                    if obj_id in self.objects_to_buildings:
+                        prev_building_id = self.objects_to_buildings[obj_id]
+                        if prev_building_id != building_id:
+                            self._remove_object_from_building(obj, debug=debug)
+                        else:
+                            continue
+
                     self._add_object_to_building(obj, building_id)
                     if debug: print(f'Adding {obj_id} to existing building {building_id}')
 
                 # touches more than one building, merge them
                 else:   # len(touched_buildings) > 1:
                     min_building_id = min(touched_buildings)
+
+                    if obj_id in self.objects_to_buildings:
+                        prev_building_id = self.objects_to_buildings[obj_id]
+                        if prev_building_id != min_building_id:
+                            self._remove_object_from_building(obj, debug=debug)
+
                     self._add_object_to_building(obj, min_building_id)
                     if debug: 
                         print(f'Adding {obj_id} to existing building {min_building_id}')

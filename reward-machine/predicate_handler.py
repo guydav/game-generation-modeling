@@ -28,6 +28,8 @@ OBJECT_NAME_KEY = 'name'
 class PredicateHandler:
     # Which field in the state to use as the index
     index_key: str
+    # Is the game ending after this step
+    is_last_step: bool
     # Which field in each object to use as an id
     object_id_key: str 
     # The cache from a string representation of the state X predicate X mapping to
@@ -52,6 +54,7 @@ class PredicateHandler:
         """
         self.evaluation_cache = {}
         self.evaluation_cache_last_updated = {}
+        self.is_last_step = False
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)
@@ -134,6 +137,10 @@ class PredicateHandler:
         predicate_rule = predicate["parseinfo"].rule  # type: ignore
 
         if predicate_rule == "predicate":
+            # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
+            if predicate["pred_name"] == "game_over":
+                return self.is_last_step
+
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
 
@@ -341,13 +348,11 @@ def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Unio
     assert len(objects) == 0
     return agent.crouching
 
-
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
-
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
     return other_object.object_id in building.building_objects

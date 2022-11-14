@@ -191,11 +191,17 @@ class GameHandler():
             return not inner_value
 
         elif rule == "setup_and":
+            if isinstance(setup_expression["and_args"], tatsu.ast.AST):
+                return self.evaluate_setup(setup_expression["and_args"], state, mapping)
+
             inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["and_args"]]  # type: ignore
 
             return all(inner_values)
 
         elif rule == "setup_or":
+            if isinstance(setup_expression["or_args"], tatsu.ast.AST):
+                return self.evaluate_setup(setup_expression["or_args"], state, mapping)
+
             inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["or_args"]]   # type: ignore
 
             return any(inner_values)

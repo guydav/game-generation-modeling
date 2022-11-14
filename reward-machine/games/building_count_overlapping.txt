@@ -22,7 +22,7 @@
     )
 ))
 (:terminal
-    (>= (external-forall-maximize (count-nonoverlapping blockPickedUp)) 3)
+    (>= (external-forall-maximize (count blockPickedUp)) 3)
 )
 (:scoring (external-forall-maximize
     (count-overlapping blockPlacedInBuilding)

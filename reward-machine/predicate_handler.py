@@ -515,6 +515,9 @@ OBJECT_SIZE_SCALING = 1.2
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
+    if isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
+        raise NotImplementedError("Adjacent predicate not implemented for agent")
+
     object_1_min, object_1_max = _extract_object_limits(objects[0])
     object_2_min, object_2_max = _extract_object_limits(objects[1])
 

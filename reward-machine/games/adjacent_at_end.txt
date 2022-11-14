@@ -16,6 +16,14 @@
             )
         )
     )
+
+    (preference chairFaces
+        (exists (?c - teddy_bear ?g - game_object)
+            (at-end
+                (faces ?c ?g)
+            )
+        )
+    )
     
     (preference objectsAdjacentBUG 
         (exists (?g - ball ?g2 - ball)

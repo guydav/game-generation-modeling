@@ -159,8 +159,15 @@ def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.
     return parent
 
 
-def replace_child(parent: tatsu.ast.AST, selector: typing.Sequence[typing.Union[str, int]], 
+def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.Sequence[typing.Union[str, int]], 
     new_value: typing.Any):
+
+    if isinstance(parent, tuple):
+        if len(selector) != 1 or not isinstance(selector[0], int):
+            raise ValueError('Invalid selector for tuple: {}'.format(selector))
+
+        child_index = selector[0]
+        return (*parent[:child_index], new_value, *parent[child_index + 1:])
 
     last_parent = apply_selector_list(parent, selector, -1)
     last_selector = selector[-1]

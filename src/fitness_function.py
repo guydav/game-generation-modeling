@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import sys
 import typing
 
 from ast_utils import cached_load_and_parse_games_from_file
@@ -25,12 +26,15 @@ DEFAULT_TEST_FILES = (
     # './dsl/problems-many-objects.pddl',
     './dsl/interactive-beta.pddl',
     './dsl/ast-mle-samples.pddl',
-    './dsl/ast-regrwoth-samples.pddl',
+    './dsl/ast-regrowth-samples.pddl',
+    './dsl/ast-mle-regrowth-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_OUTPUT_PATH ='./data/fitness_scores.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
+DEFAULT_RECURSION_LIMIT = 2000
+parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
 
 ContextDict = typing.Dict[str, typing.Union[str, int, typing.Dict[str, typing.Any]]]
@@ -508,6 +512,9 @@ def build_aggregator(args):
             
 
 def main(args):
+    original_recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(args.recursion_limit)
+
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
@@ -521,10 +528,16 @@ def main(args):
     print(df.groupby('src_file').agg([np.mean, np.std]))
     df.to_csv(args.output_path, index_label='Index')    
 
+    sys.setrecursionlimit(original_recursion_limit)
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
+
+    for test_file in args.test_files:
+        if not os.path.exists(test_file):
+            raise ValueError(f'File {test_file} does not exist')
     
     main(args)

@@ -64,14 +64,16 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "--print-samples",
+                // "--print-samples",
                 "--validate-samples", 
                 // "--parse-counter", 
                 "--save-samples",
                 "--num-samples", "16",
                 "--sampling-method", "regrowth",
                 "--sample-tqdm",
-                "--samples-output-path", "./dsl/ast-regrwoth-samples.pddl'" 
+                // "--samples-output-path", "./dsl/ast-mle-regrowth-samples.pddl",
+                "--samples-output-path", "./dsl/ast-regrowth-samples.pddl",
+                // "--test-files", "./dsl/ast-mle-samples.pddl",
             ],
             "console": "integratedTerminal",
             // "notes": "--parse-counter",

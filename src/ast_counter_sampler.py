@@ -15,11 +15,11 @@ import copy
 import re
 import typing
 import string
-from uritemplate import variables
+import sys
 
 from parse_dsl import load_games_from_file
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher
-from ast_utils import replace_child
+from ast_utils import cached_load_and_parse_games_from_file, replace_child
 import ast_printer
 
 parser = argparse.ArgumentParser()
@@ -45,6 +45,8 @@ parser.add_argument('-v', '--validate-samples', action='store_true')
 parser.add_argument('--sample-tqdm', action='store_true')
 DEFAULT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
+DEFAULT_RECURSION_LIMIT = 2000
+parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
@@ -868,7 +870,16 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], None
 
-    def sample(self, external_global_context: typing.Optional[ContextDict] = None, 
+    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_id: int):
+        new_game_name = f'{self.original_game_id}-{sample_id}'
+        game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
+        game_node, _, game_selector, _, _ = self.parent_mapping[game_key]
+
+        new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
+        return replace_child(ast, game_selector, new_game_node)
+
+
+    def sample(self, sample_id: int, external_global_context: typing.Optional[ContextDict] = None, 
         external_local_context: typing.Optional[ContextDict] = None):
 
         node_index = self.rng.choice(len(self.node_keys))
@@ -885,6 +896,7 @@ class RegrowthSampler(ASTParentMapper):
 
         new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
+        new_source = self._update_game_id(new_source, sample_id)
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)
 
@@ -956,6 +968,7 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
 
     for sample_id in sample_iter:
+
         ast = sampler.sample(global_context=dict(sample_id=sample_id))
         samples.append(ast)
 
@@ -973,15 +986,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
     real_games = []
 
     for test_file in args.test_files:
-        test_games = load_games_from_file(test_file)
-
-        if not args.dont_tqdm:
-            test_games = tqdm.tqdm(test_games, desc='Loading games')
-
-        for test_game in test_games:
-            ast = grammar_parser.parse(test_game)
+        for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
             real_games.append(ast)
-
+            
     for i, real_game in enumerate(real_games):
         regrowth_sampler.set_source_ast(real_game)
 
@@ -990,14 +997,24 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
             sample_iter = tqdm.tqdm(sample_iter, desc=f'Samples for game #{i}')
 
         for sample_id in sample_iter:
-            ast = regrowth_sampler.sample(external_global_context=dict(sample_id=sample_id))
-            samples.append(ast)
-            _test_ast_sample(ast, args, text_samples, grammar_parser)
+            sample_generated = False
+            try:
+                while not sample_generated:
+                    ast = regrowth_sampler.sample(sample_id, external_global_context=dict(sample_id=sample_id))
+                    _test_ast_sample(ast, args, text_samples, grammar_parser)
+                    sample_generated = True
+                    samples.append(ast)
 
+            except RecursionError:
+                print('Recursion error, skipping sample')
+            
     return samples, text_samples
 
 
 def main(args):
+    original_recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(args.recursion_limit)
+
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
     counter = _parse_or_load_counter(args, grammar_parser)
@@ -1018,6 +1035,8 @@ def main(args):
     # the inner rules (`setup_game_conserved` / `setup_game_optional`), 
     # or `then` for preferences) are overrepreesnted, and more likely
     # to be sampled at the root of this expression than they are in the corpus
+
+    sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
         if text_samples is None:

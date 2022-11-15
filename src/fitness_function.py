@@ -504,7 +504,7 @@ def build_aggregator(args):
 
     # TODO: no unused variables?
 
-    # TODO: 
+    # TODO: are predicates used with the correct arity?
 
     # TODO: common sense? predicate role-filler pairs
 

@@ -502,6 +502,10 @@ def build_aggregator(args):
     pref_forall_used_correctly = PrefForallUsedCorrectly()
     fitness.register(pref_forall_used_correctly)
 
+    # TODO: no unused variables?
+
+    # TODO: 
+
     # TODO: common sense? predicate role-filler pairs
 
     # TODO: recurring structures -- generate features for top-k from previous analysis

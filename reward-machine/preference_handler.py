@@ -6,7 +6,7 @@ import enum
 
 
 from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
-from predicate_handler import PredicateHandler, FUNCTION_LIBRARY
+from predicate_handler import PredicateHandler
 
 from config import NAMED_OBJECTS
 
@@ -147,6 +147,10 @@ class PreferenceHandler:
             mapping = dict(zip(initial_variables, object_assignment))
             self.partial_preference_satisfactions.append(PartialPreferenceSatisfaction(mapping, None, self.temporal_predicates[0], 0, -1, {}))
 
+        # print("\n\n=====Partial preference satisfactions=====")
+        # for pps in self.partial_preference_satisfactions:
+        #     print("\n", pps.mapping)
+
         # A list of all versions of the predicate satisfied at a particular step, updated during self.process()
         self.satisfied_this_step = []
 
@@ -187,6 +191,7 @@ class PreferenceHandler:
         initial state. If the first predicate is satisfied again, the initial mapping will again split and
         we need to make sure not to add duplicate branches back in)
         '''
+
         next_pred_idx = self.temporal_predicates.index(partial_preference_satisfcation.next_predicate)
         new_cur_predicate = partial_preference_satisfcation.next_predicate
 

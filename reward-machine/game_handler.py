@@ -138,7 +138,6 @@ class GameHandler():
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
-
         if not setup:
             return
 

@@ -1,0 +1,33 @@
+(define (game 614dec67f6eb129c3a77defd-6) (:domain many-objects-room-v1)  ; 6
+(:setup (and 
+    (exists (?h - hexagonal_bin) (game-conserved (adjacent ?h bed)))
+    (forall (?x - (either teddy_bear pillow)) (game-conserved (not (on bed ?x))))
+))
+(:constraints (and 
+    (forall (?b - ball)
+        (preference throwBallToBin
+            (exists (?h - hexagonal_bin)
+                (then 
+                    (once (and (agent_holds ?b) (adjacent agent desk)))
+                    (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                    (once (and (not (in_motion ?b)) (in ?h ?b)))
+                )
+            )
+        )
+    )
+    (preference failedThrowToBin
+        (exists (?b - ball ?h - hexagonal_bin)
+            (then 
+                (once (and (agent_holds ?b) (adjacent agent desk)))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (and (not (in_motion ?b)) (not (in ?h ?b))))
+            )
+        )
+    )
+))
+(:scoring (+
+    (* 10 (count-nonoverlapping throwBallToBin:dodgeball))
+    (* 20 (count-nonoverlapping throwBallToBin:golfball))
+    (* 30 (count-nonoverlapping throwBallToBin:beachball))
+    (- (count-nonoverlapping failedThrowToBin))
+)))

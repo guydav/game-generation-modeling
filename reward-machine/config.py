@@ -301,6 +301,12 @@ for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
             OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
     OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"])))
 
+# A list of all object types (including meta types)
+ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys()) + \
+                            list(OBJECTS_BY_ROOM_AND_TYPE[MEDIUM_OBJECTS_ROOM].keys()) + \
+                            list(OBJECTS_BY_ROOM_AND_TYPE[MANY_OBJECTS_ROOM].keys())))
+
+# ===================================================================================================
 
 class PseudoObject:
         object_id: str

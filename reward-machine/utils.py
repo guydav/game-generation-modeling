@@ -11,7 +11,7 @@ import typing
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 import ast_printer
 
-from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+from config import ALL_OBJECT_TYPES, COLORS, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
 PROJECT_NAME = 'game-generation-modeling'
 
@@ -412,6 +412,12 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
     mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
 
     return ast_str, mapping_str
+
+def is_type_or_color(variable: str):
+    '''
+    Returns whether the variable is a type or color
+    '''
+    return (variable in ALL_OBJECT_TYPES or variable in COLORS) and (variable not in NAMED_OBJECTS)
 
 def describe_preference(preference):
     '''

@@ -139,7 +139,7 @@ The optional ones are the \dsl{setup} section, which defines how the environment
   (:terminal <terminal>) \\
   (:scoring <scoring>) \\)
 
-<name> ::= /[A-z]+(_[A-z0-9]+)*/ "#" a letter, optionally followed by letters, numbers, and underscores
+<name> ::= /[A-z][A-z0-9_]*/ "#" a letter, optionally followed by letters, numbers, and underscores
 \end{grammar}
 
 We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types. 
@@ -410,26 +410,26 @@ The following enumerates all predicates currently found in our game dataset:
 (adjacent <arg1> <arg2>) [76 references] ; Are the two objects adjacent? [will probably be implemented as distance below some threshold]
 (adjacent_side <3 or 4 arguments>) [14 references] ; Are the two objects adjacent on the sides specified? Specifying a side for the second object is optional, allowing to specify <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>
 (agent_crouches ) [2 references] ; Is the agent crouching?
-(agent_holds <arg1> <arg2>) [327 references] ; Is the agent holding the object?
+(agent_holds <arg1>) [327 references] ; Is the agent holding the object?
 (between <arg1> <arg2> <arg3>) [7 references] ; Is the second object between the first object and the third object?
-(broken <arg1> <arg2>) [2 references] ; Is the object broken?
+(broken <arg1>) [2 references] ; Is the object broken?
 (equal_x_position <arg1> <arg2>) [2 references] ; Are these two objects (approximately) in the same x position? (in our environment, x, z are spatial coordinates, y is the height)
 (equal_z_position <arg1> <arg2>) [5 references] ; Are these two objects (approximately) in the same z position? (in our environment, x, z are spatial coordinates, y is the height)
 (faces <arg1> <arg2>) [6 references] ; Is the front of the first object facing the front of the second object?
 (game_over ) [4 references] ; Is this the last state of gameplay?
 (game_start ) [3 references] ; Is this the first state of gameplay?
-(in <arg1> <arg2>) [121 references] ; Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
-(in_motion <arg1> <arg2>) [311 references] ; Is the object in motion?
-(is_setup_object <arg1> <arg2>) [10 references] ; Is this the object of the same type referenced in the setup?
+(in <arg1> <arg2>) [122 references] ; Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]
+(in_motion <arg1>) [311 references] ; Is the object in motion?
+(is_setup_object <arg1>) [10 references] ; Is this the object of the same type referenced in the setup?
 (object_orientation <arg1> <arg2>) [15 references] ; Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down
-(on <arg1> <arg2>) [166 references] ; Is the second object on the first one?
-(open <arg1> <arg2>) [3 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
+(on <arg1> <arg2>) [167 references] ; Is the second object on the first one?
+(open <arg1>) [3 references] ; Is the object open? Only valid for objects that can be opened, such as drawers.
 (opposite <arg1> <arg2>) [4 references] ; So far used only with walls, or sides of the room, to specify two walls opposite each other in conjunction with other predicates involving these walls
 (rug_color_under <arg1> <arg2>) [11 references] ; Is the color of the rug under the object (first argument) the color specified by the second argument?
-(same_color <2 or 3 arguments>) [23 references] ; If two objects, do they have the same color? If one is a color, does the object have that color?
+(same_color <arg1> <arg2>) [23 references] ; If two objects, do they have the same color? If one is a color, does the object have that color?
 (same_object <arg1> <arg2>) [7 references] ; Are these two variables bound to the same object?
 (same_type <arg1> <arg2>) [14 references] ; Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?
-(toggled_on <arg1> <arg2>) [4 references] ; Is this object toggled on?
+(toggled_on <arg1>) [4 references] ; Is this object toggled on?
 (touch <arg1> <arg2>) [49 references] ; Are these two objects touching?
 \end{lstlisting}
 
@@ -484,7 +484,7 @@ pink_dodgeball [18 references]
 golfball [28 references] 
 green_golfball [2 references] 
 ---------- (* \textbf{Colors} *) ----------
-color [7 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object
+color [6 references] ; Likewise, not a real game object, mostly used to refer to the color of the rug under an object
 blue [6 references] 
 brown [5 references] 
 green [7 references] 

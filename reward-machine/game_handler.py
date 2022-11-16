@@ -180,7 +180,7 @@ class GameHandler():
             return self.evaluate_setup(setup_expression["statement"], state, mapping)
 
         elif rule == "super_predicate":
-            evaluation = self.predicate_handler(setup_expression, state, mapping)
+            evaluation = self.predicate_handler(setup_expression, state, mapping, force_evaluation=True)
             
             return evaluation
 

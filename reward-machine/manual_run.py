@@ -91,7 +91,7 @@ if __name__ == "__main__":
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=True)
+        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=False)
         if score is not None:
             break
 

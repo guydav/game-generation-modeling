@@ -408,16 +408,6 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return np.all(inner_min_corner >= outer_min_corner - IN_MARGIN) and np.all(inner_max_corner <= outer_max_corner + IN_MARGIN) 
 
-    # inner_object_bbox_center = objects[1].bbox_center
-
-    # # The interior object's bbox center must be inside the exterior object's bbox
-    # inner_bbox_center_contained = np.all(outer_min_corner <= inner_object_bbox_center) and np.all(inner_object_bbox_center <= outer_max_corner)
-
-    # # We also check to make sure that the outer object's bbox is not entirely inside the inner object's bbox (possible for non-convex objects)
-    # outer_bbox_contained = np.all(inner_min_corner <= outer_min_corner) and np.all(outer_max_corner <= inner_max_corner)
-    
-    # return inner_bbox_center_contained and not outer_bbox_contained
-
 
 # TODO (GD): we should discuss what this threshold should be
 IN_MOTION_ZERO_VELOCITY_THRESHOLD = 0.1

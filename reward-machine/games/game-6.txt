@@ -8,7 +8,7 @@
         (preference throwBallToBin
             (exists (?h - hexagonal_bin)
                 (then 
-                    (once (and (agent_holds ?b) (adjacent agent desk)))
+                    (once (and (agent_holds ?b)))
                     (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
                     (once (and (not (in_motion ?b)) (in ?h ?b)))
                 )
@@ -18,7 +18,7 @@
     (preference failedThrowToBin
         (exists (?b - ball ?h - hexagonal_bin)
             (then 
-                (once (and (agent_holds ?b) (adjacent agent desk)))
+                (once (and (agent_holds ?b)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
                 (once (and (not (in_motion ?b)) (not (in ?h ?b))))
             )
@@ -26,8 +26,8 @@
     )
 ))
 (:scoring (+
-    (* 10 (count-nonoverlapping throwBallToBin:dodgeball))
-    (* 20 (count-nonoverlapping throwBallToBin:golfball))
-    (* 30 (count-nonoverlapping throwBallToBin:beachball))
-    (- (count-nonoverlapping failedThrowToBin))
+    (* 10 (count throwBallToBin:dodgeball))
+    (* 20 (count throwBallToBin:golfball))
+    (* 30 (count throwBallToBin:beachball))
+    (- (count failedThrowToBin))
 )))

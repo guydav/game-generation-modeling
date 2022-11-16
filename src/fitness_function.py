@@ -26,7 +26,7 @@ DEFAULT_TEST_FILES = (
     # './dsl/problems-many-objects.pddl',
     './dsl/interactive-beta.pddl',
     './dsl/ast-mle-samples.pddl',
-    './dsl/ast-regrowth-samples.pddl',
+    './dsl/ast-real-regrowth-samples.pddl',
     './dsl/ast-mle-regrowth-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
@@ -189,18 +189,25 @@ class ASTFitnessFunction:
                 context = context.copy()
                 context['variables'] = context_vars
 
-            if ast.parseinfo is not None:
-                rule = ast.parseinfo.rule
-                stat_parsers = self.rule_registry[rule]
-                for stat in stat_parsers:
-                    stat.update(ast, rule, context)
-                
-                for regex_pattern, regex_term in self.regex_rules:
-                    if regex_pattern.match(rule):
-                        regex_term.update(ast, rule, context)
+            if 'parseinfo' not in ast or not ast.parseinfo:
+                raise ValueError('No parseinfo found', ast)
 
+            # Check for any handlers of the current node
+            rule = ast.parseinfo.rule
+            stat_parsers = self.rule_registry[rule]
+            for stat in stat_parsers:
+                stat.update(ast, rule, context)
+            
+            for regex_pattern, regex_term in self.regex_rules:
+                if regex_pattern.match(rule):
+                    regex_term.update(ast, rule, context)
+
+            # Perform other context updates for children
             child_context = context.copy()
             child_context['depth'] += 1  # type: ignore
+
+            if ast.parseinfo.rule in ('scoring_external_maximize', 'scoring_external_minimize'): 
+                child_context['external_forall'] = ast.parseinfo.rule  
 
             for child_key in ast:
                 if child_key != 'parseinfo':
@@ -238,34 +245,72 @@ def _extract_predicate_terms(ast: tatsu.ast.AST) -> typing.List[str]:
     return [str(arg.term) for arg in args]
 
 
-class VariablesDefinedFitnessTerm(FitnessTerm):
-    defined_count: int = 0
-    undefined_count: int = 0
-
-    def __init__(self):
-        super().__init__('predicate', 'variables_defined')
-
-    def game_start(self) -> None:
-        self.defined_count = 0
-        self.undefined_count = 0
+class VariableBasedFitnessTerm(FitnessTerm):
+    def __init__(self, header: str):
+        super().__init__(('predicate_term', 'function_term'), header)
+        self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if 'variables' not in context:
             return
 
-        if isinstance(ast, tatsu.ast.AST):
-            for term in _extract_predicate_terms(ast):  # type: ignore
-                if isinstance(term, str) and term.startswith('?'):
-                    if term in context['variables']:  # type: ignore
-                        self.defined_count += 1
-                    else:
-                        self.undefined_count += 1
+        if isinstance(ast.term, str) and ast.term.startswith('?'):  # type: ignore
+            self._inner_update(ast.term, context['variables'])  # type: ignore
+
+    @abstractmethod
+    def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
+        pass
+        
+
+class AllVariablesDefinedFitnessTerm(VariableBasedFitnessTerm):
+    defined_count: int = 0
+    undefined_count: int = 0
+
+    def __init__(self):
+        super().__init__('all_variables_defined')
+
+    def game_start(self) -> None:
+        self.defined_count = 0
+        self.undefined_count = 0
+
+    def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
+        if term in variables: 
+            self.defined_count += 1
+        else:
+            self.undefined_count += 1
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
         if self.defined_count == 0:
             return 0
 
         return self.defined_count / (self.defined_count + self.undefined_count)
+
+
+class AllVariablesUsedFitnessTerm(VariableBasedFitnessTerm):
+    defined_variables: typing.Set[str]
+    used_variables: typing.Set[str]
+
+    def __init__(self):
+        super().__init__('all_variables_used')
+
+    def game_start(self) -> None:
+        self.defined_variables = set()
+        self.used_variables = set()
+
+    def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
+        # TODO: this is incomplete, and can fail in the case of the same variable being
+        # defined in multiple contexts, but only used in one or some of them
+        # If this appears to happen, we can redefine this to be a bit smarter
+
+        self.defined_variables.update(variables)  # type: ignore
+        if term in self.defined_variables:
+            self.used_variables.add(term)
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if len(self.defined_variables) == 0:
+            return 0
+
+        return len(self.used_variables) / len(self.defined_variables)
         
 
 class AllPreferencesUsed(FitnessTerm):
@@ -334,7 +379,7 @@ class NoAdjacentOnce(FitnessTerm):
     prefs_with_adjacent_once: int = 0
 
     def __init__(self):
-        super().__init__('then', 'no_adjacent_once')
+        super().__init__(('then', 'at_end'), 'no_adjacent_once')
 
     def game_start(self) -> None:
         self.total_prefs = 0
@@ -342,6 +387,10 @@ class NoAdjacentOnce(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         self.total_prefs += 1
+        
+        if rule == 'at_end':
+            return
+
         if isinstance(ast.then_funcs, list):  # type: ignore
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
             for i in range(len(func_rules) - 1):
@@ -432,12 +481,13 @@ class NoNestedLogicals(FitnessTerm):
                 if isinstance(children, tatsu.ast.AST):
                     children = [children]
 
-                if any([isinstance(child, tatsu.ast.AST) and child.parseinfo.rule == rule for child in children]):  # type: ignore
+                if any((isinstance(child, tatsu.ast.AST) and isinstance(child.pred, tatsu.ast.AST) and child.pred.parseinfo.rule == rule) for child in children):  # type: ignore
                     self.nested_logicals += 1
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
         if self.total_logicals == 0:
-            return 0
+            # TODO: should this return a NaN? If so, we should thin kabout how to handle them
+            return 1
 
         return 1 - (self.nested_logicals / self.total_logicals)
 
@@ -465,7 +515,7 @@ class PrefForallUsedCorrectly(FitnessTerm):
             else:   # count*
                 pref_name = ast.name_and_types['pref_name']  # type: ignore
                 object_types = ast.name_and_types['object_types']  # type: ignore
-                if object_types is not None:
+                if object_types is not None or 'external_forall' in context:
                     self.prefs_used_as_pref_forall_prefs.add(pref_name)
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
@@ -475,11 +525,71 @@ class PrefForallUsedCorrectly(FitnessTerm):
         return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
 
 
+PREDICATE_ARITY_MAP = {
+    'above': 2, 'adjacent': 2, 'adjacent_side': (3, 4), 'agent_crouches': 0, 'agent_holds': 1,
+    'between': 3, 'broken': 1, 'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
+    'game_over': 0, 'game_start': 0, 'in':2, 'in_motion': 1, 'is_setup_object': 1, 
+    'object_orientation': 2, 'on': 2, 'open': 1, 'opposite': 2, 'rug_color_under': 2, 
+    'same_color': 2, 'same_object': 2, 'same_type': 2, 'toggled_on': 1, 'touch': 2
+}
+
+
+def _extract_n_args(ast: tatsu.ast.AST):
+    if 'pred_args' in ast:
+        if isinstance(ast.pred_args, tatsu.ast.AST):
+            return 1
+        else:
+            return len(ast.pred_args)  # type: ignore
+
+    return 0
+
+
+class CorrectPredicateArity(FitnessTerm):
+    total_predicates: int = 0
+    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = {}
+    predicates_with_wrong_arity: int = 0
+
+    def __init__(self, predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP):
+        super().__init__('predicate', 'correct_predicate_arity')
+        self.predicate_arity_map = predicate_arity_map
+
+    def game_start(self) -> None:
+        self.total_predicates = 0
+        self.predicates_with_wrong_arity = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_predicates += 1
+
+            if ast.pred_name not in self.predicate_arity_map:
+                raise ValueError(f'Predicate {ast.pred_name} not in predicate arity map')
+
+            n_args = _extract_n_args(ast)
+            arity = self.predicate_arity_map[ast.pred_name]  # type: ignore
+
+            if isinstance(arity, int):
+                if n_args != arity:
+                    self.predicates_with_wrong_arity += 1
+            
+            elif n_args not in arity:
+                self.predicates_with_wrong_arity += 1
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_predicates == 0:
+            return 0
+
+        return 1 - (self.predicates_with_wrong_arity / self.total_predicates)
+
+
+
 def build_aggregator(args):
     fitness = ASTFitnessFunction()
 
-    variables_defined = VariablesDefinedFitnessTerm()
-    fitness.register(variables_defined)
+    all_variables_defined = AllVariablesDefinedFitnessTerm()
+    fitness.register(all_variables_defined)
+
+    all_variables_used = AllVariablesUsedFitnessTerm()
+    fitness.register(all_variables_used)
     
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
@@ -502,9 +612,8 @@ def build_aggregator(args):
     pref_forall_used_correctly = PrefForallUsedCorrectly()
     fitness.register(pref_forall_used_correctly)
 
-    # TODO: no unused variables?
-
-    # TODO: are predicates used with the correct arity?
+    correct_predicate_arity = CorrectPredicateArity()
+    fitness.register(correct_predicate_arity)
 
     # TODO: common sense? predicate role-filler pairs
 

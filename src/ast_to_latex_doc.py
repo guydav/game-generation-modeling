@@ -8,7 +8,7 @@ import os
 
 import ast_printer
 from ast_parser import ASTParser, ASTParentMapper
-from ast_utils import load_asts
+from ast_utils import cached_load_and_parse_games_from_file 
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -792,7 +792,7 @@ TYPE_DESCRIPTIONS = (
 def extract_n_args(ast, key=None):
     n_args = 0
     if 'pred_args' in ast:
-        if isinstance(ast.pred_args, str):
+        if isinstance(ast.pred_args, tatsu.ast.AST):
             n_args = 1
         else:
             n_args = len(ast.pred_args)
@@ -854,7 +854,6 @@ def extract_types_from_predicates_and_functions(ast):
     return [arg.term for arg in args if 'term' in arg and isinstance(arg.term, str) and not arg.term.startswith('?')]
 
 
-
 def extract_co_ocurring_types(ast, key):
     if 'type_names' in ast:
         if not isinstance(ast.type_names, str):
@@ -888,7 +887,6 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar) 
 
-    asts = load_asts(args, grammar_parser, should_print=args.print_dsls)
     parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
     setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), consider_used_rules=['setup_not', 'setup_statement'])
@@ -911,8 +909,9 @@ def main(args):
     parser.register_processor(function_translator)
     parser.register_processor(type_translator)
 
-    for ast in asts:
-        parser(ast)
+    for test_file in args.test_files: 
+        for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, False):
+            parser(ast)
 
     parser.process()
     parser.output()

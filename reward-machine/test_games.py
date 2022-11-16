@@ -157,8 +157,8 @@ TEST_CASES = [
     },),
     ('test-setup', SETUP_TRACE, 2.0, {
         'throwToBin' : [
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=886, end=986, measures={}),
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=1916, end=1964, measures={})
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=2542, end=2642, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80'}, start=3572, end=3620, measures={})
         ],
     },),
     ('test-external-scoring', THROW_ALL_DODGEBALLS_TRACE, 4.0, {

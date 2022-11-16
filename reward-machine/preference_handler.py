@@ -85,7 +85,7 @@ class PreferenceHandler:
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         if self.pref_quantifier_rule == PreferenceQuantifiers.EXISTS.value:
             self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
-            preference_body = body["exists_args"]["body"]
+            preference_body = body["exists_args"]
 
         elif self.pref_quantifier_rule == PreferenceQuantifiers.FORALL.value:
             raise NotImplementedError("Forall quantification not yet supported")

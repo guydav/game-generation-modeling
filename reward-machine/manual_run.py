@@ -15,6 +15,7 @@ THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path('./reward-machine/traces/three_wa
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
 CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
+GAME_6_TRACE = pathlib.Path('./reward-machine/traces/game-6.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -68,13 +69,14 @@ TEST_GAME_LIBRARY = {
     'test-setup': load_game("throw_with_setup"),
     'test-adjacent': load_game("adjacent_at_end"),
     'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
+    'game-6': load_game("game-6"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-adjacent'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['game-6'])
     score = None
 
-    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
+    trace_path = GAME_6_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

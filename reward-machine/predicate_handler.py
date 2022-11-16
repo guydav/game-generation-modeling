@@ -488,6 +488,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
+    # print(f"Object {upper_object.object_id} is on object {lower_object.object_id}?")
+
     objects_touch = _pred_touch(agent, objects)
 
     if "Slide" in upper_object.object_type:
@@ -516,6 +518,9 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             print("Test point truth values:", [_point_in_object(test_point, lower_object) for test_point in test_points])
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
+        print(f"Object {upper_object.object_id} is on object {lower_object.object_id}? {objects_on}")
+        # input()
+
         # object 1 is on object 0 if they're touching and object 1 is above object 0
         # or if they're touching and object 1 is contained withint object 0? 
         return objects_on or _pred_in(agent, objects)
@@ -540,6 +545,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             for building_object in lower_object.building_objects.values()
             if building_object.object_id != upper_object.object_id])
 
+    print(f"Object {upper_object.object_id} is on object {lower_object.object_id}? False")
     return False
 
 ADJACENT_DISTANCE_THRESHOLD = 0.15

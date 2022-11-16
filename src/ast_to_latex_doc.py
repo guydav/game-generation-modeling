@@ -2,6 +2,7 @@ import argparse
 from collections import defaultdict, namedtuple
 from itertools import chain
 import tatsu
+import tatsu.ast
 import shutil
 import os
 
@@ -501,7 +502,7 @@ SHARED_BLOCKS = {
     PREDICATE: (r"""<predicate> ::= (<name> <predicate-term>$^*$)
 
 <predicate-term> ::= <name> | <variable>""",
-('predicate',)),
+('predicate', 'predicate_term')),
 }
 
 
@@ -618,22 +619,18 @@ SCORING_BLOCKS = (
     """, 'scoring_comp'),
 
     (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
-        \alt <count-nonoverlapping>
+        \alt <count>
         \alt <count-overlapping>
         \alt <count-once> 
         \alt <count-once-per-objects> 
-        \alt <count-nonoverlapping-measure> 
+        \alt <count-measure> 
         \alt <count-unique-positions> 
         \alt <count-same-positions> 
-        \alt <count-maximal-nonoverlapping> 
-        \alt <count-maximal-overlapping> 
-        \alt <count-maximal-once-per-objects> 
-        \alt <count-maximal-once> 
         \alt <count-once-per-external-objects> 
 
     """, 'preference-eval'),
 
-    (r'<count-nonoverlapping> ::= (count-nonoverlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count_nonoverlapping'),
+    (r'<count> ::= (count <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count'),
     (r'<count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.', 'count_overlapping'),
     (r'<count-once> ::= (count-once <pref-name-and-types>) "#" Count whether or not this preference was satisfied at all.', 'count_once'),
     (r'<count-once-per-objects> ::= (count-once-per-objects <pref-name-and-types>) "#" Count once for each unique combination of objects quantified in the preference that satisfy it.', 'count_once_per_objects'),
@@ -641,7 +638,7 @@ SCORING_BLOCKS = (
     # (r'<count-shortest> ::= (count-shortest <pref-name-and-types>) "#" count the shortest satisfication of this preference ', 'count_shortest'),
     # (r'<count-total> ::= (count-total <pref-name-and-types>) "#" count how many states in total satisfy this preference', 'count_total'),
     # (r'<count-increasing-measure> ::= (count-increasing-measure <pref-name-and-types>) "#" currently unused, will clarify definition if it surfaces again', 'count_increasing_measure'),
-    (r'<count-nonoverlapping-measure> ::= (count-nonoverlapping-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.', 'count_nonoverlapping_measure'),
+    (r'<count-measure> ::= (count-measure <pref-name-and-types>) "#" Can only be used in preferences including a <once-measure> modal, maps each preference satistifaction to the value of the function evaluation in the <once-measure>.', 'count_measure'),
     (r'<count-unique-positions> ::= (count-unique-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have different positions between different satisfactions.', 'count_unique_positions'),
     (r'<count-same-positions> ::= (count-same-positions <pref-name-and-types>) "#" Count how many times the preference was satisfied with quantified objects that remain stationary within each preference satisfcation, and have (approximately) the same position between different satisfactions.', 'count_same_positions'),
     # (r'<note> : "#" All of the count-maximal-... operators refer to counting only for preferences inside a (forall ...), and count only for the object quantified externally that has the most preference satisfactions to it. If there exist multiple preferences in a single (forall ...) block, score for the single object that satisfies the most over all such preferences.', 'maximal_explainer'),
@@ -683,7 +680,6 @@ PREDICATE_DESCRIPTIONS = {
     'same_type': 'Are these two objects of the same type? Or if one is a direct reference to a type, is this object of that type?',
     'toggled_on': 'Is this object toggled on?',
     'touch': 'Are these two objects touching?',
-    'type': 'Is the first argument, an object, an instance of the type specified by the second argument?',    
 }
 
 FUNCTION_DESCRIPTIONS = {
@@ -691,7 +687,6 @@ FUNCTION_DESCRIPTIONS = {
     'color': 'Take in an argument of type object, and returns the color of the object (as a color type object).',
     'distance': 'Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).',
     'distance_side': 'Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side).',
-    'type': 'Takes in an argument of type object, and returns the type of the object (as a string).',
     'x_position': 'Takes in an argument of type object, and returns the x position of the object (as a floating point number).',
 }
 
@@ -815,8 +810,8 @@ FUNCTION_RULES = {
 
 
 def extract_single_variable_type(ast):
-    if 'var_type' in ast and isinstance(ast.var_type, str):
-        return ast.var_type
+    if 'var_type' in ast and 'type' in ast.var_type and isinstance(ast.var_type.type, str):
+        return ast.var_type.type
 
     return None
 
@@ -841,16 +836,23 @@ def extract_pref_name_and_types(ast):
     return None
 
 
-def extract_types_from_predicates(ast):
+def extract_types_from_predicates_and_functions(ast):
+    args = None
+    
     if 'pred_args' in ast:
-        if isinstance(ast.pred_args, str) and not ast.pred_args.startswith('?'):
-            return ast.pred_args
+        args = ast.pred_args
+    
+    elif 'func_args' in ast:
+        args = ast.func_args
 
-        filtered_args = [arg for arg in ast.pred_args if isinstance(arg, str) and not arg.startswith('?')]
-        if filtered_args:
-            return filtered_args
+    if args is None:
+        return None
 
-    return None
+    if isinstance(args, tatsu.ast.AST):
+        args = [args]
+
+    return [arg.term for arg in args if 'term' in arg and isinstance(arg.term, str) and not arg.term.startswith('?')]
+
 
 
 def extract_co_ocurring_types(ast, key):
@@ -869,14 +871,15 @@ TYPE_RULES = {
     'variable_type_def': (extract_single_variable_type, None),
     'either_types': (extract_either_variable_types, None),
     'pref_name_and_types': (extract_pref_name_and_types, None),
-    'predicate': (extract_types_from_predicates, None),
+    'predicate': (extract_types_from_predicates_and_functions, None),
+    'function': (extract_types_from_predicates_and_functions, None),
 }
 
 SCORING_CONSIDER_USED_RULES = (
     'scoring_maximize', 'scoring_minimize',
     'preference-eval', # 'count_maximal_nonoverlapping', 
     'count_once_per_external_objects', 'scoring_neg_expr', 'pref_object_type', 
-    'pref_name_and_types', 'count_nonoverlapping', 'count_once_per_objects',
+    'pref_name_and_types', 'count', 'count_once_per_objects',
     'count_once', 
 )
 

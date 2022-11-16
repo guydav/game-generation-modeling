@@ -1,4 +1,6 @@
+from collections import defaultdict
 import itertools
+import numpy as np
 import tatsu
 import tatsu.ast
 import typing
@@ -10,10 +12,14 @@ from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
 from utils import extract_variable_type_mapping, get_object_assignments, ast_cache_key, FullState
+from predicate_handler import _pred_in_motion
 
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
+class ObjectMove(typing.NamedTuple):
+    time: int
+    pos: np.ndarray
 
 class GameHandler():
     domain_name: str
@@ -48,6 +54,11 @@ class GameHandler():
 
         self.building_handler = BuildingHandler(self.domain_name)
         self.predicate_handler = PredicateHandler(self.domain_name)
+
+        # Maps from an object ID to a list of the time indexes in which it moves and the corresponding position at that time
+        self.object_movements = defaultdict(list)
+        self.cur_step = 0
+        self.initial_update_complete = False
 
         # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
         # evaluate that preference
@@ -126,12 +137,33 @@ class GameHandler():
             elif rule == "scoring_expr":
                 self.scoring = ast
 
+    def _extract_scoring_preferences(self, scoring_expression: typing.Union[list, tuple, tatsu.ast.AST]) -> typing.List[str]:
+        '''
+        Extract all the preferences (by name) that are used in the scoring expression
+        '''
+
+        if isinstance(scoring_expression, tuple) or isinstance(scoring_expression, list):
+            return sum([self._extract_scoring_preferences(item) for item in scoring_expression], [])
+
+        elif isinstance(scoring_expression, tatsu.ast.AST):
+            rule = scoring_expression["parseinfo"].rule
+            if rule == "pref_name_and_types":
+                return [scoring_expression["pref_name"]]
+
+            return sum([self._extract_scoring_preferences(item) for item in scoring_expression.values()], [])
+
+        return []
+
+
     def process(self, state: FullState, is_final: bool, debug: bool = False,
         debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:  
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
         '''
+
+        self.cur_step += 1
+
         self.predicate_handler.update_cache(state)
         self.building_handler.process(state, debug=debug or debug_building_handler)
 
@@ -141,15 +173,30 @@ class GameHandler():
         if not setup:
             return
 
-        # The game is in its last step if the terminal conditions are met or if the trajectory is over
+        # Check for object updates. If an object moves, then the current time is added to its list of motion times
+        if state.n_objects_changed > 0:
+            for obj in state.objects:
+                if _pred_in_motion(state.agent_state, [obj]):
+                    self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
+
+        # When we get our first full state update, we treat every object as though it moved. This is so that we can
+        # evaluate whether an object is stationary even in situations where it never moves (see count_unique_positions)
+        if state.n_objects_changed > 15 and not self.initial_update_complete:
+            for obj in state.objects:
+                self.object_movements[obj.object_id].append(ObjectMove(self.cur_step, obj.position))
+            self.initial_update_complete = True
+
+        # The game is in its last step if the terminal conditions are met or if the trajectory is over. We pass this
+        # value to the PredicateHandler so that it can evaluate game-over
         is_last_step = is_final or self.evaluate_terminals(self.terminal)
+        self.predicate_handler.is_last_step = is_last_step
 
         for preference_name, handlers in self.preference_handlers.items():
             if isinstance(handlers, PreferenceHandler):
                 satisfactions = handlers.process(state, is_last_step, debug=debug or debug_preference_handlers)
                 self.preference_satisfactions[preference_name] += satisfactions
 
-            elif isinstance(handlers, list):
+            elif isinstance(handlers, list): # TODO: is this case safe to remove?
                 pass
 
         if is_last_step:
@@ -323,40 +370,51 @@ class GameHandler():
         return str(preference_name), object_types
 
 
-    def _filter_satisfactions(self, preference_name: str, object_types: typing.Optional[typing.Sequence[str]]):
+    def _filter_satisfactions(self, preference_name: str, object_types: typing.Optional[typing.Sequence[str]],
+                              external_mapping: typing.List[tuple]):
         '''
-        Given the name of a preference and a list of object types, return the set of all satisfactions
-        of the given preference that abide by the given variable mapping. In the case where object_types
-        is None, this amounts to returning all the satisfactions of the given preference. When object_types
-        is not None (as in the case of an external forall and the use of the ":" syntax), then we filter
-        accordingly.
+        Filter the list of satisfactions of a given preference using two criteria:
+        1. object_types: used with an external forall and the ":" syntax, filters satisfactions to those where the objects
+           used to satisfy the external forall are of the given *types*
+
+        2. external_mapping: used with an external forall, filters satisfactions to those where the objects used to satisfy
+           the external forall are of the given *object IDs*
         '''
 
-        if object_types is None:
+        if object_types is None and external_mapping == []:
             return self.preference_satisfactions[preference_name]
 
         pref_handler = self.preference_handlers[preference_name]
         satisfactions = []
 
-        # Check to see if the mapping lines up with the specified object type
         for potential_sat in self.preference_satisfactions[preference_name]:
             mapping = potential_sat.mapping
-            
-            # A PreferenceHandler's additional_variable_mapping is an OrderedDict, so the types in 
-            # object_types need to match the order of varaibles in the external forall
             acceptable_sat = True
-            for variable, object_type in zip(pref_handler.additional_variable_mapping.keys(), object_types):
-                specififed_object = mapping[variable]
-                self.domain_name = typing.cast(str, self.domain_name)
-                if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
-                    acceptable_sat = False
+
+            for idx, variable in enumerate(pref_handler.additional_variable_mapping.keys()):
+
+                # Check to see if the object type matches
+                if object_types is not None:
+                    specififed_object = mapping[variable]
+                    object_type = object_types[idx]
+
+                    if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
+                        acceptable_sat = False
+                        break
+
+                # Check to see if the object ID matches
+                if external_mapping:
+                    if mapping[variable] != external_mapping[idx]:
+                        acceptable_sat = False
+                        break
 
             if acceptable_sat:
                 satisfactions.append(potential_sat)
 
         return satisfactions
 
-    def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None]) -> float:
+    def score(self, scoring_expression: typing.Union[str, tatsu.ast.AST, None],
+              external_mapping: typing.List[tuple] = []) -> float:
         '''
         Determine the score of the current trajectory using the given scoring expression
         '''
@@ -370,7 +428,7 @@ class GameHandler():
         rule = scoring_expression["parseinfo"].rule  # type: ignore
 
         if rule == "scoring_expr":
-            return self.score(scoring_expression["expr"])
+            return self.score(scoring_expression["expr"], external_mapping)
 
         elif rule == "scoring_multi_expr":
             # Multi-expression operators are either addition (+) or multiplication (*)
@@ -380,14 +438,14 @@ class GameHandler():
             expressions = scoring_expression["expr"]
 
             if isinstance(expressions, tatsu.ast.AST):
-                return self.score(expressions)
+                return self.score(expressions, external_mapping)
 
             elif isinstance(expressions, list):
                 if operator == "+":
-                    return sum([self.score(expression) for expression in expressions])
+                    return sum([self.score(expression, external_mapping) for expression in expressions])
 
                 elif operator == "*":
-                    return prod([self.score(expression) for expression in expressions])
+                    return prod([self.score(expression, external_mapping) for expression in expressions])
 
         elif rule == "scoring_binary_expr":
             # Binary expression operators are either subtraction (-) or division (/)
@@ -396,13 +454,16 @@ class GameHandler():
             expr_1 = scoring_expression["expr_1"]
             expr_2 = scoring_expression["expr_2"]
 
+            score_1 = self.score(expr_1, external_mapping)
+            score_2 = self.score(expr_2, external_mapping)
+
             if operator == "-":
-                return self.score(expr_1) - self.score(expr_2)
+                return score_1 - score_2
             elif operator == "/":
-                return self.score(expr_1) / self.score(expr_2)
+                return score_1 / score_2
 
         elif rule == "scoring_neg_expr":
-            return - self.score(scoring_expression["expr"])
+            return - self.score(scoring_expression["expr"], external_mapping)
 
         elif rule == "scoring_comparison":
             comp_expr = typing.cast(tatsu.ast.AST, scoring_expression["comp"])
@@ -412,7 +473,7 @@ class GameHandler():
             # so we just determine whether all arguments evaluate to the same value
             if comparison_operator is None:
                 expressions = comp_expr["expr"]
-                evaluations = [self.score(expr) for expr in expressions]  # type: ignore
+                evaluations = [self.score(expr, external_mapping) for expr in expressions]  # type: ignore
 
                 return float(evaluations.count(evaluations[0]) == len(evaluations))
 
@@ -421,36 +482,98 @@ class GameHandler():
                 expr_1 = comp_expr["expr_1"]
                 expr_2 = comp_expr["expr_2"]
 
+                score_1 = self.score(expr_1, external_mapping)
+                score_2 = self.score(expr_2, external_mapping)
+
                 if comparison_operator == "=":
-                    return self.score(expr_1) == self.score(expr_2)
+                    return score_1 == score_2
                 elif comparison_operator == "<":
-                    return self.score(expr_1) < self.score(expr_2)
+                    return score_1 < score_2
                 elif comparison_operator == "<=":
-                    return self.score(expr_1) <= self.score(expr_2)
+                    return score_1 <= score_2
                 elif comparison_operator == ">":
-                    return self.score(expr_1) > self.score(expr_2)
+                    return score_1 > score_2
                 elif comparison_operator == ">=":
-                    return self.score(expr_1) >= self.score(expr_2)
+                    return score_1 >= score_2
                 else:
                     raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
 
         elif rule == "preference_eval":
-            return self.score(scoring_expression["count_method"])
+            return self.score(scoring_expression["count_method"], external_mapping)
+
+        elif rule == "scoring_external_maximize":
+            maximized_preferences = self._extract_scoring_preferences(scoring_expression)
+            
+            # Make sure that at least one of the predicates is under an external forall, and that the predicates
+            # in total are not under more than one external forall
+            external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in maximized_preferences
+                                        if self.preference_handlers[pref_name].additional_variable_mapping != {}]
+
+            if len(external_quantifications) == 0:
+                raise ValueError("Error: No external quantification found for maximization")
+
+            for quant in external_quantifications:
+                if any([quant != q for q in external_quantifications]):
+                    raise ValueError("Error: All predicates in an external maximize must be under the same external forall")
+
+            external_quant = external_quantifications[0]
+
+            # We extract the mappings that are actually used in the satisfactions of the preferences under maximization
+            all_satisfactions = sum([self.preference_satisfactions[pref_name] for pref_name in maximized_preferences
+                                     if self.preference_handlers[pref_name].additional_variable_mapping != {}], [])
+
+            # If there aren't any satisfactions, then we can just return 0
+            if len(all_satisfactions) == 0:
+                return 0.0
+
+            # Each entry in the set is a tuple of the objects used to satisfy the external mapping for at least one satisfaction. 
+            # Because the mapping is an OrderedDict, the order of the objects in the tuple is the same as the order of the variables 
+            # in the external forall
+            used_external_mappings = set([tuple([satisfaction.mapping[key] for key in external_quant]) for satisfaction in all_satisfactions])
+
+            # Return the score computed using the external mapping that maximizes the score
+            return max([self.score(scoring_expression["scoring_expr"], external_mapping) for external_mapping in used_external_mappings])
+
+        elif rule == "scoring_external_minimize":
+            # Identical except for a single line to scoring_external_maximize, so see above for comments
+            minimized_preferences = self._extract_scoring_preferences(scoring_expression)
+            
+            external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in minimized_preferences
+                                        if self.preference_handlers[pref_name].additional_variable_mapping != {}]
+
+            if len(external_quantifications) == 0:
+                raise ValueError("Error: No external quantification found for minimization")
+
+            for quant in external_quantifications:
+                if any([quant != q for q in external_quantifications]):
+                    raise ValueError("Error: All predicates in an external minimize must be under the same external forall")
+
+            external_quant = external_quantifications[0]
+
+            all_satisfactions = sum([self.preference_satisfactions[pref_name] for pref_name in minimized_preferences
+                                     if self.preference_handlers[pref_name].additional_variable_mapping != {}], [])
+
+            if len(all_satisfactions) == 0:
+                return 0.0
+
+            used_external_mappings = set([tuple([satisfaction.mapping[key] for key in external_quant]) for satisfaction in all_satisfactions])
+
+            return min([self.score(scoring_expression["scoring_expr"], external_mapping) for external_mapping in used_external_mappings])
 
         # Count the number of satisfactions of the given preference that don't overlap in both
         # (a) the mapping of variables to objects
         # (b) the temporal states involved
-        elif rule == "count_nonoverlapping":
+        elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             # Group the satisfactions by their mappings. Within each group, ensure there are no state overlaps and
             # count the total number of satisfactions that satisfy those criteria
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
-                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+                group = list(sorted(group, key=lambda satisfaction: satisfaction.end))
 
                 prev_end = -1
                 for mapping, start, end, measures in group:
@@ -460,11 +583,39 @@ class GameHandler():
 
             return count
 
+        # Count the largest set of satisfactions that share a mapping and overlap in their start / ends (solve with DP?)
+        elif rule == "count_overlapping":
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+
+            # Determine the largest set of satisfactions that overlap by sorting the start / end times. Whenever we
+            # encounter a new start time, we increment a counter. Whenever we encounter an end time, we decrement the 
+            # counter. The maximum value of the counter at any point in time is the size of the largest set of satisfactions 
+            # that overlap
+
+            cur_max = 0
+            cur_count = 0
+            starts_and_ends = []
+
+            for satisfaction in satisfactions:
+                starts_and_ends.append((satisfaction.start, "start"))
+                starts_and_ends.append((satisfaction.end, "terminal")) # because of sorting, the string here needs to be "terminal" and not "end"
+
+            for time, type in sorted(starts_and_ends):
+                if type == "start":
+                    cur_count += 1
+                elif type == "terminal":
+                    cur_count -= 1
+
+                cur_max = max(cur_max, cur_count)
+
+            return cur_max
+
         # Count whether the preference has been satisfied at all
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             return 1 if len(satisfactions) > 0 else 0
 
@@ -472,31 +623,30 @@ class GameHandler():
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             count = 0
 
             # Note: we may later decide to enforce that all objects in a mapping must be distinct, rather than
             # just that they be mapped to distinct variables
-            # keyfunc = lambda satisfaction: "_".join(sorted(satisfaction[0].values()))
-
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            # keyfunc = lambda satisfaction: "_".join(sorted(satisfaction.mapping.values()))
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1
 
             return count
 
-        # For each nonoverlapping satisfaction (see count_nonoverlapping above), sum the value of the measurement
-        elif rule == "count_nonoverlapping_measure":
+        # For each satisfaction (see count above), sum the value of the measurement
+        elif rule == "count_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)
 
-            satisfactions = self._filter_satisfactions(preference_name, object_types)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             count = 0
 
-            keyfunc = lambda satisfaction: "_".join(satisfaction[0].values())
+            keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
-                group = list(sorted(group, key=lambda satisfaction: satisfaction[2]))
+                group = list(sorted(group, key=lambda satisfaction: satisfaction.end))
 
                 prev_end = -1
                 for mapping, start, end, measures in group:
@@ -508,25 +658,84 @@ class GameHandler():
             return count
 
         elif rule == "count_unique_positions":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+
+            # Maps from an object ID to the list of positions that it has remained stationary at throughout a satisfaction
+            used_positions = defaultdict(list)
+            UNIQUE_POSITION_TOL = 0.01
+
+            count = 0
+
+            # TODO: do we need to filter out overlapping satisfactions?
+
+            # For each satisfaction, we need to determine which of its quantified objects are stationary within the
+            # duration of the satisfaction
+            for satisfaction in satisfactions:
+                all_unique = True
+                encountered_stationary = False
+
+                for obj in satisfaction.mapping.values():
+                    if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
+                        # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                                            key=lambda move: move.time).pos
+
+                        # Check whether this position is too close to any previously used unique positions
+                        if any([np.linalg.norm(last_position - pos) < UNIQUE_POSITION_TOL for pos in used_positions[obj]]):
+                            all_unique = False
+                            break
+
+                        used_positions[obj].append(last_position)
+                        encountered_stationary = True
+                
+                # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
+                # can count this satisfaction as long as at least one object was stationary
+                if all_unique and encountered_stationary:
+                    count += 1
+
+            return count
 
         elif rule == "count_same_positions":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
-        elif rule == "count_maximal_nonoverlapping":
-            pass # TODO
+            # Maps from a set of objects and their stationary positions to the number of satisfactions that use that mapping
+            # E.g. if we have two objects, A and B, and A is stationary at position (0, 0) and B is stationary at position (1, 1)
+            # for two satisfactions, then we would have the mapping {((A, (0, 0)), (B, (1, 1))): 2}
+            stationary_position_counts = defaultdict(int)
 
-        elif rule == "count_maximal_overlapping":
-            pass # TODO
+            for satisfaction in satisfactions:
+                stationary_position_key = []
+                for obj in satisfaction.mapping.values():
+                    if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                                            key=lambda move: move.time).pos
+                        
+                        stationary_position_key.append((obj, tuple(last_position)))
 
-        elif rule == "count_maximal_once_per_objects":
-            pass # TODO
+                # If the mapping has at least one stationary object, then increment the appropriate count
+                if stationary_position_key != []:
+                    stationary_position_counts[tuple(stationary_position_key)] += 1
 
-        elif rule == "count_maximal_once":
-            pass # TODO
+            # We return the maximal count if there are any satisfactions that have at least one stationary object, otherwise we return 0
+            return max(stationary_position_counts.values()) if stationary_position_counts else 0
 
+        # Count the number of satisfactions of the given preference that use distinct variable mappings for the externally 
+        # quantified variables
         elif rule == "count_once_per_external_objects":
-            pass # TODO
+            preference_name, object_types = self._extract_name_and_types(scoring_expression)
+
+            satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
+            external_variables = self.preference_handlers[preference_name].additional_variable_mapping.keys()
+
+            count = 0
+
+            keyfunc = lambda satisfaction: "_".join([satisfaction.mapping[var] for var in external_variables])
+            for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
+                count += 1
+
+            return count
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")

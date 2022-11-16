@@ -15,6 +15,10 @@ THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path('./reward-machine/traces/three_wa
 SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
 CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
+THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
+THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
+STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blocks.json')
+COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
 GAME_6_TRACE = pathlib.Path('./reward-machine/traces/game-6.json')
 
 REPLAY_NESTING_KEYS = (
@@ -67,6 +71,11 @@ TEST_GAME_LIBRARY = {
     'test-measure': load_game("throw_measure_dist"),
     'test-wall-bounce': load_game("throw_bounce_wall_bin"),
     'test-setup': load_game("throw_with_setup"),
+    'test-external-scoring': load_game("throw_external_maximize"),
+    'test-score-once-per-external': load_game("throw_count_once_per_external_objects"),
+    'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
+    'test-count-same-positions': load_game("throw_to_bin_same_positions"),
+    'test-count-overlapping': load_game("building_count_overlapping"),
     'test-adjacent': load_game("adjacent_at_end"),
     'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
     'game-6': load_game("game-6"),
@@ -78,10 +87,11 @@ if __name__ == "__main__":
 
     trace_path = GAME_6_TRACE.resolve().as_posix()
 
+
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state, is_final)
+        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=True)
         if score is not None:
             break
 

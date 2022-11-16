@@ -898,7 +898,7 @@ class RegrowthSampler(ASTParentMapper):
         new_source = copy.deepcopy(self.source_ast)
         new_source = self._update_game_id(new_source, sample_id)
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
-        replace_child(new_parent, selector, new_node)
+        replace_child(new_parent, selector, new_node)  # type: ignore
 
         return new_source
 
@@ -937,9 +937,7 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
             print()
 
         if args.validate_samples or args.save_samples:
-            ast_printer.BUFFER = []
-            ast_printer.pretty_print_ast(ast)
-            first_print_out = ''.join(ast_printer.BUFFER)
+            first_print_out = ast_to_string(ast)
             if args.save_samples:
                 text_samples.extend([line + '\n' for line in ast_printer.BUFFER])
                 text_samples.append('\n')
@@ -954,9 +952,16 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
                 print('Mismatch found')
 
     except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
-        print(f'Parse failed: at position {e.pos} expected {e.item}:')
+        print(f'Parse failed: at position {e.pos} expected "{e.item}" :')
         if len(first_print_out) > e.pos:
             print(first_print_out[e.pos:])
+
+
+def ast_to_string(ast):
+    ast_printer.BUFFER = []
+    ast_printer.pretty_print_ast(ast)
+    first_print_out = ''.join(ast_printer.BUFFER)
+    return first_print_out
 
 
 def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
@@ -968,11 +973,15 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
 
     for sample_id in sample_iter:
-
-        ast = sampler.sample(global_context=dict(sample_id=sample_id))
-        samples.append(ast)
-
-        _test_ast_sample(ast, args, text_samples, grammar_parser)
+        generated_sample = False
+        while not generated_sample:
+            try:
+                ast = sampler.sample(global_context=dict(sample_id=sample_id))
+                _test_ast_sample(ast, args, text_samples, grammar_parser)
+                samples.append(ast)
+                generated_sample = True
+            except ValueError as e:
+                print(f'ValueError while sampling, repeateing: {e}')
 
     return samples, text_samples
 
@@ -1002,8 +1011,11 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
                 while not sample_generated:
                     ast = regrowth_sampler.sample(sample_id, external_global_context=dict(sample_id=sample_id))
                     _test_ast_sample(ast, args, text_samples, grammar_parser)
-                    sample_generated = True
-                    samples.append(ast)
+                    if ast_to_string(real_game) == ast_to_string(ast):
+                        print('Regrowth generated identical games, repeating')
+                    else:
+                        sample_generated = True
+                        samples.append(ast)
 
             except RecursionError:
                 print('Recursion error, skipping sample')

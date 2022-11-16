@@ -74,7 +74,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['test-adjacent'])
     score = None
 
-    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
+    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

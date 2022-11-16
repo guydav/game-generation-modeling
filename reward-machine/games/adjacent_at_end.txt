@@ -32,6 +32,14 @@
             )
         )
     )
+
+    (preference objectOnFloor 
+        (exists (?g - game_object)
+            (at-end
+                (on floor ?g)
+            )
+        )
+    )
 ))
 (:scoring (count-once-per-objects objectsAdjacent)
 ))

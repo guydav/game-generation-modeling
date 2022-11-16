@@ -320,7 +320,21 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
             if mapping_value not in state_cache:
                 return None
 
-            mapping_objects.append(state_cache[mapping_value])
+            if mapping_value == 'Floor|+00.00|+00.00|+00.00':
+                base_floor_object = state_cache[mapping_value]
+
+                # Remove the keys that we're providing manually
+                static_fields = {key: value for key, value in base_floor_object._asdict().items() if key not in ['position', 'bbox_center', 'bbox_extents']}
+
+                updated_floor = ObjectState(position=np.array([0, 0, 0]),
+                                            bbox_center=np.array([0.16, -0.1, -0.185]),
+                                            bbox_extents=np.array([3.65, 0.1, 2.75]),
+                                            **static_fields)
+
+                mapping_objects.append(updated_floor)
+            
+            else:
+                mapping_objects.append(state_cache[mapping_value])
 
         return predicate_func(agent_object, mapping_objects)
 
@@ -349,6 +363,13 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[O
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
+
+
+def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return objects[0].is_open
 
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
@@ -469,6 +490,14 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     objects_touch = _pred_touch(agent, objects)
 
+    if "Slide" in upper_object.object_type:
+        print("\nDoes triangular ramp directly touch the floor?", objects_touch)
+        print("Floor center:", lower_object.bbox_center)
+        print("Floor extents:", lower_object.bbox_extents)
+        print("Ramp center:", upper_object.bbox_center)
+        print("Ramp position:", upper_object.position)
+        print("Ramp extents:", upper_object.bbox_extents)
+
     if objects_touch:
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
@@ -482,6 +511,9 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
                        for corner in upper_object_corners]
         test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
 
+        if "Slide" in upper_object.object_type:
+            print("Test points:", test_points)
+            print("Test point truth values:", [_point_in_object(test_point, lower_object) for test_point in test_points])
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0
@@ -517,6 +549,7 @@ OBJECT_SIZE_SCALING = 1.2
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
+    # TODO: the 'agent' does not have a bounding box, which breaks this implementation of adjacent
     if isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
         raise NotImplementedError("Adjacent predicate not implemented for agent")
 

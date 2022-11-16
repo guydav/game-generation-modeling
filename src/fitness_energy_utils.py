@@ -33,7 +33,7 @@ DEFAULT_TRAINING_PROP = 0.8
 def train_test_split_by_game_name(df: pd.DataFrame, training_prop: float = DEFAULT_TRAINING_PROP,
     random_seed: int = DEFAULT_RANDOM_SEED, positive_column: str = 'real', positive_value: typing.Any = True):
 
-    real_game_names = df[df[positive_column] == positive_value].game_name.unique()
+    real_game_names = df[df[positive_column] == positive_value].original_game_name.unique()
 
     train_game_names, test_game_names = train_test_split(real_game_names, train_size=training_prop, random_state=random_seed)
     train_df = df[df.game_name.isin(train_game_names) | df.original_game_name.isin(train_game_names)]
@@ -46,11 +46,11 @@ def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
     return torch.tensor(
         np.stack([
             np.concatenate((
-                df.loc[df.game_name == game_name, feature_columns].to_numpy(),
-                df.loc[(df.game_name != game_name) & (df.original_game_name == game_name), feature_columns].to_numpy()
+                df.loc[df.real & (df.original_game_name == game_name), feature_columns].to_numpy(),
+                df.loc[(~df.real) & (df.original_game_name == game_name), feature_columns].to_numpy()
             ))
             for game_name
-            in df[df[positive_column] == positive_value].game_name.unique()
+            in df[df[positive_column] == positive_value].original_game_name.unique()
         ]),
         dtype=torch.float
     )
@@ -143,7 +143,7 @@ DEFAULT_TRAIN_KWARGS = {
     'batch_size': 8, 
     'k': 4, 
     'device': 'cpu',
-    'seed': 33,
+    'random_seed': 33,
 }
 
 class SklearnFitnessWrapper:
@@ -233,7 +233,7 @@ def train_and_validate_model(model: nn.Module,
     n_epochs: int = 100, lr: float = 0.01, weight_decay: float = 0.0, 
     should_print: bool = True, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01, 
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', seed: int = 33):
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33):
 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay)
 
@@ -245,7 +245,7 @@ def train_and_validate_model(model: nn.Module,
         val_dataset = TensorDataset(val_data)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    torch.manual_seed(seed)
+    torch.manual_seed(random_seed)
 
     min_loss = np.Inf
     patience_loss = np.Inf

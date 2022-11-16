@@ -79,13 +79,14 @@ TEST_GAME_LIBRARY = {
     'test-adjacent': load_game("adjacent_at_end"),
     'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
     'game-6': load_game("game-6"),
+    'game-7': load_game("game-7"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['game-6'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['game-7'])
     score = None
 
-    trace_path = GAME_6_TRACE.resolve().as_posix()
+    trace_path = CASTLE_TEST_TRACE.resolve().as_posix()
 
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):

@@ -5,7 +5,7 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, is_type_or_color, _extract_object_limits,\
     _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import UNITY_PSEUDO_OBJECTS, PseudoObject
 
@@ -146,9 +146,11 @@ class PredicateHandler:
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
 
-            # Extract only the variables in the mapping relevant to this predicate
-            relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
-            
+            # Extract only the variables in the mapping relevant to this predicate. In most cases, variables will refer
+            # to objects using the ? syntax, but they can also be types or colors
+            pred_variables = extract_variables(predicate)
+            relevant_mapping = {var: var if is_type_or_color(var) else mapping[var] for var in pred_variables}
+
             # Evaluate the predicate
             evaluation = predicate_fn(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
 
@@ -306,29 +308,31 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
         if len(predicate_partial_mapping) == 0:
             return predicate_func(agent_object, [])
 
-        # Otherwise, check if any of the relevant objects have changed in this state
-        mapping_values = predicate_partial_mapping.values()
-        any_object_not_in_cache = any(obj not in state_cache for obj in mapping_values)
+        # Otherwise, check if any of the relevant objects have changed in this state, excluding passed in types and colors
+        mapping_items = predicate_partial_mapping.items()
+        any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_or_color(var))
+
         # If any objects are not in the cache, we cannot evaluate the predidate
         if any_object_not_in_cache:
             if force_evaluation:
-                raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for obj in mapping_values]}')
+                raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for var, obj in mapping_items]}')
             return None
 
-        any_objects_changed = any(state_cache_last_updated[object_id] == state.original_index for object_id in mapping_values)
+        any_objects_changed = any(state_cache_last_updated[obj] == state.original_index for var, obj in mapping_items if not is_type_or_color(var))
+
         # None of the objects in the mapping are updated in the current state, so return None
         if not any_objects_changed and not force_evaluation:
             return None
 
         # At least one object is, so populate the rest from the cache
         mapping_objects = []
-        for mapping_value in mapping_values:
+        for var, obj in mapping_items:
             # If we don't have this object in the cache, we can't evaluate the predicate
-            if mapping_value not in state_cache:
+            if not is_type_or_color(var) and obj not in state_cache:
                 return None
 
-            if mapping_value == 'Floor|+00.00|+00.00|+00.00':
-                base_floor_object = state_cache[mapping_value]
+            if obj == 'Floor|+00.00|+00.00|+00.00':
+                base_floor_object = state_cache[obj]
 
                 # Remove the keys that we're providing manually
                 static_fields = {key: value for key, value in base_floor_object._asdict().items() if key not in ['position', 'bbox_center', 'bbox_extents']}
@@ -341,7 +345,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
                 mapping_objects.append(updated_floor)
             
             else:
-                mapping_objects.append(state_cache[mapping_value])
+                mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)
 
         return predicate_func(agent_object, mapping_objects)
 
@@ -376,6 +380,16 @@ def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectSt
     if isinstance(objects[0], PseudoObject):
         return False
     return objects[0].is_open
+
+def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
+        return False
+
+    print(f"Same type on {objects[0].object_id} and {objects[1].object_id}: {objects[0].object_type}, {objects[1].object_type}")
+    exit()
+
+    return objects[0].object_type == objects[1].object_type
 
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
@@ -514,9 +528,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             print("Test point truth values:", [_point_in_object(test_point, lower_object) for test_point in test_points])
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
-        print(f"Object {upper_object.object_id} is on object {lower_object.object_id}? {objects_on}")
-        # input()
-
         # object 1 is on object 0 if they're touching and object 1 is above object 0
         # or if they're touching and object 1 is contained withint object 0? 
         return objects_on or _pred_in(agent, objects)
@@ -541,7 +552,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             for building_object in lower_object.building_objects.values()
             if building_object.object_id != upper_object.object_id])
 
-    print(f"Object {upper_object.object_id} is on object {lower_object.object_id}? False")
     return False
 
 ADJACENT_DISTANCE_THRESHOLD = 0.15

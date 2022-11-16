@@ -1166,7 +1166,7 @@
     (>= (count throwAttempt) 10)
 )
 (:scoring 
-    (count throwToBin)
+    (count throwToBinFromOppositeWall)
 ))
 
 ; projected 38 onto the space of feasible games, but could also ignore
@@ -1262,7 +1262,7 @@
                     (not (agent_holds ?g))
                     (not (in_motion ?g))
                     (not (same_type ?g bridge_block))
-                    (> (distance ?w1 ?b) (distance ?w2 ?b))
+                    (> (distance ?w1 ?g) (distance ?w2 ?g))
                 ))
                 (hold (or 
                     (agent_holds ?g)
@@ -1270,7 +1270,7 @@
                 ))
                 (once (and 
                     (not (in_motion ?g))
-                    (< (distance ?w1 ?b) (distance ?w2 ?b))
+                    (< (distance ?w1 ?g) (distance ?w2 ?g))
                 ))
             )
         ))
@@ -2024,7 +2024,7 @@
 (:scoring (count-once-per-objects ballOnBedAtEnd)
 ))
 
- 
+
 (define (game 5f806f22e8159d0913945e35-66) (:domain medium-objects-room-v1)  ; 66
 (:setup (and 
     (forall (?b - (either bridge_block cube_block)) 
@@ -3214,9 +3214,9 @@
     (>= (count-once agentLeavesDogbedOrNoMoreBalls) 1)
 )
 (:scoring (+ 
-    (* 3 (count-once-per-external-objects throwKnocksPyramidBlock:pyramid_block))
-    (* (- 3) (count-once-per-external-objects throwKnocksPyramidBlock:tall_cylindrical_block))
-    (count-once-per-external-objects throwKnocksPyramidBlock:cylindrical_block) 
+    (* 3 (count-once-per-external-objects throwKnocksBlock:pyramid_block))
+    (* (- 3) (count-once-per-external-objects throwKnocksBlock:tall_cylindrical_block))
+    (count-once-per-external-objects throwKnocksBlock:cylindrical_block) 
     (* 2 (count-once-per-external-objects ballInOrOnBin:dodgeball))
     (* 2 (count-once-per-external-objects ballInOrOnBin:basketball))
     (* 4 (count-once-per-external-objects ballInOrOnBin:beachball))
@@ -3468,7 +3468,7 @@
     (forall (?c - color) 
         (preference objectWithMatchingColor (exists (?o1 ?o2 - game_object)
             (at-end (and
-                (same_color ?o1 color ?o2)
+                (same_color ?o1 ?o2)
                 (same_color ?o1 ?c)
                 (or 
                     (on ?o1 ?o2)

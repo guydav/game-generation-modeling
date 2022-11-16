@@ -543,7 +543,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     return False
 
 ADJACENT_DISTANCE_THRESHOLD = 0.15
-Y_EXTENT_GRACE = 0.01
+OVERLAP_GRACE = 0.01
 OBJECT_SIZE_SCALING = 1.2
 
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
@@ -556,9 +556,15 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
     object_1_min, object_1_max = _extract_object_limits(objects[0])
     object_2_min, object_2_max = _extract_object_limits(objects[1])
 
-    # Two extents A and B overlap only if one of the endpoints of B is between the endpoints of A 
-    y_overlap = (object_1_min[1] - Y_EXTENT_GRACE <= object_2_min[1] <= object_1_max[1] + Y_EXTENT_GRACE) or \
-                (object_1_min[1] - Y_EXTENT_GRACE <= object_2_max[1] <= object_1_max[1] + Y_EXTENT_GRACE)
+    # Determine if there is overlap for each of the dimensions
+    x_overlap = (object_1_min[0] - OVERLAP_GRACE <= object_2_max[0] + OVERLAP_GRACE) and \
+                (object_2_min[0] - OVERLAP_GRACE <= object_1_max[0] + OVERLAP_GRACE)
+
+    y_overlap = (object_1_min[1] - OVERLAP_GRACE <= object_2_max[1] + OVERLAP_GRACE) and \
+                (object_2_min[1] - OVERLAP_GRACE <= object_1_max[1] + OVERLAP_GRACE)
+
+    z_overlap = (object_1_min[2] - OVERLAP_GRACE <= object_2_max[2] + OVERLAP_GRACE) and \
+                (object_2_min[2] - OVERLAP_GRACE <= object_1_max[2] + OVERLAP_GRACE)
 
     # Two objects can only be adjacent if there is some overlap in their y extents
     if not y_overlap:
@@ -585,7 +591,13 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
 
     threshold_dist = min(ADJACENT_DISTANCE_THRESHOLD, size)
 
-    return object_dist <= threshold_dist or (x_displacement <= threshold_dist and z_displacement <= threshold_dist)
+    # Adjacency for a given side (e.g. X) is determined by whether the displacement is below the threshold and the objects overlap
+    # in the opposite side extents (e.g. Z)
+    adjacent_by_x = x_displacement <= threshold_dist and z_overlap
+    adjacent_by_z = z_displacement <= threshold_dist and x_overlap
+    adjacent_by_dist = object_dist <= threshold_dist
+
+    return adjacent_by_dist or adjacent_by_x or adjacent_by_z
 
 def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 3

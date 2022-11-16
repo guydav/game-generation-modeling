@@ -11,6 +11,6 @@
     )
 ))
 (:scoring (+
-    (* (count-nonoverlapping blockInBuildingAtEnd) 1)
+    (* (count blockInBuildingAtEnd) 1)
 ))
 )

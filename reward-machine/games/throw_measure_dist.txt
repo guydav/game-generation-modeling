@@ -9,5 +9,5 @@
         )
     ))
 )) 
-(:scoring (count-nonoverlapping-measure throwToBinFromDistance)
+(:scoring (count-measure throwToBinFromDistance)
 ))

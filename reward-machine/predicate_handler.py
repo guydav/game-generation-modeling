@@ -169,22 +169,35 @@ class PredicateHandler:
             if isinstance(and_args, tatsu.ast.AST):
                 and_args = [and_args]
 
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in and_args] # type: ignore
-            # If there are any Nones, we cannot know about their conjunction, so return None
-            if any(v is None for v in inner_values):
-                return None
-            return all(inner_values)  
+            # We can't speed this up as much by breaking out of the loop early when we encounter a False, because we don't
+            # know if there would be an un-evaluable None later in the loop
+            cur_truth_value = True
+            for sub in and_args:
+                eval = self._inner_call(sub, state, mapping, force_evaluation)
+                if eval is None:
+                    return None
+
+                cur_truth_value = cur_truth_value and eval
+
+            return cur_truth_value
 
         elif predicate_rule == "super_predicate_or":
             or_args = predicate["or_args"]
             if isinstance(or_args, tatsu.ast.AST):
                 or_args = [or_args]
 
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in or_args] # type: ignore
-            # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
-            if all(v is None for v in inner_values):
+            all_none = True
+            for sub in or_args:
+                eval = self._inner_call(sub, state, mapping, force_evaluation) # outputs can be True, False, or None
+                if eval:
+                    return True
+                elif eval == False:
+                    all_none = False
+
+            if all_none:
                 return None
-            return any(inner_values)  
+
+            return False
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
@@ -192,10 +205,19 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
-            if all(v is None for v in inner_mapping_values):
+
+            all_none = True
+            for sub_mapping in sub_mappings:
+                eval = self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                if eval:
+                    return True
+                elif eval == False:
+                    all_none = False
+
+            if all_none:
                 return None
-            return any(inner_mapping_values)
+
+            return False
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
@@ -203,10 +225,16 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
-            if any(v is None for v in inner_mapping_values):
-                return None
-            return all(inner_mapping_values)
+
+            cur_truth_value = True
+            for sub_mapping in sub_mappings:
+                eval = self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                if eval is None:
+                    return None
+
+                cur_truth_value = cur_truth_value and eval
+
+            return cur_truth_value
 
         elif predicate_rule == "function_comparison":
             comp = typing.cast(tatsu.ast.AST, predicate["comp"])

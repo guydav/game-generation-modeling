@@ -419,6 +419,21 @@ def is_type_or_color(variable: str):
     '''
     return (variable in ALL_OBJECT_TYPES or variable in COLORS) and (variable not in NAMED_OBJECTS)
 
+def get_object_types(obj: ObjectState):
+    '''
+    Return all the types to which an object belongs (including meta-types) as a set
+    '''
+
+    object_id = obj.object_id
+    object_types = []
+
+    for objects_by_type in OBJECTS_BY_ROOM_AND_TYPE.values():
+        for object_type, objects in objects_by_type.items():
+            if object_id in objects:
+                object_types.append(object_type)
+
+    return set(object_types)
+
 def describe_preference(preference):
     '''
     Generate a natural language description of the given preference in plain language

@@ -388,6 +388,10 @@ def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[Obj
     if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
         return False
 
+    # If the variable is an object, then we collect all of the types and meta-types that it belongs to. If
+    # it's a type, then we just collect that type. The predicate is true if there is any overlap between
+    # the two sets of types.
+
     if isinstance(objects[0], str):
         if objects[0] not in ALL_OBJECT_TYPES:
             raise ValueError(f"Invalid object type: {objects[0]} (may be a color)")

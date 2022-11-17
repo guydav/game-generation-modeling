@@ -403,11 +403,11 @@
 
 (:constraints (and 
     (preference blockInTowerKnockedByDodgeball (exists (?b - building ?c - cube_block 
-        ?d - dodgeball ?h - hexagonal_bin ?c - chair)
+        ?d - dodgeball ?h - hexagonal_bin ?r - chair)
         (then
             (once (and 
                 (agent_holds ?d)
-                (adjacent agent ?c)
+                (adjacent agent ?r)
                 (on ?h ?b)
                 (in ?b ?c) 
             ))

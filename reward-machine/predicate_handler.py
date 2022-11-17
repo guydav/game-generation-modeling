@@ -5,9 +5,9 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, is_type_or_color, _extract_object_limits,\
-    _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import UNITY_PSEUDO_OBJECTS, PseudoObject
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, is_type_or_color, get_object_types, \
+    _extract_object_limits, _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -381,15 +381,34 @@ def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectSt
         return False
     return objects[0].is_open
 
-def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject, str]]):
     assert len(objects) == 2
+
+    # TODO: do PsuedoObjects have types?
     if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
         return False
 
-    print(f"Same type on {objects[0].object_id} and {objects[1].object_id}: {objects[0].object_type}, {objects[1].object_type}")
-    exit()
+    if isinstance(objects[0], str):
+        if objects[0] not in ALL_OBJECT_TYPES:
+            raise ValueError(f"Invalid object type: {objects[0]} (may be a color)")
 
-    return objects[0].object_type == objects[1].object_type
+        object_1_types = set([objects[0]])
+
+    else:
+        object_1_types = get_object_types(objects[0])
+
+    if isinstance(objects[1], str):
+        if objects[1] not in ALL_OBJECT_TYPES:
+            raise ValueError(f"Invalid object type: {objects[1]} (may be a color)")
+
+        object_2_types = set([objects[1]])
+
+    else:
+        object_2_types = get_object_types(objects[1])
+
+    type_intersection = object_1_types.intersection(object_2_types)
+
+    return len(type_intersection) > 0
 
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):

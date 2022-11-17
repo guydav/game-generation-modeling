@@ -17,11 +17,10 @@
 
 (:constraints (and 
     (preference blockInTowerKnockedByDodgeball (exists (?b - building ?c - cube_block 
-        ?d - dodgeball ?h - hexagonal_bin ?r - chair)
+        ?d - dodgeball ?h - hexagonal_bin)
         (then
             (once (and 
                 (agent_holds ?d)
-                (adjacent agent ?r)
                 (on ?h ?b)
                 (in ?b ?c) 
             ))

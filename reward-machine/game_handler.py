@@ -244,36 +244,45 @@ class GameHandler():
             if isinstance(setup_expression["and_args"], tatsu.ast.AST):
                 return self.evaluate_setup(setup_expression["and_args"], state, mapping)
 
-            inner_values = [self.evaluate_setup(sub, state, mapping, called_from_forall) for sub in setup_expression["and_args"]]  # type: ignore
+            for sub in setup_expression["and_args"]:
+                if not self.evaluate_setup(sub, state, mapping, called_from_forall):
+                    return False
 
-            return all(inner_values)
+            return True
 
         elif rule == "setup_or":
             if isinstance(setup_expression["or_args"], tatsu.ast.AST):
                 return self.evaluate_setup(setup_expression["or_args"], state, mapping)
 
-            inner_values = [self.evaluate_setup(sub, state, mapping, called_from_forall) for sub in setup_expression["or_args"]]   # type: ignore
+            for sub in setup_expression["or_args"]:
+                if self.evaluate_setup(sub, state, mapping, called_from_forall):
+                    return True
 
-            return any(inner_values)
+            return False
 
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["exists_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping},
-                                                        called_from_forall) for sub_mapping in sub_mappings]
 
-            return any(inner_mapping_values)
+            for sub_mapping in sub_mappings:
+                if self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}, called_from_forall):
+                    return True
+
+            return False
 
         elif rule == "setup_forall":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["forall_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values()) # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping},
-                                                        called_from_forall=True) for sub_mapping in sub_mappings]
-            return all(inner_mapping_values)
+
+            for sub_mapping in sub_mappings:
+                if not self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}, called_from_forall=True):
+                    return False
+
+            return True
 
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it

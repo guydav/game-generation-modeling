@@ -150,6 +150,7 @@ class PreferenceHandler:
         # print("\n\n=====Partial preference satisfactions=====")
         # for pps in self.partial_preference_satisfactions:
         #     print("\n", pps.mapping)
+        # exit()
 
         # A list of all versions of the predicate satisfied at a particular step, updated during self.process()
         self.satisfied_this_step = []

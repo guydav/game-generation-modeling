@@ -409,6 +409,12 @@ def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectSt
         return False
     return objects[0].is_open
 
+def _pred_toggled_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return objects[0].is_toggled
+
 def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject, str]]):
     assert len(objects) == 2
 

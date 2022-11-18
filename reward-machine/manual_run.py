@@ -21,6 +21,7 @@ STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blo
 COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
 GAME_6_TRACE = pathlib.Path('./reward-machine/traces/game-6.json')
 GAME_15_TRACE = pathlib.Path('./reward-machine/traces/game-15.json')
+GAME_27_TRACE = pathlib.Path('./reward-machine/traces/game-27.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -82,13 +83,14 @@ TEST_GAME_LIBRARY = {
     'game-6': load_game("game-6"),
     'game-7': load_game("game-7"),
     'game-15': load_game("game-15"),
+    'game-27': load_game("game-27"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['game-15'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['game-27'])
     score = None
 
-    trace_path = GAME_15_TRACE.resolve().as_posix()
+    trace_path = GAME_27_TRACE.resolve().as_posix()
 
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):

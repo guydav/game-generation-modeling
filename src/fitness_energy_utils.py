@@ -98,10 +98,12 @@ class CustomSklearnScaler:
 class FitnessEenrgyModel(nn.Module):
     def __init__(self, n_features: int, hidden_size: typing.Optional[int] = None,
         hidden_activation: typing.Callable = torch.relu,
+        output_activation: typing.Callable = torch.sigmoid,
         n_outputs: int = 1):
         super().__init__()
         self.n_features = n_features
         self.n_outputs = n_outputs
+        self.output_activation = output_activation
 
         if hidden_size is None:
             self.fc1 = nn.Linear(self.n_features, self.n_outputs)
@@ -119,11 +121,51 @@ class FitnessEenrgyModel(nn.Module):
             x = self.hidden_activation(x)
             x = self.fc2(x)
 
-        # TODO: do we want a sigmoid or something else? Or nothing at all? 
-        if self.n_outputs == 1 and activate:
-            x = torch.sigmoid(x)
+        if self.n_outputs == 1 and activate and self.output_activation is not None:
+            x = self.output_activation(x)
 
         return x
+
+
+def _reduce(X: torch.Tensor, reduction: str, dim: typing.Optional[int] = None):
+    if reduction == 'mean':
+        return X.mean(dim=dim)
+    elif reduction == 'sum':
+        return X.sum(dim=dim)
+    elif reduction == 'none':
+        return X
+    else:
+        raise ValueError(f'Invalid reduction: {reduction}')
+
+
+def fitness_nce_loss(scores: torch.Tensor, negative_score_reduction: str = 'sum', reduction: str = 'mean'):
+    positive_scores = torch.log(scores[:, 0])
+    negative_scores = _reduce(torch.log(1 - scores[:, 1:]), negative_score_reduction, dim=1)  
+    return _reduce(-(positive_scores + negative_scores), reduction)
+
+
+# TODO: for the margin to be interpretable here, the negative score reduction should be a mean -- so I'll make it a mean in the rest?
+# TODO: do we even need it at all? we could also broadcst the positive scores, and compute the hinge for each one individually
+def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+    positive_scores = scores[:, 0]
+    negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    return _reduce(torch.relu(positive_scores + margin - negative_scores), reduction)
+
+
+# TODO: see note re: negative score reduction in the hinge loss -- discuss with advisors
+def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+    positive_scores = scores[:, 0]
+    # negative_scores = scores[:, 1:].sum(dim=1)  
+    negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)), reduction)
+
+
+# TODO: see note re: negative score reduction in the hinge loss -- discuss with advisors
+def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+    positive_scores = scores[:, 0]
+    # negative_scores = scores[:, 1:].sum(dim=1)  
+    negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    return _reduce(positive_scores.pow(2) + torch.relu(margin - negative_scores).pow(2), reduction)
 
 
 DEFAULT_MODEL_PARAMS = {
@@ -131,11 +173,13 @@ DEFAULT_MODEL_PARAMS = {
     'hidden_size': None,
     'hidden_activation': torch.relu,
     'n_outputs': 1,
+    'output_activation': torch.sigmoid,
 }
 
 DEFAULT_TRAIN_KWARGS = {
     'weight_decay': 0.0,
     'lr': 1e-2,
+    'loss_function': fitness_nce_loss,
     'should_print': False, 
     'print_interval': 10,
     'patience_epochs': 5, 
@@ -146,10 +190,16 @@ DEFAULT_TRAIN_KWARGS = {
     'random_seed': 33,
 }
 
+LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'negative_score_reduction', 'reduction')
+DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
+
+
 class SklearnFitnessWrapper:
     def __init__(self,
         model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
-        train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, **params):
+        train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
+        loss_function_kwarg_keys: typing.Sequence[str] = LOSS_FUNCTION_KAWRG_KEYS, 
+        **params):
 
         self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_PARAMS)
         if model_kwargs is not None:
@@ -158,6 +208,9 @@ class SklearnFitnessWrapper:
         self.train_kwargs = copy.deepcopy(DEFAULT_TRAIN_KWARGS)
         if train_kwargs is not None:
             self.train_kwargs.update(train_kwargs)
+
+        self.loss_function_kwargs = {}
+        self.loss_function_kwarg_keys = loss_function_kwarg_keys
 
         self.set_params(**params)
 
@@ -181,6 +234,14 @@ class SklearnFitnessWrapper:
     def fit(self, X, y=None):
         self.model = FitnessEenrgyModel(**self.model_kwargs)
         self.model.apply(init_weights)
+        train_kwarg_keys = list(self.train_kwargs.keys())
+        for key in train_kwarg_keys:
+            if key in self.loss_function_kwarg_keys:
+                value = self.train_kwargs.pop(key)
+                if value is not None:
+                    self.loss_function_kwargs[key] = value
+
+        self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
         self.model = train_and_validate_model(self.model, X, **self.train_kwargs)[0] # type: ignore
         return self
             
@@ -191,51 +252,54 @@ class SklearnFitnessWrapper:
         return None
         
 
-def nce_fitness_loss(scores: torch.Tensor):
-    if scores.shape[-1] == 1:
-        positive_scores = torch.log(scores[:, 0])
-        negative_scores = torch.log(1 - scores[:, 1:]).sum(axis=1)  # type: ignore
-    else:
-        positive_scores = torch.log(scores[:, 0, 0])
-        negative_scores = torch.log(1 - scores[:, 1:, 1]).sum(axis=1)  # type: ignore
-        
-    return -(positive_scores + negative_scores).mean()
+def _evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor], 
+    device: str = 'cpu') -> typing.Tuple[torch.Tensor, torch.Tensor]:
 
-
-def evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y=None, return_all=False):
-    return_all = return_all and isinstance(model, nn.Module)
-    
     if isinstance(model, Pipeline):
         model = model.named_steps['fitness']
     
     if isinstance(model, SklearnFitnessWrapper):
         model = model.model
 
-    model.eval()
+    model = typing.cast(nn.Module, model)
+    model.eval()   # type: ignore
     with torch.no_grad():
-        scores = model(X, activate=False)
-        if scores.shape[-1] == 1:
-            positive_scores = scores[:, 0]
-            negative_scores = scores[:, 1:]
-        else:
-            positive_scores = scores[:, 0, 0]
-            negative_scores = scores[:, 1:, 1]
-        game_average_scores = positive_scores - negative_scores.mean(axis=1)
-        if return_all:
-            return positive_scores.mean(), negative_scores.mean(), game_average_scores.mean()
-        else:
-            return game_average_scores.mean().item()
+        scores = model(X.to(device), activate=False)
+        positive_scores = scores[:, 0]
+        negative_scores = scores[:, 1:]
+        return positive_scores.detach(), negative_scores.detach()
+
+
+def evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor] = None, 
+    return_all=False, score_sign: int = 1):
+    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+        
+    game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
+    if return_all:
+        return positive_scores.mean(), negative_scores.mean(), game_average_scores.mean()
+    else:
+        return game_average_scores.mean().item()
+
+
+def evaluate_fitness_flipped_sign(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y=None, return_all=False):
+    return evaluate_fitness(model, X, y, return_all, score_sign=-1)
 
 
 def train_and_validate_model(model: nn.Module, 
     train_data: torch.Tensor, 
     val_data: typing.Optional[torch.Tensor] = None, 
+    loss_function: typing.Callable = fitness_nce_loss,
+    loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 100, lr: float = 0.01, weight_decay: float = 0.0, 
     should_print: bool = True, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01, 
     batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33):
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay)
+    if loss_function_kwargs is None:
+        loss_function_kwargs = {}
+
+    optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     train_dataset = TensorDataset(train_data)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -262,7 +326,7 @@ def train_and_validate_model(model: nn.Module,
             indices = torch.cat((torch.tensor([0]), negative_indices))
             X = X[:, indices].to(device)
             scores = model(X)
-            loss = nce_fitness_loss(scores)
+            loss = loss_function(scores, **loss_function_kwargs)
             epoch_train_losses.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -279,7 +343,7 @@ def train_and_validate_model(model: nn.Module,
                     X = X[:, indices].to(device)
 
                     scores = model(X)
-                    loss = nce_fitness_loss(scores)
+                    loss = loss_function(scores, **loss_function_kwargs)
                     epoch_val_losses.append(loss.item())
 
         if should_print and epoch % print_interval == 0:

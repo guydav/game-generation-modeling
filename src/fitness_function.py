@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import argparse
 from collections import namedtuple, defaultdict
+import itertools
 import tatsu
 import tatsu.ast
 import tatsu.buffering
@@ -14,7 +15,9 @@ import typing
 
 from ast_utils import cached_load_and_parse_games_from_file
 from ast_parser import ASTParser
+import ast_printer
 from ast_to_latex_doc import TYPE_RULES
+from room_and_object_types import *
 
 
 parser = argparse.ArgumentParser()
@@ -111,6 +114,10 @@ class ASTFitnessFunction:
 
         self.header_registry[term.header] = term
         self.headers.append(term.header)
+
+    def register_multiple(self, terms: typing.Sequence[FitnessTerm], tuple_rule: bool = False) -> None:
+        for term in terms:
+            self.register(term, tuple_rule)
 
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.rows, columns=self.headers)
@@ -262,7 +269,7 @@ class VariableBasedFitnessTerm(FitnessTerm):
         pass
         
 
-class AllVariablesDefinedFitnessTerm(VariableBasedFitnessTerm):
+class AllVariablesDefined(VariableBasedFitnessTerm):
     defined_count: int = 0
     undefined_count: int = 0
 
@@ -286,7 +293,7 @@ class AllVariablesDefinedFitnessTerm(VariableBasedFitnessTerm):
         return self.defined_count / (self.defined_count + self.undefined_count)
 
 
-class AllVariablesUsedFitnessTerm(VariableBasedFitnessTerm):
+class AllVariablesUsed(VariableBasedFitnessTerm):
     defined_variables: typing.Set[str]
     used_variables: typing.Set[str]
 
@@ -581,14 +588,166 @@ class CorrectPredicateArity(FitnessTerm):
         return 1 - (self.predicates_with_wrong_arity / self.total_predicates)
 
 
+COMMON_SENSE_PREDICATES = ('adjacent', 'agent_holds', 'in', 'in_motion', 'on', 'touch')
+COMMON_SENSE_TYPE_CATEGORIES = list(CATEGORIES_TO_TYPES.keys())
+KNOWN_MISSING_TYPES = ('back', 'front', 'front_left_corner', 'left', 'right', 'sideways', 'upright', 'upside_down')
+
+
+class PredicateArgumentTypes(FitnessTerm):
+    argument_type_categories: typing.Sequence[str]
+    matching_argument_types_count: int = 0
+    predicate: str
+    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
+
+    def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str], 
+        predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP,
+        known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
+
+        super().__init__('predicate', f'pred_arg_types_{predicate}_{"_".join(argument_type_categories)}')
+        self.predicate = predicate
+        self.argument_type_categories = argument_type_categories
+        self.predicate_arity_map = predicate_arity_map
+        self.known_missing_types = known_missing_types
+
+        if len(argument_type_categories) != self.predicate_arity_map[predicate]:
+            raise ValueError(f'Predicate {predicate} has arity {self.predicate_arity_map[predicate]} but {len(argument_type_categories)} argument types were provided')
+
+    def game_start(self) -> None:
+        self.matching_argument_types_count = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            if ast.pred_name not in self.predicate_arity_map:
+                raise ValueError(f'Predicate {ast.pred_name} not in predicate arity map')
+
+            if ast.pred_name != self.predicate:
+                return
+
+            n_args = _extract_n_args(ast)
+            arity = self.predicate_arity_map[ast.pred_name]  # type: ignore
+
+            if isinstance(arity, int):
+                if n_args != arity:
+                    return
+            
+            elif n_args not in arity:
+                return
+
+            terms = _extract_predicate_terms(ast)
+            term_type_lists = []
+
+            context_variables = typing.cast(typing.Dict[str, typing.Dict[str, typing.Any]], context['variables']) if 'variables' in context else {}
+            for term in terms:
+                if term.startswith('?'):
+                    if term in context_variables:  
+                        term_type_lists.append(context_variables[term])
+                    else:
+                        return
+                else:
+                    term_type_lists.append([term])
+
+            term_categories = []
+            for term_type_list in term_type_lists:
+                term_type_categories = set()
+                for term_type in term_type_list:
+                    if term_type not in TYPES_TO_CATEGORIES:
+                        if term_type not in self.known_missing_types:
+                            print(f'Unknown type {term_type_list} not in the types to categories map')
+                            # raise ValueError(f'Unknown type {term_type_list} not in the types to categories map')
+                    else:
+                        term_type_categories.add(TYPES_TO_CATEGORIES[term_type])
+
+                term_categories.append(term_type_categories)
+
+            self.matching_argument_types_count += all(self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories)))
+
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        return self.matching_argument_types_count
+
+
+def build_predicate_argument_types_fitness_terms(
+    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES,
+    type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
+    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP) -> typing.Sequence[FitnessTerm]:
+    fitness_terms = []
+
+    for predicate in predicates:
+        for type_combinations in itertools.product(*([type_categories] * predicate_arity_map[predicate])):  # type: ignore
+            fitness_terms.append(PredicateArgumentTypes(predicate, type_combinations, predicate_arity_map))
+
+    return fitness_terms
+
+
+COMPOSITIONALITY_STRUCTURES = (
+    '(hold (and (not (agent_holds ?x) ) (in_motion ?x) ) )',
+    '(once (and (not (in_motion ?x) ) (in ?x ?x) ) )',
+    '(once (agent_holds ?x) )',
+    '(once (not (in_motion ?x) ) )',
+    '(once (and (agent_holds ?x) (adjacent ?x ?x) ) )',
+    '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) )',
+    '(once (and (not (in_motion ?x) ) (on ?x ?x) ) )',
+    '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) )',
+    '(once (and (adjacent ?x ?x) (agent_holds ?x) ) )',
+    '(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) )',
+    '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) )',
+    '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) )',
+    '(once (and (agent_holds ?x) (on ?x ?x) ) )'
+ )
+
+
+PREDICATE_ARGS_PATTERN = r'\(\s*(?:[\w-]+)\s+((?:\??\w+\s*)+)\)'
+COMPOSITIONALITY_VARIABLE_REPLACEMENT = '?x'
+
+
+class CompositionalityStructureCounter(FitnessTerm):
+    structure_str: str
+    structure_count: int = 0
+    structure_index: int
+    args_pattern: re.Pattern
+    variable_replacement: str
+
+    def __init__(self, structure: str, structure_index: int, 
+        variable_replacement: str = COMPOSITIONALITY_VARIABLE_REPLACEMENT,
+        predicate_arg_pattern: str = PREDICATE_ARGS_PATTERN):
+        rule = structure.split(' ')[0][1:].replace('-', '_')
+        if rule == 'hold_while':
+            rule = 'while_hold'
+        super().__init__(rule, f'compositionality_structure_{structure_index}')
+        self.structure_str = structure
+        self.structure_index = structure_index
+        self.variable_replacement = variable_replacement
+        self.args_pattern = re.compile(PREDICATE_ARGS_PATTERN)
+
+    def game_start(self) -> None:
+        self.structure_count = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            ast_str = ast_printer.ast_section_to_string(ast, ast_printer.PREFERENCES_KEY)
+            for pred_args in self.args_pattern.findall(ast_str):
+                ast_str = ast_str.replace(pred_args, ' '.join(map(lambda x: self.variable_replacement, pred_args.split(" "))), 1)
+                
+            self.structure_count += ast_str == self.structure_str
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        return self.structure_count
+
+
+def build_compositionality_fitness_terms(
+    compositionality_structures: typing.Sequence[str] = COMPOSITIONALITY_STRUCTURES, 
+    variable_replacement: str = COMPOSITIONALITY_VARIABLE_REPLACEMENT) -> typing.Sequence[FitnessTerm]:
+
+    return [CompositionalityStructureCounter(structure, i, variable_replacement) for i, structure in enumerate(compositionality_structures)]
+
 
 def build_aggregator(args):
     fitness = ASTFitnessFunction()
 
-    all_variables_defined = AllVariablesDefinedFitnessTerm()
+    all_variables_defined = AllVariablesDefined()
     fitness.register(all_variables_defined)
 
-    all_variables_used = AllVariablesUsedFitnessTerm()
+    all_variables_used = AllVariablesUsed()
     fitness.register(all_variables_used)
     
     all_preferences_used = AllPreferencesUsed()
@@ -615,7 +774,11 @@ def build_aggregator(args):
     correct_predicate_arity = CorrectPredicateArity()
     fitness.register(correct_predicate_arity)
 
-    # TODO: common sense? predicate role-filler pairs
+    predicate_argument_types_fitness_terms = build_predicate_argument_types_fitness_terms()
+    fitness.register_multiple(predicate_argument_types_fitness_terms)
+
+    compositionality_fitness_terms = build_compositionality_fitness_terms()
+    fitness.register_multiple(compositionality_fitness_terms)
 
     # TODO: recurring structures -- generate features for top-k from previous analysis
 

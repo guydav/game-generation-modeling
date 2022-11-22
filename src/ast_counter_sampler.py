@@ -937,16 +937,14 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
             print()
 
         if args.validate_samples or args.save_samples:
-            first_print_out = ast_to_string(ast)
+            first_print_out = ast_printer.ast_to_string(ast)
             if args.save_samples:
-                text_samples.extend([line + '\n' for line in ast_printer.BUFFER])
+                text_samples.extend([line + '\n' for line in ast_printer.BUFFER])  # type: ignore
                 text_samples.append('\n')
 
         if args.validate_samples:
             second_ast = grammar_parser.parse(first_print_out)
-            ast_printer.BUFFER = []
-            ast_printer.pretty_print_ast(second_ast)
-            second_print_out = ''.join(ast_printer.BUFFER)
+            second_print_out = ast_printer.ast_to_string(second_ast)
 
             if first_print_out != second_print_out:
                 print('Mismatch found')
@@ -955,13 +953,6 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
         print(f'Parse failed: at position {e.pos} expected "{e.item}" :')
         if len(first_print_out) > e.pos:
             print(first_print_out[e.pos:])
-
-
-def ast_to_string(ast):
-    ast_printer.BUFFER = []
-    ast_printer.pretty_print_ast(ast)
-    first_print_out = ''.join(ast_printer.BUFFER)
-    return first_print_out
 
 
 def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
@@ -1011,7 +1002,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
                 while not sample_generated:
                     ast = regrowth_sampler.sample(sample_id, external_global_context=dict(sample_id=sample_id))
                     _test_ast_sample(ast, args, text_samples, grammar_parser)
-                    if ast_to_string(real_game) == ast_to_string(ast):
+                    if ast_printer.ast_to_string(real_game) == ast_printer.ast_to_string(ast):  # type: ignore
                         print('Regrowth generated identical games, repeating')
                     else:
                         sample_generated = True

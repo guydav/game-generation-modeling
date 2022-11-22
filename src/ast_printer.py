@@ -91,6 +91,20 @@ def reset_buffers(to_list=True):
         LINE_BUFFER = None
 
 
+def _flush_line_buffer():
+    global BUFFER, LINE_BUFFER
+
+    if LINE_BUFFER is None:
+        return
+
+    line = ' '.join(LINE_BUFFER)
+    if line:
+        if BUFFER is None:
+            print(line)
+        else:
+            BUFFER.append(line)
+
+
 MUTATION_STYLES = {
     'old': {'text-decoration': 'line-through'},
     'new': {'color':  '#FF6A00'},
@@ -133,11 +147,7 @@ def _indent_print(out, depth, increment, context=None):
             if 'html' in context and any([bool(s and not s.isspace()) for s in LINE_BUFFER]):
                 LINE_BUFFER.append('</div>')
 
-            line = ' '.join(LINE_BUFFER)
-            if BUFFER is None:
-                print(line)
-            else:
-                BUFFER.append(line)
+            _flush_line_buffer()
 
         if 'html' in context:
             context['html_style']['margin-left'] = f'{20 * depth}px'
@@ -839,3 +849,18 @@ def pretty_print_ast(ast, increment=DEFAULT_INCREMENT, context=None):
             print(f'Encountered unknown key: {key}\n')
 
     _indent_print('', 0, increment, context)
+
+
+def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = ''):
+    reset_buffers(to_list=True)
+    pretty_print_ast(ast)
+    _flush_line_buffer()
+    return line_delimiter.join(BUFFER)  # type: ignore
+
+
+def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = ''):
+    reset_buffers(to_list=True)
+    PARSE_DICT[section_key](ast)
+    _flush_line_buffer()
+    return line_delimiter.join(BUFFER)  # type: ignore
+

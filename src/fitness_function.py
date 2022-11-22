@@ -24,9 +24,6 @@ parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
-    # './dsl/problems-few-objects.pddl',
-    # './dsl/problems-medium-objects.pddl',
-    # './dsl/problems-many-objects.pddl',
     './dsl/interactive-beta.pddl',
     './dsl/ast-mle-samples.pddl',
     './dsl/ast-real-regrowth-samples.pddl',
@@ -74,6 +71,10 @@ TERMINAL = 'terminal'
 SCORING = 'scoring'
 SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 
+VARIABLES_CONTEXT_KEY = 'variables'
+SECTION_CONTEXT_KEY = 'section'
+DEPTH_CONTEXT_KEY = 'depth'
+
 
 class ASTFitnessFunction:
     headers: typing.List[str]
@@ -82,6 +83,7 @@ class ASTFitnessFunction:
     regex_rules: typing.List[typing.Tuple[re.Pattern, FitnessTerm]]
     rows: typing.List
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
+    section_registry: typing.Dict[str, typing.List[FitnessTerm]]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]] 
     section_keys: typing.List[str]
 
@@ -92,8 +94,10 @@ class ASTFitnessFunction:
         self.list_reduce = list_reduce
         self.section_keys = list(section_keys)
 
+
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
+        self.section_registry = defaultdict(list)    
         self.regex_rules = []
         self.header_registry = dict()
 
@@ -105,7 +109,14 @@ class ASTFitnessFunction:
         else:
             self.rule_registry[rule].append(term)
 
-    def register(self, term: FitnessTerm, tuple_rule: bool = False) -> None:
+    def register(self, term: FitnessTerm, tuple_rule: bool = False, section_rule: bool = False) -> None:
+        if section_rule:
+            section = typing.cast(str, term.rules[0])
+            if section not in self.section_keys:
+                raise ValueError(f'Invalid section key: {section}')
+
+            self.section_registry[section].append(term)  
+
         for rule in term.rules:
             if isinstance(rule, re.Pattern):
                 self.regex_rules.append((rule, term))
@@ -115,9 +126,9 @@ class ASTFitnessFunction:
         self.header_registry[term.header] = term
         self.headers.append(term.header)
 
-    def register_multiple(self, terms: typing.Sequence[FitnessTerm], tuple_rule: bool = False) -> None:
+    def register_multiple(self, terms: typing.Sequence[FitnessTerm], tuple_rule: bool = False, section_rule: bool = False) -> None:
         for term in terms:
-            self.register(term, tuple_rule)
+            self.register(term, tuple_rule, section_rule)
 
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.rows, columns=self.headers)
@@ -167,7 +178,7 @@ class ASTFitnessFunction:
     def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST],
         context: typing.Optional[ContextDict] = None):
         if context is None:
-            context = dict(depth=0)
+            context = {DEPTH_CONTEXT_KEY: 0}
 
         if not ast or isinstance(ast, (str, int, tatsu.buffering.Buffer)):
             return
@@ -176,7 +187,7 @@ class ASTFitnessFunction:
             if len(ast) > 0 and isinstance(ast[0], str):
                 # check if should update the section key
                 if ast[0][2:] in self.section_keys:
-                    context['section'] = ast[0][2:]
+                    context[SECTION_CONTEXT_KEY] = ast[0][2:]
 
                 for tuple_stat in self.tuple_registry[ast[0]]:
                     tuple_stat.update(ast, '', context)
@@ -191,10 +202,10 @@ class ASTFitnessFunction:
 
             elif len(vars_keys) > 0:
                 vars_key = vars_keys[0]
-                context_vars = typing.cast(dict, context['variables']) if 'variables' in context else {}
+                context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
                 self._extract_variables(ast, vars_key, context_vars) 
                 context = context.copy()
-                context['variables'] = context_vars
+                context[VARIABLES_CONTEXT_KEY] = context_vars
 
             if 'parseinfo' not in ast or not ast.parseinfo:
                 raise ValueError('No parseinfo found', ast)
@@ -204,6 +215,11 @@ class ASTFitnessFunction:
             stat_parsers = self.rule_registry[rule]
             for stat in stat_parsers:
                 stat.update(ast, rule, context)
+
+            if SECTION_CONTEXT_KEY in context:
+                section = typing.cast(str, context[SECTION_CONTEXT_KEY])
+                for term in self.section_registry[section]:
+                    term.update(ast, rule, context)
             
             for regex_pattern, regex_term in self.regex_rules:
                 if regex_pattern.match(rule):
@@ -211,7 +227,7 @@ class ASTFitnessFunction:
 
             # Perform other context updates for children
             child_context = context.copy()
-            child_context['depth'] += 1  # type: ignore
+            child_context[DEPTH_CONTEXT_KEY] += 1  # type: ignore
 
             if ast.parseinfo.rule in ('scoring_external_maximize', 'scoring_external_minimize'): 
                 child_context['external_forall'] = ast.parseinfo.rule  
@@ -258,11 +274,11 @@ class VariableBasedFitnessTerm(FitnessTerm):
         self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if 'variables' not in context:
+        if VARIABLES_CONTEXT_KEY not in context:
             return
 
         if isinstance(ast.term, str) and ast.term.startswith('?'):  # type: ignore
-            self._inner_update(ast.term, context['variables'])  # type: ignore
+            self._inner_update(ast.term, context[VARIABLES_CONTEXT_KEY])  # type: ignore
 
     @abstractmethod
     def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
@@ -357,10 +373,10 @@ class SetupObjectsUsed(FitnessTerm):
         self.used_objects = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if 'section' not in context:
+        if SECTION_CONTEXT_KEY not in context:
             raise ValueError('Section not found in context', context)
 
-        if context['section'] == SETUP:
+        if context[SECTION_CONTEXT_KEY] == SETUP:
             result = TYPE_RULES[rule][0](ast)
             if isinstance(result, (list, tuple)):
                 self.setup_objects.update(result)
@@ -590,6 +606,7 @@ class CorrectPredicateArity(FitnessTerm):
 
 COMMON_SENSE_PREDICATES = ('adjacent', 'agent_holds', 'in', 'in_motion', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(CATEGORIES_TO_TYPES.keys())
+COMMON_SENSE_TYPE_CATEGORIES.remove(EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = ('back', 'front', 'front_left_corner', 'left', 'right', 'sideways', 'upright', 'upside_down')
 
 
@@ -636,7 +653,7 @@ class PredicateArgumentTypes(FitnessTerm):
             terms = _extract_predicate_terms(ast)
             term_type_lists = []
 
-            context_variables = typing.cast(typing.Dict[str, typing.Dict[str, typing.Any]], context['variables']) if 'variables' in context else {}
+            context_variables = typing.cast(typing.Dict[str, typing.Dict[str, typing.Any]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             for term in terms:
                 if term.startswith('?'):
                     if term in context_variables:  
@@ -741,6 +758,69 @@ def build_compositionality_fitness_terms(
     return [CompositionalityStructureCounter(structure, i, variable_replacement) for i, structure in enumerate(compositionality_structures)]
 
 
+class SectionMaxDepth(FitnessTerm):
+    max_depth: int = 0
+
+    def __init__(self, section: str):
+        super().__init__(section, f'max_depth_{section}')
+        self.max_depth = 0
+
+    def game_start(self) -> None:
+        self.max_depth = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if DEPTH_CONTEXT_KEY in context:
+            self.max_depth = max(self.max_depth, context[DEPTH_CONTEXT_KEY])  # type: ignore
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        return self.max_depth
+
+
+class SectionMeanDepth(FitnessTerm):
+    depths: typing.List[int] = []
+
+    def __init__(self, section: str):
+        super().__init__(section, f'mean_depth_{section}')
+        self.depths = []
+
+    def game_start(self) -> None:
+        self.depths = []
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if DEPTH_CONTEXT_KEY in context:
+            self.depths.append(context[DEPTH_CONTEXT_KEY])  # type: ignore
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if len(self.depths) == 0:
+            return 0
+
+        return sum(self.depths) / len(self.depths)
+
+
+class SectionNodeCount(FitnessTerm):
+    node_count: int = 0
+
+    def __init__(self, section: str):
+        super().__init__(section, f'node_count_{section}')
+        self.node_count = 0
+
+    def game_start(self) -> None:
+        self.node_count = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.node_count += 1
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        return self.node_count
+
+
+def build_section_count_fitness_terms(sections: typing.Sequence[str] = SECTION_KEYS,
+    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount)
+    ) -> typing.Sequence[FitnessTerm]:
+
+    return [term_class(section) for term_class in term_classes for section in sections]
+
+
 def build_aggregator(args):
     fitness = ASTFitnessFunction()
 
@@ -780,9 +860,8 @@ def build_aggregator(args):
     compositionality_fitness_terms = build_compositionality_fitness_terms()
     fitness.register_multiple(compositionality_fitness_terms)
 
-    # TODO: recurring structures -- generate features for top-k from previous analysis
-
-    # TODO: length/depth/width features, perhaps by section, perhaps discretized by length
+    section_count_fitness_terms = build_section_count_fitness_terms()
+    fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 
     return fitness
             

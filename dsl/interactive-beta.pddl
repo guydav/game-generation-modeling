@@ -14,7 +14,7 @@
                     (and (not (agent_holds ?b)) (in_motion ?b))
                     (touch ?b ?r)
                 ) 
-                (once  (and (in ?h ?b) (not (in_motion ?b)))) 
+                (once (and (not (in_motion ?b)) (in ?h ?b))) 
             )
         )
     )

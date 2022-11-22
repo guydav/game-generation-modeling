@@ -1,6 +1,9 @@
 import argparse
 from collections import namedtuple, defaultdict
 import tatsu
+import tatsu.ast
+import tatsu.infos
+import typing
 import tqdm
 import pandas as pd
 import numpy as np
@@ -34,6 +37,9 @@ TEMPORAL_OPERATOR_STRUCTURE_STARTS = ('once', 'hold', 'hold-while')
 DEFAULT_HEADERS = ('structure_start', 'structure', 'count')
 
 
+# TODO: rewrite this to support the latest DSL 
+
+
 class RepeatedStructureExtractor(ASTParser):
     def __init__(self, structure_starts, headers=DEFAULT_HEADERS):
         self.structure_starts = structure_starts
@@ -45,7 +51,7 @@ class RepeatedStructureExtractor(ASTParser):
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
         self.regex_rules = []
-        self.whitespace_re = re.compile('\s+')
+        self.whitespace_re = re.compile(r'\s+')
 
     def _register(self, rule, replacer, tuple_rule=False):
         if tuple_rule:
@@ -81,6 +87,8 @@ class RepeatedStructureExtractor(ASTParser):
                 structure_start_index = structure_start_match.start()
                 n_open_parens = 0
 
+                end_index = 0
+
                 for end_index in range(structure_start_index, len(ast_str)):
                     if ast_str[end_index] == ')':
                         n_open_parens -= 1
@@ -107,7 +115,7 @@ class RepeatedStructureExtractor(ASTParser):
         if is_root:
             ast_printer.reset_buffers(True)
             ast_printer.pretty_print_ast(ast)
-            ast_str = ''.join(ast_printer.BUFFER)
+            ast_str = ''.join(ast_printer.BUFFER)  # type: ignore
             self._extract_structures_from_str(ast_str)
 
         return 
@@ -151,9 +159,21 @@ def build_preference_body_level_extractor(args):
     return build_variables_and_objects_extractor(args, PREFERENCE_BODY_STRUCTURE_STARTS)
 
 
+def _extract_predicate_terms(ast: tatsu.ast.AST) -> typing.List[str]:
+    args = ast.pred_args
+
+    if args is None:
+        return []
+
+    if isinstance(args, tatsu.ast.AST):
+        args = [args]
+
+    return [str(arg.term) for arg in args]
+
+
 def build_variables_and_objects_extractor(args, structure_starts, replace_predicate_names=False, 
     replace_non_variable_args=True, variable_replacement='?x', non_variable_replacement='?x',
-    replace_comparison_numbers=True, number_replacement='0', type_replacement='object_type'):
+    replace_comparison_numbers=True, number_replacement='0', type_replacement='object'):
 
     if args.replace_predicate_names:
         replace_predicate_names = args.replace_predicate_names

@@ -1,4 +1,5 @@
 import argparse
+import sys
 import tatsu
 import tatsu.exceptions
 import tqdm
@@ -15,10 +16,14 @@ parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')
 parser.add_argument('-p', '--pretty-print', action='store_true')
 parser.add_argument('-v', '--validate', action='store_true')
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-
+DEFAULT_RECURSION_LIMIT = 2000
+parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
     
 def main(args):
+    original_recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(args.recursion_limit)
+
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
@@ -55,6 +60,8 @@ def main(args):
         finally:
             pass
         # pprint(ast, width=20, depth=4)
+
+    sys.setrecursionlimit(original_recursion_limit)
 
 
 if __name__ == '__main__':

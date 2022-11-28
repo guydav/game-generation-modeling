@@ -972,7 +972,7 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
                 samples.append(ast)
                 generated_sample = True
             except ValueError as e:
-                print(f'ValueError while sampling, repeateing: {e}')
+                print(f'ValueError while sampling, repeating: {e}')
 
     return samples, text_samples
 

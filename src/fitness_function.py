@@ -25,9 +25,12 @@ DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
-    './dsl/ast-mle-samples.pddl',
+    # './dsl/ast-mle-samples.pddl', 
     './dsl/ast-real-regrowth-samples.pddl',
-    './dsl/ast-mle-regrowth-samples.pddl',
+    # './dsl/ast-mle-regrowth-samples.pddl',
+    # './dsl/ast-mle-samples-large.pddl',
+    './dsl/ast-mle-samples-large-best.pddl',
+    './dsl/ast-best-mle-regrowth-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
@@ -604,6 +607,72 @@ class CorrectPredicateArity(FitnessTerm):
         return 1 - (self.predicates_with_wrong_arity / self.total_predicates)
 
 
+TWO_ARG_COMPARISON_RULE = 'two_arg_comparison'
+MULTIPLE_ARG_COMPARISON_RULE = 'multiple_args_equal_comparison'
+
+
+class NoTwoNumberComparisons(FitnessTerm):
+    total_comparisons: int = 0
+    two_number_comparisons: int = 0
+    
+    def __init__(self):
+        super().__init__((TWO_ARG_COMPARISON_RULE, MULTIPLE_ARG_COMPARISON_RULE), 'no_two_number_comparisons')
+
+    def game_start(self) -> None:
+        self.total_comparisons = 0
+        self.two_number_comparisons = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_comparisons += 1
+
+            if rule == TWO_ARG_COMPARISON_RULE:
+                if isinstance(ast.arg_1, str) and isinstance(ast.arg_2, str):
+                    self.two_number_comparisons += 1
+
+            elif rule == MULTIPLE_ARG_COMPARISON_RULE:
+                args = ast.equal_comp_args  
+                if all(isinstance(arg, str) for arg in args) or len(args) <= 1:  # type: ignore
+                    self.two_number_comparisons += 1
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_comparisons == 0:
+            return 1
+
+        return 1 - (self.two_number_comparisons / self.total_comparisons)
+    
+
+class NoVariableTwiceInPredicate(FitnessTerm):
+    total_predicates: int = 0
+    predicates_with_variable_twice: int = 0
+
+    def __init__(self):
+        super().__init__('predicate', 'no_variable_twice_in_predicate')
+
+    def game_start(self) -> None:
+        self.total_predicates = 0
+        self.predicates_with_variable_twice = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_predicates += 1
+
+            if 'pred_args' in ast:
+                if isinstance(ast.pred_args, tatsu.ast.AST):
+                    return
+
+                terms = _extract_predicate_terms(ast)
+                if len(terms) != len(set(terms)):
+                    self.predicates_with_variable_twice += 1
+
+
+    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+        if self.total_predicates == 0:
+            return 0
+
+        return 1 - (self.predicates_with_variable_twice / self.total_predicates)
+
+
 COMMON_SENSE_PREDICATES = ('adjacent', 'agent_holds', 'in', 'in_motion', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(EMPTY_OBJECT)
@@ -853,6 +922,12 @@ def build_aggregator(args):
 
     correct_predicate_arity = CorrectPredicateArity()
     fitness.register(correct_predicate_arity)
+
+    no_two_number_comparisons = NoTwoNumberComparisons()
+    fitness.register(no_two_number_comparisons)
+
+    no_variable_twice_in_predicate = NoVariableTwiceInPredicate()
+    fitness.register(no_variable_twice_in_predicate)
 
     predicate_argument_types_fitness_terms = build_predicate_argument_types_fitness_terms()
     fitness.register_multiple(predicate_argument_types_fitness_terms)

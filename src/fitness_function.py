@@ -935,6 +935,7 @@ def build_aggregator(args):
     compositionality_fitness_terms = build_compositionality_fitness_terms()
     fitness.register_multiple(compositionality_fitness_terms)
 
+    # TODO: break these down by features for different lengths?
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 

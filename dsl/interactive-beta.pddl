@@ -34,7 +34,6 @@
 
 ; 1 is invalid
 
-
 (define (game 5f77754ba932fb2c4ba181d8-2) (:domain many-objects-room-v1)  ; 2
 (:setup (and 
     (game-conserved (open top_drawer))
@@ -95,6 +94,7 @@
             )
         )
     )
+    (preference 
 ))
 (:scoring (count throwBallToBin)
 ))
@@ -323,6 +323,8 @@
 (:scoring 
     (count-unique-positions throwToRampToBin)
 ))
+
+
 
 (define (game 616e5ae706e970fe0aff99b6-13) (:domain many-objects-room-v1)  ; 13
 (:setup (and 

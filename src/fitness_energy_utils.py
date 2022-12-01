@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from statsmodels.distributions.empirical_distribution import ECDF
 import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
@@ -19,7 +20,7 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
     fitness_df = pd.read_csv(FITNESS_DATA_FILE)
     fitness_df = fitness_df.assign(real=fitness_df.src_file == 'interactive-beta.pddl', original_game_name=fitness_df.game_name)
     fitness_df.original_game_name.where(
-        fitness_df.game_name.apply(lambda s: s.count('-') <= 1), 
+        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') == 2)), 
         fitness_df.original_game_name.apply(lambda s: s[:s.rfind('-')]), 
         inplace=True)
 
@@ -73,7 +74,8 @@ class CustomSklearnScaler:
             raise ValueError('X must be 3D')
 
         self.mean = X.mean(axis=(0, 1))
-        self.std = X.std(axis=(0, 1))   
+        self.std = X.std(axis=(0, 1))
+        self.std[torch.isclose(self.std, torch.zeros_like(self.std))] = 1
         return self
 
     def transform(self, X, y=None):
@@ -214,13 +216,13 @@ class SklearnFitnessWrapper:
 
         self.set_params(**params)
 
-    def get_params(self, deep: bool = True):
+    def get_params(self, deep: bool = True) -> typing.Dict[str, typing.Any]:
         return {
             **self.model_kwargs,
             **self.train_kwargs,
         }
 
-    def set_params(self, **params):
+    def set_params(self, **params) -> 'SklearnFitnessWrapper':
         for key, value in params.items():
             if key in self.model_kwargs:
                 self.model_kwargs[key] = value
@@ -231,7 +233,7 @@ class SklearnFitnessWrapper:
 
         return self
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
         self.model = FitnessEenrgyModel(**self.model_kwargs)
         self.model.apply(init_weights)
         train_kwarg_keys = list(self.train_kwargs.keys())
@@ -242,14 +244,17 @@ class SklearnFitnessWrapper:
                     self.loss_function_kwargs[key] = value
 
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
-        self.model = train_and_validate_model(self.model, X, **self.train_kwargs)[0] # type: ignore
+        self.model = train_and_validate_model(self.model, X, **self.train_kwargs) 
         return self
+
+    def transform(self, X, y=None) -> torch.Tensor:
+        return self.model(X)
             
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> torch.Tensor:
         if self.model is not None:
             return self.model(*args, **kwargs)
 
-        return None
+        return torch.empty(0)
         
 
 def _evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor], 
@@ -271,18 +276,44 @@ def _evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: 
 
 
 def evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor] = None, 
-    return_all=False, score_sign: int = 1):
+    score_sign: int = 1):
     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
         
     game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
-    if return_all:
-        return positive_scores.mean(), negative_scores.mean(), game_average_scores.mean()
-    else:
-        return game_average_scores.mean().item()
+    return game_average_scores.mean().item()
 
 
-def evaluate_fitness_flipped_sign(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y=None, return_all=False):
-    return evaluate_fitness(model, X, y, return_all, score_sign=-1)
+def evaluate_fitness_flipped_sign(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
+    X: torch.Tensor, y=None):
+    return evaluate_fitness(model, X, y, score_sign=-1)
+
+
+def evaluate_fitness_overall_ecdf(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
+    X: torch.Tensor, y=None):
+    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+    positive_scores = positive_scores.squeeze().cpu().numpy()
+    negative_scores = negative_scores.squeeze().cpu().numpy()
+    ecdf = ECDF(np.concatenate([positive_scores, negative_scores.reshape(-1)]))
+
+    positive_mean_quantile = ecdf(positive_scores).mean()
+    return -positive_mean_quantile
+
+
+def evaluate_fitness_single_game_rank(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
+    X: torch.Tensor, y=None):
+    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+    single_game_rank = (positive_scores[:, None] < negative_scores).mean(axis=1, dtype=torch.float)  # type: ignore
+    return single_game_rank.mean().item()
+
+
+def build_multiple_scoring_function(
+    evaluators: typing.Sequence[typing.Callable[[typing.Union[nn.Module, SklearnFitnessWrapper], torch.Tensor, typing.Optional[torch.Tensor]], float]],
+    names: typing.Sequence[str]
+    ):
+    def _evaluate_fitness_multiple(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y=None, return_all=False):
+        return {name: evaluator(model, X, y) for name, evaluator in zip(names, evaluators)}
+
+    return _evaluate_fitness_multiple
 
 
 def train_and_validate_model(model: nn.Module, 
@@ -292,9 +323,10 @@ def train_and_validate_model(model: nn.Module,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 100, lr: float = 0.01, weight_decay: float = 0.0, 
-    should_print: bool = True, print_interval: int = 10,
+    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01, 
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33):
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33,
+    eval_method: typing.Callable = evaluate_fitness) -> nn.Module:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
@@ -348,28 +380,37 @@ def train_and_validate_model(model: nn.Module,
 
         if should_print and epoch % print_interval == 0:
             if validate:
-                print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                if should_print_weights:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                else:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f}')
             else:
-                print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                if should_print_weights:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                else:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f}')
 
         epoch_loss = np.mean(epoch_val_losses) if validate else np.mean(epoch_train_losses)
 
         if epoch_loss < min_loss:
+            if should_print:
+                print(f'Epoch {epoch}: new best model with loss {epoch_loss:.4f}')
             min_loss = epoch_loss
             best_model = copy.deepcopy(model).cpu()
 
         if epoch_loss < patience_loss - patience_threshold:
+            if should_print:
+                print(f'Epoch {epoch}: updating patience loss from {patience_loss:.4f} to {epoch_loss:.4f}')
             patience_loss = epoch_loss
             patience_update_epoch = epoch
 
         if epoch - patience_update_epoch >= patience_epochs:
+            if should_print:
+                print(f'Early stopping after {epoch} epochs')
             break
 
     model = best_model.to(device)
 
-    if validate:    
-        return model, evaluate_fitness(model, train_data), evaluate_fitness(model, val_data)
-    else:
-        return model, evaluate_fitness(model, train_data)
+    return model
 
 

@@ -115,10 +115,11 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|+00.70|+01.11|-02.80'}, start=2374, end=2410, measures={})
         ]
     },),
-    ('test-throw-to-wall', BALL_TO_WALL_TO_BIN_TRACE, 22.0, {
+    ('test-throw-to-wall', BALL_TO_WALL_TO_BIN_TRACE, 23.0, {
         'throwToWall': [
             PreferenceSatisfaction(mapping={'?w': 'east_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}),
+            PreferenceSatisfaction(mapping={'?w': 'south_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=343, end=456, measures={}),
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=457, end=590, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=769, end=880, measures={}), 
             PreferenceSatisfaction(mapping={'?w': 'north_wall', '?b': 'Dodgeball|+00.70|+01.11|-02.80'}, start=881, end=947, measures={}), 

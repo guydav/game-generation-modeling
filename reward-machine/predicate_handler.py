@@ -618,6 +618,9 @@ OBJECT_SIZE_SCALING = 1.2
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
 
+    # if objects[1].object_id:
+    #     pass
+
     # TODO: the 'agent' does not have a bounding box, which breaks this implementation of adjacent
     if isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
         raise NotImplementedError("Adjacent predicate not implemented for agent")

@@ -733,10 +733,9 @@ def _find_nearest_pseudo_object_of_type(object: ObjectState, object_type: str):
     """
     Finds the pseudo object in the sequence that is closest to the object.
     """
-    pseudo_objects = list(UNITY_PSEUDO_OBJECTS.values())
-    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in pseudo_objects
-        if pseudo_object.object_type == object_type]
-    return pseudo_objects[np.argmin(distances)]
+    filtered_pseudo_objects = [obj for obj in UNITY_PSEUDO_OBJECTS.values() if obj.object_type == object_type]
+    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in filtered_pseudo_objects]
+    return filtered_pseudo_objects[np.argmin(distances)]
 
 
 def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoObject):

@@ -21,7 +21,7 @@
     (preference laptopAndBookInPlace
         (exists (?o - (either laptop book) ?s - shelf)
             (at-end (and 
-                (adjacent ?s south_wall)
+                ; (adjacent ?s south_wall)
                 (on ?s ?o)
             ))
         )

@@ -346,24 +346,22 @@ class PseudoObject:
             return item in self.__dict__
 
 
-WALL_ID = 'FP302:StandardWallSize'
+WALL_ID = 'FP326:StandardWallSize.021'
 WALL_TYPE = 'wall'
-WALL_NAME = 'FP326:StandardWallSize.021'
 
-DOOR_ID = 'FP326:StandardDoor1'
+DOOR_ID = 'FP326:StandardDoor1.019'
 DOOR_TYPE = 'door'
-DOOR_NAME = 'FP326:StandardDoor1.019'
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
 UNITY_PSEUDO_OBJECTS = {
-        NORTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),           # has the door
-        SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, -3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),            # has the window
-        EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the desk
-        WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the bed
+        NORTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, NORTH_WALL, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),           # has the door
+        SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, SOUTH_WALL, position=np.array([0.1875, 1.35, -3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),            # has the window
+        EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, EAST_WALL, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the desk
+        WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WEST_WALL, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the bed
 
         # TODO: need to determine the extent of the door in the x dimension
-        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR_NAME, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([0.3, 1.35, 0.075]), rotation=np.zeros(3)),
+        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([0.3, 1.35, 0.075]), rotation=np.zeros(3)),
 }
 
 

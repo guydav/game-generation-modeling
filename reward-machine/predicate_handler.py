@@ -555,7 +555,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-    # print(f"Object {upper_object.object_id} is on object {lower_object.object_id}?")
 
     objects_touch = _pred_touch(agent, objects)
 
@@ -567,11 +566,22 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         print("Ramp position:", upper_object.position)
         print("Ramp extents:", upper_object.bbox_extents)
 
+
     if objects_touch:
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
         upper_object_bbox_center = upper_object.bbox_center
         upper_object_bbox_extents = upper_object.bbox_extents
+
+        if "Book" in upper_object.name or "Laptop" in upper_object.name:
+            print(f"\n\n{upper_object.object_id} is touching {lower_object.object_id}")
+            print("Upper object bbox center:", upper_object_bbox_center)
+            print("Upper object bbox extents:", upper_object_bbox_extents)
+            print("Lower object bbox center:", lower_object.bbox_center)
+            print("Lower object bbox extents:", lower_object.bbox_extents)
+
+            # Manually edit the y extent of the shelf, to test
+            lower_object.bbox_extents[1] = 0.1
 
         # Project a point slightly below the bottom center / corners of the upper object
         upper_object_corners = _object_corners(upper_object)
@@ -611,15 +621,12 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return False
 
-ADJACENT_DISTANCE_THRESHOLD = 0.15
+ADJACENT_DISTANCE_THRESHOLD = 0.2
 OVERLAP_GRACE = 0.01
 OBJECT_SIZE_SCALING = 1.2
 
 def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
-
-    # if objects[1].object_id:
-    #     pass
 
     # TODO: the 'agent' does not have a bounding box, which breaks this implementation of adjacent
     if isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
@@ -668,6 +675,19 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
     adjacent_by_x = x_displacement <= threshold_dist and z_overlap
     adjacent_by_z = z_displacement <= threshold_dist and x_overlap
     adjacent_by_dist = object_dist <= threshold_dist
+
+    if objects[1].name == "south_wall":
+        print("\n==========\nObject:", objects[0].name)
+        print("Object position:", objects[0].bbox_center)
+        print("Object extents:", objects[0].bbox_extents)
+
+        print("Wall position:", objects[1].bbox_center)
+        print("Wall extents:", objects[1].bbox_extents)
+
+        print("\nThreshold:", threshold_dist)
+        print("Adjacent by x:", x_displacement, z_overlap)
+        print("Adjacent by z:", z_displacement, x_overlap)
+        print("Adjacent by dist:", adjacent_by_dist)
 
     return adjacent_by_dist or adjacent_by_x or adjacent_by_z
 

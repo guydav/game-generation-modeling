@@ -85,5 +85,24 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
         },
+        {
+            "name": "Python: mcmc regrowth sampling",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                // "--print-samples",
+                // "--validate-samples", 
+                // "--parse-counter", 
+                "--save-samples",
+                "--num-samples", "100", 
+                "--sampling-method", "mcmc-regrowth",
+                "--sample-tqdm",
+                "--samples-output-path", "./dsl/ast-mcmc-regrowth-samples.pddl",
+            ],
+            "console": "integratedTerminal",
+            // "notes": "--parse-counter",
+            // "justMyCode": false,
+        },
     ]
 }

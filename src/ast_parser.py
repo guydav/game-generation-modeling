@@ -1,3 +1,4 @@
+import numpy as np
 import tatsu
 import tatsu.ast
 import tatsu.buffering
@@ -12,7 +13,7 @@ class ASTParser:
         if isinstance(ast, str):
             return self._handle_str(ast, **kwargs)
 
-        if isinstance(ast, int):
+        if isinstance(ast, (int, np.int32, np.int64)):  # type: ignore
             return self._handle_int(ast, **kwargs)
 
         if isinstance(ast, tuple):
@@ -32,7 +33,7 @@ class ASTParser:
     def _handle_str(self, ast: str, **kwargs):
         pass
 
-    def _handle_int(self, ast: int, **kwargs):
+    def _handle_int(self, ast: typing.Union[int, np.int32, np.int64], **kwargs):
         pass
 
     def _handle_tuple(self, ast: tuple, **kwargs):

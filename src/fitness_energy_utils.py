@@ -78,9 +78,6 @@ class CustomSklearnScaler:
         return self
 
     def transform(self, X, y=None):
-        if X.ndim != 3:
-            raise ValueError('X must be 3D')
-
         return (X - self.mean) / self.std
     
     def fit_transform(self, X, y=None):

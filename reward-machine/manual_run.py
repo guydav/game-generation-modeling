@@ -89,17 +89,17 @@ TEST_GAME_LIBRARY = {
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-door'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['game-27'])
     score = None
 
-    trace_path = TEST_DOOR_AND_RUG_TRACE.resolve().as_posix()
+    trace_path = GAME_27_TRACE.resolve().as_posix()
 
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
 
-        score = game_handler.process(state, is_final, debug_preference_handlers=True, debug_building_handler=False)
+        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=False)
         if score is not None:
             break
 

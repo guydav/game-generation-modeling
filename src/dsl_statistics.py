@@ -1,6 +1,8 @@
 import argparse
 from collections import namedtuple, defaultdict
 import tatsu
+import tatsu.ast
+import tatsu.buffering
 import tqdm
 import pandas as pd
 import numpy as np
@@ -110,7 +112,7 @@ class ASTStatisticsAggregator:
                 vars_key = vars_keys[0]
                 context_vars = context['variables'] if 'variables' in context else {}
 
-                for var_def in ast[vars_key].variables:
+                for var_def in ast[vars_key].variables:  # type: ignore
                     var_names = var_def.var_names
                     if isinstance(var_names, str): 
                         var_names = [var_names]
@@ -123,10 +125,10 @@ class ASTStatisticsAggregator:
                         var_type = [var_type]
 
                     for var_name in var_names:
-                        context_vars[var_name] = var_type
+                        context_vars[var_name] = var_type  # type: ignore
 
                 context = context.copy()
-                context['variables'] = context_vars
+                context['variables'] = context_vars  # type: ignore
 
             if ast.parseinfo is not None:
                 stat_parsers = self.rule_registry[ast.parseinfo.rule]
@@ -288,10 +290,10 @@ def build_aggregator(args):
         if isinstance(pred_args, str): pred_args = [pred_args]
 
         for arg in pred_args:
-            if isinstance(arg, tatsu.ast.AST) and arg.parseinfo.rule == 'predicate':
+            if isinstance(arg, tatsu.ast.AST) and arg.parseinfo.rule == 'predicate':  # type: ignore
                 inner_counts.append(map_types_to_predicates(arg, context))
 
-            elif arg.startswith('?'):
+            elif arg.startswith('?'):  # type: ignore
                 if arg not in variables:
                     raise ValueError(f'Encountered undefined argument {arg} in AST: {ast}')
 

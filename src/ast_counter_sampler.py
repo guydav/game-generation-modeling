@@ -47,10 +47,12 @@ DEFAULT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
+parser.add_argument('--verbose', action='store_true')
 
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
-parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLING], required=True)
+MCMC_REGRWOTH = 'mcmc-regrowth'
+parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLING, MCMC_REGRWOTH], required=True)
 
 
 ContextDict = typing.Dict[str, typing.Any]
@@ -231,8 +233,7 @@ def sample_existing_variable(global_context: ContextDict, local_context: typing.
         local_context = {}
 
     if 'variables' not in local_context:
-        # TODO: decide if we should return a nonsensical value here or an error
-        return '?xxx'
+        raise SamplingException('Attempted to sample an existing variable with no variables in scope')
 
     if 'rng' not in global_context:
         rng = np.random.default_rng()
@@ -355,6 +356,8 @@ class ASTSampler:
             total_score=re.compile(re.escape('(total-score)'))
         )
         self.parse_prior_to_posterior()
+
+        self.sample_parseinfo_index = 0
 
     def _update_prior_to_posterior(self, rule_name: str, field_name: str, field_prior: ContextDict):
         rule_counter = self.ast_counter.counters[rule_name]
@@ -722,6 +725,9 @@ class ASTSampler:
         global_context: typing.Optional[ContextDict] = None, 
         local_context: typing.Optional[ContextDict] = None):
 
+        if rule == START:
+            self.sample_parseinfo_index = 0
+
         if global_context is None:
             global_context = dict(rng=self.rng)
         elif 'rng' not in global_context:
@@ -765,7 +771,8 @@ class ASTSampler:
 
         if return_ast:
             out_dict = reduce(lambda x, y: {**x, **y}, filter(lambda x: isinstance(x, dict), output))
-            out_dict['parseinfo'] = tatsu.infos.ParseInfo(None, rule, 0, 0, 0, 0) 
+            out_dict['parseinfo'] = tatsu.infos.ParseInfo(None, rule, self.sample_parseinfo_index, self.sample_parseinfo_index, self.sample_parseinfo_index, self.sample_parseinfo_index)
+            self.sample_parseinfo_index += 1 
             output = tatsu.ast.AST(out_dict)
 
         elif len(output) == 1:
@@ -800,11 +807,10 @@ class RegrowthSampler(ASTParentMapper):
         self.rng = np.random.RandomState(seed)  # type: ignore
         self.parent_mapping = dict()
         self.searcher = ASTParseinfoSearcher()
+        self.source_ast = None  # type: ignore
 
     def set_source_ast(self, source_ast: typing.Union[tuple, tatsu.ast.AST]):
         self.source_ast = source_ast
-        # TODO: this will break with games I generate, because they don't have parseinfo
-        # TODO: I should fix this at some point
         self.parent_mapping = {}
         self(source_ast)
         self.node_keys = list(
@@ -911,7 +917,7 @@ class RegrowthSampler(ASTParentMapper):
         return new_source
 
 
-def _parse_or_load_counter(args: argparse.Namespace, grammar_parser):
+def parse_or_load_counter(args: argparse.Namespace, grammar_parser):
     if args.parse_counter:
         counter = ASTRuleValueCounter()
 
@@ -981,6 +987,8 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
                 generated_sample = True
             except ValueError as e:
                 print(f'ValueError while sampling, repeating: {e}')
+            except SamplingException as e:
+                print(f'SamplingException while sampling, repeating: {e}')
 
     return samples, text_samples
 
@@ -1031,7 +1039,7 @@ def main(args):
 
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
-    counter = _parse_or_load_counter(args, grammar_parser)
+    counter = parse_or_load_counter(args, grammar_parser)
 
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)
     samples, text_samples = None, None

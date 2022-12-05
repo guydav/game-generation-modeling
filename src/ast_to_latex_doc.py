@@ -828,6 +828,9 @@ def extract_either_variable_types(ast):
 
 def extract_pref_name_and_types(ast):
     if 'object_types' in ast:
+        if ast.object_types is None:
+            return None
+
         if isinstance(ast.object_types, tatsu.ast.AST):
             return ast.object_types.type_name
         else:

@@ -81,7 +81,7 @@ SECTION_CONTEXT_KEY = 'section'
 DEPTH_CONTEXT_KEY = 'depth'
 
 
-class ASTFitnessFunction:
+class ASTFitnessFeaturizer:
     headers: typing.List[str]
     header_registry: typing.Dict[str, FitnessTerm]
     list_reduce: typing.Callable[[typing.Sequence[Number]], Number]
@@ -138,7 +138,7 @@ class ASTFitnessFunction:
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.rows, columns=self.headers)
 
-    def parse(self, ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str):
+    def parse(self, ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
         row = {}
         row['src_file'] = os.path.basename(src_file)
         row['game_name'] = ast[1]["game_name"]  # type: ignore
@@ -159,6 +159,8 @@ class ASTFitnessFunction:
                     row[header] = self.list_reduce(row[header])
 
         self.rows.append(row)
+        if return_row:
+            return row
 
     def _extract_variables(self, ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.List[str]]) -> None:
         variables = ast[vars_key].variables  # type: ignore
@@ -185,7 +187,7 @@ class ASTFitnessFunction:
         if context is None:
             context = {DEPTH_CONTEXT_KEY: 0}
 
-        if not ast or isinstance(ast, (str, int, tatsu.buffering.Buffer)):
+        if not ast or isinstance(ast, (str, int, np.int32, np.int64, tatsu.buffering.Buffer)):  # type: ignore
             return
 
         elif isinstance(ast, (tuple, list)):
@@ -564,6 +566,9 @@ PREDICATE_ARITY_MAP = {
 
 def _extract_n_args(ast: tatsu.ast.AST):
     if 'pred_args' in ast:
+        if ast.pred_args is None:
+            return 0
+
         if isinstance(ast.pred_args, tatsu.ast.AST):
             return 1
         else:
@@ -892,8 +897,8 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = SECTION_K
     return [term_class(section) for term_class in term_classes for section in sections]
 
 
-def build_aggregator(args):
-    fitness = ASTFitnessFunction()
+def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
+    fitness = ASTFitnessFeaturizer()
 
     all_variables_defined = AllVariablesDefined()
     fitness.register(all_variables_defined)
@@ -951,7 +956,7 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    aggregator = build_aggregator(args)
+    aggregator = build_fitness_featurizer(args)
 
     for test_file in args.test_files:
         for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):

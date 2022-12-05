@@ -63,7 +63,6 @@ def init_weights(m):
         m.bias.data.fill_(0.01)
 
 
-
 class CustomSklearnScaler:
     def __init__(self):
         self.mean = None
@@ -152,6 +151,17 @@ def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score
     positive_scores = scores[:, 0]
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     return _reduce(torch.relu(positive_scores + margin - negative_scores), reduction)
+    
+
+def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 1.0, alpha: float = 0.5,
+    negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+    hinge = fitness_hinge_loss(scores, margin, negative_score_reduction, reduction)
+
+    positive_scores = scores[:, 0, None]
+    negative_scores = scores[:, 1:]
+    cross_example_loss = _reduce(torch.relu(positive_scores + margin - negative_scores), reduction)
+
+    return alpha * hinge + (1 - alpha) * cross_example_loss
 
 
 # TODO: see note re: negative score reduction in the hinge loss -- discuss with advisors
@@ -192,7 +202,7 @@ DEFAULT_TRAIN_KWARGS = {
     'random_seed': 33,
 }
 
-LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'negative_score_reduction', 'reduction')
+LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'negative_score_reduction', 'reduction')
 DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
 

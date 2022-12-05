@@ -25,12 +25,14 @@ DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
-    # './dsl/ast-mle-samples.pddl', 
     './dsl/ast-real-regrowth-samples.pddl',
+    # './dsl/ast-mle-samples.pddl', 
     # './dsl/ast-mle-regrowth-samples.pddl',
     # './dsl/ast-mle-samples-large.pddl',
-    './dsl/ast-mle-samples-large-best.pddl',
-    './dsl/ast-best-mle-regrowth-samples.pddl',
+    # './dsl/ast-mle-samples-large-best.pddl',
+    # './dsl/ast-best-mle-regrowth-samples.pddl',
+    # './dsl/ast-mle-samples-medium.pddl',
+    # './dsl/ast-medium-mle-regrowth-samples.pddl',
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')

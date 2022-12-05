@@ -17,7 +17,7 @@ NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'rea
 
 
 def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
-    fitness_df = pd.read_csv(FITNESS_DATA_FILE)
+    fitness_df = pd.read_csv(path)
     fitness_df = fitness_df.assign(real=fitness_df.src_file == 'interactive-beta.pddl', original_game_name=fitness_df.game_name)
     fitness_df.original_game_name.where(
         fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') == 2)), 

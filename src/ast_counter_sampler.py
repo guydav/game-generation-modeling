@@ -56,6 +56,11 @@ parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLIN
 ContextDict = typing.Dict[str, typing.Any]
 
 
+class SamplingException(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 class RuleKeyValueCounter:
     def __init__(self, rule: str, key:str):
         self.rule = rule
@@ -188,8 +193,7 @@ def sample_new_preference_name(global_context: ContextDict, local_context: typin
 
 def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if 'preference_count' not in global_context:
-        # TODO: do we want to fail here, or return a nonsensical value
-        return 'no-preferences-exist'
+        raise SamplingException('Attempted to sample a preference name with no sampled preference')
 
     if 'rng' not in global_context:
         rng = np.random.default_rng()
@@ -213,6 +217,10 @@ def sample_new_variable(global_context: ContextDict, local_context: typing.Optio
         rng = global_context['rng']
 
     valid_vars = set(string.ascii_lowercase) - local_context['variables']
+    
+    if len(valid_vars) == 0:
+        raise SamplingException('No valid variables left to sample')
+
     new_var = rng.choice(list(valid_vars))
     local_context['variables'].add(new_var)
     return f'?{new_var}'
@@ -1010,6 +1018,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
 
             except RecursionError:
                 print('Recursion error, skipping sample')
+
+            except SamplingException:
+                print('Sampling exception, skipping sample')
             
     return samples, text_samples
 

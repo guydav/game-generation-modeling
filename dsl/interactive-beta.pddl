@@ -83,7 +83,6 @@
 ; 4 is invalid -- woefully underconstrained
 
 (define (game 5bc79f652885710001a0e82a-5) (:domain few-objects-room-v1)  ; 5
-
 (:constraints (and 
     (preference throwBallToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
@@ -94,7 +93,6 @@
             )
         )
     )
-    (preference 
 ))
 (:scoring (count throwBallToBin)
 ))

@@ -232,7 +232,7 @@ class GameHandler():
             return self.evaluate_setup(setup_expression["statement"], state, mapping, called_from_forall)
 
         elif rule == "super_predicate":
-            evaluation = self.predicate_handler(setup_expression, state, mapping)
+            evaluation = self.predicate_handler(setup_expression, state, mapping, force_evaluation=self.cur_step > 100)
             
             return evaluation
 
@@ -281,7 +281,6 @@ class GameHandler():
             for sub_mapping in sub_mappings:
                 if not self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}, called_from_forall=True):
                     return False
-
             return True
 
         elif rule == "setup_game_optional":

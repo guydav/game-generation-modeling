@@ -6,3 +6,4 @@ latex/out/dsl_doc.pdf
 latex/out/pddl.aux
 
 */__pycache__/*
+**/.DS_Store

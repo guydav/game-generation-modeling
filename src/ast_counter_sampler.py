@@ -303,6 +303,7 @@ RULE = 'rule'
 TOKEN = 'token'
 NAMED = 'named'
 PATTERN = 'pattern'
+MIN_LENGTH = '_min_length'
 OPTIONAL_VOID = 'void'
 
 
@@ -373,7 +374,7 @@ class ASTSampler:
         options = field_prior[OPTIONS]
         field_counter = rule_counter[field_name] if field_name in rule_counter else None
 
-        if '_min_length' in field_prior:
+        if 'MIN_LENGTH' in field_prior:
             self._create_length_posterior(rule_name, field_name, field_prior, field_counter)
 
         if isinstance(options, str):
@@ -415,7 +416,7 @@ class ASTSampler:
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
         field_counter: typing.Optional[RuleKeyValueCounter]):
 
-        min_length = field_prior['_min_length']
+        min_length = field_prior['MIN_LENGTH']
         length_posterior = Counter({k: v for k, v in self.length_prior.items() if k >= min_length})
 
         if field_counter is not None:
@@ -648,7 +649,7 @@ class ASTSampler:
             return self.parse_rule_prior(children[0])
 
         if isinstance(rule, (grammars.PositiveClosure, grammars.Closure)):
-            d = {'_min_length': 1 if isinstance(rule, grammars.PositiveClosure) else 0}
+            d = {'MIN_LENGTH': 1 if isinstance(rule, grammars.PositiveClosure) else 0}
             if len(rule.children()) == 1:
                 child_value = self.parse_rule_prior(rule.children()[0])
                 if not isinstance(child_value, dict):
@@ -917,8 +918,11 @@ class RegrowthSampler(ASTParentMapper):
         return new_source
 
 
-def parse_or_load_counter(args: argparse.Namespace, grammar_parser):
+def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optional[tatsu.grammars.Grammar] = None):
     if args.parse_counter:
+        if grammar_parser is None:
+            raise ValueError('Grammar parser must be provided if parsing counter')
+
         counter = ASTRuleValueCounter()
 
         for test_file in args.test_files:

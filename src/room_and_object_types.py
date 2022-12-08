@@ -108,6 +108,7 @@ HEXAGONAL_BIN = 'hexagonal_bin'
 # ROOM_FEATURES
 DOOR = 'door'
 FLOOR = 'floor'
+ROOM_CENTER = 'room_center'
 RUG = 'rug'
 SHELF = 'shelf'
 BOTTOM_SHELF = 'bottom_shelf'
@@ -176,7 +177,7 @@ CATEGORIES_TO_TYPES = {
         DOGGIE_BED, HEXAGONAL_BIN,
     ),
     ROOM_FEATURES: (
-        DOOR, FLOOR, RUG, SHELF, BOTTOM_SHELF,
+        DOOR, FLOOR, RUG, ROOM_CENTER, SHELF, BOTTOM_SHELF,
         TOP_SHELF, SLIDING_DOOR, EAST_SLIDING_DOOR, SOUTH_WEST_CORNER, WALL,
         NORTH_WALL, SOUTH_WALL, WEST_WALL,
     ),
@@ -256,6 +257,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 4,
             SLIDING_DOOR: 2,
@@ -347,6 +349,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 2,
             SLIDING_DOOR: 2,
@@ -439,6 +442,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 2,
             SLIDING_DOOR: 2,

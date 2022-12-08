@@ -33,7 +33,7 @@ comparison_arg = arg:(function_eval | number);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = '(' func_name:func_name {func_args:function_term}* ')';
 func_name = name;
-function_term = term:(number | type_name | variable); 
+function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable); 
 
 predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
 predicate_name = name;  # = used to be here to allow for checking that one object is/isn't another

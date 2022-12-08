@@ -263,8 +263,13 @@ class ASTNodeCounter(ASTParser):
         super()._handle_ast(ast, **kwargs)
 
 
-def _extract_predicate_terms(ast: tatsu.ast.AST) -> typing.List[str]:
-    args = ast.pred_args
+def _extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
+    args = None
+    if 'pred_args' in ast:
+        args = ast.pred_args
+
+    elif 'func_args' in ast:
+        args = ast.func_args
 
     if args is None:
         return []
@@ -460,28 +465,31 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
         return self.prefs_start_and_end_with_once / self.total_prefs
 
 
-class VariableNotRepeatedInPredicate(FitnessTerm):
-    total_predicates: int = 0
-    predicates_with_repeated_variables: int = 0
+PREDICATE_AND_FUNCTION_RULES = ('predicate', 'function_eval')
+
+
+class VariableNotRepeatedInPredicateFunction(FitnessTerm):
+    total_count: int = 0
+    count_with_repeats: int = 0
 
     def __init__(self):
-        super().__init__('predicate', 'variable_not_repeated')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'variable_not_repeated')
 
     def game_start(self) -> None:
-        self.total_predicates = 0
-        self.predicates_with_repeated_variables = 0
+        self.total_count = 0
+        self.count_with_repeats = 0
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            self.total_predicates += 1
-            predicate_vars = [t for t in _extract_predicate_terms(ast) if isinstance(t, str) and t.startswith('?')]
-            self.predicates_with_repeated_variables += 1 if len(predicate_vars) != len(set(predicate_vars)) else 0
+            self.total_count += 1
+            args = list(_extract_predicate_function_args(ast))
+            self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
-        if self.total_predicates == 0:
+        if self.total_count == 0:
             return 0
 
-        return 1 - (self.predicates_with_repeated_variables / self.total_predicates)
+        return 1 - (self.count_with_repeats / self.total_count)
 
 
 class NoNestedLogicals(FitnessTerm):
@@ -555,63 +563,74 @@ class PrefForallUsedCorrectly(FitnessTerm):
         return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
 
 
-PREDICATE_ARITY_MAP = {
+PREDICATE_FUNCTION_ARITY_MAP = {
     'above': 2, 'adjacent': 2, 'adjacent_side': (3, 4), 'agent_crouches': 0, 'agent_holds': 1,
-    'between': 3, 'broken': 1, 'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
+    'between': 3, 'broken': 1, 'building_size': 1, 'distance': 2, 'distance_side': (3, 4),
+    'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
     'game_over': 0, 'game_start': 0, 'in':2, 'in_motion': 1, 'is_setup_object': 1, 
     'object_orientation': 2, 'on': 2, 'open': 1, 'opposite': 2, 'rug_color_under': 2, 
-    'same_color': 2, 'same_object': 2, 'same_type': 2, 'toggled_on': 1, 'touch': 2
+    'same_color': 2, 'same_object': 2, 'same_type': 2, 'toggled_on': 1, 'touch': 2,
+    'x_position': 1,
 }
 
 
 def _extract_n_args(ast: tatsu.ast.AST):
+    key = None
     if 'pred_args' in ast:
-        if ast.pred_args is None:
+        key = 'pred_args'
+
+    if 'func_args' in ast:
+        key = 'func_args'
+
+    if key is not None:
+        if ast[key] is None:
             return 0
 
-        if isinstance(ast.pred_args, tatsu.ast.AST):
+        if isinstance(ast[key], tatsu.ast.AST):
             return 1
         else:
-            return len(ast.pred_args)  # type: ignore
+            return len(ast[key])  # type: ignore
 
     return 0
 
 
-class CorrectPredicateArity(FitnessTerm):
-    total_predicates: int = 0
-    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = {}
-    predicates_with_wrong_arity: int = 0
+class CorrectPredicateFunctionArity(FitnessTerm):
+    total_count: int = 0
+    name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = {}
+    count_with_wrong_arity: int = 0
 
-    def __init__(self, predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP):
-        super().__init__('predicate', 'correct_predicate_arity')
-        self.predicate_arity_map = predicate_arity_map
+    def __init__(self, name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP):
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'correct_predicate_function_arity')
+        self.name_to_arity_map = name_to_arity_map
 
     def game_start(self) -> None:
-        self.total_predicates = 0
-        self.predicates_with_wrong_arity = 0
+        self.total_count = 0
+        self.count_with_wrong_arity = 0
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            self.total_predicates += 1
+            self.total_count += 1
 
-            if ast.pred_name not in self.predicate_arity_map:
-                raise ValueError(f'Predicate {ast.pred_name} not in predicate arity map')
+            name = ast.pred_name if rule == 'predicate' else ast.func_name
+
+            if name not in self.name_to_arity_map:
+                raise ValueError(f'Predicate {name} not in predicate arity map')
 
             n_args = _extract_n_args(ast)
-            arity = self.predicate_arity_map[ast.pred_name]  # type: ignore
+            arity = self.name_to_arity_map[name]  # type: ignore
 
             if isinstance(arity, int):
                 if n_args != arity:
-                    self.predicates_with_wrong_arity += 1
+                    self.count_with_wrong_arity += 1
             
             elif n_args not in arity:
-                self.predicates_with_wrong_arity += 1
+                self.count_with_wrong_arity += 1
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
-        if self.total_predicates == 0:
+        if self.total_count == 0:
             return 0
 
-        return 1 - (self.predicates_with_wrong_arity / self.total_predicates)
+        return 1 - (self.count_with_wrong_arity / self.total_count)
 
 
 TWO_ARG_COMPARISON_RULE = 'two_arg_comparison'
@@ -649,75 +668,49 @@ class NoTwoNumberComparisons(FitnessTerm):
         return 1 - (self.two_number_comparisons / self.total_comparisons)
     
 
-class NoVariableTwiceInPredicate(FitnessTerm):
-    total_predicates: int = 0
-    predicates_with_variable_twice: int = 0
-
-    def __init__(self):
-        super().__init__('predicate', 'no_variable_twice_in_predicate')
-
-    def game_start(self) -> None:
-        self.total_predicates = 0
-        self.predicates_with_variable_twice = 0
-
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            self.total_predicates += 1
-
-            if 'pred_args' in ast:
-                if isinstance(ast.pred_args, tatsu.ast.AST):
-                    return
-
-                terms = _extract_predicate_terms(ast)
-                if len(terms) != len(set(terms)):
-                    self.predicates_with_variable_twice += 1
 
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
-        if self.total_predicates == 0:
-            return 0
 
-        return 1 - (self.predicates_with_variable_twice / self.total_predicates)
-
-
-COMMON_SENSE_PREDICATES = ('adjacent', 'agent_holds', 'in', 'in_motion', 'on', 'touch')
+COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = ('back', 'front', 'front_left_corner', 'left', 'right', 'sideways', 'upright', 'upside_down')
 
 
-class PredicateArgumentTypes(FitnessTerm):
+class PredicateFunctionArgumentTypes(FitnessTerm):
     argument_type_categories: typing.Sequence[str]
     matching_argument_types_count: int = 0
-    predicate: str
-    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
+    predicate_or_function: str
+    name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
 
     def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str], 
-        predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP,
+        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
-        super().__init__('predicate', f'pred_arg_types_{predicate}_{"_".join(argument_type_categories)}')
-        self.predicate = predicate
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, f'arg_types_{predicate}_{"_".join(argument_type_categories)}')
+        self.predicate_or_function = predicate
         self.argument_type_categories = argument_type_categories
-        self.predicate_arity_map = predicate_arity_map
+        self.name_to_arity_map = name_to_arity_map
         self.known_missing_types = known_missing_types
 
-        if len(argument_type_categories) != self.predicate_arity_map[predicate]:
-            raise ValueError(f'Predicate {predicate} has arity {self.predicate_arity_map[predicate]} but {len(argument_type_categories)} argument types were provided')
+        if len(argument_type_categories) != self.name_to_arity_map[predicate]:
+            raise ValueError(f'Predicate {predicate} has arity {self.name_to_arity_map[predicate]} but {len(argument_type_categories)} argument types were provided')
 
     def game_start(self) -> None:
         self.matching_argument_types_count = 0
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            if ast.pred_name not in self.predicate_arity_map:
-                raise ValueError(f'Predicate {ast.pred_name} not in predicate arity map')
+            name = ast.pred_name if rule == 'predicate' else ast.func_name
 
-            if ast.pred_name != self.predicate:
+            if name not in self.name_to_arity_map:
+                raise ValueError(f'Predicate {ast.name} not in predicate arity map')
+
+            if name != self.predicate_or_function:
                 return
 
             n_args = _extract_n_args(ast)
-            arity = self.predicate_arity_map[ast.pred_name]  # type: ignore
+            arity = self.name_to_arity_map[name]  # type: ignore
 
             if isinstance(arity, int):
                 if n_args != arity:
@@ -726,7 +719,7 @@ class PredicateArgumentTypes(FitnessTerm):
             elif n_args not in arity:
                 return
 
-            terms = _extract_predicate_terms(ast)
+            terms = _extract_predicate_function_args(ast)
             term_type_lists = []
 
             context_variables = typing.cast(typing.Dict[str, typing.Dict[str, typing.Any]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
@@ -744,7 +737,7 @@ class PredicateArgumentTypes(FitnessTerm):
                 term_type_categories = set()
                 for term_type in term_type_list:
                     if term_type not in TYPES_TO_CATEGORIES:
-                        if term_type not in self.known_missing_types:
+                        if term_type not in self.known_missing_types and not term_type.isnumeric():
                             print(f'Unknown type {term_type_list} not in the types to categories map')
                             # raise ValueError(f'Unknown type {term_type_list} not in the types to categories map')
                     else:
@@ -759,15 +752,15 @@ class PredicateArgumentTypes(FitnessTerm):
         return self.matching_argument_types_count
 
 
-def build_predicate_argument_types_fitness_terms(
-    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES,
+def build_argument_types_fitness_terms(
+    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS,
     type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
-    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_ARITY_MAP) -> typing.Sequence[FitnessTerm]:
+    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:
     fitness_terms = []
 
     for predicate in predicates:
         for type_combinations in itertools.product(*([type_categories] * predicate_arity_map[predicate])):  # type: ignore
-            fitness_terms.append(PredicateArgumentTypes(predicate, type_combinations, predicate_arity_map))
+            fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
 
     return fitness_terms
 
@@ -918,7 +911,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()
     fitness.register(pref_starts_and_ends_with_once)
 
-    no_repeated_variables_in_predicate = VariableNotRepeatedInPredicate()
+    no_repeated_variables_in_predicate = VariableNotRepeatedInPredicateFunction()
     fitness.register(no_repeated_variables_in_predicate)
 
     no_nested_logicals = NoNestedLogicals()
@@ -927,18 +920,14 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     pref_forall_used_correctly = PrefForallUsedCorrectly()
     fitness.register(pref_forall_used_correctly)
 
-    correct_predicate_arity = CorrectPredicateArity()
+    correct_predicate_arity = CorrectPredicateFunctionArity()
     fitness.register(correct_predicate_arity)
 
     no_two_number_comparisons = NoTwoNumberComparisons()
     fitness.register(no_two_number_comparisons)
 
-    no_variable_twice_in_predicate = NoVariableTwiceInPredicate()
-    fitness.register(no_variable_twice_in_predicate)
-
-    # TODO: add something similar for some functions?
-    predicate_argument_types_fitness_terms = build_predicate_argument_types_fitness_terms()
-    fitness.register_multiple(predicate_argument_types_fitness_terms)
+    argument_types_fitness_terms = build_argument_types_fitness_terms()
+    fitness.register_multiple(argument_types_fitness_terms)
 
     compositionality_fitness_terms = build_compositionality_fitness_terms()
     fitness.register_multiple(compositionality_fitness_terms)

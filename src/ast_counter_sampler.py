@@ -277,7 +277,7 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'type_name',
     ('comparison_arg', 'arg'): 'number',
-    ('function_term', 'term'): ('type_name', 'variable', 'number'),
+    ('function_term', 'term'): ('type_name', 'variable',),
     ('predicate_term', 'term'): ('type_name', 'variable'),
     ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
 }
@@ -894,8 +894,8 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], None
 
-    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_id: int):
-        new_game_name = f'{self.original_game_id}-{sample_id}'
+    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int):
+        new_game_name = f'{self.original_game_id}-{sample_index}'
         game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
         game_node, _, game_selector, _, _ = self.parent_mapping[game_key]
 
@@ -903,7 +903,7 @@ class RegrowthSampler(ASTParentMapper):
         return replace_child(ast, game_selector, new_game_node)
 
 
-    def sample(self, sample_id: int, external_global_context: typing.Optional[ContextDict] = None, 
+    def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None, 
         external_local_context: typing.Optional[ContextDict] = None):
 
         node_index = self.rng.choice(len(self.node_keys))
@@ -920,7 +920,7 @@ class RegrowthSampler(ASTParentMapper):
 
         new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
-        new_source = self._update_game_id(new_source, sample_id)
+        new_source = self._update_game_id(new_source, sample_index)
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 
@@ -964,10 +964,7 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
             print()
 
         if args.validate_samples or args.save_samples:
-            first_print_out = ast_printer.ast_to_string(ast)
-            if args.save_samples:
-                text_samples.extend([line + '\n' for line in ast_printer.BUFFER])  # type: ignore
-                text_samples.append('\n')
+            first_print_out = ast_printer.ast_to_string(ast, line_delimiter='\n')
 
         if args.validate_samples:
             second_ast = grammar_parser.parse(first_print_out)
@@ -980,6 +977,8 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
         print(f'Parse failed: at position {e.pos} expected "{e.item}" :')
         if len(first_print_out) > e.pos:
             print(first_print_out[e.pos:])
+
+    return first_print_out
 
 
 def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
@@ -995,8 +994,9 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
         while not generated_sample:
             try:
                 ast = sampler.sample(global_context=dict(sample_id=sample_id))
-                _test_ast_sample(ast, args, text_samples, grammar_parser)
+                sample_text = _test_ast_sample(ast, args, text_samples, grammar_parser)
                 samples.append(ast)
+                text_samples.append(sample_text)
                 generated_sample = True
             except ValueError as e:
                 print(f'ValueError while sampling, repeating: {e}')
@@ -1015,41 +1015,40 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
     real_games = []
 
     for test_file in args.test_files:
-        for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-            real_games.append(ast)
+        for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
+            real_games.append(sample_ast)
+
+    game_iter = enumerate(real_games)
+    if args.sample_tqdm:
+        game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=len(real_games))
             
-    for i, real_game in enumerate(real_games):
+    for game_index, real_game in game_iter:
         regrowth_sampler.set_source_ast(real_game)
-        real_game_str = ast_printer.ast_to_string(real_game)
-        real_game_str = real_game_str[real_game_str.find('(:domain'):]
-        sample_hashes = set([fixed_hash(real_game_str)])
+        real_game_str = ast_printer.ast_to_string(real_game, line_delimiter='\n')
+        sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
 
-        sample_iter = range(args.num_samples)
-        if args.sample_tqdm:
-            sample_iter = tqdm.tqdm(sample_iter, desc=f'Samples for game #{i}')
-
-        for sample_id in sample_iter:
+        for sample_index in range(args.num_samples):
             sample_generated = False
-            try:
-                while not sample_generated:
-                    ast = regrowth_sampler.sample(sample_id, external_global_context=dict(sample_id=sample_id))
-                    _test_ast_sample(ast, args, text_samples, grammar_parser)
-                    sample_str = ast_printer.ast_to_string(ast)  # type: ignore
-                    sample_str = sample_str[sample_str.find('(:domain'):]
-                    sample_hash = fixed_hash(sample_str)
+
+            while not sample_generated:
+                try:
+                    sample_ast = regrowth_sampler.sample(sample_index)
+                    sample_str = _test_ast_sample(sample_ast, args, text_samples, grammar_parser)
+                    sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
 
                     if sample_hash in sample_hashes:
-                        print('Regrowth generated identical games, repeating')
+                        if args.verbose: print('Regrowth generated identical games, repeating')
                     else:
                         sample_generated = True
-                        samples.append(ast)
+                        samples.append(sample_ast)
+                        text_samples.append(sample_str + '\n\n')
                         sample_hashes.add(sample_hash)
 
-            except RecursionError:
-                print('Recursion error, skipping sample')
+                except RecursionError:
+                    if args.verbose: print('Recursion error, skipping sample')
 
-            except SamplingException:
-                print('Sampling exception, skipping sample')
+                except SamplingException:
+                    if args.verbose: print('Sampling exception, skipping sample')
             
     return samples, text_samples
 

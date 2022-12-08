@@ -86,9 +86,12 @@ CACHE_ASTS_KEY = 'asts'
 CACHE_DSL_HASH_KEY = 'dsl'
 
 
-def _generate_cache_file_name(file_path: str):
+def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str] = None):
     name, _ = os.path.splitext(os.path.basename(file_path))
-    return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    if relative_path is not None:
+        return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    else:    
+        return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
 
 
 def _extract_game_id(game_str: str):
@@ -97,15 +100,15 @@ def _extract_game_id(game_str: str):
     return game_str[start:end]
 
 
-def _fixed_hash(str_data: str):
+def fixed_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
 
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
-    use_tqdm: bool):
+    use_tqdm: bool, relative_path: typing.Optional[str] = None):
 
-    cache_path = _generate_cache_file_name(games_file_path)
-    grammar_hash = _fixed_hash(grammar_parser._to_str())
+    cache_path = _generate_cache_file_name(games_file_path, relative_path)
+    grammar_hash = fixed_hash(grammar_parser._to_str())
 
     game_iter = load_games_from_file(games_file_path)
     if use_tqdm:
@@ -126,7 +129,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
 
     for game in game_iter:
         game_id = _extract_game_id(game)
-        game_hash = _fixed_hash(game)
+        game_hash = fixed_hash(game)
 
         if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
             cache_updated = True

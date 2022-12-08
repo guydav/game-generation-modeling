@@ -19,7 +19,7 @@ import sys
 
 from parse_dsl import load_games_from_file
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher
-from ast_utils import cached_load_and_parse_games_from_file, replace_child
+from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash
 import ast_printer
 
 parser = argparse.ArgumentParser()
@@ -189,12 +189,17 @@ def sample_new_preference_name(global_context: ContextDict, local_context: typin
     if 'preference_count' not in global_context:
         global_context['preference_count'] = 0
 
+    if 'preference_names' not in global_context:
+        global_context['preference_names'] = set()
+
     global_context['preference_count'] += 1
-    return _preference_name(global_context['preference_count'])
+    pref_name = _preference_name(global_context['preference_count'])
+    global_context['preference_names'].add(pref_name)
+    return pref_name
 
 
 def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
-    if 'preference_count' not in global_context:
+    if 'preference_names' not in global_context:
         raise SamplingException('Attempted to sample a preference name with no sampled preference')
 
     if 'rng' not in global_context:
@@ -202,8 +207,8 @@ def sample_existing_preference_name(global_context: ContextDict, local_context: 
     else:
         rng = global_context['rng']
 
-    pref_count = global_context['preference_count']
-    return _preference_name(rng.integers(1, pref_count + 1))
+    pref_names = list(global_context['preference_names'])
+    return rng.choice(pref_names)
 
 
 def sample_new_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
@@ -374,7 +379,7 @@ class ASTSampler:
         options = field_prior[OPTIONS]
         field_counter = rule_counter[field_name] if field_name in rule_counter else None
 
-        if 'MIN_LENGTH' in field_prior:
+        if MIN_LENGTH in field_prior:
             self._create_length_posterior(rule_name, field_name, field_prior, field_counter)
 
         if isinstance(options, str):
@@ -416,7 +421,7 @@ class ASTSampler:
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]], 
         field_counter: typing.Optional[RuleKeyValueCounter]):
 
-        min_length = field_prior['MIN_LENGTH']
+        min_length = field_prior[MIN_LENGTH]
         length_posterior = Counter({k: v for k, v in self.length_prior.items() if k >= min_length})
 
         if field_counter is not None:
@@ -649,7 +654,7 @@ class ASTSampler:
             return self.parse_rule_prior(children[0])
 
         if isinstance(rule, (grammars.PositiveClosure, grammars.Closure)):
-            d = {'MIN_LENGTH': 1 if isinstance(rule, grammars.PositiveClosure) else 0}
+            d = {MIN_LENGTH: 1 if isinstance(rule, grammars.PositiveClosure) else 0}
             if len(rule.children()) == 1:
                 child_value = self.parse_rule_prior(rule.children()[0])
                 if not isinstance(child_value, dict):
@@ -859,7 +864,11 @@ class RegrowthSampler(ASTParentMapper):
             if 'preference_count' not in kwargs['global_context']:
                 kwargs['global_context']['preference_count'] = 0
 
+            if 'preference_names' not in kwargs['global_context']:
+                kwargs['global_context']['preference_names'] = set()
+
             kwargs['global_context']['preference_count'] += 1
+            kwargs['global_context']['preference_names'].add(ast.pref_name)
 
         elif rule == 'variable_type_def':
             var_names = ast.var_names
@@ -1011,6 +1020,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
             
     for i, real_game in enumerate(real_games):
         regrowth_sampler.set_source_ast(real_game)
+        real_game_str = ast_printer.ast_to_string(real_game)
+        real_game_str = real_game_str[real_game_str.find('(:domain'):]
+        sample_hashes = set([fixed_hash(real_game_str)])
 
         sample_iter = range(args.num_samples)
         if args.sample_tqdm:
@@ -1022,11 +1034,16 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
                 while not sample_generated:
                     ast = regrowth_sampler.sample(sample_id, external_global_context=dict(sample_id=sample_id))
                     _test_ast_sample(ast, args, text_samples, grammar_parser)
-                    if ast_printer.ast_to_string(real_game) == ast_printer.ast_to_string(ast):  # type: ignore
+                    sample_str = ast_printer.ast_to_string(ast)  # type: ignore
+                    sample_str = sample_str[sample_str.find('(:domain'):]
+                    sample_hash = fixed_hash(sample_str)
+
+                    if sample_hash in sample_hashes:
                         print('Regrowth generated identical games, repeating')
                     else:
                         sample_generated = True
                         samples.append(ast)
+                        sample_hashes.add(sample_hash)
 
             except RecursionError:
                 print('Recursion error, skipping sample')

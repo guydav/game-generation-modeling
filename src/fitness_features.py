@@ -936,6 +936,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_variable_twice_in_predicate = NoVariableTwiceInPredicate()
     fitness.register(no_variable_twice_in_predicate)
 
+    # TODO: add something similar for some functions?
     predicate_argument_types_fitness_terms = build_predicate_argument_types_fitness_terms()
     fitness.register_multiple(predicate_argument_types_fitness_terms)
 

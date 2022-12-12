@@ -60,6 +60,23 @@ class PredicateHandler:
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)
         self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
+
+    def _extract_predicate_function_name(self, ast: tatsu.ast.AST):
+        if 'pred' in ast:
+            rule = ast.pred.parseinfo.rule  # type: ignore
+            name = rule.replace('predicate_', '')
+
+        elif 'func' in ast:
+            rule = ast.func.parseinfo.rule  # type: ignore
+            name = rule.replace('function_', '')
+
+        else:
+            raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
+
+        if name[-1].isdigit():
+            name = name[:-2]
+
+        return name
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> bool:
@@ -137,12 +154,14 @@ class PredicateHandler:
         predicate_rule = predicate["parseinfo"].rule  # type: ignore
 
         if predicate_rule == "predicate":
+            predicate_name = self._extract_predicate_function_name(predicate)  # type: ignore
+
             # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
-            if predicate["pred_name"] == "game_over":
+            if predicate_name == "game_over":
                 return self.is_last_step
 
             # Obtain the functional representation of the base predicate
-            predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
+            predicate_fn = PREDICATE_LIBRARY[predicate_name]  # type: ignore
 
             # Extract only the variables in the mapping relevant to this predicate
             relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
@@ -278,8 +297,10 @@ class PredicateHandler:
         if function is None:
             return None
 
+        function_name = self._extract_predicate_function_name(function)  # type: ignore
+
         # Obtain the functional representation of the function
-        func = FUNCTION_LIBRARY[str(function["func_name"])]
+        func = FUNCTION_LIBRARY[function_name]
 
         # Extract only the variables in the mapping relevant to this predicate
         relevant_mapping = {var: mapping[var] for var in extract_variables(function)}

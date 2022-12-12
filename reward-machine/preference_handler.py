@@ -5,7 +5,7 @@ import tatsu.ast
 import enum
 
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
+from utils import extract_variable_type_mapping, extract_predicate_function_name, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler
 
 from config import NAMED_OBJECTS
@@ -365,7 +365,7 @@ class PreferenceHandler:
 
 
                 measurement = typing.cast(tatsu.ast.AST, current_predicate["measurement"])
-                measurement_fn_name = typing.cast(str, measurement["func_name"])
+                measurement_fn_name = typing.cast(str, extract_predicate_function_name(measurement))
 
                 evaluation = self.predicate_handler.evaluate_function(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
 

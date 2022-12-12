@@ -441,10 +441,10 @@ Similarly to predicates, functions are not a part of the grammar, and may vary b
 
 The following describes all functions currently found in our game dataset:
 \begin{lstlisting}
-(building_size ) [2 references] ; Takes in an argument of type building, and returns how many objects comprise the building (as an integer).
-(distance ) [114 references] ; Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).
-(distance_side ) [5 references] ; Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side).
-(x_position ) [4 references] ; Takes in an argument of type object, and returns the x position of the object (as a floating point number).
+(building_size <arg1>) [2 references] ; Takes in an argument of type building, and returns how many objects comprise the building (as an integer).
+(distance <arg1> <arg2>) [114 references] ; Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).
+(distance_side <arg1> <arg2> <arg3>) [5 references] ; Similarly to the adjacent_side predicate, but applied to distance. Takes in three or four arguments, either <obj1> <side1> <obj2> or <obj1> <side1> <obj2> <side2>, and returns the distance between the first object on the side specified to the second object (optionally to its specified side).
+(x_position <arg1>) [4 references] ; Takes in an argument of type object, and returns the x position of the object (as a floating point number).
 \end{lstlisting}
 
 

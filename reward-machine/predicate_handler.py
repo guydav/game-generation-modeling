@@ -3,7 +3,7 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
+from utils import extract_variable_type_mapping, extract_predicate_function_name, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
     _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import UNITY_PSEUDO_OBJECTS, PseudoObject
 
@@ -60,23 +60,6 @@ class PredicateHandler:
         self.state_cache.update(UNITY_PSEUDO_OBJECTS)
         self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
-
-    def _extract_predicate_function_name(self, ast: tatsu.ast.AST):
-        if 'pred' in ast:
-            rule = ast.pred.parseinfo.rule  # type: ignore
-            name = rule.replace('predicate_', '')
-
-        elif 'func' in ast:
-            rule = ast.func.parseinfo.rule  # type: ignore
-            name = rule.replace('function_', '')
-
-        else:
-            raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
-
-        if name[-1].isdigit():
-            name = name[:-2]
-
-        return name
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> bool:
@@ -154,7 +137,7 @@ class PredicateHandler:
         predicate_rule = predicate["parseinfo"].rule  # type: ignore
 
         if predicate_rule == "predicate":
-            predicate_name = self._extract_predicate_function_name(predicate)  # type: ignore
+            predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
             # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
             if predicate_name == "game_over":
@@ -297,7 +280,7 @@ class PredicateHandler:
         if function is None:
             return None
 
-        function_name = self._extract_predicate_function_name(function)  # type: ignore
+        function_name = extract_predicate_function_name(function)  # type: ignore
 
         # Obtain the functional representation of the function
         func = FUNCTION_LIBRARY[function_name]

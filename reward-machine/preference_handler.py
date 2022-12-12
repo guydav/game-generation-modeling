@@ -5,7 +5,7 @@ import tatsu.ast
 import enum
 
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, FullState
+from utils import extract_variable_type_mapping, extract_predicate_function_name, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler
 
 from config import NAMED_OBJECTS
@@ -85,7 +85,8 @@ class PreferenceHandler:
         # Extract the mapping of variable names to types (e.g. {?d : dodgeball})
         if self.pref_quantifier_rule == PreferenceQuantifiers.EXISTS.value:
             self.variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
-            preference_body = body["exists_args"]["body"]
+            preference_body = body["exists_args"]
+            
 
         elif self.pref_quantifier_rule == PreferenceQuantifiers.FORALL.value:
             raise NotImplementedError("Forall quantification not yet supported")
@@ -364,7 +365,7 @@ class PreferenceHandler:
 
 
                 measurement = typing.cast(tatsu.ast.AST, current_predicate["measurement"])
-                measurement_fn_name = typing.cast(str, measurement["func_name"])
+                measurement_fn_name = typing.cast(str, extract_predicate_function_name(measurement))
 
                 evaluation = self.predicate_handler.evaluate_function(measurement, traj_state, mapping, True)  # force evaluation to get a value anyhow
 

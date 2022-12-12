@@ -3,7 +3,7 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
+from utils import extract_variable_type_mapping, extract_predicate_function_name, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
     _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import UNITY_PSEUDO_OBJECTS, PseudoObject
 
@@ -137,12 +137,14 @@ class PredicateHandler:
         predicate_rule = predicate["parseinfo"].rule  # type: ignore
 
         if predicate_rule == "predicate":
+            predicate_name = extract_predicate_function_name(predicate)  # type: ignore
+
             # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
-            if predicate["pred_name"] == "game_over":
+            if predicate_name == "game_over":
                 return self.is_last_step
 
             # Obtain the functional representation of the base predicate
-            predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
+            predicate_fn = PREDICATE_LIBRARY[predicate_name]  # type: ignore
 
             # Extract only the variables in the mapping relevant to this predicate
             relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
@@ -278,8 +280,10 @@ class PredicateHandler:
         if function is None:
             return None
 
+        function_name = extract_predicate_function_name(function)  # type: ignore
+
         # Obtain the functional representation of the function
-        func = FUNCTION_LIBRARY[str(function["func_name"])]
+        func = FUNCTION_LIBRARY[function_name]
 
         # Extract only the variables in the mapping relevant to this predicate
         relevant_mapping = {var: mapping[var] for var in extract_variables(function)}

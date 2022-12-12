@@ -15,7 +15,7 @@ scoring_def = '(:scoring' scoring ')';
 # Generic definitions useful across sections
 
 id = /[a-z0-9][a-z0-9\-]+/;
-name = /[A-z][A-z0-9_]*/;
+name = /[A-Za-z][A-Za-z0-9_]*/;
 number = /\d*\.?\d+/;
 
 variable = /\?[a-z][a-z0-9]*/;
@@ -31,14 +31,79 @@ multiple_args_equal_comparison = '(=' {equal_comp_args:comparison_arg}+ ')';
 
 comparison_arg = arg:(function_eval | number);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
-function_eval = '(' func_name:func_name {func_args:function_term}* ')';
-func_name = name;
-function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable); 
+function_eval = func:(function_building_size |
+    function_distance |
+    function_distance_side_3 |
+    function_distance_side_4 |
+    function_x_position
+    )
+    ;
+function_building_size = '(building_size' arg_1:predicate_or_function_term ')';
+function_distance = '(distance' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+function_distance_side_3 = '(distance_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term ')';
+function_distance_side_4 = '(distance_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term arg_4:predicate_or_function_term ')';
+function_x_position = '(x_position' arg_1:predicate_or_function_term ')';
 
-predicate = '(' pred_name:predicate_name {pred_args:predicate_term}* ')';
-predicate_name = name;  # = used to be here to allow for checking that one object is/isn't another
-predicate_term = term:(type_name | variable);
-# predicate_function = predicate;
+# function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable); 
+
+predicate = pred:(predicate_above | 
+    predicate_adjacent |
+    predicate_adjacent_side_3 |
+    predicate_adjacent_side_4 |
+    predicate_agent_crouches |
+    predicate_agent_holds |
+    predicate_between |
+    predicate_broken |
+    predicate_equal_x_position |
+    predicate_equal_z_position |
+    predicate_faces |
+    predicate_game_over |
+    predicate_game_start |
+    predicate_in |
+    predicate_in_motion |
+    predicate_is_setup_object |
+    predicate_object_orientation |
+    predicate_on |
+    predicate_open |
+    predicate_opposite |
+    predicate_rug_color_under |
+    predicate_same_color |
+    predicate_same_object |
+    predicate_same_type |
+    predicate_toggled_on |
+    predicate_touch
+    )   
+    ;
+
+predicate_above = '(above' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_adjacent = '(adjacent' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_adjacent_side_3 = '(adjacent_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term ')';
+predicate_adjacent_side_4 = '(adjacent_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term arg_4:predicate_or_function_term ')';
+predicate_agent_crouches = '(agent_crouches' no_args:{} ')';  # hack to make sure it parses an expression
+predicate_agent_holds = '(agent_holds' arg_1:predicate_or_function_term ')';
+predicate_between = '(between' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term ')';
+predicate_broken = '(broken' arg_1:predicate_or_function_term ')';
+predicate_equal_x_position = '(equal_x_position' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_equal_z_position = '(equal_z_position' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_faces = '(faces' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_game_over = '(game_over' no_args:{} ')';  # hack to make sure it parses an expression
+predicate_game_start = '(game_start' no_args:{} ')';  # hack to make sure it parses an expression
+predicate_in = '(in' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_in_motion = '(in_motion' arg_1:predicate_or_function_term ')';
+predicate_is_setup_object = '(is_setup_object' arg_1:predicate_or_function_term ')';
+predicate_object_orientation = '(object_orientation' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_on = '(on' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_open = '(open' arg_1:predicate_or_function_term ')';
+predicate_opposite = '(opposite' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_rug_color_under = '(rug_color_under' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_same_color = '(same_color' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_same_object = '(same_object' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_same_type = '(same_type' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_toggled_on = '(toggled_on' arg_1:predicate_or_function_term ')';
+predicate_touch = '(touch' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+
+predicate_or_function_term = term:(type_name | variable);
+
 
 # Game Setup
 

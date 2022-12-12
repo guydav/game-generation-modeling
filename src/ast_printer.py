@@ -49,7 +49,7 @@ class ASTPrinter(ASTParser):
         return self._handle_str(str(ast), **kwargs)
 
     def _handle_ast(self, ast, **kwargs):
-        rule = ast.parseinfo.rule
+        rule = ast.parseinfo.rule  # type: ignore
         depth, increment, context = kwargs['depth'], kwargs['increment'], kwargs['context']
         # check for exact matches before rule substitutions
 
@@ -166,7 +166,7 @@ def _out_str_to_span(out_str, context):
 
 def mutation_context(func):
     @functools.wraps(func)
-    def wrapper_func(caller, rule, ast, depth, increment, context=None, **kwargs):
+    def wrapper_func(caller, rule, ast, depth, increment, context=None, *args, **kwargs):
         if context is None:
             context = {}
 
@@ -179,7 +179,7 @@ def mutation_context(func):
 
         context = preprocess_context(context)
 
-        ret_val = func(caller, rule, ast, depth, increment, context, **kwargs)
+        ret_val = func(caller, rule, ast, depth, increment, context, *args, **kwargs)
 
         if 'mutation' in ast:  
             if prev_mutation is not None:
@@ -358,31 +358,31 @@ def _handle_game(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
-def _handle_function_eval(caller, rule, ast, depth, increment, context=None):
-    _indent_print(f'({ast.func_name} {" ".join(_format_func_args(ast, depth, increment, context))})', 
-        depth, increment, context)
+def _handle_function_eval(caller, rule, ast, depth, increment, context=None, return_str=False):
+    return _handle_predicate(caller, rule, ast, depth, increment, context,
+        return_str, 'func', 'function_')
 
 
-@mutation_context
-def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
-    formatted_args = _format_func_args(ast, depth, increment, context)
-    return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
+# @mutation_context
+# def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
+#     formatted_args = _format_func_args(ast, depth, increment, context)
+#     return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
 
-def _format_func_args(ast, depth, increment, context):
-    func_args = ast.func_args
-    if func_args is None:
-        formatted_args = []
+# def _format_func_args(ast, depth, increment, context):
+#     func_args = ast.func_args
+#     if func_args is None:
+#         formatted_args = []
 
-    else:
-        if not isinstance(func_args, list):
-            func_args = [func_args]
+#     else:
+#         if not isinstance(func_args, list):
+#             func_args = [func_args]
 
-        formatted_args = [
-            arg if isinstance(arg, str) 
-            else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context)) 
-            for arg in func_args]
+#         formatted_args = [
+#             arg if isinstance(arg, str) 
+#             else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context)) 
+#             for arg in func_args]
             
-    return formatted_args
+#     return formatted_args
 
 
 @mutation_context
@@ -391,7 +391,8 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
 
     if isinstance(arg, tatsu.ast.AST): 
         if arg.parseinfo.rule == 'function_eval':  # type: ignore
-            return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
+            # return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
+            return _handle_function_eval(caller, arg.rule, arg, depth, increment, context, return_str=True)  # type: ignore
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
     return str(arg)
@@ -422,26 +423,21 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
     
 
 @mutation_context
-def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False):
-    name = ast.pred_name
-    pred_args = ast.pred_args
+def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False,
+    child_key: str = 'pred', child_rule_prefix: str = 'predicate_'):
+    pred = ast[child_key]
+    pred_rule = pred.parseinfo.rule
+    name = pred_rule.replace(child_rule_prefix, '')
+    if name[-1].isdigit():
+        name = name[:-2]
+
     args = []
-
-    if pred_args is not None:
-        if not isinstance(pred_args, list):
-            pred_args = [pred_args]
-
-        for arg in pred_args:
-            if isinstance(arg, str):
-                args.append(arg)
-            elif isinstance(arg, tatsu.ast.AST):
-                term = arg.term
-                if isinstance(term, str):
-                    args.append(term)    
-                else:
-                    args.append(_handle_predicate(caller, rule, term, depth + 1, increment, context, return_str=True))
-            else:
-                raise ValueError(f'Unexpected predicate argument: {arg}')
+    arg_index = 1
+    arg_key = f'arg_{arg_index}'
+    while arg_key in pred and pred[arg_key] is not None:
+        args.append(pred[arg_key].term)
+        arg_index += 1
+        arg_key = f'arg_{arg_index}'
 
     out = _out_str_to_span(f'({name} {" ".join(args)})', context)
 
@@ -526,7 +522,8 @@ def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
     _indent_print('(once-measure', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_measure_pred, depth + 1, increment, context)
-    _indent_print(_inline_format_function_eval(caller, ast.measurement.rule, ast.measurement, depth, increment, context), depth + 1, increment, context)
+    # _indent_print(_inline_format_function_eval(caller, ast.measurement.rule, ast.measurement, depth, increment, context), depth + 1, increment, context)
+    _indent_print(_handle_function_eval(caller, ast.measurement.rule, ast.measurement, depth, increment, context, return_str=True), depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
     

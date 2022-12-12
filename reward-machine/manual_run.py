@@ -78,10 +78,10 @@ TEST_GAME_LIBRARY = {
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-overlapping'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-measure'])
     score = None
 
-    trace_path = COMPLEX_STACKING_TRACE.resolve().as_posix()
+    trace_path = THREE_WALL_TO_BIN_BOUNCES_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

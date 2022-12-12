@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2021) (preloaded format=pdflatex 2022.1.30)  15 NOV 2022 22:46
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2021) (preloaded format=pdflatex 2022.1.30)  12 DEC 2022 15:18
 entering extended mode
  \write18 enabled.
  %&-line parsing enabled.
@@ -1261,7 +1261,7 @@ Package rerunfilecheck Info: File `updated_dsl_doc.out' has not changed.
 Here is how much of TeX's memory you used:
  35012 strings out of 478994
  665568 string characters out of 5858184
- 1634374 words of memory out of 5000000
+ 1637398 words of memory out of 5000000
  51718 multiletter control sequences out of 15000+600000
  414369 words of font info for 70 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
@@ -1286,7 +1286,7 @@ b></usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb
 ></usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
 </usr/local/texlive/2021/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb></
 usr/local/texlive/2021/texmf-dist/fonts/type1/public/cm-super/sfrm1000.pfb>
-Output written on updated_dsl_doc.pdf (9 pages, 239718 bytes).
+Output written on updated_dsl_doc.pdf (9 pages, 239190 bytes).
 PDF statistics:
  396 PDF objects out of 1000 (max. 8388607)
  335 compressed objects within 4 object streams

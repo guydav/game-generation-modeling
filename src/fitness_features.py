@@ -16,7 +16,7 @@ import typing
 from ast_utils import cached_load_and_parse_games_from_file
 from ast_parser import ASTParser
 import ast_printer
-from ast_to_latex_doc import TYPE_RULES
+from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 from room_and_object_types import *
 
 
@@ -263,23 +263,6 @@ class ASTNodeCounter(ASTParser):
         super()._handle_ast(ast, **kwargs)
 
 
-def _extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
-    args = None
-    if 'pred_args' in ast:
-        args = ast.pred_args
-
-    elif 'func_args' in ast:
-        args = ast.func_args
-
-    if args is None:
-        return []
-
-    if isinstance(args, tatsu.ast.AST):
-        args = [args]
-
-    return [str(arg.term) for arg in args]
-
-
 class VariableBasedFitnessTerm(FitnessTerm):
     def __init__(self, header: str):
         super().__init__(('predicate_term', 'function_term'), header)
@@ -482,7 +465,7 @@ class VariableNotRepeatedInPredicateFunction(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             self.total_count += 1
-            args = list(_extract_predicate_function_args(ast))
+            args = list(extract_predicate_function_args(ast))
             self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
 
     def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
@@ -574,26 +557,6 @@ PREDICATE_FUNCTION_ARITY_MAP = {
 }
 
 
-def _extract_n_args(ast: tatsu.ast.AST):
-    key = None
-    if 'pred_args' in ast:
-        key = 'pred_args'
-
-    if 'func_args' in ast:
-        key = 'func_args'
-
-    if key is not None:
-        if ast[key] is None:
-            return 0
-
-        if isinstance(ast[key], tatsu.ast.AST):
-            return 1
-        else:
-            return len(ast[key])  # type: ignore
-
-    return 0
-
-
 class CorrectPredicateFunctionArity(FitnessTerm):
     total_count: int = 0
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = {}
@@ -611,12 +574,12 @@ class CorrectPredicateFunctionArity(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST):
             self.total_count += 1
 
-            name = ast.pred_name if rule == 'predicate' else ast.func_name
+            name = extract_predicate_function_name(ast)
 
             if name not in self.name_to_arity_map:
                 raise ValueError(f'Predicate {name} not in predicate arity map')
 
-            n_args = _extract_n_args(ast)
+            n_args = extract_n_args(ast)
             arity = self.name_to_arity_map[name]  # type: ignore
 
             if isinstance(arity, int):
@@ -701,7 +664,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            name = ast.pred_name if rule == 'predicate' else ast.func_name
+            name = extract_predicate_function_name(ast)
 
             if name not in self.name_to_arity_map:
                 raise ValueError(f'Predicate {ast.name} not in predicate arity map')
@@ -709,7 +672,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             if name != self.predicate_or_function:
                 return
 
-            n_args = _extract_n_args(ast)
+            n_args = extract_n_args(ast)
             arity = self.name_to_arity_map[name]  # type: ignore
 
             if isinstance(arity, int):
@@ -719,7 +682,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             elif n_args not in arity:
                 return
 
-            terms = _extract_predicate_function_args(ast)
+            terms = extract_predicate_function_args(ast)
             term_type_lists = []
 
             context_variables = typing.cast(typing.Dict[str, typing.Dict[str, typing.Any]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
@@ -803,7 +766,7 @@ class CompositionalityStructureCounter(FitnessTerm):
         self.structure_str = structure
         self.structure_index = structure_index
         self.variable_replacement = variable_replacement
-        self.args_pattern = re.compile(PREDICATE_ARGS_PATTERN)
+        self.args_pattern = re.compile(predicate_arg_pattern)
 
     def game_start(self) -> None:
         self.structure_count = 0
@@ -811,8 +774,8 @@ class CompositionalityStructureCounter(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             ast_str = ast_printer.ast_section_to_string(ast, ast_printer.PREFERENCES_KEY)
-            for pred_args in self.args_pattern.findall(ast_str):
-                ast_str = ast_str.replace(pred_args, ' '.join(map(lambda x: self.variable_replacement, pred_args.split(" "))), 1)
+            for args in self.args_pattern.findall(ast_str):
+                ast_str = ast_str.replace(args, ' '.join(map(lambda x: self.variable_replacement, args.split(" "))), 1)
                 
             self.structure_count += ast_str == self.structure_str
 

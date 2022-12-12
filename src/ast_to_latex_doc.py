@@ -3,6 +3,7 @@ from collections import defaultdict, namedtuple
 from itertools import chain
 import tatsu
 import tatsu.ast
+import typing
 import shutil
 import os
 
@@ -789,23 +790,60 @@ TYPE_DESCRIPTIONS = (
 )
 
 
-def extract_n_args(ast, key=None):
-    n_args = 0
-    if 'pred_args' in ast:
-        if isinstance(ast.pred_args, tatsu.ast.AST):
-            n_args = 1
-        else:
-            n_args = len(ast.pred_args)
+def extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
+    inner = None
+    if 'pred' in ast:
+        inner = ast.pred
 
-    return ('n_args', n_args)
+    elif 'func' in ast:
+        inner = ast.func
+
+    if inner is None:
+        raise ValueError(f'Could not find predicate or function in {ast}')
+
+    args = []
+    arg_index = 1
+    arg_key = f'arg_{arg_index}'
+    while arg_key in inner and inner[arg_key] is not None:
+        args.append(inner[arg_key].term)
+        arg_index += 1
+        arg_key = f'arg_{arg_index}'
+
+    return [str(arg) for arg in args]
+
+
+def extract_predicate_function_name(ast: tatsu.ast.AST):
+    if 'pred' in ast:
+        rule = ast.pred.parseinfo.rule  # type: ignore
+        name = rule.replace('predicate_', '')
+
+    elif 'func' in ast:
+        rule = ast.func.parseinfo.rule  # type: ignore
+        name = rule.replace('function_', '')
+
+    else:
+        raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
+
+    if name[-1].isdigit():
+        name = name[:-2]
+
+    return name
+
+
+def extract_n_args(ast: tatsu.ast.AST):
+    return len(extract_predicate_function_args(ast))
+
+
+def wrapped_extract_n_args(ast: tatsu.ast.AST, key: typing.Optional[str] = None):
+    return ('n_args', len(extract_predicate_function_args(ast)))
 
 
 PREDICATE_RULES = {
-    PREDICATE: ('pred_name', (extract_n_args, ))
+    PREDICATE: (extract_predicate_function_name, (wrapped_extract_n_args, ))
 }
 
 FUNCTION_RULES = {
-    FUNCTION: ('func_name', (extract_n_args, ))
+    FUNCTION: (extract_predicate_function_name, (wrapped_extract_n_args, ))
 }
 
 
@@ -840,21 +878,8 @@ def extract_pref_name_and_types(ast):
 
 
 def extract_types_from_predicates_and_functions(ast):
-    args = None
-    
-    if 'pred_args' in ast:
-        args = ast.pred_args
-    
-    elif 'func_args' in ast:
-        args = ast.func_args
-
-    if args is None:
-        return None
-
-    if isinstance(args, tatsu.ast.AST):
-        args = [args]
-
-    return [arg.term for arg in args if 'term' in arg and isinstance(arg.term, str) and not arg.term.startswith('?')]
+    terms = extract_predicate_function_args(ast)
+    return [term for term in terms if not term.startswith('?')]
 
 
 def extract_co_ocurring_types(ast, key):

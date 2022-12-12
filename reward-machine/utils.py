@@ -300,6 +300,23 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
     return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
 
 
+def extract_predicate_function_name(ast: tatsu.ast.AST):
+    if 'pred' in ast:
+        rule = ast.pred.parseinfo.rule  # type: ignore
+        name = rule.replace('predicate_', '')
+
+    elif 'func' in ast:
+        rule = ast.func.parseinfo.rule  # type: ignore
+        name = rule.replace('function_', '')
+
+    else:
+        raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
+
+    if name[-1].isdigit():
+        name = name[:-2]
+
+    return name
+
 def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
     '''
     Recursively extract every variable referenced in the predicate (including inside functions 

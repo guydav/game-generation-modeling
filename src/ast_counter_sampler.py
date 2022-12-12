@@ -248,6 +248,10 @@ def sample_existing_variable(global_context: ContextDict, local_context: typing.
     return f'?{rng.choice(list(local_context["variables"]))}'
 
 
+def sample_empty_list(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
+    return list()
+
+
 VARIABLE_DEFAULTS = defaultdict(lambda: sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable
 
@@ -270,15 +274,16 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     number=defaultdict(lambda: NUMBER_DEFAULTS),  
     variable=VARIABLE_DEFAULTS,
     total_time=defaultdict(lambda: ['(total-time)']),
-    total_score=defaultdict(lambda: ['(total-score)'])
+    total_score=defaultdict(lambda: ['(total-score)']),
 )
 
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'type_name',
     ('comparison_arg', 'arg'): 'number',
-    ('function_term', 'term'): ('type_name', 'variable',),
-    ('predicate_term', 'term'): ('type_name', 'variable'),
+    ('predicate_or_function_term', 'term'): ('type_name', 'variable',),
+    # ('function_term', 'term'): ('type_name', 'variable',),
+    # ('predicate_term', 'term'): ('type_name', 'variable'),
     ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
 }
 
@@ -310,7 +315,17 @@ NAMED = 'named'
 PATTERN = 'pattern'
 MIN_LENGTH = '_min_length'
 OPTIONAL_VOID = 'void'
+EMPTY_CLOSURE = 'empty_closure'
+EMPTY_LIST = 'empty_list'
 
+HARDCODED_RULES = {
+    EMPTY_CLOSURE: {
+        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0}, 
+        TOKEN_POSTERIOR: {EMPTY_LIST: 1.0}, 
+        SAMPLERS: {EMPTY_LIST: sample_empty_list},
+        PRODUCTION: ((TOKEN, []),)
+    }
+}
 
 class ASTSampler:
     """
@@ -335,9 +350,9 @@ class ASTSampler:
                  rule_field_value_types=SPECIAL_RULE_FIELD_VALUE_TYPES,
                  pattern_type_mappings=PATTERN_TYPE_MAPPINGS,
                  local_context_propagating_rules=LOCAL_CONTEXT_PROPAGATING_RULES,
-                 prior_rule_count=PRIOR_COUNT, 
-                 prior_token_count=PRIOR_COUNT, 
-                 length_prior=LENGTH_PRIOR, rng=None, seed=DEFAULT_RANDOM_SEED):
+                 prior_rule_count=PRIOR_COUNT, prior_token_count=PRIOR_COUNT, 
+                 length_prior=LENGTH_PRIOR, hardcoded_rules=HARDCODED_RULES,
+                 rng=None, seed=DEFAULT_RANDOM_SEED):
         
         self.grammar_parser = grammar_parser
         self.ast_counter = ast_counter
@@ -355,12 +370,14 @@ class ASTSampler:
             rng = np.random.default_rng(seed)  # type: ignore
         self.rng = rng
 
-        self.rules = {}
+        self.rules = {k: v for k, v in hardcoded_rules.items()}
         self.value_patterns = dict(
             any=re.compile(re.escape('(any)')),
             total_time=re.compile(re.escape('(total-time)')),
             total_score=re.compile(re.escape('(total-score)'))
         )
+        self.all_rules = set([rule.name for rule in self.grammar_parser.rules])
+        self.all_rules.update(self.rules.keys())
         self.parse_prior_to_posterior()
 
         self.sample_parseinfo_index = 0
@@ -517,8 +534,6 @@ class ASTSampler:
             del field_prior[RULE_POSTERIOR]
         
     def parse_prior_to_posterior(self):
-        all_rules = set([rule.name for rule in self.grammar_parser.rules])
-
         for rule in self.grammar_parser.rules:
             children = rule.children()
             if len(children) > 1:
@@ -585,7 +600,7 @@ class ASTSampler:
 
             elif isinstance(rule_prior, str):
                 # This is a rule that expands only to a single other rule
-                if rule_prior in all_rules:
+                if rule_prior in self.all_rules:
                     rule_prior = dict(rule_posterior={rule_prior: 1}, production=[(RULE, rule_prior)])
 
                 # This is a rule that expands directly to a token
@@ -635,7 +650,15 @@ class ASTSampler:
             return rule_dict
 
         if isinstance(rule, grammars.Named):
-            return {rule.name: dict(options=self.parse_rule_prior(child)) for child in rule.children()}
+            children = rule.children()
+            if len(children) > 1:
+                raise ValueError(f'Named rule has more than one child: {rule}')
+            
+            child_prior = self.parse_rule_prior(children[0])
+            # if isinstance(child_prior, str) and child_prior not in self.all_rules:
+            #     return child_prior
+            
+            return {rule.name: dict(options=child_prior)}
         
         if isinstance(rule, grammars.Group):
             if len(rule.children()) == 1:
@@ -672,6 +695,9 @@ class ASTSampler:
 
         if isinstance(rule, grammars.Void):
             return OPTIONAL_VOID
+
+        if isinstance(rule, grammars.EmptyClosure):
+            return EMPTY_CLOSURE
 
         raise ValueError(f'Encountered unknown rule type: {type(rule)}: {rule}')
 
@@ -968,7 +994,7 @@ def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[st
 
         if args.validate_samples:
             second_ast = grammar_parser.parse(first_print_out)
-            second_print_out = ast_printer.ast_to_string(second_ast)
+            second_print_out = ast_printer.ast_to_string(second_ast, line_delimiter='\n')
 
             if first_print_out != second_print_out:
                 print('Mismatch found')

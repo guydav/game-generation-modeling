@@ -6,6 +6,7 @@ import tatsu.ast
 import typing
 import shutil
 import os
+import re
 
 import ast_printer
 from ast_parser import ASTParser, ASTParentMapper
@@ -232,22 +233,18 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
         """  # .format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR) # Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
     },
     PREDICATES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The predicates are not defined as part of the grammar, but rather, we envision them is being specific to a domain and being specified to any model as part of the model inputs. 
-Predicates can act on any number of arguments, and return a Boolean value.
-            
-The following enumerates all predicates currently found in our game dataset:
+        PRE_NOTES_KEY: r"""The following section described valid expansions of the \dsl{predicate} rule,
+        which are all of the predicates we consider valid in the current domain.
+        Predicates operate over a specified number of arguments, which can be variables or object names, and return a boolean value (true/false).
 """  # .format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any predicates I forgot to provide a description for will appear in {{ \color{{{undescribed_color}}} {undescribed_color} }}.
     },
     FUNCTIONS_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""Functions operate similarly to predicates, but rather than returning a Boolean value, they return a numeric value or a type. 
-Similarly to predicates, functions are not a part of the grammar, and may vary by problem domain. 
-
-The following describes all functions currently found in our game dataset:""",
+        PRE_NOTES_KEY: r"""he following section described valid expansions of the \dsl{function_eval} rule,
+        which are all of the functions we consider valid in the current domain.
+        Functions operate over a specified number of arguments, which can be variables or object names, and return a number.""",
     },
     TYPES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The types are also not defined as part of the grammar, and we envision them operating similarly to the predicates and functions, varying by domain and provided to any models as part of its inputs .
-            
-The following describes all types currently found in our game dataset: 
+        PRE_NOTES_KEY: r"""The types are currently not defined as part of the grammar, but you can consider the following as enumerating all observed expansions of the \dsl{type-name} rule:
         """  # .format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any types we forgot to provide a description for will appear in {{\color{{{undescribed_color}}}{undescribed_color} }}.
     }
 }
@@ -296,7 +293,7 @@ class FakeTranslator:
 class SectionTranslator(DSLTranslator):
     def __init__(self, section_key, core_blocks, additional_blocks=None, section_name=None, consider_used_rules=None,
                  section_type='grammar', unused_rule_color=UNUSED_RULE_OR_ELEMENT_COLOR, new_rule_color=NEW_RULE_OR_ELEMENT_COLOR,
-                 external_mode=False, omit_unused=False):
+                 external_mode=False, omit_unused=False, consider_described_rules: typing.Optional[typing.Sequence[typing.Union[str, re.Pattern]]] = None):
         super().__init__(section_key, section_type, section_name, external_mode=external_mode, omit_unused=omit_unused)
         self.section_key = section_key
         self.core_blocks = core_blocks
@@ -304,9 +301,9 @@ class SectionTranslator(DSLTranslator):
         self.consider_used_rules = consider_used_rules if consider_used_rules is not None else []
         self.unused_rule_color = unused_rule_color
         self.new_rule_color = new_rule_color
+        self.consider_described_rules = consider_described_rules
 
         self.lines = []
-        self.remaining_rules = []
         self.unused_rules = []     
 
     def process(self, section_data):
@@ -338,15 +335,27 @@ class SectionTranslator(DSLTranslator):
                 elif is_core or any([rule in keys for rule in block_rules]):
                     self.lines.extend(block_text.split('\n'))
                     for rule in block_rules:
-                        if rule in keys:
+                        if isinstance(rule, re.Pattern): 
+                            keys -= set([key for key in keys if rule.match(key)])
+
+                        elif rule in keys:
                             keys.remove(rule)
 
-                        elif is_core:
+                        elif is_core and rule not in self.consider_used_rules:
                             self.unused_rules.append(rule)
 
                 self.lines.append('')
 
             self.lines.append('')
+
+        if self.consider_described_rules is not None:
+            for rule in self.consider_described_rules:
+                if isinstance(rule, str):
+                    if rule in keys:
+                        keys.remove(rule)
+                
+                elif isinstance(rule, re.Pattern):
+                    keys -= set([key for key in keys if rule.match(key)])
 
         return keys
 
@@ -486,9 +495,8 @@ SHARED_BLOCKS = {
 
 <function-eval-or-number> ::= <function-eval> | <number> 
 
-<function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
-
-<function-term> ::= <name> | <variable> | <number> """, ('function_comparison', FUNCTION)),
+<function-eval> ::= "#" See valid expansions in a separate section below
+""", ('function_comparison', 'multiple_args_equal_comparison', 'two_arg_comparison', 'comparison_arg', FUNCTION,  re.compile('function_[A-Za-z_]+'))),
 
     VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
@@ -496,14 +504,16 @@ SHARED_BLOCKS = {
 
 <variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers.
 
-<type-def> ::= <name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
+<type-def> ::= <type-name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
 
-<either-types> ::= (either <name>$^+$)""", ('variable_list', 'variable_type_def', 'either_types')),
+<either-types> ::= (either <type-name>$^+$)
 
-    PREDICATE: (r"""<predicate> ::= (<name> <predicate-term>$^*$)
+<type-name> ::= <name>""", ('variable_list', 'variable_type_def', 'type_definition', 'either_types')),
 
-<predicate-term> ::= <name> | <variable>""",
-('predicate', 'predicate_term')),
+    PREDICATE: (r"""<predicate> ::= "#" See valid expansions in a separate section below
+
+<predicate-or-function-term> ::= <type-name> | <variable>""",
+('predicate', 'predicate_term', 'predicate_or_function_term', re.compile('predicate_[A-Za-z_]+'))),
 }
 
 
@@ -513,7 +523,7 @@ SETUP_BLOCKS = (
     \alt (not <setup>)
     \alt (exists (<typed list(variable)>) <setup>)
     \alt (forall (<typed list(variable)>) <setup>) 
-    \alt <setup-statement>""", ('setup_and', 'setup_or', 'setup_not', 'setup_exists', 'setup_forall', 'setup_statement')),
+    \alt <setup-statement>""", ('setup', 'setup_and', 'setup_or', 'setup_not', 'setup_exists', 'setup_forall', 'setup_statement')),
 
     (r"""<setup-statement> ::= "#" A setup statement specifies that a predicate is either optional during gameplay or must be preserved during gameplay.
     \alt (game-conserved <super-predicate>) 
@@ -526,7 +536,7 @@ SETUP_BLOCKS = (
     \alt (exists (<typed list(variable)>) <super-predicate>) 
     \alt (forall (<typed list(variable)>) <super-predicate>) 
     \alt <f-comp> 
-    \alt <predicate>""", ('super_predicate_and', 'super_predicate_or', 'super_predicate_not', 'super_predicate_forall', 'super_predicate_exists')),
+    \alt <predicate>""", ('super_predicate', 'super_predicate_and', 'super_predicate_or', 'super_predicate_not', 'super_predicate_forall', 'super_predicate_exists')),
 )
 
 
@@ -544,7 +554,7 @@ PREFERENCES_BLOCKS = (
 \alt  (forall (<variable-list>) <preference-body>)
 \alt <preference-body>) 
 
-<preference-body> ::=  <then> | <at-end>""", ('preference', 'pref_forall', 'pref_body_exists')), # | <always>
+<preference-body> ::=  <then> | <at-end>""", ('preferences', 'preference', 'pref_forall', 'pref_def', 'pref_body', 'pref_body_exists', 'pref_forall_prefs')), # | <always>
 
     (r'<at-end> ::= (at-end <super-predicate>) "#" Specifies a prediicate that should hold in the terminal state.', 'at_end'), 
 
@@ -552,7 +562,7 @@ PREFERENCES_BLOCKS = (
 
     (r"""<then> ::= (then <seq-func> <seq-func>$^+$) "#" Specifies a series of conditions that should hold over a sequence of states -- see below for the specific operators (<seq-func>s), and Section 2 for translation of these definitions to linear temporal logicl (LTL).
 
-<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while> "#" Four of thse temporal sequence functions currently exist: """, 'then'),  #  | <hold-for> | <hold-to-end> \alt <forall-seq>
+<seq-func> ::= <once> | <once-measure> | <hold> | <hold-while> "#" Four of thse temporal sequence functions currently exist: """, ('then', 'seq_func')),  #  | <hold-for> | <hold-to-end> \alt <forall-seq>
 
     (r'<once> ::= (once <super-predicate>) "#" The predicate specified must hold for a single world state.', 'once'),
 
@@ -593,7 +603,7 @@ TERMINAL_BLOCKS = (
 
 
 SCORING_BLOCKS = (
-    (r"""<scoring> ::= <scoring-expr> "#" The scoring conditions maximize a scoring expression. """, ('scoring_maximize', 'scoring_minimize')),
+    (r"""<scoring> ::= <scoring-expr> "#" The scoring conditions maximize a scoring expression. """, ('scoring_expr', )),
 
     (r"""<scoring-expr> ::= "#" A scoring expression can be an arithmetic operation over other scoring expressions, a reference to the total time or score, a comparison, or a preference scoring evaluation.
         \alt <scoring-external-maximize> 
@@ -617,7 +627,7 @@ SCORING_BLOCKS = (
     (r"""<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
         \alt (<comp-op> <scoring-expr> <scoring-expr>) 
         \alt (= <scoring-expr>$^+$)
-    """, 'scoring_comp'),
+    """, 'scoring_comparison'),
 
     (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
         \alt <count>
@@ -629,7 +639,7 @@ SCORING_BLOCKS = (
         \alt <count-same-positions> 
         \alt <count-once-per-external-objects> 
 
-    """, 'preference-eval'),
+    """, 'preference_eval'),
 
     (r'<count> ::= (count <pref-name-and-types>) "#" Count how many times the preference is satisfied by non-overlapping sequences of states.', 'count'),
     (r'<count-overlapping> ::= (count-overlapping <pref-name-and-types>) "#" Count how many times the preference is satisfied by overlapping sequences of states.', 'count_overlapping'),
@@ -651,7 +661,7 @@ SCORING_BLOCKS = (
 
     (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
 
-    <pref-object-type> ::= : <name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
+    <pref-object-type> ::= : <type-name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
     """, ('pref_name_and_types', 'pref_object_type')),
 )
 
@@ -917,8 +927,10 @@ def main(args):
 
     parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
-    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), consider_used_rules=['setup_not', 'setup_statement'])
-    pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, section_name='Gameplay Preferences')  # additional_blocks=(SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE])
+    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), 
+        consider_used_rules=['setup_not', 'setup_statement'])
+    pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, section_name='Gameplay Preferences',
+        consider_described_rules=[re.compile('predicate_[A-Za-z_]+'), re.compile('function_[A-Za-z_]+')])  # additional_blocks=(SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE])
     terminal_translator = SectionTranslator(TERMINAL_SECTION_KEY, TERMINAL_BLOCKS, None, section_name='Terminal Conditions', consider_used_rules=['terminal_not'])
     scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=SCORING_CONSIDER_USED_RULES)
 

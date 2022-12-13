@@ -191,9 +191,8 @@ For a full list of the predicates we found ourselves using so far, see \fullref{
 
 <function-eval-or-number> ::= <function-eval> | <number> 
 
-<function-eval> ::= (<name> <function-term>$^+$) "#" An evaluation of a function on any number of arguments.
+<function-eval> ::= "#" See valid expansions in a separate section below
 
-<function-term> ::= <name> | <variable> | <number> 
 
 <variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
 
@@ -201,13 +200,15 @@ For a full list of the predicates we found ourselves using so far, see \fullref{
 
 <variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers.
 
-<type-def> ::= <name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
+<type-def> ::= <type-name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
 
-<either-types> ::= (either <name>$^+$)
+<either-types> ::= (either <type-name>$^+$)
 
-<predicate> ::= (<name> <predicate-term>$^*$)
+<type-name> ::= <name>
 
-<predicate-term> ::= <name> | <variable>
+<predicate> ::= "#" See valid expansions in a separate section below
+
+<predicate-or-function-term> ::= <type-name> | <variable>
 
 
 \end{grammar}
@@ -387,7 +388,7 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
 
 <pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
 
-    <pref-object-type> ::= : <name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
+    <pref-object-type> ::= : <type-name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
     
 
 
@@ -400,10 +401,9 @@ Various preference evaluation modes can expand the \dsl{preference-eval} rule, s
 
 
 \subsection{Predicates} \label{sec:predicates}
-The predicates are not defined as part of the grammar, but rather, we envision them is being specific to a domain and being specified to any model as part of the model inputs. 
-Predicates can act on any number of arguments, and return a Boolean value.
-            
-The following enumerates all predicates currently found in our game dataset:
+The following section described valid expansions of the \dsl{predicate} rule,
+        which are all of the predicates we consider valid in the current domain.
+        Predicates operate over a specified number of arguments, which can be variables or object names, and return a boolean value (true/false).
 
 \begin{lstlisting}
 (above <arg1> <arg2>) [5 references] ; Is the first object above the second object?
@@ -436,10 +436,9 @@ The following enumerates all predicates currently found in our game dataset:
 
 
 \subsection{Functions} \label{sec:functions}
-Functions operate similarly to predicates, but rather than returning a Boolean value, they return a numeric value or a type. 
-Similarly to predicates, functions are not a part of the grammar, and may vary by problem domain. 
-
-The following describes all functions currently found in our game dataset:
+he following section described valid expansions of the \dsl{function_eval} rule,
+        which are all of the functions we consider valid in the current domain.
+        Functions operate over a specified number of arguments, which can be variables or object names, and return a number.
 \begin{lstlisting}
 (building_size <arg1>) [2 references] ; Takes in an argument of type building, and returns how many objects comprise the building (as an integer).
 (distance <arg1> <arg2>) [114 references] ; Takes in two arguments of type object, and returns the distance between the two objects (as a floating point number).
@@ -450,9 +449,7 @@ The following describes all functions currently found in our game dataset:
 
 
 \subsection{Types} \label{sec:types}
-The types are also not defined as part of the grammar, and we envision them operating similarly to the predicates and functions, varying by domain and provided to any models as part of its inputs .
-            
-The following describes all types currently found in our game dataset: 
+The types are currently not defined as part of the grammar, but you can consider the following as enumerating all observed expansions of the \dsl{type-name} rule:
         
 \begin{lstlisting}
 game_object [33 references] ; Parent type of all objects

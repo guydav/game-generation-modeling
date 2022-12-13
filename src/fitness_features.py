@@ -65,7 +65,7 @@ class FitnessTerm(ABC):
         pass
 
     @abstractmethod
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         pass
 
 
@@ -136,7 +136,7 @@ class ASTFitnessFeaturizer:
             self.register(term, tuple_rule, section_rule)
 
     def to_df(self) -> pd.DataFrame:
-        return pd.DataFrame.from_records(self.rows, columns=self.headers)
+        return pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
 
     def parse(self, ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
         row = {}
@@ -152,11 +152,13 @@ class ASTFitnessFeaturizer:
 
         for header, term in self.header_registry.items():
             term_result = term.game_end()
-            if term_result is not None:
-                if isinstance(term_result, (int, float)):
-                    row[header] = term_result
-                else:
-                    row[header] = self.list_reduce(row[header])
+            if isinstance(term_result, (int, float)):
+                row[header] = term_result
+            elif isinstance(term_result, dict):
+                for key, val in term_result.items():
+                    row[f'{header}_{key}'] = val
+            else:
+                row[header] = self.list_reduce(row[header])
 
         self.rows.append(row)
         if return_row:
@@ -265,7 +267,7 @@ class ASTNodeCounter(ASTParser):
 
 class VariableBasedFitnessTerm(FitnessTerm):
     def __init__(self, header: str):
-        super().__init__(('predicate_term', 'function_term'), header)
+        super().__init__(('predicate_term', 'function_term', 'predicate_or_function_term'), header)
         self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
@@ -297,7 +299,7 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
         else:
             self.undefined_count += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.defined_count == 0:
             return 0
 
@@ -324,7 +326,7 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
         if term in self.defined_variables:
             self.used_variables.add(term)
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.defined_variables) == 0:
             return 0
 
@@ -349,7 +351,7 @@ class AllPreferencesUsed(FitnessTerm):
         else:
             self.used_preferences.add(ast.name_and_types.pref_name)  # type: ignore 
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.defined_preferences) == 0:
             return 0
 
@@ -385,7 +387,7 @@ class SetupObjectsUsed(FitnessTerm):
             elif result is not None:
                 self.used_objects.add(result)
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.setup_objects) == 0:
             return 0
 
@@ -416,7 +418,7 @@ class NoAdjacentOnce(FitnessTerm):
                     self.prefs_with_adjacent_once += 1
                     break
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_prefs == 0:
             return 0
 
@@ -441,7 +443,7 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
             if len(func_rules) >= 3 and func_rules[0] == func_rules[-1] == 'once':
                 self.prefs_start_and_end_with_once += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_prefs == 0:
             return 0
 
@@ -468,7 +470,7 @@ class VariableNotRepeatedInPredicateFunction(FitnessTerm):
             args = list(extract_predicate_function_args(ast))
             self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_count == 0:
             return 0
 
@@ -505,7 +507,7 @@ class NoNestedLogicals(FitnessTerm):
                 if any((isinstance(child, tatsu.ast.AST) and isinstance(child.pred, tatsu.ast.AST) and child.pred.parseinfo.rule == rule) for child in children):  # type: ignore
                     self.nested_logicals += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_logicals == 0:
             # TODO: should this return a NaN? If so, we should thin kabout how to handle them
             return 1
@@ -539,7 +541,7 @@ class PrefForallUsedCorrectly(FitnessTerm):
                 if object_types is not None or 'external_forall' in context:
                     self.prefs_used_as_pref_forall_prefs.add(pref_name)
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 1
 
@@ -589,7 +591,7 @@ class CorrectPredicateFunctionArity(FitnessTerm):
             elif n_args not in arity:
                 self.count_with_wrong_arity += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_count == 0:
             return 0
 
@@ -624,7 +626,7 @@ class NoTwoNumberComparisons(FitnessTerm):
                 if all(isinstance(arg, str) for arg in args) or len(args) <= 1:  # type: ignore
                     self.two_number_comparisons += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_comparisons == 0:
             return 1
 
@@ -711,7 +713,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             self.matching_argument_types_count += all(self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories)))
 
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.matching_argument_types_count
 
 
@@ -779,7 +781,7 @@ class CompositionalityStructureCounter(FitnessTerm):
                 
             self.structure_count += ast_str == self.structure_str
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.structure_count
 
 
@@ -790,11 +792,33 @@ def build_compositionality_fitness_terms(
     return [CompositionalityStructureCounter(structure, i, variable_replacement) for i, structure in enumerate(compositionality_structures)]
 
 
-class SectionMaxDepth(FitnessTerm):
+class SectionCountTerm(FitnessTerm):
+    def __init__(self, section: str, header: str, thresholds: typing.Optional[typing.Sequence[float]]):
+        super().__init__(section, header)
+        if thresholds is not None:
+            thresholds = list(thresholds)
+            thresholds.insert(0, float('-inf'))
+            thresholds.append(float('inf'))
+        
+        self.thresholds = thresholds
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        result = self._inner_game_end()
+        if self.thresholds is None:
+            return result
+
+        return {i: 1 if self.thresholds[i] <= result < self.thresholds[i + 1] else 0 for i in range(len(self.thresholds) - 1)}
+
+    @abstractmethod
+    def _inner_game_end(self) -> Number:
+        pass
+
+
+class SectionMaxDepth(SectionCountTerm):
     max_depth: int = 0
 
-    def __init__(self, section: str):
-        super().__init__(section, f'max_depth_{section}')
+    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+        super().__init__(section, f'max_depth_{section}', thresholds)
         self.max_depth = 0
 
     def game_start(self) -> None:
@@ -804,15 +828,15 @@ class SectionMaxDepth(FitnessTerm):
         if DEPTH_CONTEXT_KEY in context:
             self.max_depth = max(self.max_depth, context[DEPTH_CONTEXT_KEY])  # type: ignore
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.max_depth
 
 
-class SectionMeanDepth(FitnessTerm):
+class SectionMeanDepth(SectionCountTerm):
     depths: typing.List[int] = []
 
-    def __init__(self, section: str):
-        super().__init__(section, f'mean_depth_{section}')
+    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+        super().__init__(section, f'mean_depth_{section}', thresholds)
         self.depths = []
 
     def game_start(self) -> None:
@@ -822,18 +846,18 @@ class SectionMeanDepth(FitnessTerm):
         if DEPTH_CONTEXT_KEY in context:
             self.depths.append(context[DEPTH_CONTEXT_KEY])  # type: ignore
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.depths) == 0:
             return 0
 
         return sum(self.depths) / len(self.depths)
 
 
-class SectionNodeCount(FitnessTerm):
+class SectionNodeCount(SectionCountTerm):
     node_count: int = 0
 
-    def __init__(self, section: str):
-        super().__init__(section, f'node_count_{section}')
+    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+        super().__init__(section, f'node_count_{section}', thresholds)
         self.node_count = 0
 
     def game_start(self) -> None:
@@ -842,15 +866,38 @@ class SectionNodeCount(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         self.node_count += 1
 
-    def game_end(self) -> typing.Optional[typing.Union[Number, typing.Sequence[Number]]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.node_count
 
 
+SECTION_COUNT_THRESHOLDS = {
+    (SectionMaxDepth, 'setup'): [1, 8.5, 17.5, 25.5],
+    (SectionMaxDepth, 'constraints'): [8.5, 15.5, 19.5, 23.5],
+    (SectionMaxDepth, 'terminal'): [1, 4.5, 8.5, 11.5],
+    (SectionMaxDepth, 'scoring'): [2.5, 4.5, 8.5, 12.5],
+    
+    (SectionMeanDepth, 'setup'): [1, 4, 9, 12],
+    (SectionMeanDepth, 'constraints'): [6.5, 8, 10, 12],
+    (SectionMeanDepth, 'terminal'): [1, 2, 3.8, 5.5],
+    (SectionMeanDepth, 'scoring'): [1.5, 2.75, 4, 6],
+
+    (SectionNodeCount, 'setup'): [1, 10, 30, 100],
+    (SectionNodeCount, 'constraints'): [30, 70, 135, 200],
+    (SectionNodeCount, 'terminal'): [1, 5, 25, 55],
+    (SectionNodeCount, 'scoring'): [6, 18, 33, 60],
+    
+}
+
+
 def build_section_count_fitness_terms(sections: typing.Sequence[str] = SECTION_KEYS,
-    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount)
+    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount),
+    thresholds: typing.Optional[typing.Dict[typing.Tuple[typing.Callable, str], typing.Sequence[float]]] = SECTION_COUNT_THRESHOLDS,
     ) -> typing.Sequence[FitnessTerm]:
 
-    return [term_class(section) for term_class in term_classes for section in sections]
+    if thresholds is not None:
+        return [term_class(section, thresholds[(term_class, section)]) for term_class in term_classes for section in sections]
+    else:
+        return [term_class(section) for term_class in term_classes for section in sections]
 
 
 def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
@@ -917,6 +964,16 @@ def main(args):
 
     df = aggregator.to_df()
     print(df.groupby('src_file').agg([np.mean, np.std]))
+
+    for src_file in df.src_file.unique():
+        zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
+        zero_std_columns = [c for c in zero_std.index if zero_std[c] and not c.startswith('arg_types')]  # type: ignore
+        print(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
+
+    global_zero_std = df.std(numeric_only=True) == 0
+    global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not c.startswith('arg_types')]  # type: ignore
+    print(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
+
     df.to_csv(args.output_path, index_label='Index')    
 
     sys.setrecursionlimit(original_recursion_limit)

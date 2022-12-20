@@ -24,8 +24,11 @@ parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
-    './dsl/interactive-beta.pddl',
-    './dsl/ast-real-regrowth-samples.pddl',
+    # './dsl/interactive-beta.pddl',
+    # './dsl/ast-real-regrowth-samples.pddl',
+    './dsl/ast-codex-combine-samples.pddl',
+    './dsl/ast-codex-regrowth-samples.pddl',
+
     # './dsl/ast-mle-samples.pddl', 
     # './dsl/ast-mle-regrowth-samples.pddl',
     # './dsl/ast-mle-samples-large.pddl',
@@ -703,8 +706,8 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
                 for term_type in term_type_list:
                     if term_type not in TYPES_TO_CATEGORIES:
                         if term_type not in self.known_missing_types and not term_type.isnumeric():
-                            print(f'Unknown type {term_type_list} not in the types to categories map')
-                            # raise ValueError(f'Unknown type {term_type_list} not in the types to categories map')
+                            continue
+                            # print(f'Unknown type {term_type_list} not in the types to categories map')
                     else:
                         term_type_categories.add(TYPES_TO_CATEGORIES[term_type])
 

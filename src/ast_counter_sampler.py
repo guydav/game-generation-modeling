@@ -980,7 +980,7 @@ def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optio
     return counter
 
 
-def _test_ast_sample(ast, args: argparse.Namespace, text_samples: typing.List[str], grammar_parser: tatsu.grammars.Grammar):
+def test_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar):
     first_print_out = ''
     
     try:
@@ -1020,7 +1020,7 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
         while not generated_sample:
             try:
                 ast = sampler.sample(global_context=dict(sample_id=sample_id))
-                sample_text = _test_ast_sample(ast, args, text_samples, grammar_parser)
+                sample_text = test_ast_sample(ast, args, grammar_parser)
                 samples.append(ast)
                 text_samples.append(sample_text)
                 generated_sample = True
@@ -1059,7 +1059,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
             while not sample_generated:
                 try:
                     sample_ast = regrowth_sampler.sample(sample_index)
-                    sample_str = _test_ast_sample(sample_ast, args, text_samples, grammar_parser)
+                    sample_str = test_ast_sample(sample_ast, args, grammar_parser)
                     sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
 
                     if sample_hash in sample_hashes:

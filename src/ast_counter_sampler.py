@@ -192,8 +192,11 @@ def sample_new_preference_name(global_context: ContextDict, local_context: typin
     if 'preference_names' not in global_context:
         global_context['preference_names'] = set()
 
-    global_context['preference_count'] += 1
-    pref_name = _preference_name(global_context['preference_count'])
+    pref_name = None
+    while (pref_name is None) or (pref_name in global_context['preference_names']):
+        global_context['preference_count'] += 1
+        pref_name = _preference_name(global_context['preference_count'])
+        
     global_context['preference_names'].add(pref_name)
     return pref_name
 
@@ -352,7 +355,7 @@ class ASTSampler:
                  local_context_propagating_rules=LOCAL_CONTEXT_PROPAGATING_RULES,
                  prior_rule_count=PRIOR_COUNT, prior_token_count=PRIOR_COUNT, 
                  length_prior=LENGTH_PRIOR, hardcoded_rules=HARDCODED_RULES,
-                 rng=None, seed=DEFAULT_RANDOM_SEED):
+                 verbose=False, rng=None, seed=DEFAULT_RANDOM_SEED):
         
         self.grammar_parser = grammar_parser
         self.ast_counter = ast_counter
@@ -365,6 +368,7 @@ class ASTSampler:
         self.prior_rule_count = prior_rule_count
         self.prior_token_count = prior_token_count
         self.length_prior = length_prior
+        self.verbose = verbose
 
         if rng is None:
             rng = np.random.default_rng(seed)  # type: ignore
@@ -413,7 +417,7 @@ class ASTSampler:
             self._create_rule_posterior(rule_name, field_name, field_prior, options, field_counter)
 
         elif not isinstance(options, str):
-            print(f'Unrecognized options type for {rule_name}.{field_name}: {options}')
+            if self.verbose: print(f'Unrecognized options type for {rule_name}.{field_name}: {options}')
 
         # TODO: should these values come from the prior, likelihood, or posterior? Or be fixed?
         rule_counts = sum(field_prior[RULE_POSTERIOR].values()) if RULE_POSTERIOR in field_prior else 0
@@ -528,7 +532,7 @@ class ASTSampler:
 
                 field_prior[RULE_POSTERIOR][counted_rule] += count  # type: ignore
         else:
-            print(f'No counted data for {rule_name}.{field_name}')
+            if self.verbose: print(f'No counted data for {rule_name}.{field_name}')
 
         if len(field_prior[RULE_POSTERIOR]) == 0:
             del field_prior[RULE_POSTERIOR]
@@ -608,10 +612,10 @@ class ASTSampler:
                     token = rule_prior
                     rule_prior = dict(token_posterior={token: 1}, production=[(TOKEN, token)])
                     self.value_patterns[rule_name] = re.compile(re.escape(token))
-                    print(f'String token rule for {rule_name}: {rule_prior}')
+                    if self.verbose: print(f'String token rule for {rule_name}: {rule_prior}')
 
             else:
-                print(f'Encountered rule with unknown prior or no special case: {rule.name}\n{rule_prior}')
+                raise ValueError(f'Encountered rule with unknown prior or no special case: {rule.name}\n{rule_prior}')
 
             self.rules[rule.name] = rule_prior
 
@@ -880,6 +884,14 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], kwargs['local_context']
 
+    def _extract_variable_def_variables(self, ast):
+        var_names = ast.var_names
+        if isinstance(var_names, str):
+            var_names = [var_names]
+
+        return [v[1:] for v in var_names]
+
+
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule
         
@@ -896,15 +908,18 @@ class RegrowthSampler(ASTParentMapper):
             kwargs['global_context']['preference_count'] += 1
             kwargs['global_context']['preference_names'].add(ast.pref_name)
 
-        elif rule == 'variable_type_def':
-            var_names = ast.var_names
-            if isinstance(var_names, str):
-                var_names = [var_names]
-
+        elif rule == 'variable_list':
             if 'variables' not in kwargs['local_context']:
                 kwargs['local_context']['variables'] = set()
 
-            kwargs['local_context']['variables'].update([v[1:] for v in var_names])
+            for var_def in ast.variables:
+                kwargs['local_context']['variables'].update(self._extract_variable_def_variables(var_def))
+
+        elif rule == 'variable_type_def':
+            if 'variables' not in kwargs['local_context']:
+                kwargs['local_context']['variables'] = set()
+
+            kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast))
         
         self._add_ast_to_mapping(ast, **kwargs)
 
@@ -930,7 +945,7 @@ class RegrowthSampler(ASTParentMapper):
 
 
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None, 
-        external_local_context: typing.Optional[ContextDict] = None):
+        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True):
 
         node_index = self.rng.choice(len(self.node_keys))
         node_key = self.node_keys[node_index]
@@ -946,7 +961,8 @@ class RegrowthSampler(ASTParentMapper):
 
         new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
-        new_source = self._update_game_id(new_source, sample_index)
+        if update_game_id: 
+            new_source = self._update_game_id(new_source, sample_index)
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 

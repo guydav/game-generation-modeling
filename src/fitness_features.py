@@ -20,14 +20,15 @@ from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_funct
 from room_and_object_types import *
 
 
+
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
-    # './dsl/interactive-beta.pddl',
-    # './dsl/ast-real-regrowth-samples.pddl',
-    './dsl/ast-codex-combine-samples.pddl',
-    './dsl/ast-codex-regrowth-samples.pddl',
+    './dsl/interactive-beta.pddl',
+    './dsl/ast-real-regrowth-samples.pddl',
+    # './dsl/ast-codex-combine-samples.pddl',
+    # './dsl/ast-codex-regrowth-samples.pddl',
 
     # './dsl/ast-mle-samples.pddl', 
     # './dsl/ast-mle-regrowth-samples.pddl',
@@ -82,6 +83,28 @@ SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 VARIABLES_CONTEXT_KEY = 'variables'
 SECTION_CONTEXT_KEY = 'section'
 DEPTH_CONTEXT_KEY = 'depth'
+EXTERNAL_FORALL_CONTEXT_KEY = 'external_forall'
+
+
+def _extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.List[str]]) -> None:
+    variables = ast[vars_key].variables  # type: ignore
+    if isinstance(variables, tatsu.ast.AST):
+        variables = [variables]
+    
+    for var_def in variables:  # type: ignore
+        var_names = var_def.var_names
+        if isinstance(var_names, str): 
+            var_names = [var_names]
+        
+        var_type = var_def.var_type.type  # type: ignore
+        if isinstance(var_type, tatsu.ast.AST):
+            var_type = var_type.type_names
+
+        if isinstance(var_type, str): 
+            var_type = [var_type]
+
+        for var_name in var_names:  # type: ignore
+            context_vars[var_name] = var_type  # type: ignore
 
 
 class ASTFitnessFeaturizer:
@@ -167,26 +190,6 @@ class ASTFitnessFeaturizer:
         if return_row:
             return row
 
-    def _extract_variables(self, ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.List[str]]) -> None:
-        variables = ast[vars_key].variables  # type: ignore
-        if isinstance(variables, tatsu.ast.AST):
-            variables = [variables]
-        
-        for var_def in variables:  # type: ignore
-            var_names = var_def.var_names
-            if isinstance(var_names, str): 
-                var_names = [var_names]
-            
-            var_type = var_def.var_type.type  # type: ignore
-            if isinstance(var_type, tatsu.ast.AST):
-                var_type = var_type.type_names
-
-            if isinstance(var_type, str): 
-                var_type = [var_type]
-
-            for var_name in var_names:  # type: ignore
-                context_vars[var_name] = var_type  # type: ignore
-
     def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST],
         context: typing.Optional[ContextDict] = None):
         if context is None:
@@ -215,7 +218,7 @@ class ASTFitnessFeaturizer:
             elif len(vars_keys) > 0:
                 vars_key = vars_keys[0]
                 context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-                self._extract_variables(ast, vars_key, context_vars) 
+                _extract_variables_from_ast(ast, vars_key, context_vars) 
                 context = context.copy()
                 context[VARIABLES_CONTEXT_KEY] = context_vars
 
@@ -242,7 +245,7 @@ class ASTFitnessFeaturizer:
             child_context[DEPTH_CONTEXT_KEY] += 1  # type: ignore
 
             if ast.parseinfo.rule in ('scoring_external_maximize', 'scoring_external_minimize'): 
-                child_context['external_forall'] = ast.parseinfo.rule  
+                child_context[EXTERNAL_FORALL_CONTEXT_KEY] = ast.parseinfo.rule  
 
             for child_key in ast:
                 if child_key != 'parseinfo':
@@ -270,15 +273,19 @@ class ASTNodeCounter(ASTParser):
 
 class VariableBasedFitnessTerm(FitnessTerm):
     def __init__(self, header: str):
-        super().__init__(('predicate_term', 'function_term', 'predicate_or_function_term'), header)
+        super().__init__(('setup_statement', 'predicate', 'function', 'predicate_term', 'function_term', 'predicate_or_function_term'), header)
         self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if VARIABLES_CONTEXT_KEY not in context:
             return
 
-        if isinstance(ast.term, str) and ast.term.startswith('?'):  # type: ignore
-            self._inner_update(ast.term, context[VARIABLES_CONTEXT_KEY])  # type: ignore
+        if 'term' in ast:
+            if isinstance(ast.term, str) and ast.term.startswith('?'):  # type: ignore
+                self._inner_update(ast.term, context[VARIABLES_CONTEXT_KEY])  # type: ignore
+
+        else:
+            self._inner_update(None, context[VARIABLES_CONTEXT_KEY])  # type: ignore
 
     @abstractmethod
     def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
@@ -297,7 +304,9 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
         self.undefined_count = 0
 
     def _inner_update(self, term: str, variables: typing.Dict[str, typing.List[str]]):
-        if term in variables: 
+        if term is None:
+            return
+        elif term in variables: 
             self.defined_count += 1
         else:
             self.undefined_count += 1
@@ -518,37 +527,268 @@ class NoNestedLogicals(FitnessTerm):
         return 1 - (self.nested_logicals / self.total_logicals)
 
 
-class PrefForallUsedCorrectly(FitnessTerm):
+class NoIdenticalChildrenInLogicals(FitnessTerm):
+    total_logicals: int = 0
+    identical_children: int = 0
+
+    def __init__(self):
+        self.rule_to_section = {
+            'setup_and': ast_printer.SETUP_KEY,
+            'setup_or': ast_printer.SETUP_KEY,
+            'super_predicate_and': ast_printer.PREFERENCES_KEY,
+            'super_predicate_or': ast_printer.PREFERENCES_KEY,
+            'terminal_and': ast_printer.TERMINAL_KEY,
+            'terminal_or': ast_printer.TERMINAL_KEY,
+            'scoring_and': ast_printer.SCORING_KEY,
+            'scoring_or': ast_printer.SCORING_KEY,
+        }
+        super().__init__(tuple(self.rule_to_section.keys()), 'no_identical_logical_children')
+
+    def game_start(self) -> None:
+        self.total_logicals = 0
+        self.identical_children = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            rule_name = rule.split('_')[-1]
+            children = ast[f'{rule_name}_args']
+            if isinstance(children, tatsu.ast.AST) or len(children) < 2:
+                return
+
+            self.total_logicals += 1
+
+            children_strs = [ast_printer.ast_section_to_string(child, self.rule_to_section[rule]) for child in children]  # type: ignore
+            if len(set(children_strs)) != len(children_strs):
+                self.identical_children += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if self.total_logicals == 0:
+            # TODO: should this return a NaN? If so, we should think about how to handle them
+            return 1
+
+        return 1 - (self.identical_children / self.total_logicals)
+
+
+# ast_str = ast_printer.ast_section_to_string(ast, ast_printer.PREFERENCES_KEY)
+
+class PrefForallTerm(FitnessTerm):
+    def __init__(self, name: str):
+        super().__init__(('scoring_external_maximize', 'scoring_external_minimize', 'pref_forall', re.compile('count.*')), name)
+
+    def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
+        preferences = ast.forall_pref.preferences  # type: ignore
+        if isinstance(preferences, tatsu.ast.AST):
+            preferences = [preferences]
+
+        self.pref_forall_prefs.update([pref.pref_name for pref in preferences])  # type: ignore
+
+    # Not abstract as is optional
+    def _update_external_forall(self, ast: tatsu.ast.AST, context: ContextDict):
+        pass
+
+    @abstractmethod
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]], 
+        rule: str, context: ContextDict):
+        pass
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            if rule == 'pref_forall':
+                self._update_pref_forall_def(ast, context)
+
+            elif rule in ('scoring_external_maximize', 'scoring_external_minimize'):
+                self._update_external_forall(ast, context)
+
+            else:   # count*
+                pref_name = ast.name_and_types['pref_name']  # type: ignore
+                object_types = ast.name_and_types['object_types']  # type: ignore
+                self._update_count(pref_name, object_types, rule, context)
+
+
+class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
+    pref_forall_prefs: typing.Set[str] = set()
+    count_once_per_external_objects_prefs: typing.Set[str] = set()
+
+    def __init__(self):
+        super().__init__('count_once_per_external_objects_used_correctly')
+
+    def game_start(self) -> None:
+        self.pref_forall_prefs = set()
+        self.count_once_per_external_objects_prefs = set()
+
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]], 
+        rule: str, context: ContextDict):
+
+        if rule == 'count_once_per_external_objects':
+            self.count_once_per_external_objects_prefs.add(pref_name)
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.count_once_per_external_objects_prefs) == 0:
+            return 1
+
+        return len(self.count_once_per_external_objects_prefs.intersection(self.pref_forall_prefs)) / len(self.count_once_per_external_objects_prefs)
+
+
+class ExternalForallUsedCorrectly(PrefForallTerm):
+    pref_forall_prefs: typing.Set[str] = set()
+    external_forall_used: int = 0
+    external_forall_used_with_forall_pref: int = 0
+
+    def __init__(self):
+        super().__init__('external_forall_used_correctly')
+
+    def game_start(self) -> None:
+        self.pref_forall_prefs = set()
+        self.external_forall_used = 0
+        self.external_forall_used_with_forall_pref = 0
+
+    def _update_external_forall(self, ast: tatsu.ast.AST, context: ContextDict):
+        self.external_forall_used += 1
+
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]], 
+        rule: str, context: ContextDict):
+        if pref_name in self.pref_forall_prefs:
+            self.external_forall_used_with_forall_pref += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if self.external_forall_used == 0:
+            return 1
+
+        return min(self.external_forall_used_with_forall_pref / self.external_forall_used, 1)
+
+
+class PrefForallUsed(PrefForallTerm):
     pref_forall_prefs: typing.Set[str] = set()
     prefs_used_as_pref_forall_prefs: typing.Set[str] = set()
 
     def __init__(self):
-        super().__init__(('pref_forall', re.compile('count.*')), 'pref_forall_correct')
+        super().__init__('pref_forall_used')
 
     def game_start(self) -> None:
         self.pref_forall_prefs = set()
         self.prefs_used_as_pref_forall_prefs = set()
 
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            if rule == 'pref_forall':
-                preferences = ast.forall_pref.preferences  # type: ignore
-                if isinstance(preferences, tatsu.ast.AST):
-                    preferences = [preferences]
-
-                self.pref_forall_prefs.update([pref.pref_name for pref in preferences])  # type: ignore
-
-            else:   # count*
-                pref_name = ast.name_and_types['pref_name']  # type: ignore
-                object_types = ast.name_and_types['object_types']  # type: ignore
-                if object_types is not None or 'external_forall' in context:
-                    self.prefs_used_as_pref_forall_prefs.add(pref_name)
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]], 
+        rule: str, context: ContextDict):
+        if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context:
+            self.prefs_used_as_pref_forall_prefs.add(pref_name)
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 1
 
         return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
+
+
+class PrefForallCorrectArity(PrefForallTerm):
+    pref_forall_prefs_to_counts: typing.Dict[str, int] = dict()
+    prefs_used_with_correct_count: typing.Set[str] = set()
+
+    def __init__(self):
+        super().__init__('pref_forall_correct_arity')
+
+    def game_start(self) -> None:
+        self.pref_forall_prefs_to_counts = dict()
+        self.prefs_used_with_correct_count = set()
+
+    def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
+        preferences = ast.forall_pref.preferences  # type: ignore
+        if isinstance(preferences, tatsu.ast.AST):
+            preferences = [preferences]
+
+        vars = ast.forall_vars.variables  # type: ignore
+
+        if isinstance(vars, tatsu.ast.AST):
+            n_vars = 1
+        else:
+            n_vars = len(vars)
+
+        for pref in preferences:
+            self.pref_forall_prefs_to_counts[pref.pref_name] = n_vars  # type: ignore
+
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
+        rule: str, context: ContextDict):
+        if object_types is None:
+            n_vars = 0
+        elif isinstance(object_types, tatsu.ast.AST):
+            n_vars = 1
+        else:
+            n_vars = len(object_types)
+
+        if pref_name in self.pref_forall_prefs_to_counts and n_vars <= self.pref_forall_prefs_to_counts[pref_name]:
+            self.prefs_used_with_correct_count.add(pref_name)
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.pref_forall_prefs_to_counts) == 0:
+            return 1
+
+        defined_prefs = set(self.pref_forall_prefs_to_counts.keys())
+        return len(defined_prefs.intersection(self.prefs_used_with_correct_count)) / len(defined_prefs)
+
+
+# Copied from `reward_machines/config.py`
+META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],
+              BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, 
+                      PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TALL_RECTANGULAR_BLOCK, TRIANGLE_BLOCK],
+              COLOR: CATEGORIES_TO_TYPES[COLORS],
+              CUBE_BLOCK: [BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK],
+              DODGEBALL: [BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL],
+              PYRAMID_BLOCK: [ BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK]}
+
+TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
+
+
+
+class PrefForallCorrectTypes(PrefForallTerm):
+    pref_forall_prefs_to_types: typing.Dict[str, typing.Dict[str, str]] = defaultdict(dict)
+    prefs_with_correct_types: typing.List[float] = list()
+
+    def __init__(self):
+        super().__init__('pref_forall_correct_types')
+
+    def game_start(self) -> None:
+        self.pref_forall_prefs_to_types = defaultdict(dict)
+        self.prefs_with_correct_types = list()
+
+    def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
+        preferences = ast.forall_pref.preferences  # type: ignore
+        if isinstance(preferences, tatsu.ast.AST):
+            preferences = [preferences]
+
+        var_dict = {}
+        _extract_variables_from_ast(ast, 'forall_vars', var_dict) 
+
+        for pref in preferences:
+            self.pref_forall_prefs_to_types[pref.pref_name] = var_dict  # type: ignore
+
+    def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]], 
+        rule: str, context: ContextDict):
+        if object_types is None:
+            return
+
+        if pref_name not in self.pref_forall_prefs_to_types:
+            return
+
+        elif isinstance(object_types, tatsu.ast.AST):
+            object_types = [object_types]
+        
+        if len(object_types) > len(self.pref_forall_prefs_to_types[pref_name]):
+            return 
+
+        count_correct = 0
+        for obj_type, (_, var_types) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
+            obj = obj_type.type_name
+            if obj in var_types or (obj in TYPE_TO_META_TYPE and TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
+                count_correct += 1
+
+        self.prefs_with_correct_types.append(count_correct / len(object_types))
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.pref_forall_prefs_to_types) == 0 or len(self.prefs_with_correct_types) == 0:
+            return 1
+
+        return np.mean(self.prefs_with_correct_types)  # type: ignore
+
 
 
 PREDICATE_FUNCTION_ARITY_MAP = {
@@ -603,6 +843,13 @@ class CorrectPredicateFunctionArity(FitnessTerm):
 
 TWO_ARG_COMPARISON_RULE = 'two_arg_comparison'
 MULTIPLE_ARG_COMPARISON_RULE = 'multiple_args_equal_comparison'
+TERMINAL_COMP = 'terminal_comp'
+SCORING_COMP = 'scoring_comp'
+SCORING_EQUALS_COMP = 'scoring_equals_comp'
+
+
+def _is_number(s: typing.Any) -> bool:
+    return isinstance(s, str) and s.replace('.', '', 1).isdigit()
 
 
 class NoTwoNumberComparisons(FitnessTerm):
@@ -610,7 +857,7 @@ class NoTwoNumberComparisons(FitnessTerm):
     two_number_comparisons: int = 0
     
     def __init__(self):
-        super().__init__((TWO_ARG_COMPARISON_RULE, MULTIPLE_ARG_COMPARISON_RULE), 'no_two_number_comparisons')
+        super().__init__((TWO_ARG_COMPARISON_RULE, MULTIPLE_ARG_COMPARISON_RULE, TERMINAL_COMP, SCORING_COMP, SCORING_EQUALS_COMP), 'no_two_number_comparisons')
 
     def game_start(self) -> None:
         self.total_comparisons = 0
@@ -621,12 +868,33 @@ class NoTwoNumberComparisons(FitnessTerm):
             self.total_comparisons += 1
 
             if rule == TWO_ARG_COMPARISON_RULE:
-                if isinstance(ast.arg_1, str) and isinstance(ast.arg_2, str):
+                if _is_number(ast.arg_1.arg) and _is_number(ast.arg_2.arg):  # type: ignore
                     self.two_number_comparisons += 1
 
             elif rule == MULTIPLE_ARG_COMPARISON_RULE:
-                args = ast.equal_comp_args  
-                if all(isinstance(arg, str) for arg in args) or len(args) <= 1:  # type: ignore
+                args = ast.equal_comp_args
+                if isinstance(args, tatsu.ast.AST):
+                    return
+
+                if all(_is_number(arg.arg) for arg in args) or len(args) <= 1:  # type: ignore
+                    self.two_number_comparisons += 1
+
+            elif rule == TERMINAL_COMP:
+                first_number = 'expr' in ast.expr_1.expr and _is_number(ast.expr_1.expr.expr)  # type: ignore
+                second_number = 'expr' in ast.expr_2.expr and _is_number(ast.expr_2.expr.expr)  # type: ignore
+                if first_number and second_number:  
+                    self.two_number_comparisons += 1
+
+            elif rule == SCORING_COMP:
+                if _is_number(ast.expr_1.expr) and _is_number(ast.expr_2.expr):  # type: ignore
+                    self.two_number_comparisons += 1
+
+            elif rule == SCORING_EQUALS_COMP:
+                args = ast.expr
+                if isinstance(args, tatsu.ast.AST):
+                    return
+
+                if all(_is_number(arg.expr) for arg in args) or len(args) <= 1:  # type: ignore
                     self.two_number_comparisons += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -930,8 +1198,23 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_nested_logicals = NoNestedLogicals()
     fitness.register(no_nested_logicals)
 
-    pref_forall_used_correctly = PrefForallUsedCorrectly()
+    no_identical_logical_children = NoIdenticalChildrenInLogicals()
+    fitness.register(no_identical_logical_children)
+
+    count_once_per_external_objects_used_correctly = CountOncePerExternalObjectsUsedCorrectly()
+    fitness.register(count_once_per_external_objects_used_correctly)
+    
+    external_forall_used_correctly = ExternalForallUsedCorrectly()
+    fitness.register(external_forall_used_correctly)
+
+    pref_forall_used_correctly = PrefForallUsed()
     fitness.register(pref_forall_used_correctly)
+
+    pref_forall_correct_arity = PrefForallCorrectArity()
+    fitness.register(pref_forall_correct_arity)
+
+    pref_forall_correct_types = PrefForallCorrectTypes()
+    fitness.register(pref_forall_correct_types)
 
     correct_predicate_arity = CorrectPredicateFunctionArity()
     fitness.register(correct_predicate_arity)
@@ -945,7 +1228,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     compositionality_fitness_terms = build_compositionality_fitness_terms()
     fitness.register_multiple(compositionality_fitness_terms)
 
-    # TODO: break these down by features for different lengths?
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 

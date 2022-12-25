@@ -8,6 +8,7 @@ NORTH_WALL = 'north_wall'
 SOUTH_WALL = 'south_wall'
 EAST_WALL = 'east_wall'
 WEST_WALL = 'west_wall'
+DOOR = 'door'
 
 BUILDING_TYPE = 'building'
 
@@ -242,7 +243,7 @@ OBJECTS_BY_ROOM_AND_TYPE = {
             "SmallSlide|-00.81|+00.14|-03.10",
             "SmallSlide|-01.31|+00.14|-03.10"
         ],
-        "tall_rect_block": [
+        "tall_rectangular_block": [
             "TallRectBlock|-02.95|+02.05|-02.31",
             "TallRectBlock|-02.95|+02.05|-02.52",
             "TallRectBlock|-02.95|+02.05|-02.72"
@@ -272,7 +273,7 @@ COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
-                        "tall_rect_block", "triangle_block"],
+                        "tall_rectangular_block", "triangle_block"],
               "color": COLORS}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
@@ -335,6 +336,10 @@ WALL_ID = 'FP302:StandardWallSize'
 WALL_TYPE = 'wall'
 WALL_NAME = 'FP326:StandardWallSize.021'
 
+DOOR_ID = 'FP326:StandardDoor1.019'
+DOOR_TYPE = 'door'
+
+
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
 UNITY_PSEUDO_OBJECTS = {
@@ -342,6 +347,7 @@ UNITY_PSEUDO_OBJECTS = {
         SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),
         EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
         WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
+        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.875, 1, 0.675]), extents=np.array([0.425, 1, 0.075]) , rotation=np.zeros(3))
 }
 
 

@@ -3040,7 +3040,7 @@
             (once (and (not (in_motion ?d)))) 
         )
     ))
-    (preference throwAttempt (exists (?d - dodgeball ?h - hexagonal_bin)
+    (preference throwAttempt (exists (?d - dodgeball)
         (then
             (once (agent_holds ?d))
             (hold (and (in_motion ?d) (not (agent_holds ?d))))

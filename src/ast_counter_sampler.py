@@ -912,8 +912,12 @@ class RegrowthSampler(ASTParentMapper):
             if 'variables' not in kwargs['local_context']:
                 kwargs['local_context']['variables'] = set()
 
-            for var_def in ast.variables:
-                kwargs['local_context']['variables'].update(self._extract_variable_def_variables(var_def))
+            if isinstance(ast.variables, tatsu.ast.AST):
+                kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast.variables))
+
+            else:
+                for var_def in ast.variables:
+                    kwargs['local_context']['variables'].update(self._extract_variable_def_variables(var_def))
 
         elif rule == 'variable_type_def':
             if 'variables' not in kwargs['local_context']:

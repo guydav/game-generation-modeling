@@ -7,3 +7,4 @@ latex/out/pddl.aux
 
 */__pycache__/*
 **/.DS_Store
+notebooks/sandbox.ipynb

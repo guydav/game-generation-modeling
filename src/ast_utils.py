@@ -45,7 +45,8 @@ DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
 
 
 def load_games_from_file(path: str, start_token: str='(define', 
-    stop_tokens: typing.Optional[typing.Sequence[str]] = None):
+    stop_tokens: typing.Optional[typing.Sequence[str]] = None, 
+    remove_comments: bool = True, comment_prefixes_to_keep: typing.Optional[typing.Sequence[str]] = None):
 
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS
@@ -56,8 +57,20 @@ def load_games_from_file(path: str, start_token: str='(define',
     #     if not l.strip()[0] == ';':
     #         print(l)
     #         new_lines.append(l[:l.find(';')])
-    new_lines = [l[:l.find(';')] for l in lines 
-        if len(l.strip()) > 0 and not l.strip()[0] == ';']
+
+    if remove_comments:
+        new_lines = [l[:l.find(';')] for l in lines 
+            if len(l.strip()) > 0 and not l.strip()[0] == ';']
+
+    else:
+        new_lines = []
+        for l in lines:
+            l_s = l.strip()
+            if l_s.startswith(';') and (comment_prefixes_to_keep is None or any(l_s.startswith(prefix) for prefix in comment_prefixes_to_keep)):
+                new_lines.append(l.rstrip())
+            elif not l_s.startswith(';'):
+                new_lines.append(l[:l.find(';')])
+
     text = '\n'.join(new_lines)
     results = []
     start = text.find(start_token)

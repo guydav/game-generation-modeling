@@ -5,8 +5,14 @@ import pickle
 import typing
 import sys
 
+import numpy as np
+import tqdm
+import tatsu
+import tatsu.ast
 import torch
-from ast_counter_sampler import *
+
+from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
+import ast_printer
 from fitness_features import build_fitness_featurizer
 from fitness_energy_utils import NON_FEATURE_COLUMNS
 
@@ -14,7 +20,7 @@ sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
 
 DEFUALT_RANDOM_SEED = 33
-DEFAULT_FITNESS_FUNCTION_PATH = './models/cv_fitness_model_with_cross_example_2022_12_05.pkl.gz'
+DEFAULT_FITNESS_FUNCTION_PATH = './models/cv_fitness_model_2022_12_26.pkl.gz'
 
 
 def _load_and_wrap_fitness_function(fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH) -> typing.Callable[[torch.Tensor], float]:
@@ -131,7 +137,7 @@ class MCMCRegrowthSampler:
             return current_proposal, current_proposal_features, current_proposal_fitness, False
 
     def _score_proposal(self, proposal: tatsu.ast.AST):
-        proposal_features = typing.Cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
+        proposal_features = typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
         proposal_tensor = torch.tensor([v for k, v in proposal_features.items() if k not in NON_FEATURE_COLUMNS], 
             dtype=torch.float32)  # type: ignore
         proposal_fitness = self.fitness_function(proposal_tensor)
@@ -158,11 +164,11 @@ def main(args: argparse.Namespace):
     sys.setrecursionlimit(original_recursion_limit)
 
 
-if __name__ == '__main__':
-    cmd_args = sys.argv[1:]
-    if '--sampling-method' not in cmd_args:
-        cmd_args += ['--sampling-method', MCMC_REGRWOTH]
+# if __name__ == '__main__':
+#     cmd_args = sys.argv[1:]
+#     if '--sampling-method' not in cmd_args:
+#         cmd_args += ['--sampling-method', MCMC_REGRWOTH]
 
-    args = parser.parse_args(cmd_args)    
-    main(args)
+#     args = parser.parse_args(cmd_args)    
+#     main(args)
 

@@ -194,7 +194,7 @@ def sample_new_preference_name(global_context: ContextDict, local_context: typin
 
     pref_name = None
     while (pref_name is None) or (pref_name in global_context['preference_names']):
-        global_context['preference_count'] += 1
+        global_context['preference_count'] += 1  # type: ignore
         pref_name = _preference_name(global_context['preference_count'])
         
     global_context['preference_names'].add(pref_name)
@@ -219,20 +219,20 @@ def sample_new_variable(global_context: ContextDict, local_context: typing.Optio
         local_context = {}
 
     if 'variables' not in local_context:
-        local_context['variables'] = set()
+        local_context['variables'] = dict()
 
     if 'rng' not in global_context:
         rng = np.random.default_rng()
     else:
         rng = global_context['rng']
 
-    valid_vars = set(string.ascii_lowercase) - local_context['variables']
+    valid_vars = set(string.ascii_lowercase) - set(local_context['variables'].keys())
     
     if len(valid_vars) == 0:
         raise SamplingException('No valid variables left to sample')
 
     new_var = rng.choice(list(valid_vars))
-    local_context['variables'].add(new_var)
+    local_context['variables'][new_var] = None
     return f'?{new_var}'
 
 
@@ -248,7 +248,7 @@ def sample_existing_variable(global_context: ContextDict, local_context: typing.
     else:
         rng = global_context['rng']
 
-    return f'?{rng.choice(list(local_context["variables"]))}'
+    return f'?{rng.choice(list(local_context["variables"].keys()))}'
 
 
 def sample_empty_list(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
@@ -772,7 +772,7 @@ class ASTSampler:
         if local_context is None:
             local_context = dict()
         else:
-            local_context = copy.deepcopy(local_context)
+            local_context = simplified_context_deepcopy(local_context)
 
         rule_dict = self.rules[rule]
         production = rule_dict[PRODUCTION]
@@ -826,11 +826,30 @@ class ASTSampler:
         return output, None
 
 
+def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[typing.Dict, typing.Set, int]]:
+    context_new = {}
+
+    for k, v in context.items():
+        if isinstance(v, dict):
+            context_new[k] = dict(v)
+        elif isinstance(v, set):
+            context_new[k] = set(v)
+        elif isinstance(v, int):
+            context_new[k] = v
+        else:
+            raise ValueError('Unexpected value')
+
+    return context_new
+
+
+ASTNodeInfo = typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, typing.List, ContextDict, ContextDict]
+ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
+
+# TODO: move this class to a separate module?
 class RegrowthSampler(ASTParentMapper):
     node_keys: typing.List[tatsu.infos.ParseInfo]
     original_game_id: str
-    parent_mapping: typing.Dict[tatsu.infos.ParseInfo, 
-        typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, typing.List, ContextDict, ContextDict]]
+    parent_mapping: ASTParentMapping
     rng: np.random.Generator
     sampler: ASTSampler
     seed: int
@@ -866,14 +885,15 @@ class RegrowthSampler(ASTParentMapper):
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'global_context', dict())
         self._default_kwarg(kwargs, 'local_context', dict())
-        kwargs['local_context'] = copy.deepcopy(kwargs['local_context'])
+        kwargs['local_context'] = simplified_context_deepcopy(kwargs['local_context'])
         retval = super().__call__(ast, **kwargs)
         self._update_contexts(kwargs, retval)
         return retval
 
     def _build_mapping_value(self, ast, **kwargs):
         return(*super()._build_mapping_value(ast, **kwargs), 
-            copy.deepcopy(kwargs['global_context']), copy.deepcopy(kwargs['local_context']))
+            simplified_context_deepcopy(kwargs['global_context']), 
+            simplified_context_deepcopy(kwargs['local_context']))
 
     def _handle_iterable(self, ast, **kwargs):
         base_selector = kwargs['selector']
@@ -889,8 +909,7 @@ class RegrowthSampler(ASTParentMapper):
         if isinstance(var_names, str):
             var_names = [var_names]
 
-        return [v[1:] for v in var_names]
-
+        return {v[1:]: ast.parseinfo.pos for v in var_names}
 
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule
@@ -910,7 +929,7 @@ class RegrowthSampler(ASTParentMapper):
 
         elif rule == 'variable_list':
             if 'variables' not in kwargs['local_context']:
-                kwargs['local_context']['variables'] = set()
+                kwargs['local_context']['variables'] = dict()
 
             if isinstance(ast.variables, tatsu.ast.AST):
                 kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast.variables))
@@ -921,7 +940,7 @@ class RegrowthSampler(ASTParentMapper):
 
         elif rule == 'variable_type_def':
             if 'variables' not in kwargs['local_context']:
-                kwargs['local_context']['variables'] = set()
+                kwargs['local_context']['variables'] = dict()
 
             kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast))
         
@@ -947,13 +966,15 @@ class RegrowthSampler(ASTParentMapper):
         new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
         return replace_child(ast, game_selector, new_game_node)
 
+    def _sample_node_to_update(self):
+        node_index = self.rng.choice(len(self.node_keys))
+        node_key = self.node_keys[node_index]
+        return self.parent_mapping[node_key]
 
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None, 
         external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True):
 
-        node_index = self.rng.choice(len(self.node_keys))
-        node_key = self.node_keys[node_index]
-        node, parent, selector, global_context, local_context = self.parent_mapping[node_key]
+        node, parent, selector, global_context, local_context = self._sample_node_to_update()
 
         if external_global_context is not None:
             global_context.update(external_global_context)
@@ -981,13 +1002,7 @@ def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optio
         counter = ASTRuleValueCounter()
 
         for test_file in args.test_files:
-            test_cases = load_games_from_file(test_file)
-
-            if not args.dont_tqdm:
-                test_cases = tqdm.tqdm(test_cases)
-
-            for test_case in test_cases:
-                ast = grammar_parser.parse(test_case)
+            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
                 counter(ast)
 
         with open(args.counter_output_path, 'wb') as out_file:

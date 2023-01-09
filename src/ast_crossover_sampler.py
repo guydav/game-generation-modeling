@@ -221,7 +221,6 @@ class CrossoverSampler(RegrowthSampler):
         if use_tqdm:
             pop_iter = tqdm.tqdm(pop_iter)
 
-        # TODO: why is this so slow??
         for ast in pop_iter:
             self.set_source_ast(ast)
             # self.node_keys_by_id[self.original_game_id] = self.node_keys[:]

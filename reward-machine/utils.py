@@ -95,6 +95,7 @@ class ObjectState(typing.NamedTuple):
     position: np.ndarray  # x, y, z
     rotation: np.ndarray  # x, y, z
     touching_objects: typing.List[str]
+    contained_objects: typing.List[str]
     velocity: np.ndarray  # x, y, z
 
     @staticmethod
@@ -112,6 +113,7 @@ class ObjectState(typing.NamedTuple):
             position=_vec_dict_to_array(state_dict['position']),
             rotation=_vec_dict_to_array(state_dict['rotation']),
             touching_objects=state_dict['touchingObjects'],
+            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None, # old traces don't have containedObjects
             velocity=_vec_dict_to_array(state_dict['velocity']),
         )
 

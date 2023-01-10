@@ -20,6 +20,7 @@ THROW_ALL_DODGEBALLS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/t
 SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
 COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
+CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
 
 
 def load_game(game_name: str):
@@ -43,6 +44,7 @@ TEST_GAME_LIBRARY = {
     'test-external-scoring': load_game("throw_external_maximize"),
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
     'test-count-overlapping': load_game("building_count_overlapping"),
+    'test-clean-room': load_game("game-27")
 }
 
 TEST_CASES = [
@@ -199,6 +201,33 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.99|+01.26|-01.49'}, start=215, end=611, measures={}),
             PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=405, end=681, measures={}),
             PreferenceSatisfaction(mapping={'?l': 'CubeBlock|-02.97|+01.26|-01.94'}, start=682, end=753, measures={})
+        ],
+    },),
+    ('test-clean-room', CLEANUP_TRACE, 69.0, {
+        'dodgeballsInPlace' : [
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.95|+01.29|-02.61'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=3015, end=3015, measures={})
+        ],
+        'blocksInPlace' : [
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.29|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.10|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.28|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.23|+00.28|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.10|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.24|+00.10|-02.83'}, start=3015, end=3015, measures={})
+        ],
+        'laptopAndBookInPlace' : [
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.01|-02.82', '?o': 'Book|+02.83|+00.41|-00.01'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.51|-02.82', '?o': 'Laptop|+03.04|+00.79|-02.28'}, start=3015, end=3015, measures={})
+        ],
+        'smallItemsInPlace' : [
+            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'CellPhone|+02.96|+00.79|-00.93'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'KeyChain|-01.62|+00.60|+00.41'}, start=3015, end=3015, measures={})
+        ],
+        'itemsTurnedOff' : [
+            PreferenceSatisfaction(mapping={'?o': 'LightSwitch|-00.14|+01.33|+00.60'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?o': 'Desktop|+03.10|+00.79|-01.24'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?o': 'Laptop|+03.04|+00.79|-02.28'}, start=3015, end=3015, measures={})
         ],
     },),
 ]

@@ -40,7 +40,7 @@ def _vec_dict_to_array(vec: typing.Dict[str, float]):
 class AgentState(typing.NamedTuple):
     angle: float
     angle_int: int
-    camera_local_roation: np.ndarray   # w, x, y, z
+    camera_local_rotation: np.ndarray   # w, x, y, z
     camera_rotation_euler_angles: np.ndarray  # x, y, z
     crouching: bool
     direction: np.ndarray  # x, y, z
@@ -62,7 +62,8 @@ class AgentState(typing.NamedTuple):
         return AgentState(
             angle=state_dict['angle'],
             angle_int=state_dict['angleInt'],
-            camera_local_roation=_vec_dict_to_array(state_dict['cameraLocalRoation']),
+            camera_local_rotation=_vec_dict_to_array(state_dict['cameraLocalRotation']) if 'cameraLocalRotation' in state_dict 
+                                  else _vec_dict_to_array(state_dict['cameraLocalRoation']), # manually handle typo in old traces
             camera_rotation_euler_angles=_vec_dict_to_array(state_dict['cameraRotationEulerAngles']),
             crouching=state_dict['crouching'],
             direction=_vec_dict_to_array(state_dict['direction']),

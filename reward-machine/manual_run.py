@@ -6,23 +6,22 @@ from game_handler import GameHandler
 from utils import FullState, get_project_dir
 
 
-BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
-THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_at_wall.json')
-WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
-SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
-SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
-SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
-CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
-BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
-THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
-THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
-STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blocks.json')
-COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
-GAME_6_TRACE = pathlib.Path('./reward-machine/traces/game-6.json')
-GAME_15_TRACE = pathlib.Path('./reward-machine/traces/game-15.json')
-GAME_27_TRACE = pathlib.Path('./reward-machine/traces/game-27.json')
-TEST_DOOR_AND_RUG_TRACE = pathlib.Path('./reward-machine/traces/test_door_and_rug_collision.json')
+BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
+THROWING_BALLS_AT_WALL_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throwing_balls_at_wall.json')
+SIMPLE_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/simple_stacking_trace.json')
+THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
+SETUP_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
+CASTLE_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/building_castle.json')
+BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
+THROW_ALL_DODGEBALLS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_all_dodgeballs.json')
+THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
+STACK_THREE_CUBES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/stack_3_cube_blocks.json')
+COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
+GAME_6_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-6.json')
+GAME_15_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-15.json')
+GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-27.json')
+UPDATED_GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
+TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/test_door_and_rug_collision.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -92,8 +91,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['game-27'])
     score = None
 
-    trace_path = GAME_27_TRACE.resolve().as_posix()
-
+    trace_path = UPDATED_GAME_27_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

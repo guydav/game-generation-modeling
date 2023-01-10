@@ -22,6 +22,7 @@ GAME_15_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-15
 GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-27.json')
 UPDATED_GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
 TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/test_door_and_rug_collision.json')
+TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -85,13 +86,14 @@ TEST_GAME_LIBRARY = {
     'game-15': load_game("game-15"),
     'game-27': load_game("game-27"),
     'test-door': load_game("test_door"),
+    'test-agent-door-adjacent': load_game("test_agent_door_adjacent"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['game-27'])
+    game_handler = GameHandler(TEST_GAME_LIBRARY['test-agent-door-adjacent'])
     score = None
 
-    trace_path = UPDATED_GAME_27_TRACE.resolve().as_posix()
+    trace_path = TEST_AGENT_DOOR_ADJACENT_TRACE.resolve().as_posix()
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

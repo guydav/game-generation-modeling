@@ -21,6 +21,7 @@ SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_tes
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
 COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
 CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
+TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
 
 
 def load_game(game_name: str):
@@ -44,7 +45,8 @@ TEST_GAME_LIBRARY = {
     'test-external-scoring': load_game("throw_external_maximize"),
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
     'test-count-overlapping': load_game("building_count_overlapping"),
-    'test-clean-room': load_game("game-27")
+    'test-clean-room': load_game("game-27"),
+    'test-agent-adjacent': load_game("test_agent_door_adjacent")
 }
 
 TEST_CASES = [
@@ -228,6 +230,11 @@ TEST_CASES = [
             PreferenceSatisfaction(mapping={'?o': 'LightSwitch|-00.14|+01.33|+00.60'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?o': 'Desktop|+03.10|+00.79|-01.24'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?o': 'Laptop|+03.04|+00.79|-02.28'}, start=3015, end=3015, measures={})
+        ],
+    },),
+    ('test-agent-adjacent', TEST_AGENT_DOOR_ADJACENT_TRACE, 1.0, {
+        'throwAdjacentToDoor' : [
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', 'agent': 'agent', 'door': 'door'}, start=136, end=197, measures={})
         ],
     },),
 ]

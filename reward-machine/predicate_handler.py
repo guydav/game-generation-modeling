@@ -558,15 +558,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     objects_touch = _pred_touch(agent, objects)
 
-    if "Slide" in upper_object.object_type:
-        print("\nDoes triangular ramp directly touch the floor?", objects_touch)
-        print("Floor center:", lower_object.bbox_center)
-        print("Floor extents:", lower_object.bbox_extents)
-        print("Ramp center:", upper_object.bbox_center)
-        print("Ramp position:", upper_object.position)
-        print("Ramp extents:", upper_object.bbox_extents)
-
-
     if objects_touch:
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 

@@ -220,6 +220,7 @@ def test_single_game(game_key: str, trace_path: typing.Union[str, pathlib.Path],
 
     for state, is_final in _load_trace(trace_path):
         state = FullState.from_state_dict(state)
+
         score = game_handler.process(state, is_final, debug=debug, 
             debug_building_handler=debug_building_handler, 
             debug_preference_handlers=debug_preference_handlers)

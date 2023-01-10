@@ -573,16 +573,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         upper_object_bbox_center = upper_object.bbox_center
         upper_object_bbox_extents = upper_object.bbox_extents
 
-        if "Book" in upper_object.name or "Laptop" in upper_object.name:
-            print(f"\n\n{upper_object.object_id} is touching {lower_object.object_id}")
-            print("Upper object bbox center:", upper_object_bbox_center)
-            print("Upper object bbox extents:", upper_object_bbox_extents)
-            print("Lower object bbox center:", lower_object.bbox_center)
-            print("Lower object bbox extents:", lower_object.bbox_extents)
-
-            # Manually edit the y extent of the shelf, to test
-            lower_object.bbox_extents[1] = 0.1
-
         # Project a point slightly below the bottom center / corners of the upper object
         upper_object_corners = _object_corners(upper_object)
 
@@ -590,9 +580,11 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
                        for corner in upper_object_corners]
         test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
 
-        if "Slide" in upper_object.object_type:
-            print("Test points:", test_points)
-            print("Test point truth values:", [_point_in_object(test_point, lower_object) for test_point in test_points])
+        # Due to bounding box weirdness, we also check to see if the center of the upper object is contained in the bottom's
+        # bounding box. Enforcing that the objects are touching should make sure that we don't have any errors where floating
+        # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
+        test_points += upper_object_corners
+
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0

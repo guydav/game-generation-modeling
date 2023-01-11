@@ -127,10 +127,14 @@ class FitnessEenrgyModel(nn.Module):
 
 def _reduce(X: torch.Tensor, reduction: str, dim: typing.Optional[int] = None):
     if reduction == 'mean':
+        if dim is None:
+            return X.mean()
         return X.mean(dim=dim)
     elif reduction == 'sum':
+        if dim is None:
+            return X.sum()
         return X.sum(dim=dim)
-    elif reduction == 'none':
+    elif reduction.lower() == 'none':
         return X
     else:
         raise ValueError(f'Invalid reduction: {reduction}')

@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.pipeline import Pipeline
 from statsmodels.distributions.empirical_distribution import ECDF
 import torch
@@ -96,11 +96,13 @@ class CustomSklearnScaler:
 class FitnessEenrgyModel(nn.Module):
     def __init__(self, n_features: int, hidden_size: typing.Optional[int] = None,
         hidden_activation: typing.Callable = torch.relu,
-        output_activation: typing.Callable = torch.sigmoid,
+        output_activation: typing.Optional[typing.Callable] = None,
         n_outputs: int = 1):
         super().__init__()
         self.n_features = n_features
         self.n_outputs = n_outputs
+        if output_activation is None:
+            output_activation = nn.Identity()
         self.output_activation = output_activation
 
         if hidden_size is None:
@@ -146,11 +148,11 @@ def fitness_nce_loss(scores: torch.Tensor, negative_score_reduction: str = 'sum'
     return _reduce(-(positive_scores + negative_scores), reduction)
 
 
-# TODO: for the margin to be interpretable here, the negative score reduction should be a mean -- so I'll make it a mean in the rest?
-# TODO: do we even need it at all? we could also broadcst the positive scores, and compute the hinge for each one individually
 def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    if negative_score_reduction == 'none':
+        positive_scores = positive_scores.unsqueeze(-1)
     return _reduce(torch.relu(positive_scores + margin - negative_scores), reduction)
     
 
@@ -165,7 +167,6 @@ def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 
     return alpha * hinge + (1 - alpha) * cross_example_loss
 
 
-# TODO: see note re: negative score reduction in the hinge loss -- discuss with advisors
 def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     # negative_scores = scores[:, 1:].sum(dim=1)  
@@ -173,12 +174,28 @@ def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'mean
     return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)), reduction)
 
 
-# TODO: see note re: negative score reduction in the hinge loss -- discuss with advisors
 def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     # negative_scores = scores[:, 1:].sum(dim=1)  
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     return _reduce(positive_scores.pow(2) + torch.relu(margin - negative_scores).pow(2), reduction)
+
+
+def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, reduction: str = 'mean'):
+    return nn.functional.cross_entropy(
+        - beta * scores, 
+        torch.zeros((scores.shape[0], 1), dtype=torch.long, device=scores.device), 
+        reduction=reduction) 
+
+
+def fitness_softmin_hybrid_loss(scores: torch.Tensor, margin: float = 1.0, beta: float = 1.0, reduction: str = 'mean'):
+    positive_scores = scores[:, 0]
+    negative_scores = scores[:, 1:]
+    negative_scores_softmin = nn.functional.softmin(beta * negative_scores, dim=1)
+    effective_negative_scores = torch.einsum('bij, bjk -> bik', negative_scores.squeeze(-1).unsqueeze(1), negative_scores_softmin).squeeze(-1).squeeze()
+    return _reduce(torch.relu(positive_scores + margin - effective_negative_scores), reduction)
+    # return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)) + torch.relu(margin - negative_scores), reduction)
+
 
 
 DEFAULT_MODEL_PARAMS = {
@@ -203,7 +220,7 @@ DEFAULT_TRAIN_KWARGS = {
     'random_seed': 33,
 }
 
-LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'negative_score_reduction', 'reduction')
+LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction')
 DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
 
@@ -268,39 +285,49 @@ class SklearnFitnessWrapper:
         return torch.empty(0)
         
 
-def _evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor], 
+
+ModelClasses = typing.Union[nn.Module, SklearnFitnessWrapper, Pipeline]
+
+
+
+def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor], 
     device: str = 'cpu') -> typing.Tuple[torch.Tensor, torch.Tensor]:
 
-    if isinstance(model, Pipeline):
-        model = model.named_steps['fitness']
-    
-    if isinstance(model, SklearnFitnessWrapper):
-        model = model.model
-
-    model = typing.cast(nn.Module, model)
-    model.eval()   # type: ignore
     with torch.no_grad():
-        scores = model(X.to(device), activate=False)
-        positive_scores = scores[:, 0]
-        negative_scores = scores[:, 1:]
-        return positive_scores.detach(), negative_scores.detach()
-
-
-def evaluate_fitness(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y: typing.Optional[torch.Tensor] = None, 
-    score_sign: int = 1):
-    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+        if isinstance(model, Pipeline):
+            model.named_steps['fitness'].model.eval()
+            scores = model.transform(X.to(device))
         
-    game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
-    return game_average_scores.mean().item()
+        elif isinstance(model, SklearnFitnessWrapper):
+            model.model.eval()
+            scores = model.transform(X.to(device))
+
+        else:
+            model.eval()
+            scores = model(X.to(device), activate=False)
+
+        scores = scores.detach().cpu()
+
+    positive_scores = scores[:, 0]
+    negative_scores = scores[:, 1:]
+    return positive_scores.detach(), negative_scores.detach()
 
 
-def evaluate_fitness_flipped_sign(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
-    X: torch.Tensor, y=None):
-    return evaluate_fitness(model, X, y, score_sign=-1)
+# def evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor] = None, 
+#     score_sign: int = 1):
+#     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+        
+#     game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
+#     return game_average_scores.mean().item()
 
 
-def evaluate_fitness_overall_ecdf(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
-    X: torch.Tensor, y=None):
+# def evaluate_fitness_flipped_sign(model: ModelClasses, 
+#     X: torch.Tensor, y=None):
+#     return evaluate_fitness(model, X, y, score_sign=-1)
+
+
+def evaluate_fitness_overall_ecdf(model: ModelClasses, 
+    X: torch.Tensor, y=None) -> float:
     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
     positive_scores = positive_scores.squeeze().cpu().numpy()
     negative_scores = negative_scores.squeeze().cpu().numpy()
@@ -310,18 +337,17 @@ def evaluate_fitness_overall_ecdf(model: typing.Union[nn.Module, SklearnFitnessW
     return -positive_mean_quantile
 
 
-def evaluate_fitness_single_game_rank(model: typing.Union[nn.Module, SklearnFitnessWrapper], 
-    X: torch.Tensor, y=None):
+def evaluate_fitness_single_game_rank(model: ModelClasses, X: torch.Tensor, y=None) -> float:
     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
     single_game_rank = (positive_scores[:, None] < negative_scores).mean(axis=1, dtype=torch.float)  # type: ignore
     return single_game_rank.mean().item()
 
 
 def build_multiple_scoring_function(
-    evaluators: typing.Sequence[typing.Callable[[typing.Union[nn.Module, SklearnFitnessWrapper], torch.Tensor, typing.Optional[torch.Tensor]], float]],
+    evaluators: typing.Sequence[typing.Callable[[ModelClasses, torch.Tensor, typing.Optional[torch.Tensor]], float]],
     names: typing.Sequence[str]
-    ):
-    def _evaluate_fitness_multiple(model: typing.Union[nn.Module, SklearnFitnessWrapper], X: torch.Tensor, y=None, return_all=False):
+    ) -> typing.Callable[[ModelClasses, torch.Tensor, typing.Optional[torch.Tensor]], typing.Dict[str, float]]:
+    def _evaluate_fitness_multiple(model: ModelClasses, X: torch.Tensor, y=None, return_all=False):
         return {name: evaluator(model, X, y) for name, evaluator in zip(names, evaluators)}
 
     return _evaluate_fitness_multiple
@@ -333,11 +359,10 @@ def train_and_validate_model(model: nn.Module,
     loss_function: typing.Callable = fitness_nce_loss,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
-    n_epochs: int = 100, lr: float = 0.01, weight_decay: float = 0.0, 
+    n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0, 
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01, 
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33,
-    eval_method: typing.Callable = evaluate_fitness) -> nn.Module:
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33) -> nn.Module:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
@@ -359,6 +384,7 @@ def train_and_validate_model(model: nn.Module,
     patience_update_epoch = 0
     best_model = model
     
+    epoch = 0
     for epoch in range(n_epochs):
         model.train()
         epoch_train_losses = []
@@ -420,8 +446,106 @@ def train_and_validate_model(model: nn.Module,
                 print(f'Early stopping after {epoch} epochs')
             break
 
+    if epoch == n_epochs - 1:
+        print('Training finished without early stopping')
+
     model = best_model.to(device)
 
     return model
 
 
+
+def cross_validate(train: torch.Tensor,
+    param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]],
+    scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
+    model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
+    cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    n_folds: int = 5, verbose: int = 0) -> GridSearchCV:
+
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    if train_kwargs is None:
+        train_kwargs = {}
+
+    if cv_kwargs is None:
+        cv_kwargs = {}
+
+    if 'n_jobs' not in cv_kwargs: 
+        cv_kwargs['n_jobs'] = -1
+    if 'verbose' not in cv_kwargs:
+        cv_kwargs['verbose'] = verbose
+
+    pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler()), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
+
+    if isinstance(param_grid, list):
+        for param_grid_dict in param_grid:
+            param_grid_dict['fitness__n_features'] = [train.shape[-1]]
+    else:
+        param_grid['fitness__n_features'] = [train.shape[-1]]        
+
+    random_seed = train_kwargs['random_seed'] if 'random_seed' in train_kwargs else None
+
+    cv = GridSearchCV(pipeline, param_grid, scoring=scoring_function, 
+        cv=KFold(n_folds, shuffle=True, random_state=random_seed), 
+        **cv_kwargs)
+    return cv.fit(train, None)
+
+
+def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor],
+    param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]], 
+    split_test_set: bool = True,
+    feature_columns: typing.Optional[typing.List[str]] = None, 
+    random_seed: int = DEFAULT_RANDOM_SEED,
+    scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
+    model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    n_folds: int = 5, verbose: int = 0
+    ) -> typing.Tuple[GridSearchCV, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]], typing.Optional[typing.Dict[str, float]]]:
+
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    if train_kwargs is None:
+        train_kwargs = {}
+
+    cv_data = input_data
+    test_tensor = None
+
+    if isinstance(cv_data, pd.DataFrame):
+        if feature_columns is None:
+            feature_columns = [c for c in cv_data.columns if c not in NON_FEATURE_COLUMNS]
+            
+        if split_test_set:
+            cv_data, test_data = train_test_split_by_game_name(cv_data, random_seed=random_seed)
+            test_tensor = df_to_tensor(test_data, feature_columns)  
+
+        cv_tensor = df_to_tensor(cv_data, feature_columns)
+
+    else:
+        cv_tensor = cv_data
+        if split_test_set:
+            cv_tensor, test_tensor = train_test_split(cv_tensor, random_state=random_seed, 
+                train_size=DEFAULT_TRAINING_PROP)
+            
+        cv_tensor = typing.cast(torch.Tensor, cv_tensor)
+
+    cv = cross_validate(cv_tensor, param_grid,   
+        scoring_function=scoring_function,
+        train_kwargs={'random_seed': random_seed, **train_kwargs}, 
+        model_kwargs=model_kwargs, cv_kwargs=cv_kwargs, n_folds=n_folds, verbose=verbose)
+    
+    test_results = None
+
+    if split_test_set:
+        if test_tensor is None:
+            raise ValueError(f'Encoutered None test tensor with split_test_set=True')
+        test_tensor = typing.cast(torch.Tensor, test_tensor)
+        best_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_)
+        ecdf = evaluate_fitness_overall_ecdf(best_model, test_tensor)
+        game_rank = evaluate_fitness_single_game_rank(best_model, test_tensor)
+        test_results = dict(ecdf=ecdf, game_rank=game_rank)
+
+    return cv, (cv_tensor, test_tensor), test_results  # type: ignore

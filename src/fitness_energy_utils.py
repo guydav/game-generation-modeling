@@ -339,7 +339,7 @@ def evaluate_fitness_overall_ecdf(model: ModelClasses,
 
 def evaluate_fitness_single_game_rank(model: ModelClasses, X: torch.Tensor, y=None) -> float:
     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
-    single_game_rank = (positive_scores[:, None] < negative_scores).mean(axis=1, dtype=torch.float)  # type: ignore
+    single_game_rank = (positive_scores[:, None] < negative_scores).float().mean(axis=1)  # type: ignore
     return single_game_rank.mean().item()
 
 

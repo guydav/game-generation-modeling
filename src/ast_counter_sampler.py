@@ -163,6 +163,15 @@ FUNCTION_NAMES = []
 PREDICATE_NAMES = []
 
 
+def _split_posterior(posterior_dict: typing.Dict[typing.Any, typing.Any]):
+    return zip(*posterior_dict.items())
+
+
+def posterior_dict_sample(rng: np.random.Generator, posterior_dict: typing.Dict[str, float], size: typing.Union[int, typing.Tuple[int], None] = None):
+    values, probs = _split_posterior(posterior_dict)
+    return rng.choice(values, size=size, p=probs)
+
+
 def generate_game_id(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     game_id = global_context['original_game_id'] if 'original_game_id' in global_context else 'game-id'    
     if 'sample_id' in global_context:
@@ -179,26 +188,28 @@ def generate_domain_name(global_context: ContextDict, local_context: typing.Opti
     else:
         rng = global_context['rng']
     return rng.choice(DOMAINS)
+
+
+def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
+    total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
+    value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
+
+    def sample_new_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
+        if 'preference_names' not in global_context:
+            global_context['preference_names'] = set()
+
+        pref_name = None
+        while (pref_name is None) or (pref_name in global_context['preference_names']):
+            pref_name = posterior_dict_sample(global_context['rng'], value_posterior)
+            
+        global_context['preference_names'].add(pref_name)
+        return pref_name
     
-
-def _preference_name(i):
-    return f'preference{i}'
+    return sample_new_preference_name
 
 
-def sample_new_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
-    if 'preference_count' not in global_context:
-        global_context['preference_count'] = 0
+sample_new_preference_name_factory.factory = True
 
-    if 'preference_names' not in global_context:
-        global_context['preference_names'] = set()
-
-    pref_name = None
-    while (pref_name is None) or (pref_name in global_context['preference_names']):
-        global_context['preference_count'] += 1  # type: ignore
-        pref_name = _preference_name(global_context['preference_count'])
-        
-    global_context['preference_names'].add(pref_name)
-    return pref_name
 
 
 def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
@@ -214,26 +225,38 @@ def sample_existing_preference_name(global_context: ContextDict, local_context: 
     return rng.choice(pref_names)
 
 
-def sample_new_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
-    if local_context is None:
-        local_context = {}
-
-    if 'variables' not in local_context:
-        local_context['variables'] = dict()
-
-    if 'rng' not in global_context:
-        rng = np.random.default_rng()
-    else:
-        rng = global_context['rng']
-
-    valid_vars = set(string.ascii_lowercase) - set(local_context['variables'].keys())
+def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
+    total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
+    value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
     
-    if len(valid_vars) == 0:
-        raise SamplingException('No valid variables left to sample')
+    def sample_new_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
+        if local_context is None:
+            local_context = {}
 
-    new_var = rng.choice(list(valid_vars))
-    local_context['variables'][new_var] = None
-    return f'?{new_var}'
+        if 'variables' not in local_context:
+            local_context['variables'] = dict()
+
+        if 'rng' not in global_context:
+            rng = np.random.default_rng()
+        else:
+            rng = global_context['rng']
+
+        valid_vars = set(value_posterior.keys()) - set(local_context['variables'].keys())
+        
+        if len(valid_vars) == 0:
+            raise SamplingException('No valid variables left to sample')
+
+        filtered_posterior_normalization = sum(value_posterior[k] for k in valid_vars)
+        filtered_posterior = {k: v / filtered_posterior_normalization for k, v in value_posterior.items() if k in valid_vars}
+
+        new_var = posterior_dict_sample(rng, filtered_posterior)[1:]
+        local_context['variables'][new_var] = None
+        return f'?{new_var}'
+    
+    return sample_new_variable
+    
+
+sample_new_variable_factory.factory = True
 
 
 def sample_existing_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
@@ -256,7 +279,7 @@ def sample_empty_list(global_context: ContextDict, local_context: typing.Optiona
 
 
 VARIABLE_DEFAULTS = defaultdict(lambda: sample_existing_variable)
-VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable
+VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
@@ -267,7 +290,7 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     type_name=defaultdict(lambda: TYPE_NAMES),
     predicate_name=defaultdict(lambda: PREDICATE_NAMES),
     preference_name={
-        ('preference', 'pref_name'): sample_new_preference_name,
+        ('preference', 'pref_name'): sample_new_preference_name_factory,
         ('pref_name_and_types', 'pref_name'): sample_existing_preference_name,
     },
     id={
@@ -499,7 +522,14 @@ class ASTSampler:
             field_prior[TOKEN_POSTERIOR][value_type] = count  # type: ignore
             if SAMPLERS not in field_prior:
                 field_prior[SAMPLERS] = {}
-            field_prior[SAMPLERS][value_type] = field_default  # type: ignore
+
+            field_sampler = field_default
+
+            if hasattr(field_default, 'factory') and field_default.factory:
+                field_sampler = field_default(field_counter, self.prior_token_count)
+
+            field_prior[SAMPLERS][value_type] = field_sampler  # type: ignore
+
         else:
             raise ValueError(f'Unknown field_default type: {field_default}')
 
@@ -705,13 +735,6 @@ class ASTSampler:
 
         raise ValueError(f'Encountered unknown rule type: {type(rule)}: {rule}')
 
-    def _split_posterior(self, posterior_dict: typing.Dict[typing.Any, typing.Any]):
-        return zip(*posterior_dict.items())
-
-    def _posterior_dict_sample(self, posterior_dict: typing.Dict[str, float], size: typing.Union[int, typing.Tuple[int], None] = None):
-        values, probs = self._split_posterior(posterior_dict)
-        return self.rng.choice(values, size=size, p=probs)
-
     def _sample_named(self, 
         sample_dict: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
         global_context: ContextDict,
@@ -721,7 +744,7 @@ class ASTSampler:
             raise ValueError(f'Missing type_posterior in sample: {sample_dict}')
 
         if LENGTH_POSTERIOR in sample_dict:
-            length = self._posterior_dict_sample(sample_dict[LENGTH_POSTERIOR])  # type: ignore
+            length = posterior_dict_sample(self.rng, sample_dict[LENGTH_POSTERIOR])  # type: ignore
             if length == 0:
                 return None, None
             values, context_updates = zip(*[self._sample_single_named_value(sample_dict, global_context, local_context) for _ in range(length)])
@@ -735,20 +758,20 @@ class ASTSampler:
         global_context: ContextDict,
         local_context: ContextDict):
 
-        sample_type = self._posterior_dict_sample(sample_dict[TYPE_POSTERIOR])  # type: ignore
+        sample_type = posterior_dict_sample(self.rng, sample_dict[TYPE_POSTERIOR])  # type: ignore
 
         if sample_type == RULE:
             if RULE_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
-            rule = typing.cast(str, self._posterior_dict_sample(sample_dict[RULE_POSTERIOR]))  # type: ignore
+            rule = typing.cast(str, posterior_dict_sample(self.rng, sample_dict[RULE_POSTERIOR]))  # type: ignore
             return self.sample(rule, global_context, local_context)
 
         elif sample_type == TOKEN:
             if TOKEN_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing token_posterior in sample: {sample_dict}')
 
-            token = self._posterior_dict_sample(sample_dict[TOKEN_POSTERIOR])  # type: ignore
+            token = posterior_dict_sample(self.rng, sample_dict[TOKEN_POSTERIOR])  # type: ignore
             if SAMPLERS in sample_dict and token in sample_dict[SAMPLERS]:  # type: ignore
                 token = sample_dict[SAMPLERS][token](global_context, local_context)     # type: ignore
 
@@ -784,7 +807,7 @@ class ASTSampler:
                 if prod_value == EOF:
                     pass
                 elif prod_value == SAMPLE:
-                    output.append(self._posterior_dict_sample(rule_dict[TOKEN_POSTERIOR]))
+                    output.append(posterior_dict_sample(self.rng, rule_dict[TOKEN_POSTERIOR]))
                 else:
                     output.append(prod_value)
 
@@ -918,13 +941,9 @@ class RegrowthSampler(ASTParentMapper):
             self.original_game_id = ast.game_name
         
         elif rule == 'preference':
-            if 'preference_count' not in kwargs['global_context']:
-                kwargs['global_context']['preference_count'] = 0
-
             if 'preference_names' not in kwargs['global_context']:
                 kwargs['global_context']['preference_names'] = set()
 
-            kwargs['global_context']['preference_count'] += 1
             kwargs['global_context']['preference_names'].add(ast.pref_name)
 
         elif rule == 'variable_list':

@@ -1110,7 +1110,7 @@
                 (once (and (agent_holds ?d) (adjacent agent desk)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
-                ; TODO: do we do anything about "whenever you get a point you put one of the blocks on the shelf. (on any of the two, it doesn't matter)"??
+                ; TODO: do we do anything about "whenever you get a point you put one of the blocks on the shelf. (on any of the two, it doesn't matter)"?
             )
         )
     )

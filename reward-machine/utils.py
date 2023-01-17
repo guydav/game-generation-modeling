@@ -104,6 +104,12 @@ class ObjectState(typing.NamedTuple):
 
     @staticmethod
     def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        # Manually handle the floor, which is not placed correctly in the Unity scene
+        if state_dict['objectId'] == 'Floor|+00.00|+00.00|+00.00':
+            state_dict['position'] = {'x': 0, 'y': 0, 'z': 0}
+            state_dict['bboxCenter'] = {'x': 0.16, 'y': -0.1, 'z': -0.185}
+            state_dict['bboxExtents'] = {'x': 3.65, 'y': 0.1, 'z': 2.75}
+
         return ObjectState(
             angular_velocity=_vec_dict_to_array(state_dict['angularVelocity']),
             bbox_center=_vec_dict_to_array(state_dict['bboxCenter']),

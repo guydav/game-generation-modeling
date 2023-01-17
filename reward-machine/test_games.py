@@ -234,7 +234,7 @@ TEST_CASES = [
     },),
     ('test-agent-adjacent', TEST_AGENT_DOOR_ADJACENT_TRACE, 1.0, {
         'throwAdjacentToDoor' : [
-            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', 'agent': 'agent', 'door': 'door'}, start=136, end=197, measures={})
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', 'agent': 'agent', 'door': 'door', 'floor': 'Floor|+00.00|+00.00|+00.00', 'bed': 'Bed|-02.46|00.00|-00.57'}, start=136, end=197, measures={})
         ],
     },),
 ]

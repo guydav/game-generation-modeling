@@ -358,19 +358,6 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
             # If we don't have this object in the cache, we can't evaluate the predicate
             if not is_type_or_color(var) and obj not in state_cache:
                 return None
-
-            if obj == 'Floor|+00.00|+00.00|+00.00':
-                base_floor_object = state_cache[obj]
-
-                # Remove the keys that we're providing manually
-                static_fields = {key: value for key, value in base_floor_object._asdict().items() if key not in ['position', 'bbox_center', 'bbox_extents']}
-
-                updated_floor = ObjectState(position=np.array([0, 0, 0]),
-                                            bbox_center=np.array([0.16, -0.1, -0.185]),
-                                            bbox_extents=np.array([3.65, 0.1, 2.75]),
-                                            **static_fields)
-
-                mapping_objects.append(updated_floor)
             
             else:
                 mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)

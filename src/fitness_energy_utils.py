@@ -2,6 +2,8 @@ from collections import defaultdict
 import copy
 import typing
 
+from IPython.display import display, Markdown, HTML
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
@@ -549,3 +551,95 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
         test_results = dict(ecdf=ecdf, game_rank=game_rank)
 
     return cv, (cv_tensor, test_tensor), test_results  # type: ignore
+
+
+def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor, 
+    test_tensor: typing.Optional[torch.Tensor] = None, 
+    test_results: typing.Optional[dict] = None,
+    display_by_ecdf: bool = True, display_by_game_rank: bool = True,
+    display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
+    histogram_title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
+    dispaly_weights_histogram: bool = True, weights_histogram_title_base: str = 'Energy model weights',
+    ) -> None:
+
+    cv_df = pd.concat([
+        pd.DataFrame(cv.cv_results_["params"]), 
+        pd.DataFrame(cv.cv_results_["mean_test_overall_ecdf"], columns=['ecdf_mean']), 
+        pd.DataFrame(cv.cv_results_["std_test_overall_ecdf"], columns=['ecdf_std']), 
+        pd.DataFrame(cv.cv_results_["rank_test_overall_ecdf"], columns=['ecdf_rank']),
+        pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']), 
+        pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']), 
+        pd.DataFrame(cv.cv_results_["rank_test_single_game_rank"], columns=['game_rank_rank']),
+    ],axis=1)
+
+    if test_results is not None:
+        display(Markdown('### Test results:'))
+        display(test_results)
+
+    if display_by_ecdf:
+        display(Markdown('### CV results by overall ECDF:'))
+        display(cv_df.sort_values(by='ecdf_rank').head(10))
+
+    if display_by_game_rank:
+        display(Markdown('### CV results by mean single game rank:'))
+        display(cv_df.sort_values(by='game_rank_rank').head(10))
+
+    if display_energy_histogram:
+        train_positive_scores = cv.best_estimator_.transform(train_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
+        train_negative_scores = cv.best_estimator_.transform(train_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
+        hist_scores = [train_positive_scores, train_negative_scores.flatten()]
+        labels = ['Real (train)', 'Negatives (train)']
+
+        cm = plt.get_cmap('tab20')  # type: ignore
+        colors = cm.colors[0], cm.colors[2]
+
+        if test_tensor is not None:
+            test_positive_scores = cv.best_estimator_.transform(test_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
+            test_negative_scores = cv.best_estimator_.transform(test_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
+
+            hist_scores.insert(1, test_positive_scores)
+            hist_scores.append(test_negative_scores.flatten())
+            labels.insert(1, 'Real (test)')
+            labels.append('Negatives (test)')
+
+            colors = cm.colors[:4]
+
+        
+        plt.hist(hist_scores, label=labels, stacked=True, bins=100, color=colors)  # type: ignore
+        if histogram_title_note is not None:
+            plt.title(f'{histogram_title_base} ({histogram_title_note})')
+        else:
+            plt.title(histogram_title_base)
+        
+        plt.title(' features only, example-wise margin loss')
+        plt.xlabel('Energy score')
+
+        if histogram_log_y:
+            plt.ylabel('log(Count)')
+            plt.semilogy()
+        else:
+            plt.ylabel('Count')
+        
+        plt.legend(loc='best')
+        plt.show()
+
+    if dispaly_weights_histogram:
+        weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().numpy().squeeze()  # type: ignore
+        bias = cv.best_estimator_.named_steps['fitness'].model.fc1.bias.data.detach().numpy().squeeze()  # type: ignore
+
+        plt.hist(weights, bins=100)
+
+        if histogram_title_note is not None:
+            plt.title(f'{weights_histogram_title_base} ({histogram_title_note})')
+        else:
+            plt.title(weights_histogram_title_base)
+
+        plt.xlabel('Weight magnitude')
+        plt.ylabel('Count')
+        plt.show()
+
+
+
+
+
+

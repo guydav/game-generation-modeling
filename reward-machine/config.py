@@ -271,8 +271,6 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
     OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
 
 # A list of all objects that can be referred to directly as variables inside of a game
-# TODO: "door" should be added here to NAMED_OBJECTS, but it doesn't have an accompanying object in the scene.
-#       Will need to manually construct it, perhaps...
 NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects

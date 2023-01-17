@@ -171,8 +171,8 @@ class GameHandler():
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
         if not setup:
-            # Ugly: manually advance the 'cur_step' counter for each PreferenceHandler, since their process() methods
-            # aren't being called. Better solution might be to have each PreferenceHandler reference the GameHandler?
+            
+            # Manually advance 'cur_step' for each PreferenceHandler, since their process() methods aren't being called
             for handler in self.preference_handlers.values():
                 handler.cur_step += 1
 

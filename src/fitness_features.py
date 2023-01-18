@@ -681,15 +681,18 @@ class PrefForallUsed(PrefForallTerm):
 
 
 class PrefForallCorrectArity(PrefForallTerm):
+    correct_usage_count: int = 0 
+    incorrect_usage_count: int = 0
     pref_forall_prefs_to_counts: typing.Dict[str, int] = dict()
-    prefs_used_with_correct_count: typing.Set[str] = set()
+    
 
     def __init__(self):
         super().__init__('pref_forall_correct_arity')
 
     def game_start(self) -> None:
         self.pref_forall_prefs_to_counts = dict()
-        self.prefs_used_with_correct_count = set()
+        self.correct_usage_count = 0
+        self.incorrect_usage_count = 0
 
     def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
         preferences = ast.forall_pref.preferences  # type: ignore
@@ -716,14 +719,19 @@ class PrefForallCorrectArity(PrefForallTerm):
             n_vars = len(object_types)
 
         if pref_name in self.pref_forall_prefs_to_counts and n_vars <= self.pref_forall_prefs_to_counts[pref_name]:
-            self.prefs_used_with_correct_count.add(pref_name)
+            self.correct_usage_count += 1
+        elif n_vars > 0:
+            self.incorrect_usage_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs_to_counts) == 0:
             return 1
 
-        defined_prefs = set(self.pref_forall_prefs_to_counts.keys())
-        return len(defined_prefs.intersection(self.prefs_used_with_correct_count)) / len(defined_prefs)
+        total_usage_count = self.correct_usage_count + self.incorrect_usage_count
+        if total_usage_count == 0:
+            return 0
+
+        return self.correct_usage_count / total_usage_count
 
 
 # Copied from `reward_machines/config.py`

@@ -1,5 +1,6 @@
 from collections import defaultdict
 import copy
+from difflib import HtmlDiff
 import typing
 
 from IPython.display import display, Markdown, HTML
@@ -626,6 +627,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     if dispaly_weights_histogram:
         weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().numpy().squeeze()  # type: ignore
         bias = cv.best_estimator_.named_steps['fitness'].model.fc1.bias.data.detach().numpy().squeeze()  # type: ignore
+        print(weights.mean(), weights.std(), bias)
 
         plt.hist(weights, bins=100)
 
@@ -637,6 +639,107 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         plt.xlabel('Weight magnitude')
         plt.ylabel('Count')
         plt.show()
+
+
+
+HTML_DIFF = HtmlDiff(wrapcolumn=60)
+HTML_DIFF_SUBSTITUTIONS = {
+    '#aaffaa': '#6fa66f',
+    '#ffaaaa': '#a66f6f',
+    '#ffff77': '#999949',
+}
+
+
+def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],  
+    feature_names: typing.List[str], full_dataset_tensor: torch.Tensor, original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
+    top_k: int = 5, display_overall_features: bool = False, display_relative_features: bool = True,  
+    display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
+    display_features_diff: bool = True) -> None:
+
+    negatives = data_tensor[:, 1:, :]
+
+    if isinstance(index, tuple):
+        row, col = index
+    else:
+        row, col = index // negatives.shape[1], index % negatives.shape[1]
+    
+    index_features = negatives[row, col]
+    real_game_features = data_tensor[row, 0]
+    index_energy = cv.best_estimator_.transform(index_features).item()  # type: ignore
+    real_game_energy = cv.best_estimator_.transform(data_tensor[row, 0]).item()  # type: ignore
+
+    weights = cv.best_estimator_['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
+
+    scaled_index_features = cv.best_estimator_['scaler'].transform(index_features)  # type: ignore
+    scaled_real_game_features = cv.best_estimator_['scaler'].transform(data_tensor[row, 0])  # type: ignore
+
+    index_energy_contributions = scaled_index_features * weights
+    real_game_contributions = scaled_real_game_features * weights
+
+    print(f'Energy of real game: {real_game_energy:.3f} | Energy of index: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}')
+
+    if display_overall_features:
+        display(Markdown(f'### Top features pushing the energy up [(feature value => scaled feature value) X (weight)]'))
+        top_k_contributions = torch.topk(index_energy_contributions, top_k, largest=True)
+        for i in range(top_k):
+            idx = top_k_contributions.indices[i]
+            display(Markdown(f'{feature_names[idx]}: {top_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
+
+        display(Markdown(f'### Top features pushing the energy down [(feature value => scaled feature value) X (weight)]'))
+        bottom_k_contributions = torch.topk(index_energy_contributions, top_k, largest=False)
+        for i in range(top_k):
+            idx = bottom_k_contributions.indices[i]
+            display(Markdown(f'{feature_names[idx]}: {bottom_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
+    
+    if display_relative_features:
+        top_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=True)
+        if torch.any(top_k_relative_contributions.values > min_display_threshold):
+            display(Markdown(f'### Top features pushing the energy up relative to real game [(feature value => scaled feature value) X (weight)]'))
+            
+            for i in range(top_k):
+                idx = top_k_relative_contributions.indices[i]
+                value = top_k_relative_contributions.values[i]
+                if value > min_display_threshold:
+                    display(Markdown(f'{feature_names[idx]}: {value:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f} | {real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f}) * {weights[idx]:.3f}'))
+
+        bottom_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=False)
+        if torch.any(bottom_k_relative_contributions.values < -min_display_threshold):
+            display(Markdown(f'### Top features pushing the energy down relative to real game [(feature value => scaled feature value) X (weight)]'))
+            
+            for i in range(top_k):
+                idx = bottom_k_relative_contributions.indices[i]
+                value = bottom_k_relative_contributions.values[i]
+                if value < -min_display_threshold:
+                    display(Markdown(f'{feature_names[idx]}: {value:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f} | {real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f}) * {weights[idx]:.3f}'))
+
+    if display_game_diff:
+        display(Markdown('### Game Diffs'))
+        original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
+        original_game_text = original_game_texts[original_game_index]  # type: ignore
+        negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
+
+        diff = HTML_DIFF.make_file(original_game_text.splitlines(), negative_game_text.splitlines())  #, context=True, numlines=0)
+
+        for key, value in html_diff_substitutions.items():
+            diff = diff.replace(key, value)
+
+        display(HTML(diff))
+
+    if display_features_diff:
+        display(Markdown('### Features Diffs'))
+        d = index_features - real_game_features
+        inds = d.nonzero().squeeze()
+        if inds.ndim == 0 or len(inds) == 0:
+            print('No features changed')
+
+        else:
+            c = d[inds]
+            for i in torch.argsort(c):
+                original_idx = inds[i]
+                print(f'{feature_names[original_idx]}: {c[i]:.3f} => {scaled_index_features[original_idx] - scaled_real_game_features[original_idx]:.3f}')
+
+
+
 
 
 

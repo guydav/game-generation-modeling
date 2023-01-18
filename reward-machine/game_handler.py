@@ -171,7 +171,7 @@ class GameHandler():
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
         if not setup:
-            
+
             # Manually advance 'cur_step' for each PreferenceHandler, since their process() methods aren't being called
             for handler in self.preference_handlers.values():
                 handler.cur_step += 1
@@ -644,9 +644,8 @@ class GameHandler():
 
             count = 0
 
-            # Note: we may later decide to enforce that all objects in a mapping must be distinct, rather than
-            # just that they be mapped to distinct variables
-            # keyfunc = lambda satisfaction: "_".join(sorted(satisfaction.mapping.values()))
+            # We consider two mappings to be distinct if at least one variable is mapped to a different object,
+            # so we call (?b: ball_1, ?x - block_1) and (?b: block_1, ?x - ball_1) distinct
             keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1

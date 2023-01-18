@@ -59,8 +59,6 @@ class PredicateHandler:
         self.is_last_step = False
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
-        self.state_cache.update(UNITY_PSEUDO_OBJECTS)
-        self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
@@ -338,6 +336,15 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
 
         # Otherwise, check if any of the relevant objects have changed in this state, excluding passed in types and colors
         mapping_items = predicate_partial_mapping.items()
+
+        # The first time that we evaluate a predicate containing a PseudoObject (e.g. a wall), we need to
+        # add it to the cache and mark it as updated for the current state in order to ensure that predicates
+        # with only PseudoObjects in them are actually evaluated
+        for var, obj in mapping_items:
+            if obj in UNITY_PSEUDO_OBJECTS and obj not in state_cache:
+                state_cache[obj] = UNITY_PSEUDO_OBJECTS[obj]
+                state_cache_last_updated[obj] = state.original_index
+
         any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_or_color(var))
 
         # If any objects are not in the cache, we cannot evaluate the predidate
@@ -404,10 +411,6 @@ def _pred_toggled_on(agent: AgentState, objects: typing.Sequence[typing.Union[Ob
 
 def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject, str]]):
     assert len(objects) == 2
-
-    # TODO: do PsuedoObjects have types?
-    if isinstance(objects[0], PseudoObject) or isinstance(objects[1], PseudoObject):
-        return False
 
     # If the variable is an object, then we collect all of the types and meta-types that it belongs to. If
     # it's a type, then we just collect that type. The predicate is true if there is any overlap between

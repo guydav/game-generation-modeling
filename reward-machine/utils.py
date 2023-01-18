@@ -438,11 +438,12 @@ def get_object_types(obj: ObjectState):
     '''
 
     object_id = obj.object_id
+    object_name = obj.name
     object_types = []
 
     for objects_by_type in OBJECTS_BY_ROOM_AND_TYPE.values():
         for object_type, objects in objects_by_type.items():
-            if object_id in objects:
+            if object_id in objects or object_name in objects:
                 object_types.append(object_type)
 
     return set(object_types)

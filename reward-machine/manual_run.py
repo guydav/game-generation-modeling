@@ -6,19 +6,24 @@ from game_handler import GameHandler
 from utils import FullState, get_project_dir
 
 
-BLOCK_STACKING_TRACE = pathlib.Path('./reward-machine/traces/block_stacking_test_trace.json')
-THROWING_BALLS_AT_WALL_TRACE = pathlib.Path('./reward-machine/traces/throwing_balls_at_wall.json')
-WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/m9yCPYToAPeSSYKh7WuL-preCreateGame.json')
-SECOND_WALL_BALL_TRACE = pathlib.Path('/Users/guydavidson/Downloads/HuezY8vhxETSFyQL6BZK-preCreateGame.json')
-SIMPLE_STACKING_TRACE = pathlib.Path('./reward-machine/traces/simple_stacking_trace.json')
-THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path('./reward-machine/traces/three_wall_to_bin_bounces.json')
-SETUP_TEST_TRACE = pathlib.Path('./reward-machine/traces/setup_test_trace.json')
-CASTLE_TEST_TRACE = pathlib.Path('./reward-machine/traces/building_castle.json')
-BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path('./reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
-THROW_ALL_DODGEBALLS_TRACE = pathlib.Path('./reward-machine/traces/throw_all_dodgeballs.json')
-THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path('./reward-machine/traces/throw_ball_to_bin_unique_positions.json')
-STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blocks.json')
-COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
+BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
+THROWING_BALLS_AT_WALL_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throwing_balls_at_wall.json')
+SIMPLE_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/simple_stacking_trace.json')
+THREE_WALL_TO_BIN_BOUNCES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
+SETUP_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
+CASTLE_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/building_castle.json')
+BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
+THROW_ALL_DODGEBALLS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_all_dodgeballs.json')
+THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
+STACK_THREE_CUBES_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/stack_3_cube_blocks.json')
+COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
+GAME_6_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-6.json')
+GAME_15_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-15.json')
+GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-27.json')
+UPDATED_GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
+TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/test_door_and_rug_collision.json')
+TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
+THROW_WITH_STACKED_BLOCKS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -75,18 +80,28 @@ TEST_GAME_LIBRARY = {
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
     'test-count-same-positions': load_game("throw_to_bin_same_positions"),
     'test-count-overlapping': load_game("building_count_overlapping"),
+    'test-adjacent': load_game("adjacent_at_end"),
+    'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
+    'game-6': load_game("game-6"),
+    'game-7': load_game("game-7"),
+    'game-15': load_game("game-15"),
+    'game-27': load_game("game-27"),
+    'test-door': load_game("test_door"),
+    'test-agent-door-adjacent': load_game("test_agent_door_adjacent"),
+    'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-count-overlapping'])
-    score = None
+    game_handler = GameHandler(TEST_GAME_LIBRARY['throw-block-cache-test'])
+    trace_path = THROW_WITH_STACKED_BLOCKS_TRACE.resolve().as_posix()
 
-    trace_path = COMPLEX_STACKING_TRACE.resolve().as_posix()
+    score = None
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=True)
+
+        score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=False)
         if score is not None:
             break
 
@@ -96,7 +111,14 @@ if __name__ == "__main__":
         print("\n\nSCORE ACHIEVED:", score)
 
     print("\nPREFERENCE SATISFACTIONS")
+    used_mappings = set()
     for key, val in game_handler.preference_satisfactions.items():
         print(key + ":")
         for sat in val:
             print(f"\t{sat}")
+            # print(f"\t\t{', '.join(sorted(sat.mapping.values()))}")
+
+            # if ", ".join(sorted(sat.mapping.values())) in used_mappings:
+            #     print("DUPLICATE MAPPING")
+            #     exit()
+            # used_mappings.add(", ".join(sorted(sat.mapping.values())))

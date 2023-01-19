@@ -170,8 +170,12 @@ class GameHandler():
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
-
         if not setup:
+
+            # Manually advance 'cur_step' for each PreferenceHandler, since their process() methods aren't being called
+            for handler in self.preference_handlers.values():
+                handler.cur_step += 1
+
             return
 
         # Check for object updates. If an object moves, then the current time is added to its list of motion times
@@ -209,7 +213,7 @@ class GameHandler():
         return score
 
     def evaluate_setup(self, setup_expression: typing.Optional[tatsu.ast.AST], state: FullState,
-                       mapping: typing.Dict[str, str]) -> bool:
+                       mapping: typing.Dict[str, str], called_from_forall=False) -> bool:
         '''
         Determine whether the setup conditions of the game have been met. The setup conditions
         of a game are met if all of the game-optional expressions have evaluated to True at least
@@ -222,48 +226,62 @@ class GameHandler():
         rule = setup_expression["parseinfo"].rule  # type: ignore
 
         if rule == "setup":
-            return self.evaluate_setup(setup_expression["setup"], state, mapping)
+            return self.evaluate_setup(setup_expression["setup"], state, mapping, called_from_forall)
 
         elif rule == "setup_statement":
-            return self.evaluate_setup(setup_expression["statement"], state, mapping)
+            return self.evaluate_setup(setup_expression["statement"], state, mapping, called_from_forall)
 
         elif rule == "super_predicate":
-            evaluation = self.predicate_handler(setup_expression, state, mapping)
+            evaluation = self.predicate_handler(setup_expression, state, mapping, force_evaluation=self.cur_step > 100)
             
             return evaluation
 
         elif rule == "setup_not":
-            inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping)  
-
+            inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping, called_from_forall)  
             return not inner_value
 
         elif rule == "setup_and":
-            inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["and_args"]]  # type: ignore
+            if isinstance(setup_expression["and_args"], tatsu.ast.AST):
+                return self.evaluate_setup(setup_expression["and_args"], state, mapping)
 
-            return all(inner_values)
+            for sub in setup_expression["and_args"]:
+                if not self.evaluate_setup(sub, state, mapping, called_from_forall):
+                    return False
+
+            return True
 
         elif rule == "setup_or":
-            inner_values = [self.evaluate_setup(sub, state, mapping) for sub in setup_expression["or_args"]]   # type: ignore
+            if isinstance(setup_expression["or_args"], tatsu.ast.AST):
+                return self.evaluate_setup(setup_expression["or_args"], state, mapping)
 
-            return any(inner_values)
+            for sub in setup_expression["or_args"]:
+                if self.evaluate_setup(sub, state, mapping, called_from_forall):
+                    return True
+
+            return False
 
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["exists_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values())  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
 
-            return any(inner_mapping_values)
+            for sub_mapping in sub_mappings:
+                if self.evaluate_setup(setup_expression["exists_args"], state, {**sub_mapping, **mapping}, called_from_forall):
+                    return True
+
+            return False
 
         elif rule == "setup_forall":
             variable_type_mapping = extract_variable_type_mapping(setup_expression["forall_vars"]["variables"])  # type: ignore
             object_assignments = get_object_assignments(self.domain_name, variable_type_mapping.values()) # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}) for sub_mapping in sub_mappings]
 
-            return all(inner_mapping_values)
+            for sub_mapping in sub_mappings:
+                if not self.evaluate_setup(setup_expression["forall_args"], state, {**sub_mapping, **mapping}, called_from_forall=True):
+                    return False
+            return True
 
         elif rule == "setup_game_optional":
             # Once the game-optional condition has been satisfied once, we no longer need to evaluate it
@@ -271,7 +289,7 @@ class GameHandler():
             if cache_key in self.game_optional_cache:
                 return True
 
-            evaluation = self.evaluate_setup(setup_expression["optional_pred"], state, mapping)
+            evaluation = self.evaluate_setup(setup_expression["optional_pred"], state, mapping, called_from_forall)
             if evaluation:
                 self.game_optional_cache.add(cache_key)
 
@@ -282,7 +300,11 @@ class GameHandler():
             # and ensure that the condition is satisfied *by those objects* in all future states
             expr_str, mapping_str = ast_cache_key(setup_expression["conserved_pred"], mapping)
             
-            evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
+            evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping, called_from_forall)
+
+            # We only lock in the object assignment if we're not being called from a forall
+            if called_from_forall:
+                return evaluation
 
             # If we've satisfied the condition for the first time, store the mapping in the cache
             if evaluation and expr_str not in self.game_conserved_cache:
@@ -622,6 +644,8 @@ class GameHandler():
 
             count = 0
 
+            # We consider two mappings to be distinct if at least one variable is mapped to a different object,
+            # so we call (?b: ball_1, ?x - block_1) and (?b: block_1, ?x - ball_1) distinct
             keyfunc = lambda satisfaction: "_".join(satisfaction.mapping.values())
             for key, group in itertools.groupby(sorted(satisfactions, key=keyfunc), keyfunc):
                 count += 1

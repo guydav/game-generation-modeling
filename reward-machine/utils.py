@@ -11,7 +11,7 @@ import typing
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 import ast_printer
 
-from config import OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+from config import ALL_OBJECT_TYPES, COLORS, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
 PROJECT_NAME = 'game-generation-modeling'
 
@@ -40,7 +40,9 @@ def _vec_dict_to_array(vec: typing.Dict[str, float]):
 class AgentState(typing.NamedTuple):
     angle: float
     angle_int: int
-    camera_local_roation: np.ndarray   # w, x, y, z
+    bbox_center: np.ndarray  #  x, y, z
+    bbox_extents:  np.ndarray  # x, y, z
+    camera_local_rotation: np.ndarray   # w, x, y, z
     camera_rotation_euler_angles: np.ndarray  # x, y, z
     crouching: bool
     direction: np.ndarray  # x, y, z
@@ -62,7 +64,10 @@ class AgentState(typing.NamedTuple):
         return AgentState(
             angle=state_dict['angle'],
             angle_int=state_dict['angleInt'],
-            camera_local_roation=_vec_dict_to_array(state_dict['cameraLocalRoation']),
+            bbox_center=_vec_dict_to_array(state_dict['bboxCenter']) if 'bboxCenter' in state_dict else None,
+            bbox_extents=_vec_dict_to_array(state_dict['bboxExtents']) if 'bboxExtents' in state_dict else None,
+            camera_local_rotation=_vec_dict_to_array(state_dict['cameraLocalRotation']) if 'cameraLocalRotation' in state_dict 
+                                  else _vec_dict_to_array(state_dict['cameraLocalRoation']), # manually handle typo in old traces
             camera_rotation_euler_angles=_vec_dict_to_array(state_dict['cameraRotationEulerAngles']),
             crouching=state_dict['crouching'],
             direction=_vec_dict_to_array(state_dict['direction']),
@@ -94,10 +99,17 @@ class ObjectState(typing.NamedTuple):
     position: np.ndarray  # x, y, z
     rotation: np.ndarray  # x, y, z
     touching_objects: typing.List[str]
+    contained_objects: typing.List[str]
     velocity: np.ndarray  # x, y, z
 
     @staticmethod
     def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
+        # Manually handle the floor, which is not placed correctly in the Unity scene
+        if state_dict['objectId'] == 'Floor|+00.00|+00.00|+00.00':
+            state_dict['position'] = {'x': 0, 'y': 0, 'z': 0}
+            state_dict['bboxCenter'] = {'x': 0.16, 'y': -0.1, 'z': -0.185}
+            state_dict['bboxExtents'] = {'x': 3.65, 'y': 0.1, 'z': 2.75}
+
         return ObjectState(
             angular_velocity=_vec_dict_to_array(state_dict['angularVelocity']),
             bbox_center=_vec_dict_to_array(state_dict['bboxCenter']),
@@ -111,6 +123,7 @@ class ObjectState(typing.NamedTuple):
             position=_vec_dict_to_array(state_dict['position']),
             rotation=_vec_dict_to_array(state_dict['rotation']),
             touching_objects=state_dict['touchingObjects'],
+            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None, # old traces don't have containedObjects
             velocity=_vec_dict_to_array(state_dict['velocity']),
         )
 
@@ -229,19 +242,39 @@ class BuildingPseudoObject(PseudoObject):
 def _object_location(object: typing.Union[AgentState, ObjectState, PseudoObject]) -> np.ndarray:
     return object.bbox_center if hasattr(object, 'bbox_center') and object.bbox_center is not None else object.position  # type: ignore
 
-def _object_corners(object: typing.Union[ObjectState, PseudoObject]):
+def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_pos: str = 'center'):
     '''
     Returns the coordinates of each of the 4 corners of the object's bounding box, with the
-    y coordinate matching the center of mass
+    y coordinate matching either
+    - a provided integer / float value
+    - the center of the object's bounding box (y_offset='center')
+    - the minimum y coordinate of the object's bounding box (y_offset='bottom')
+    - the maximum y coordinate of the object's bounding box (y_offset='top')
+
+    Assuming that positive x is to the right and positive z is forward, the corners are
+    returned in the following order:
+    - 0: top right
+    - 1: bottom right
+    - 2: bottom left
+    - 3: top left
     '''
 
     bbox_center = object.bbox_center
     bbox_extents = object.bbox_extents
 
-    corners = [bbox_center + np.array([bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, bbox_extents[2]]),
-               bbox_center + np.array([bbox_extents[0], 0, -bbox_extents[2]]),
-               bbox_center + np.array([-bbox_extents[0], 0, -bbox_extents[2]])
+    if isinstance(y_pos, int) or isinstance(y_pos, float):
+        y = y_pos
+    elif y_pos == 'center':
+        y = 0
+    elif y_pos == 'bottom':
+        y = -bbox_extents[1]
+    elif y_pos == 'top':
+        y = bbox_extents[1]
+
+    corners = [bbox_center + np.array([bbox_extents[0], y, bbox_extents[2]]),
+               bbox_center + np.array([bbox_extents[0], y, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], y, -bbox_extents[2]]),
+               bbox_center + np.array([-bbox_extents[0], y, bbox_extents[2]])
               ]
 
     return corners
@@ -265,7 +298,6 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
     bbox_extents = object.bbox_extents
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
-
 
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
@@ -322,6 +354,8 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
     elif isinstance(predicate, tatsu.ast.AST):
         pred_vars = []
+        exists_forall_vars = []
+
         for key in predicate:
             if key == "term":
 
@@ -331,20 +365,23 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
                 else:
                     pred_vars += [predicate["term"]]
 
+            elif key == "var_names":
+                pred_vars += [predicate["var_names"]] # type: ignore
+
             # We don't want to capture any variables within an (exists) or (forall) that's inside 
             # the preference, since those are not globally required -- see evaluate_predicate()
-            elif key == "exists_args":
-                continue
+            elif key == "exists_vars":
+                exists_forall_vars += extract_variables(predicate[key])
 
-            elif key == "forall_args":
-                continue
+            elif key == "forall_vars":
+                exists_forall_vars += extract_variables(predicate[key])
 
             elif key != "parseinfo":
                 pred_vars += extract_variables(predicate[key])
 
         unique_vars = []
         for var in pred_vars:
-            if var not in unique_vars:
+            if var not in unique_vars and var not in exists_forall_vars:
                 unique_vars.append(var)
 
         return unique_vars
@@ -393,6 +430,28 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
     mapping_str = ' '.join([f'{k}={mapping[k]}' for k in sorted(mapping.keys())])
 
     return ast_str, mapping_str
+
+def is_type_or_color(variable: str):
+    '''
+    Returns whether the variable is a type or color
+    '''
+    return (variable in ALL_OBJECT_TYPES or variable in COLORS) and (variable not in NAMED_OBJECTS)
+
+def get_object_types(obj: ObjectState):
+    '''
+    Return all the types to which an object belongs (including meta-types) as a set
+    '''
+
+    object_id = obj.object_id
+    object_name = obj.name
+    object_types = []
+
+    for objects_by_type in OBJECTS_BY_ROOM_AND_TYPE.values():
+        for object_type, objects in objects_by_type.items():
+            if object_id in objects or object_name in objects:
+                object_types.append(object_type)
+
+    return set(object_types)
 
 def describe_preference(preference):
     '''

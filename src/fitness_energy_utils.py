@@ -612,7 +612,6 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         else:
             plt.title(histogram_title_base)
         
-        plt.title(' features only, example-wise margin loss')
         plt.xlabel('Energy score')
 
         if histogram_log_y:
@@ -648,6 +647,17 @@ HTML_DIFF_SUBSTITUTIONS = {
     '#ffaaaa': '#a66f6f',
     '#ffff77': '#999949',
 }
+
+
+
+def display_game_diff_html(before: str, after: str, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS):
+    diff = HTML_DIFF.make_file(before.splitlines(), after.splitlines())  #, context=True, numlines=0)
+
+    for key, value in html_diff_substitutions.items():
+        diff = diff.replace(key, value)
+
+    display(HTML(diff))
+
 
 
 def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],  
@@ -715,16 +725,12 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
     if display_game_diff:
         display(Markdown('### Game Diffs'))
         original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
+        print(f'Original game index: {original_game_index} | Negative game row: {row} | Negative game col: {col}')
         original_game_text = original_game_texts[original_game_index]  # type: ignore
         negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
 
-        diff = HTML_DIFF.make_file(original_game_text.splitlines(), negative_game_text.splitlines())  #, context=True, numlines=0)
-
-        for key, value in html_diff_substitutions.items():
-            diff = diff.replace(key, value)
-
-        display(HTML(diff))
-
+        display_game_diff_html(original_game_text, negative_game_text, html_diff_substitutions)
+        
     if display_features_diff:
         display(Markdown('### Features Diffs'))
         d = index_features - real_game_features
@@ -737,8 +743,6 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
             for i in torch.argsort(c):
                 original_idx = inds[i]
                 print(f'{feature_names[original_idx]}: {c[i]:.3f} => {scaled_index_features[original_idx] - scaled_real_game_features[original_idx]:.3f}')
-
-
 
 
 

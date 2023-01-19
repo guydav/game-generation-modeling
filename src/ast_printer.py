@@ -852,12 +852,12 @@ def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = ''):
     reset_buffers(to_list=True)
     pretty_print_ast(ast)
     _flush_line_buffer()
-    return line_delimiter.join(BUFFER)  # type: ignore
+    return line_delimiter.join(BUFFER).strip()  # type: ignore
 
 
 def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = ''):
     reset_buffers(to_list=True)
     PARSE_DICT[section_key](ast)
     _flush_line_buffer()
-    return line_delimiter.join(BUFFER)  # type: ignore
+    return line_delimiter.join(BUFFER).strip()  # type: ignore
 

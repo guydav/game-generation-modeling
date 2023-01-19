@@ -23,6 +23,7 @@ GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/game-27
 UPDATED_GAME_27_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
 TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/test_door_and_rug_collision.json')
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
+THROW_WITH_STACKED_BLOCKS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop', 
@@ -87,13 +88,14 @@ TEST_GAME_LIBRARY = {
     'game-27': load_game("game-27"),
     'test-door': load_game("test_door"),
     'test-agent-door-adjacent': load_game("test_agent_door_adjacent"),
+    'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['test-agent-door-adjacent'])
-    score = None
+    game_handler = GameHandler(TEST_GAME_LIBRARY['throw-block-cache-test'])
+    trace_path = THROW_WITH_STACKED_BLOCKS_TRACE.resolve().as_posix()
 
-    trace_path = TEST_AGENT_DOOR_ADJACENT_TRACE.resolve().as_posix()
+    score = None
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
         print(f"\n\n================================PROCESSING STATE {idx} ================================")

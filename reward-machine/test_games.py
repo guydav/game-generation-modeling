@@ -22,6 +22,7 @@ THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-ma
 COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
 CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
+TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
 
 def load_game(game_name: str):
@@ -46,7 +47,8 @@ TEST_GAME_LIBRARY = {
     'test-count-unique-positions': load_game("throw_to_bin_unique_positions"),
     'test-count-overlapping': load_game("building_count_overlapping"),
     'test-clean-room': load_game("game-27"),
-    'test-agent-adjacent': load_game("test_agent_door_adjacent")
+    'test-agent-adjacent': load_game("test_agent_door_adjacent"),
+    'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
 }
 
 TEST_CASES = [
@@ -236,6 +238,17 @@ TEST_CASES = [
         'throwAdjacentToDoor' : [
             PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', 'agent': 'agent', 'door': 'door', 'floor': 'Floor|+00.00|+00.00|+00.00', 'bed': 'Bed|-02.46|00.00|-00.57'}, start=136, end=197, measures={})
         ],
+    },),
+    ('throw-block-cache-test', TEST_BLOCK_CACHE_TEST, 3.0, {
+        'throwWithStackedBlocksVerI': [
+            PreferenceSatisfaction(mapping={'?x': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=312, end=546, measures={})
+        ],
+        'throwWithStackedBlocksVerII': [
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', '?x': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83'}, start=312, end=545, measures={})
+        ],
+        'throwWithStackedBlocksVerIII': [
+            PreferenceSatisfaction(mapping={'?x': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=312, end=545, measures={})
+        ]
     },),
 ]
 

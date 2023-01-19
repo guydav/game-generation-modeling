@@ -44,7 +44,7 @@ class PredicateHandler:
     # The last state the state cache was updated for
     state_cache_global_last_updated: int
     # The last state each object was updated for
-    state_cache_object_last_updated: typing.Dict[str, int]    
+    state_cache_object_last_updated: typing.Dict[str, int]
 
     def __init__(self, domain: str):
         self.domain = domain
@@ -81,7 +81,11 @@ class PredicateHandler:
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
-        predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
+
+        pred_variables = extract_variables(predicate)
+        relevant_mapping = {var: var if is_type_or_color(var) else mapping[var] for var in pred_variables}
+
+        predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, relevant_mapping))
         state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
@@ -92,7 +96,7 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value = self._inner_evaluate_predicate(predicate, state, mapping, force_evaluation)
+        current_state_value = self._inner_evaluate_predicate(predicate, state, relevant_mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
@@ -144,13 +148,13 @@ class PredicateHandler:
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
 
-            # Extract only the variables in the mapping relevant to this predicate. In most cases, variables will refer
-            # to objects using the ? syntax, but they can also be types or colors
-            pred_variables = extract_variables(predicate)
-            relevant_mapping = {var: var if is_type_or_color(var) else mapping[var] for var in pred_variables}
+            # Determine the last step at which the predicate was evaluated
+            predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
+            predicate_mapping_last_updated = self.evaluation_cache_last_updated.get(predicate_key, -1)
 
             # Evaluate the predicate
-            evaluation = predicate_fn(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
+            evaluation = predicate_fn(state, mapping, self.state_cache, self.state_cache_object_last_updated, 
+                                      predicate_mapping_last_updated, force_evaluation)
 
             return evaluation
 
@@ -326,7 +330,7 @@ class PredicateHandler:
 
 def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState], 
-        state_cache_last_updated: typing.Dict[str, int], force_evaluation: bool = False) -> typing.Optional[bool]:
+        state_cache_last_updated: typing.Dict[str, int], predicate_mapping_last_updated: int, force_evaluation: bool = False) -> typing.Optional[bool]:
         
         agent_object = state.agent_state if state.agent_state_changed else state_cache[AGENT_STATE_KEY]
 
@@ -355,19 +359,16 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
 
         any_objects_changed = any(state_cache_last_updated[obj] == state.original_index for var, obj in mapping_items if not is_type_or_color(var))
 
-        # None of the objects in the mapping are updated in the current state, so return None
-        if not any_objects_changed and not force_evaluation:
+        latest_object_update = max(state_cache_last_updated[obj] for var, obj in mapping_items if not is_type_or_color(var))
+
+        # If none of the objects have changed in the current step or since the last time we evaluated this predicate,
+        # then return None unless force_evaluation is True
+        if not (any_objects_changed or latest_object_update > predicate_mapping_last_updated or force_evaluation):
             return None
 
-        # At least one object is, so populate the rest from the cache
         mapping_objects = []
         for var, obj in mapping_items:
-            # If we don't have this object in the cache, we can't evaluate the predicate
-            if not is_type_or_color(var) and obj not in state_cache:
-                return None
-            
-            else:
-                mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)
+            mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)
 
         return predicate_func(agent_object, mapping_objects)
 

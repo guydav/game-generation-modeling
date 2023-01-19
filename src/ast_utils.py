@@ -51,43 +51,43 @@ def load_games_from_file(path: str, start_token: str='(define',
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS
 
-    lines = open(path).readlines()
-    # new_lines = []
-    # for l in lines:
-    #     if not l.strip()[0] == ';':
-    #         print(l)
-    #         new_lines.append(l[:l.find(';')])
+    with open(path) as f:
+        lines = f.readlines()
+        # new_lines = []
+        # for l in lines:
+        #     if not l.strip()[0] == ';':
+        #         print(l)
+        #         new_lines.append(l[:l.find(';')])
 
-    if remove_comments:
-        new_lines = [l[:l.find(';')] for l in lines 
-            if len(l.strip()) > 0 and not l.strip()[0] == ';']
+        if remove_comments:
+            new_lines = [l[:l.find(';')] for l in lines 
+                if len(l.strip()) > 0 and not l.strip()[0] == ';']
 
-    else:
-        new_lines = []
-        for l in lines:
-            l_s = l.strip()
-            if l_s.startswith(';') and (comment_prefixes_to_keep is None or any(l_s.startswith(prefix) for prefix in comment_prefixes_to_keep)):
-                new_lines.append(l.rstrip())
-            elif not l_s.startswith(';'):
-                new_lines.append(l[:l.find(';')])
+        else:
+            new_lines = []
+            for l in lines:
+                l_s = l.strip()
+                if l_s.startswith(';') and (comment_prefixes_to_keep is None or any(l_s.startswith(prefix) for prefix in comment_prefixes_to_keep)):
+                    new_lines.append(l.rstrip())
+                elif not l_s.startswith(';'):
+                    new_lines.append(l[:l.find(';')])
 
-    text = '\n'.join(new_lines)
-    results = []
-    start = text.find(start_token)
+        text = '\n'.join(new_lines)
+        start = text.find(start_token)
 
-    while start != -1:
-        end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
-        end_matches = [match != -1 and match or len(text) for match in end_matches]
-        end = min(end_matches)
-        next_start = text.find(start_token, start + 1)
-        if end <= next_start or end == len(text):  # we have a match
-            test_case = text[start:end]
-            if end < next_start:
-                test_case += ')'
-            
-            yield test_case
+        while start != -1:
+            end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
+            end_matches = [match != -1 and match or len(text) for match in end_matches]
+            end = min(end_matches)
+            next_start = text.find(start_token, start + 1)
+            if end <= next_start or end == len(text):  # we have a match
+                test_case = text[start:end]
+                if end < next_start:
+                    test_case += ')'
+                
+                yield test_case.strip()
 
-        start = next_start
+            start = next_start
 
 
 

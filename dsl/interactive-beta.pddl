@@ -97,6 +97,7 @@
 (:scoring (count throwBallToBin)
 ))
 
+
 (define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)  ; 6
 (:setup (and 
     (exists (?h - hexagonal_bin) (game-conserved (adjacent ?h bed)))
@@ -175,6 +176,7 @@
     (* 2 (= (count throwAttempt) 2) (count-once throwOverRamp))
     (* (>= (count throwAttempt) 3) (count-once throwOverRamp))
 )))
+
 
 ; Taking the first game this participant provided
 (define (game 615452aaabb932ada88ef3ca-9) (:domain many-objects-room-v1)  ; 9
@@ -995,15 +997,15 @@
         ))
         (preference throwAttempt
             (then 
-                (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
-                (once (not (in_motion ?d)))
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+                (once (not (in_motion ?b)))
             )
         )
         (preference ballNeverThrown
             (then
                 (once (game_start))
-                (hold (not (agent_holds ?d)))
+                (hold (not (agent_holds ?b)))
                 (hold (game_over))
             )
         )

@@ -9,6 +9,8 @@ SOUTH_WALL = 'south_wall'
 EAST_WALL = 'east_wall'
 WEST_WALL = 'west_wall'
 
+DOOR = 'door'
+
 BUILDING_TYPE = 'building'
 
 FEW_OBJECTS_ROOM = 'few'
@@ -111,7 +113,12 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
         SOUTH_WALL, 
         EAST_WALL, 
         WEST_WALL
-    ]
+    ],
+    NORTH_WALL: [NORTH_WALL],
+    SOUTH_WALL: [SOUTH_WALL],
+    EAST_WALL: [EAST_WALL],
+    WEST_WALL: [WEST_WALL],
+    DOOR: [DOOR]
 }
 
 
@@ -264,7 +271,7 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
     OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "desk", "bed", "floor"]
+NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
 COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
@@ -299,6 +306,12 @@ for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
             OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
     OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"])))
 
+# A list of all object types (including meta types)
+ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys()) + \
+                            list(OBJECTS_BY_ROOM_AND_TYPE[MEDIUM_OBJECTS_ROOM].keys()) + \
+                            list(OBJECTS_BY_ROOM_AND_TYPE[MANY_OBJECTS_ROOM].keys())))
+
+# ===================================================================================================
 
 class PseudoObject:
         object_id: str
@@ -331,17 +344,22 @@ class PseudoObject:
             return item in self.__dict__
 
 
-WALL_ID = 'FP302:StandardWallSize'
+WALL_ID = 'FP326:StandardWallSize.021'
 WALL_TYPE = 'wall'
-WALL_NAME = 'FP326:StandardWallSize.021'
+
+DOOR_ID = 'FP326:StandardDoor1.019'
+DOOR_TYPE = 'door'
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
 UNITY_PSEUDO_OBJECTS = {
-        NORTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),
-        SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([0.1875, 1.35, 3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),
-        EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
-        WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
+        NORTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, NORTH_WALL, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),           # has the door
+        SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, SOUTH_WALL, position=np.array([0.1875, 1.35, -3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),            # has the window
+        EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, EAST_WALL, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the desk
+        WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WEST_WALL, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the bed
+
+        # TODO: need to determine the extent of the door in the x dimension
+        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([0.3, 1.35, 0.075]), rotation=np.zeros(3)),
 }
 
 

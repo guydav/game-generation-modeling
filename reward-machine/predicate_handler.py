@@ -1,11 +1,13 @@
 import numpy as np
+from scipy.spatial import ConvexHull
+from skspatial.objects import Vector
 import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, _extract_object_limits,\
-    _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import UNITY_PSEUDO_OBJECTS, PseudoObject
+from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, is_type_or_color, get_object_types, \
+    _extract_object_limits, _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -42,7 +44,7 @@ class PredicateHandler:
     # The last state the state cache was updated for
     state_cache_global_last_updated: int
     # The last state each object was updated for
-    state_cache_object_last_updated: typing.Dict[str, int]    
+    state_cache_object_last_updated: typing.Dict[str, int]
 
     def __init__(self, domain: str):
         self.domain = domain
@@ -57,8 +59,6 @@ class PredicateHandler:
         self.is_last_step = False
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
-        self.state_cache.update(UNITY_PSEUDO_OBJECTS)
-        self.state_cache_object_last_updated.update({k: -1 for k in UNITY_PSEUDO_OBJECTS.keys()})
         self.state_cache_global_last_updated = -1
     
     def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
@@ -81,7 +81,11 @@ class PredicateHandler:
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
-        predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
+
+        pred_variables = extract_variables(predicate)
+        relevant_mapping = {var: var if is_type_or_color(var) else mapping[var] for var in pred_variables}
+
+        predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, relevant_mapping))
         state_index = state.original_index
 
         # If no time has passed since the last update, we know we can use the cached value
@@ -92,7 +96,7 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value = self._inner_evaluate_predicate(predicate, state, mapping, force_evaluation)
+        current_state_value = self._inner_evaluate_predicate(predicate, state, relevant_mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
@@ -144,11 +148,13 @@ class PredicateHandler:
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
 
-            # Extract only the variables in the mapping relevant to this predicate
-            relevant_mapping = {var: mapping[var] for var in extract_variables(predicate)}
-            
+            # Determine the last step at which the predicate was evaluated
+            predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
+            predicate_mapping_last_updated = self.evaluation_cache_last_updated.get(predicate_key, -1)
+
             # Evaluate the predicate
-            evaluation = predicate_fn(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
+            evaluation = predicate_fn(state, mapping, self.state_cache, self.state_cache_object_last_updated, 
+                                      predicate_mapping_last_updated, force_evaluation)
 
             return evaluation
 
@@ -165,22 +171,35 @@ class PredicateHandler:
             if isinstance(and_args, tatsu.ast.AST):
                 and_args = [and_args]
 
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in and_args] # type: ignore
-            # If there are any Nones, we cannot know about their conjunction, so return None
-            if any(v is None for v in inner_values):
-                return None
-            return all(inner_values)  
+            # We can't speed this up as much by breaking out of the loop early when we encounter a False, because we don't
+            # know if there would be an un-evaluable None later in the loop
+            cur_truth_value = True
+            for sub in and_args:
+                eval = self._inner_call(sub, state, mapping, force_evaluation)
+                if eval is None:
+                    return None
+
+                cur_truth_value = cur_truth_value and eval
+
+            return cur_truth_value
 
         elif predicate_rule == "super_predicate_or":
             or_args = predicate["or_args"]
             if isinstance(or_args, tatsu.ast.AST):
                 or_args = [or_args]
 
-            inner_values = [self._inner_call(sub, state, mapping, force_evaluation) for sub in or_args] # type: ignore
-            # We only need to return None when all the values are None, as any([None, False]) == False, which is fine
-            if all(v is None for v in inner_values):
+            all_none = True
+            for sub in or_args:
+                eval = self._inner_call(sub, state, mapping, force_evaluation) # outputs can be True, False, or None
+                if eval:
+                    return True
+                elif eval == False:
+                    all_none = False
+
+            if all_none:
                 return None
-            return any(inner_values)  
+
+            return False
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
@@ -188,10 +207,19 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
-            if all(v is None for v in inner_mapping_values):
+
+            all_none = True
+            for sub_mapping in sub_mappings:
+                eval = self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                if eval:
+                    return True
+                elif eval == False:
+                    all_none = False
+
+            if all_none:
                 return None
-            return any(inner_mapping_values)
+
+            return False
 
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
@@ -199,10 +227,16 @@ class PredicateHandler:
             object_assignments = get_object_assignments(self.domain, variable_type_mapping.values(), used_objects)  # type: ignore
 
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
-            inner_mapping_values = [self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation) for sub_mapping in sub_mappings]
-            if any(v is None for v in inner_mapping_values):
-                return None
-            return all(inner_mapping_values)
+
+            cur_truth_value = True
+            for sub_mapping in sub_mappings:
+                eval = self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                if eval is None:
+                    return None
+
+                cur_truth_value = cur_truth_value and eval
+
+            return cur_truth_value
 
         elif predicate_rule == "function_comparison":
             comp = typing.cast(tatsu.ast.AST, predicate["comp"])
@@ -296,7 +330,7 @@ class PredicateHandler:
 
 def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:
     def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState], 
-        state_cache_last_updated: typing.Dict[str, int], force_evaluation: bool = False) -> typing.Optional[bool]:
+        state_cache_last_updated: typing.Dict[str, int], predicate_mapping_last_updated: int, force_evaluation: bool = False) -> typing.Optional[bool]:
         
         agent_object = state.agent_state if state.agent_state_changed else state_cache[AGENT_STATE_KEY]
 
@@ -304,28 +338,37 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
         if len(predicate_partial_mapping) == 0:
             return predicate_func(agent_object, [])
 
-        # Otherwise, check if any of the relevant objects have changed in this state
-        mapping_values = predicate_partial_mapping.values()
-        any_object_not_in_cache = any(obj not in state_cache for obj in mapping_values)
+        # Otherwise, check if any of the relevant objects have changed in this state, excluding passed in types and colors
+        mapping_items = predicate_partial_mapping.items()
+
+        # The first time that we evaluate a predicate containing a PseudoObject (e.g. a wall), we need to
+        # add it to the cache and mark it as updated for the current state in order to ensure that predicates
+        # with only PseudoObjects in them are actually evaluated
+        for var, obj in mapping_items:
+            if obj in UNITY_PSEUDO_OBJECTS and obj not in state_cache:
+                state_cache[obj] = UNITY_PSEUDO_OBJECTS[obj]
+                state_cache_last_updated[obj] = state.original_index
+
+        any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_or_color(var))
+
         # If any objects are not in the cache, we cannot evaluate the predidate
         if any_object_not_in_cache:
             if force_evaluation:
-                raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for obj in mapping_values]}')
+                raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for var, obj in mapping_items]}')
             return None
 
-        any_objects_changed = any(state_cache_last_updated[object_id] == state.original_index for object_id in mapping_values)
-        # None of the objects in the mapping are updated in the current state, so return None
-        if not any_objects_changed and not force_evaluation:
+        any_objects_changed = any(state_cache_last_updated[obj] == state.original_index for var, obj in mapping_items if not is_type_or_color(var))
+
+        latest_object_update = max(state_cache_last_updated[obj] for var, obj in mapping_items if not is_type_or_color(var))
+
+        # If none of the objects have changed in the current step or since the last time we evaluated this predicate,
+        # then return None unless force_evaluation is True
+        if not (any_objects_changed or latest_object_update > predicate_mapping_last_updated or force_evaluation):
             return None
 
-        # At least one object is, so populate the rest from the cache
         mapping_objects = []
-        for mapping_value in mapping_values:
-            # If we don't have this object in the cache, we can't evaluate the predicate
-            if mapping_value not in state_cache:
-                return None
-
-            mapping_objects.append(state_cache[mapping_value])
+        for var, obj in mapping_items:
+            mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)
 
         return predicate_func(agent_object, mapping_objects)
 
@@ -353,6 +396,49 @@ def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[O
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
+
+
+def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return objects[0].is_open
+
+def _pred_toggled_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return objects[0].is_toggled
+
+def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject, str]]):
+    assert len(objects) == 2
+
+    # If the variable is an object, then we collect all of the types and meta-types that it belongs to. If
+    # it's a type, then we just collect that type. The predicate is true if there is any overlap between
+    # the two sets of types.
+
+    if isinstance(objects[0], str):
+        if objects[0] not in ALL_OBJECT_TYPES:
+            raise ValueError(f"Invalid object type: {objects[0]} (may be a color)")
+
+        object_1_types = set([objects[0]])
+
+    else:
+        object_1_types = get_object_types(objects[0])
+
+    if isinstance(objects[1], str):
+        if objects[1] not in ALL_OBJECT_TYPES:
+            raise ValueError(f"Invalid object type: {objects[1]} (may be a color)")
+
+        object_2_types = set([objects[1]])
+
+    else:
+        object_2_types = get_object_types(objects[1])
+
+    type_intersection = object_1_types.intersection(object_2_types)
+
+    return len(type_intersection) > 0
+
 
 def _object_in_building(building: BuildingPseudoObject, other_object: ObjectState):
     return other_object.object_id in building.building_objects
@@ -383,16 +469,6 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])    
 
     return np.all(inner_min_corner >= outer_min_corner - IN_MARGIN) and np.all(inner_max_corner <= outer_max_corner + IN_MARGIN) 
-
-    # inner_object_bbox_center = objects[1].bbox_center
-
-    # # The interior object's bbox center must be inside the exterior object's bbox
-    # inner_bbox_center_contained = np.all(outer_min_corner <= inner_object_bbox_center) and np.all(inner_object_bbox_center <= outer_max_corner)
-
-    # # We also check to make sure that the outer object's bbox is not entirely inside the inner object's bbox (possible for non-convex objects)
-    # outer_bbox_contained = np.all(inner_min_corner <= outer_min_corner) and np.all(outer_max_corner <= inner_max_corner)
-    
-    # return inner_bbox_center_contained and not outer_bbox_contained
 
 
 # TODO (GD): we should discuss what this threshold should be
@@ -470,6 +546,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
+
     objects_touch = _pred_touch(agent, objects)
 
     if objects_touch:
@@ -484,6 +561,11 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])
                        for corner in upper_object_corners]
         test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
+
+        # Due to bounding box weirdness, we also check to see if the center of the upper object is contained in the bottom's
+        # bounding box. Enforcing that the objects are touching should make sure that we don't have any errors where floating
+        # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
+        test_points += upper_object_corners
 
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
@@ -513,6 +595,126 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return False
 
+ADJACENT_DISTANCE_THRESHOLD = 0.2
+OVERLAP_GRACE = 0.01
+OBJECT_SIZE_SCALING = 1.2
+
+def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    object_1_min, object_1_max = _extract_object_limits(objects[0])
+    object_2_min, object_2_max = _extract_object_limits(objects[1])
+
+    # Determine if there is overlap for each of the dimensions
+    x_overlap = (object_1_min[0] - OVERLAP_GRACE <= object_2_max[0] + OVERLAP_GRACE) and \
+                (object_2_min[0] - OVERLAP_GRACE <= object_1_max[0] + OVERLAP_GRACE)
+
+    y_overlap = (object_1_min[1] - OVERLAP_GRACE <= object_2_max[1] + OVERLAP_GRACE) and \
+                (object_2_min[1] - OVERLAP_GRACE <= object_1_max[1] + OVERLAP_GRACE)
+
+    z_overlap = (object_1_min[2] - OVERLAP_GRACE <= object_2_max[2] + OVERLAP_GRACE) and \
+                (object_2_min[2] - OVERLAP_GRACE <= object_1_max[2] + OVERLAP_GRACE)
+
+    # Two objects can only be adjacent if there is some overlap in their y extents
+    if not y_overlap:
+        return False
+
+    # Measures the minimum distance between any pair of parallel sides between the two objects
+    x_displacement = min(abs(object_1_min[0] - object_2_max[0]), abs(object_2_min[0] - object_1_max[0]),
+                         abs(object_1_min[0] - object_2_min[0]), abs(object_2_max[0] - object_1_max[0]))
+
+    z_displacement = min(abs(object_1_min[2] - object_2_max[2]), abs(object_2_min[2] - object_1_max[2]),
+                         abs(object_1_min[2] - object_2_min[2]), abs(object_2_max[2] - object_1_max[2]))
+
+    object_dist = _func_distance(agent, objects)
+
+    # Intuition: an object is not adjacent to another if it's more than (some scaling >= 1) times its own size away from it. 
+    # Since adjacency is symmetric, we'll use the larger of the two objects to determine the threshold distance. We'll also 
+    # first try determing an object's size by taking the average of its two dimensions (x and z)
+
+    object_1_size = (objects[0].bbox_extents[0] + objects[0].bbox_extents[2]) # don't need to divide by 2 since the extent is half the size
+    object_2_size = (objects[1].bbox_extents[0] + objects[1].bbox_extents[2])
+
+    # Can try average of the two objects' sizes, or just use the larger of the two. Can also try various scaling factors
+    size = OBJECT_SIZE_SCALING * (object_1_size + object_2_size) / 2
+
+    threshold_dist = min(ADJACENT_DISTANCE_THRESHOLD, size)
+
+    # Adjacency for a given side (e.g. X) is determined by whether the displacement is below the threshold and the objects overlap
+    # in the opposite side extents (e.g. Z)
+    adjacent_by_x = x_displacement <= threshold_dist and z_overlap
+    adjacent_by_z = z_displacement <= threshold_dist and x_overlap
+    adjacent_by_dist = object_dist <= threshold_dist
+
+    if objects[1].name == "south_wall":
+        print("\n==========\nObject:", objects[0].name)
+        print("Object position:", objects[0].bbox_center)
+        print("Object extents:", objects[0].bbox_extents)
+
+        print("Wall position:", objects[1].bbox_center)
+        print("Wall extents:", objects[1].bbox_extents)
+
+        print("\nThreshold:", threshold_dist)
+        print("Adjacent by x:", x_displacement, z_overlap)
+        print("Adjacent by z:", z_displacement, x_overlap)
+        print("Adjacent by dist:", adjacent_by_dist)
+
+    return adjacent_by_dist or adjacent_by_x or adjacent_by_z
+
+def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 3
+
+    object_1_bottom_corners = _object_corners(objects[0], y_pos="bottom")
+    object_1_top_corners = _object_corners(objects[0], y_pos="top")
+
+    object_2_bottom_corners = _object_corners(objects[2], y_pos="bottom")
+    object_2_top_corners = _object_corners(objects[2], y_pos="top")
+
+    test_position = _object_location(objects[1])
+
+    # An object is between two others if its center position is contained in the convex hull formed by the vertices of the
+    # others. We can test this by seeing if that the test position is *not* among the vertices of the hull
+
+    hull = ConvexHull(np.concatenate([object_1_bottom_corners, object_1_top_corners, object_2_bottom_corners, object_2_top_corners,
+                                      np.array(test_position).reshape(1, -1)]))
+    
+    # The test point is always at index 16
+    return 16 not in hull.vertices
+
+def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    caster, target = objects
+
+    # For simplicitly, we zero out the y component in each vector
+    projection = np.array([0, 2])
+    
+    caster_pos = _object_location(caster)[projection]
+    caster_facing = caster.rotation[projection]
+
+    target_pos = _object_location(target)[projection]
+
+    target_corners = _object_corners(target, y_pos=0)
+
+    caster_to_target = Vector(target_pos - caster_pos)
+    caster_to_corners = [Vector(corner[projection] - caster_pos) for corner in target_corners]
+
+    angle_to_corners = [caster_to_target.angle_signed(to_corner) for to_corner in caster_to_corners]
+    min_corner_angle, max_corner_angle = min(angle_to_corners), max(angle_to_corners)
+
+    # Clearly this won't work, because the caster's rotation is not the same as its facing direction
+    angle_to_facing = caster_to_target.angle_signed(caster_facing)
+
+    print("\n" + "=" * 100)
+    print("Caster:", caster.object_id)
+    print("\tRotation:", caster.rotation)
+    print("Target:", target.object_id)
+    print("Angle to corners:", angle_to_corners)
+    print("Angle to facing:", angle_to_facing)
+
+    return min_corner_angle <= angle_to_facing <= max_corner_angle
+    
+
 
 # ====================================== FUNCTION DEFINITIONS =======================================
 
@@ -521,10 +723,9 @@ def _find_nearest_pseudo_object_of_type(object: ObjectState, object_type: str):
     """
     Finds the pseudo object in the sequence that is closest to the object.
     """
-    pseudo_objects = list(UNITY_PSEUDO_OBJECTS.values())
-    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in pseudo_objects
-        if pseudo_object.object_type == object_type]
-    return pseudo_objects[np.argmin(distances)]
+    filtered_pseudo_objects = [obj for obj in UNITY_PSEUDO_OBJECTS.values() if obj.object_type == object_type]
+    distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in filtered_pseudo_objects]
+    return filtered_pseudo_objects[np.argmin(distances)]
 
 
 def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoObject):

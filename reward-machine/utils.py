@@ -354,6 +354,8 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
     elif isinstance(predicate, tatsu.ast.AST):
         pred_vars = []
+        exists_forall_vars = []
+
         for key in predicate:
             if key == "term":
 
@@ -363,20 +365,23 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
                 else:
                     pred_vars += [predicate["term"]]
 
+            elif key == "var_names":
+                pred_vars += [predicate["var_names"]] # type: ignore
+
             # We don't want to capture any variables within an (exists) or (forall) that's inside 
             # the preference, since those are not globally required -- see evaluate_predicate()
-            elif key == "exists_args":
-                continue
+            elif key == "exists_vars":
+                exists_forall_vars += extract_variables(predicate[key])
 
-            elif key == "forall_args":
-                continue
+            elif key == "forall_vars":
+                exists_forall_vars += extract_variables(predicate[key])
 
             elif key != "parseinfo":
                 pred_vars += extract_variables(predicate[key])
 
         unique_vars = []
         for var in pred_vars:
-            if var not in unique_vars:
+            if var not in unique_vars and var not in exists_forall_vars:
                 unique_vars.append(var)
 
         return unique_vars

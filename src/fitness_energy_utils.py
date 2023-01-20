@@ -67,7 +67,8 @@ def init_weights(m):
 
 
 class CustomSklearnScaler:
-    def __init__(self):
+    def __init__(self, passthrough: bool = False):
+        self.passthrough = passthrough
         self.mean = None
         self.std = None
 
@@ -75,12 +76,17 @@ class CustomSklearnScaler:
         if X.ndim != 3:
             raise ValueError('X must be 3D')
 
+        if self.passthrough:
+            return self
+
         self.mean = X.mean(axis=(0, 1))
         self.std = X.std(axis=(0, 1))
         self.std[torch.isclose(self.std, torch.zeros_like(self.std))] = 1
         return self
 
     def transform(self, X, y=None):
+        if self.passthrough:
+            return X
         return (X - self.mean) / self.std
     
     def fit_transform(self, X, y=None):
@@ -90,10 +96,14 @@ class CustomSklearnScaler:
         return [f'x{i}' for i in range(self.mean.shape[0])]  # type: ignore
 
     def set_params(self, **params):
+        if params:
+            if 'passthrough' in params:
+                self.passthrough = params['passthrough']
+
         return self
 
     def get_params(self, deep=True):
-        return {}
+        return dict(passthrough=self.passthrough)
 
 
 class FitnessEenrgyModel(nn.Module):
@@ -461,10 +471,14 @@ def train_and_validate_model(model: nn.Module,
 def cross_validate(train: torch.Tensor,
     param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]],
     scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
+    scaler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     n_folds: int = 5, verbose: int = 0) -> GridSearchCV:
+
+    if scaler_kwargs is None:
+        scaler_kwargs = {}
 
     if model_kwargs is None:
         model_kwargs = {}
@@ -480,7 +494,7 @@ def cross_validate(train: torch.Tensor,
     if 'verbose' not in cv_kwargs:
         cv_kwargs['verbose'] = verbose
 
-    pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler()), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
+    pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler(**scaler_kwargs)), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
 
     if isinstance(param_grid, list):
         for param_grid_dict in param_grid:
@@ -502,12 +516,16 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     feature_columns: typing.Optional[typing.List[str]] = None, 
     random_seed: int = DEFAULT_RANDOM_SEED,
     scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
+    scaler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     n_folds: int = 5, verbose: int = 0
     ) -> typing.Tuple[GridSearchCV, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]], typing.Optional[typing.Dict[str, float]]]:
 
+    if scaler_kwargs is None:
+        scaler_kwargs = {}
+    
     if model_kwargs is None:
         model_kwargs = {}
 
@@ -537,8 +555,9 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
 
     cv = cross_validate(cv_tensor, param_grid,   
         scoring_function=scoring_function,
+        scaler_kwargs=scaler_kwargs, model_kwargs=model_kwargs,
         train_kwargs={'random_seed': random_seed, **train_kwargs}, 
-        model_kwargs=model_kwargs, cv_kwargs=cv_kwargs, n_folds=n_folds, verbose=verbose)
+        cv_kwargs=cv_kwargs, n_folds=n_folds, verbose=verbose)
     
     test_results = None
 

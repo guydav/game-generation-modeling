@@ -1165,6 +1165,7 @@ def main(args):
             raise ValueError('No samples to save')
 
         with open(args.samples_output_path, 'w') as out_file:
+            text_samples = [sample + '\n\n' for sample in text_samples]
             out_file.writelines(text_samples)
 
     return

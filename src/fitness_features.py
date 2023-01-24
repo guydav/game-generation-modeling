@@ -507,7 +507,7 @@ class NoNestedLogicals(FitnessTerm):
             self.total_logicals += 1
             
             if rule.endswith('_not'):
-                if isinstance(ast.not_args, tatsu.ast.AST) and ast.not_args.parseinfo.rule == rule:  # type: ignore
+                if isinstance(ast.not_args, tatsu.ast.AST) and isinstance(ast.not_args.pred, tatsu.ast.AST) and ast.not_args.pred.parseinfo.rule == rule:  # type: ignore
                     self.nested_logicals += 1
 
             else:
@@ -1259,12 +1259,14 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_two_number_comparisons = NoTwoNumberOperations()
     fitness.register(no_two_number_comparisons)
 
+    # TODO: here, add (total-time) and (total-score) as other valid referents
     no_count_in_terminal = SectionWithoutPrefCounts(TERMINAL)
     fitness.register(no_count_in_terminal, section_rule=True)
 
     no_count_in_scoring = SectionWithoutPrefCounts(SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
+    # TODO: deal with the entries in `KNOWN_MISSING_TYPES`
     argument_types_fitness_terms = build_argument_types_fitness_terms()
     fitness.register_multiple(argument_types_fitness_terms)
 

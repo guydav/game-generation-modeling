@@ -161,7 +161,7 @@ def fitness_nce_loss(scores: torch.Tensor, negative_score_reduction: str = 'sum'
     return _reduce(-(positive_scores + negative_scores), reduction)
 
 
-def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     if negative_score_reduction == 'none':
@@ -170,7 +170,7 @@ def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score
     
 
 def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 1.0, alpha: float = 0.5,
-    negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+    negative_score_reduction: str = 'none', reduction: str = 'mean'):
     hinge = fitness_hinge_loss(scores, margin, negative_score_reduction, reduction)
 
     positive_scores = scores[:, 0, None]
@@ -180,17 +180,22 @@ def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 
     return alpha * hinge + (1 - alpha) * cross_example_loss
 
 
-def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     # negative_scores = scores[:, 1:].sum(dim=1)  
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    if negative_score_reduction == 'none':
+        positive_scores = positive_scores.unsqueeze(-1)
     return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)), reduction)
 
 
-def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'mean', reduction: str = 'mean'):
+def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     # negative_scores = scores[:, 1:].sum(dim=1)  
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
+    if negative_score_reduction == 'none':
+        return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
+
     return _reduce(positive_scores.pow(2) + torch.relu(margin - negative_scores).pow(2), reduction)
 
 
@@ -660,7 +665,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
 
 
-HTML_DIFF = HtmlDiff(wrapcolumn=60)
+HTML_DIFF = HtmlDiff(wrapcolumn=100)
 HTML_DIFF_SUBSTITUTIONS = {
     '#aaffaa': '#6fa66f',
     '#ffaaaa': '#a66f6f',
@@ -680,7 +685,8 @@ def display_game_diff_html(before: str, after: str, html_diff_substitutions: typ
 
 
 def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],  
-    feature_names: typing.List[str], full_dataset_tensor: torch.Tensor, original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
+    feature_names: typing.List[str], full_dataset_tensor: torch.Tensor, 
+    original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
     top_k: int = 5, display_overall_features: bool = False, display_relative_features: bool = True,  
     display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
     display_features_diff: bool = True) -> None:
@@ -751,17 +757,17 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
         display_game_diff_html(original_game_text, negative_game_text, html_diff_substitutions)
         
     if display_features_diff:
-        display(Markdown('### Features Diffs'))
+        display(Markdown('### Feature Diffs'))
         d = index_features - real_game_features
         inds = d.nonzero().squeeze()
         if inds.ndim == 0 or len(inds) == 0:
             print('No features changed')
 
         else:
-            c = d[inds]
-            for i in torch.argsort(c):
+            diffs = d[inds]
+            for i in torch.argsort(diffs):
                 original_idx = inds[i]
-                print(f'{feature_names[original_idx]}: {c[i]:.3f} => {scaled_index_features[original_idx] - scaled_real_game_features[original_idx]:.3f}')
+                print(f'{feature_names[original_idx]}: {diffs[i]:.3f} ({scaled_real_game_features[original_idx]:.3f} => {scaled_index_features[original_idx]:.3f})')
 
 
 

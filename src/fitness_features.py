@@ -18,7 +18,7 @@ from ast_utils import cached_load_and_parse_games_from_file
 from ast_parser import ASTParser
 import ast_printer
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
-from room_and_object_types import *
+import room_and_object_types 
 
 
 
@@ -552,7 +552,7 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST):
             rule_name = rule.split('_')[-1]
             children = ast[f'{rule_name}_args']
-            if isinstance(children, tatsu.ast.AST) or len(children) < 2:
+            if isinstance(children, tatsu.ast.AST) or len(children) < 2:  # type: ignore
                 return
 
             self.total_logicals += 1
@@ -734,18 +734,6 @@ class PrefForallCorrectArity(PrefForallTerm):
         return self.correct_usage_count / total_usage_count
 
 
-# Copied from `reward_machines/config.py`
-META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],
-              BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, 
-                      PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TALL_RECTANGULAR_BLOCK, TRIANGLE_BLOCK],
-              COLOR: CATEGORIES_TO_TYPES[COLORS],
-              CUBE_BLOCK: [BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK],
-              DODGEBALL: [BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL],
-              PYRAMID_BLOCK: [ BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK]}
-
-TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
-
-
 
 class PrefForallCorrectTypes(PrefForallTerm):
     pref_forall_prefs_to_types: typing.Dict[str, typing.Dict[str, VariableDefinition]] = defaultdict(dict)
@@ -787,7 +775,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
         for obj_type, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
             obj = obj_type.type_name
             var_types = var_def.var_types
-            if obj in var_types or (obj in TYPE_TO_META_TYPE and TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
+            if obj in var_types or (obj in room_and_object_types.TYPE_TO_META_TYPE and room_and_object_types.TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
                 count_correct += 1
 
         self.prefs_with_correct_types.append(count_correct / len(object_types))
@@ -799,11 +787,14 @@ class PrefForallCorrectTypes(PrefForallTerm):
         return np.mean(self.prefs_with_correct_types)  # type: ignore
 
 
-class SectionWithoutPrefCounts(FitnessTerm):
+TOTAL_TERMINALS = ('(total-time)', '(total-score)')
+
+
+class SectionWithoutPrefOrTotalCounts(FitnessTerm):
     section_found: bool
     count_rule_found: bool
     def __init__(self, section: str):
-        super().__init__(section, f'section_without_pref_count_{section}')
+        super().__init__(section, f'section_without_pref_or_total_count_{section}')
         self.section = section
 
     def game_start(self) -> None:
@@ -815,6 +806,9 @@ class SectionWithoutPrefCounts(FitnessTerm):
             self.section_found = True
         
         if isinstance(ast, tatsu.ast.AST) and COUNT_RULE_PATTERN.match(rule):
+            self.found_count = True
+
+        if rule == 'scoring_expr' and isinstance(ast.expr, str) and ast.expr in TOTAL_TERMINALS:  # type:ignore
             self.found_count = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -941,13 +935,10 @@ class NoTwoNumberOperations(FitnessTerm):
         return 1 - (self.two_number_operations / self.total_operations)
     
 
-
-
-
 COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
-COMMON_SENSE_TYPE_CATEGORIES = list(CATEGORIES_TO_TYPES.keys())
-COMMON_SENSE_TYPE_CATEGORIES.remove(EMPTY_OBJECT)
-KNOWN_MISSING_TYPES = ('back', 'front', 'front_left_corner', 'left', 'right', 'sideways', 'upright', 'upside_down')
+COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
+COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
+KNOWN_MISSING_TYPES = []
 
 
 class PredicateFunctionArgumentTypes(FitnessTerm):
@@ -1009,12 +1000,12 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             for term_type_list in term_type_lists:
                 term_type_categories = set()
                 for term_type in term_type_list:
-                    if term_type not in TYPES_TO_CATEGORIES:
+                    if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
                         if term_type not in self.known_missing_types and not term_type.isnumeric():
                             continue
                             # print(f'Unknown type {term_type_list} not in the types to categories map')
                     else:
-                        term_type_categories.add(TYPES_TO_CATEGORIES[term_type])
+                        term_type_categories.add(room_and_object_types.TYPES_TO_CATEGORIES[term_type])
 
                 term_categories.append(term_type_categories)
 
@@ -1259,11 +1250,10 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_two_number_comparisons = NoTwoNumberOperations()
     fitness.register(no_two_number_comparisons)
 
-    # TODO: here, add (total-time) and (total-score) as other valid referents
-    no_count_in_terminal = SectionWithoutPrefCounts(TERMINAL)
+    no_count_in_terminal = SectionWithoutPrefOrTotalCounts(TERMINAL)
     fitness.register(no_count_in_terminal, section_rule=True)
 
-    no_count_in_scoring = SectionWithoutPrefCounts(SCORING)
+    no_count_in_scoring = SectionWithoutPrefOrTotalCounts(SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
     # TODO: deal with the entries in `KNOWN_MISSING_TYPES`

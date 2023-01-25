@@ -60,10 +60,12 @@ def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
     )
 
 
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
+def make_init_weight_function(bias: float = 0.01):
+    def init_weights(m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(bias)
+    return init_weights
 
 
 class CustomSklearnScaler:
@@ -281,6 +283,10 @@ class SklearnFitnessWrapper:
 
     def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
         self.model = FitnessEenrgyModel(**self.model_kwargs)
+        if 'margin' in self.train_kwargs:
+            init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
+        else:
+            init_weights = make_init_weight_function()
         self.model.apply(init_weights)
         train_kwarg_keys = list(self.train_kwargs.keys())
         for key in train_kwarg_keys:
@@ -557,6 +563,12 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
                 train_size=DEFAULT_TRAINING_PROP)
             
         cv_tensor = typing.cast(torch.Tensor, cv_tensor)
+
+    if test_tensor is not None:
+        print(f'Train tensor shape: {cv_tensor.shape} | Test tensor shape: {test_tensor.shape}')
+    else:
+        print(f'Train tensor shape: {cv_tensor.shape}')
+
 
     cv = cross_validate(cv_tensor, param_grid,   
         scoring_function=scoring_function,

@@ -18,7 +18,7 @@ import string
 import sys
 
 from parse_dsl import load_games_from_file
-from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher
+from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash
 import ast_printer
 
@@ -870,6 +870,7 @@ ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
 
 # TODO: move this class to a separate module?
 class RegrowthSampler(ASTParentMapper):
+    depth_parser: ASTDepthParser
     node_keys: typing.List[tatsu.infos.ParseInfo]
     original_game_id: str
     parent_mapping: ASTParentMapping
@@ -884,6 +885,7 @@ class RegrowthSampler(ASTParentMapper):
         self.seed = seed
         self.rng = np.random.RandomState(seed)  # type: ignore
         self.parent_mapping = dict()
+        self.depth_parser = ASTDepthParser()
         self.searcher = ASTParseinfoSearcher()
         self.source_ast = None  # type: ignore
 
@@ -977,8 +979,8 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], None
 
-    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int):
-        new_game_name = f'{self.original_game_id}-{sample_index}'
+    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None):
+        new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'
         game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
         game_node, _, game_selector, _, _ = self.parent_mapping[game_key]
 
@@ -1006,11 +1008,15 @@ class RegrowthSampler(ASTParentMapper):
         new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
         if update_game_id: 
-            new_source = self._update_game_id(new_source, sample_index)
+            depth = self.depth_parser(node)
+            new_source = self._update_game_id(new_source, sample_index, f'd{depth}')
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 
         return new_source
+
+
+
 
 
 def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optional[tatsu.grammars.Grammar] = None):

@@ -121,3 +121,29 @@ class ASTParseinfoSearcher(ASTParser):
                     return result
 
         return None
+    
+
+class ASTDepthParser(ASTParser):
+    def __call__(self, ast, **kwargs):
+        self._default_kwarg(kwargs, 'depth', 0)
+        return super().__call__(ast, **kwargs)
+        
+    def _handle_iterable(self, ast: typing.Iterable, **kwargs):
+        child_values = [self(item, depth=kwargs['depth'] + 1) for item in ast]
+        child_values = [cv for cv in child_values if cv is not None]
+        if not child_values:
+            return kwargs['depth']
+        return max(child_values) 
+    
+    def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
+        child_values = [self(ast[key], depth=kwargs['depth'] + 1) for key in ast if key != 'parseinfo']
+        child_values = [cv for cv in child_values if cv is not None]
+        if not child_values:
+            return kwargs['depth']
+        return max(child_values) 
+    
+    def _handle_str(self, ast: str, **kwargs):
+        return kwargs['depth']
+    
+    def _handle_int(self, ast: typing.Union[int, np.int32, np.int64], **kwargs):
+        return kwargs['depth']

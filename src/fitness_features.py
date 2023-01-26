@@ -2,20 +2,22 @@ from abc import ABC, abstractmethod
 import argparse
 from collections import namedtuple, defaultdict
 import itertools
-import tatsu
-import tatsu.ast
-import tatsu.buffering
-import tatsu.infos
-import tqdm
-import pandas as pd
-import numpy as np
 import os
 import re
 import sys
 import typing
 
-from ast_utils import cached_load_and_parse_games_from_file
-from ast_parser import ASTParser
+import boolean
+import numpy as np
+import pandas as pd
+import tatsu
+import tatsu.ast
+import tatsu.buffering
+import tatsu.infos
+
+
+from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition, extract_variables_from_ast
+import ast_parser 
 import ast_printer
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 import room_and_object_types 
@@ -47,7 +49,7 @@ DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
 
-VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
+
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
 
@@ -76,11 +78,6 @@ class FitnessTerm(ABC):
 
 
 DEFAULT_HEADERS = ('src_file', 'game_name', 'domain_name')
-SETUP = 'setup'
-PREFERENCES = 'constraints'
-TERMINAL = 'terminal'
-SCORING = 'scoring'
-SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 
 VARIABLES_CONTEXT_KEY = 'variables'
 SECTION_CONTEXT_KEY = 'section'
@@ -88,27 +85,6 @@ DEPTH_CONTEXT_KEY = 'depth'
 EXTERNAL_FORALL_CONTEXT_KEY = 'external_forall'
 
 COUNT_RULE_PATTERN = re.compile('count.*')
-
-
-def _extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, VariableDefinition]) -> None:
-    variables = ast[vars_key].variables  # type: ignore
-    if isinstance(variables, tatsu.ast.AST):
-        variables = [variables]
-    
-    for var_def in variables:  # type: ignore
-        var_names = var_def.var_names
-        if isinstance(var_names, str): 
-            var_names = [var_names]
-        
-        var_type = var_def.var_type.type  # type: ignore
-        if isinstance(var_type, tatsu.ast.AST):
-            var_type = var_type.type_names
-
-        if isinstance(var_type, str): 
-            var_type = [var_type]
-
-        for var_name in var_names:  # type: ignore
-            context_vars[var_name] = VariableDefinition(var_names, var_type, var_def.parseinfo)
 
 
 class ASTFitnessFeaturizer:
@@ -124,11 +100,10 @@ class ASTFitnessFeaturizer:
 
     def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS, 
         list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
-        section_keys: typing.Sequence[str] = SECTION_KEYS):
+        section_keys: typing.Sequence[str] = ast_parser.SECTION_KEYS):
         self.headers = list(headers)
         self.list_reduce = list_reduce
         self.section_keys = list(section_keys)
-
 
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
@@ -205,8 +180,8 @@ class ASTFitnessFeaturizer:
         elif isinstance(ast, (tuple, list)):
             if len(ast) > 0 and isinstance(ast[0], str):
                 # check if should update the section key
-                if ast[0][2:] in self.section_keys:
-                    context[SECTION_CONTEXT_KEY] = ast[0][2:]
+                if ast[0] in self.section_keys:
+                    context[SECTION_CONTEXT_KEY] = ast[0]
 
                 for tuple_stat in self.tuple_registry[ast[0]]:
                     tuple_stat.update(ast, '', context)
@@ -222,7 +197,7 @@ class ASTFitnessFeaturizer:
             elif len(vars_keys) > 0:
                 vars_key = vars_keys[0]
                 context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-                _extract_variables_from_ast(ast, vars_key, context_vars) 
+                extract_variables_from_ast(ast, vars_key, context_vars) 
                 context = context.copy()
                 context[VARIABLES_CONTEXT_KEY] = context_vars  # type: ignore
 
@@ -259,7 +234,7 @@ class ASTFitnessFeaturizer:
             print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
 
 
-class ASTNodeCounter(ASTParser):
+class ASTNodeCounter(ast_parser.ASTParser):
     def __init__(self):
         self.count = 0
 
@@ -385,7 +360,7 @@ class SetupObjectsUsed(FitnessTerm):
         if SECTION_CONTEXT_KEY not in context:
             raise ValueError('Section not found in context', context)
 
-        if context[SECTION_CONTEXT_KEY] == SETUP:
+        if context[SECTION_CONTEXT_KEY] == ast_parser.SETUP:
             result = TYPE_RULES[rule][0](ast)
             if isinstance(result, (list, tuple)):
                 self.setup_objects.update(result)
@@ -489,14 +464,16 @@ class VariableNotRepeatedInPredicateFunction(FitnessTerm):
         return 1 - (self.count_with_repeats / self.total_count)
 
 
+ALL_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or|_not)$')
+MULTI_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or)$')
+
+
 class NoNestedLogicals(FitnessTerm):
     total_logicals: int = 0
     nested_logicals: int = 0
 
     def __init__(self):
-        super().__init__(('setup_and', 'setup_or', 'setup_not', 'super_predicate_and',
-        'super_predicate_or', 'super_predicate_not', 'terminal_and',
-        'terminal_or', 'terminal_not', 'scoring_and', 'scoring_or', 'scoring_not'), 'no_nested_logicals')
+        super().__init__(ALL_BOOLEAN_RULE_PATTERN, 'no_nested_logicals')
 
     def game_start(self) -> None:
         self.total_logicals = 0
@@ -533,14 +510,14 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
 
     def __init__(self):
         self.rule_to_section = {
-            'setup_and': ast_printer.SETUP_KEY,
-            'setup_or': ast_printer.SETUP_KEY,
-            'super_predicate_and': ast_printer.PREFERENCES_KEY,
-            'super_predicate_or': ast_printer.PREFERENCES_KEY,
-            'terminal_and': ast_printer.TERMINAL_KEY,
-            'terminal_or': ast_printer.TERMINAL_KEY,
-            'scoring_and': ast_printer.SCORING_KEY,
-            'scoring_or': ast_printer.SCORING_KEY,
+            'setup_and': ast_parser.SETUP,
+            'setup_or': ast_parser.SETUP,
+            'super_predicate_and': ast_parser.PREFERENCES,
+            'super_predicate_or': ast_parser.PREFERENCES,
+            'terminal_and': ast_parser.TERMINAL,
+            'terminal_or': ast_parser.TERMINAL,
+            'scoring_and': ast_parser.SCORING,
+            'scoring_or': ast_parser.SCORING,
         }
         super().__init__(tuple(self.rule_to_section.keys()), 'no_identical_logical_children')
 
@@ -569,7 +546,66 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
         return 1 - (self.identical_children / self.total_logicals)
 
 
-# ast_str = ast_printer.ast_section_to_string(ast, ast_printer.PREFERENCES_KEY)
+BOOLEAN_PARSER = ast_parser.ASTBooleanParser()
+BOOLEAN_LOGIC_IGNORE_PREFIXES = ('terminal_', 'scoring_')
+
+
+class BooleanLogicTerm(FitnessTerm):
+    boolean_parser: ast_parser.ASTBooleanParser
+    def __init__(self, name: str, ignore_prefixes: typing.Sequence[str] = BOOLEAN_LOGIC_IGNORE_PREFIXES):
+        super().__init__(MULTI_BOOLEAN_RULE_PATTERN, name)
+        self.boolean_parser = BOOLEAN_PARSER
+        self.ignore_prefixes = ignore_prefixes
+
+    def game_start(self) -> None:
+        self.boolean_parser.game_start()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if any(rule.startswith(prefix) for prefix in self.ignore_prefixes):
+            return
+        
+        if isinstance(ast, tatsu.ast.AST):
+            expr = self.boolean_parser(ast, **context)
+            self._inner_update(expr, rule, context)  # type: ignore
+
+    @abstractmethod
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        pass
+
+
+class TautologicalBooleanExpression(BooleanLogicTerm):
+    def __init__(self):
+        super().__init__('tautological_expression_found')
+        self.tautalogy_found = False
+
+    def game_start(self) -> None:
+        super().game_start()
+        self.tautalogy_found = False
+
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        if self.boolean_parser.evaluate_tautology(expr):  # type: ignore
+            self.tautalogy_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return int(self.tautalogy_found)
+
+
+class RedundantBooleanExpression(BooleanLogicTerm):
+    def __init__(self):
+        super().__init__('redundant_expression_found')
+        self.redundancy_found = False
+
+    def game_start(self) -> None:
+        super().game_start()
+        self.redundancy_found = False
+
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        if self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
+            self.redundancy_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return int(self.redundancy_found)
+
 
 class PrefForallTerm(FitnessTerm):
     def __init__(self, name: str):
@@ -752,7 +788,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
             preferences = [preferences]
 
         var_dict = {}
-        _extract_variables_from_ast(ast, 'forall_vars', var_dict) 
+        extract_variables_from_ast(ast, 'forall_vars', var_dict) 
 
         for pref in preferences:
             self.pref_forall_prefs_to_types[pref.pref_name] = var_dict  # type: ignore
@@ -794,7 +830,7 @@ class SectionWithoutPrefOrTotalCounts(FitnessTerm):
     section_found: bool
     count_rule_found: bool
     def __init__(self, section: str):
-        super().__init__(section, f'section_without_pref_or_total_count_{section}')
+        super().__init__(section, f'section_without_pref_or_total_count_{section.replace("(:", "")}')
         self.section = section
 
     def game_start(self) -> None:
@@ -816,8 +852,9 @@ class SectionWithoutPrefOrTotalCounts(FitnessTerm):
 
 
 PREDICATE_FUNCTION_ARITY_MAP = {
-    'above': 2, 'adjacent': 2, 'adjacent_side': (3, 4), 'agent_crouches': 0, 'agent_holds': 1,
-    'between': 3, 'broken': 1, 'building_size': 1, 'distance': 2, 'distance_side': (3, 4),
+    'above': 2, 'adjacent': 2, 'adjacent_side_3': 3, 'adjacent_side_4': 4, 
+    'agent_crouches': 0, 'agent_holds': 1, 'between': 3, 'broken': 1, 
+    'building_size': 1, 'distance': 2, 'distance_side_3': 3, 'distance_side_4': 4,
     'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
     'game_over': 0, 'game_start': 0, 'in':2, 'in_motion': 1, 'is_setup_object': 1, 
     'object_orientation': 2, 'on': 2, 'open': 1, 'opposite': 2, 'rug_color_under': 2, 
@@ -831,7 +868,7 @@ class CorrectPredicateFunctionArity(FitnessTerm):
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = {}
     count_with_wrong_arity: int = 0
 
-    def __init__(self, name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP):
+    def __init__(self, name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP):  # type: ignore
         super().__init__(PREDICATE_AND_FUNCTION_RULES, 'correct_predicate_function_arity')
         self.name_to_arity_map = name_to_arity_map
 
@@ -843,7 +880,7 @@ class CorrectPredicateFunctionArity(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST):
             self.total_count += 1
 
-            name = extract_predicate_function_name(ast)
+            name = extract_predicate_function_name(ast, remove_digits=False)
 
             if name not in self.name_to_arity_map:
                 raise ValueError(f'Predicate {name} not in predicate arity map')
@@ -935,7 +972,8 @@ class NoTwoNumberOperations(FitnessTerm):
         return 1 - (self.two_number_operations / self.total_operations)
     
 
-COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
+# COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
+COMMON_SENSE_PREDICATES_FUNCTIONS_WITH_SETUP = ('adjacent', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'object_orientation', 'on', 'touch')  # 'adjacent_side_3', 
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []
@@ -948,7 +986,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
 
     def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str], 
-        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,
+        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
         super().__init__(PREDICATE_AND_FUNCTION_RULES, f'arg_types_{predicate}_{"_".join(argument_type_categories)}')
@@ -965,7 +1003,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            name = extract_predicate_function_name(ast)
+            name = extract_predicate_function_name(ast, remove_digits=False)
 
             if name not in self.name_to_arity_map:
                 raise ValueError(f'Predicate {ast.name} not in predicate arity map')
@@ -1009,22 +1047,47 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
 
                 term_categories.append(term_type_categories)
 
-            self.matching_argument_types_count += all(self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories)))
+            if all(self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):
+                self._count(context)
 
+    def _count(self, context: ContextDict):
+        self.matching_argument_types_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.matching_argument_types_count
 
 
+PREDICATE_SECTIONS = [ast_parser.SETUP, ast_parser.PREFERENCES]
+
+
+class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
+    matching_argument_types_count_by_section: typing.Dict[str, Number]
+
+    def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str], 
+        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
+        known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
+
+        super().__init__(predicate, argument_type_categories, name_to_arity_map, known_missing_types)
+
+    def game_start(self) -> None:
+        self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
+
+    def _count(self, context: ContextDict):
+        self.matching_argument_types_count_by_section[context[SECTION_CONTEXT_KEY]] += 1  # type: ignore
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return {k.replace('(:', ''): v for k, v in self.matching_argument_types_count_by_section.items()}
+
+
 def build_argument_types_fitness_terms(
-    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS,
+    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS_WITH_SETUP,
     type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
-    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:
+    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
     fitness_terms = []
 
     for predicate in predicates:
         for type_combinations in itertools.product(*([type_categories] * predicate_arity_map[predicate])):  # type: ignore
-            fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
+            fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
 
     return fitness_terms
 
@@ -1074,7 +1137,7 @@ class CompositionalityStructureCounter(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            ast_str = ast_printer.ast_section_to_string(ast, ast_printer.PREFERENCES_KEY)
+            ast_str = ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES)
             for args in self.args_pattern.findall(ast_str):
                 ast_str = ast_str.replace(args, ' '.join(map(lambda x: self.variable_replacement, args.split(" "))), 1)
                 
@@ -1093,7 +1156,7 @@ def build_compositionality_fitness_terms(
 
 class SectionCountTerm(FitnessTerm):
     def __init__(self, section: str, header: str, thresholds: typing.Optional[typing.Sequence[float]]):
-        super().__init__(section, header)
+        super().__init__(section, header.replace('(:', ''))
         if thresholds is not None:
             thresholds = list(thresholds)
             thresholds.insert(0, float('-inf'))
@@ -1170,25 +1233,25 @@ class SectionNodeCount(SectionCountTerm):
 
 
 SECTION_COUNT_THRESHOLDS = {
-    (SectionMaxDepth, 'setup'): [1, 8.5, 17.5, 25.5],
-    (SectionMaxDepth, 'constraints'): [8.5, 15.5, 19.5, 23.5],
-    (SectionMaxDepth, 'terminal'): [1, 4.5, 8.5, 11.5],
-    (SectionMaxDepth, 'scoring'): [2.5, 4.5, 8.5, 12.5],
+    (SectionMaxDepth, ast_parser.SETUP): [1, 8.5, 17.5, 25.5],
+    (SectionMaxDepth, ast_parser.PREFERENCES): [8.5, 15.5, 19.5, 23.5],
+    (SectionMaxDepth, ast_parser.TERMINAL): [1, 4.5, 8.5, 11.5],
+    (SectionMaxDepth, ast_parser.SCORING): [2.5, 4.5, 8.5, 12.5],
     
-    (SectionMeanDepth, 'setup'): [1, 4, 9, 12],
-    (SectionMeanDepth, 'constraints'): [6.5, 8, 10, 12],
-    (SectionMeanDepth, 'terminal'): [1, 2, 3.8, 5.5],
-    (SectionMeanDepth, 'scoring'): [1.5, 2.75, 4, 6],
+    (SectionMeanDepth, ast_parser.SETUP): [1, 4, 9, 12],
+    (SectionMeanDepth, ast_parser.PREFERENCES): [6.5, 8, 10, 12],
+    (SectionMeanDepth, ast_parser.TERMINAL): [1, 2, 3.8, 5.5],
+    (SectionMeanDepth, ast_parser.SCORING): [1.5, 2.75, 4, 6],
 
-    (SectionNodeCount, 'setup'): [1, 10, 30, 100],
-    (SectionNodeCount, 'constraints'): [30, 70, 135, 200],
-    (SectionNodeCount, 'terminal'): [1, 5, 25, 55],
-    (SectionNodeCount, 'scoring'): [6, 18, 33, 60],
+    (SectionNodeCount, ast_parser.SETUP): [1, 10, 30, 100],
+    (SectionNodeCount, ast_parser.PREFERENCES): [30, 70, 135, 200],
+    (SectionNodeCount, ast_parser.TERMINAL): [1, 5, 25, 55],
+    (SectionNodeCount, ast_parser.SCORING): [6, 18, 33, 60],
     
 }
 
 
-def build_section_count_fitness_terms(sections: typing.Sequence[str] = SECTION_KEYS,
+def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parser.SECTION_KEYS,
     term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount),
     thresholds: typing.Optional[typing.Dict[typing.Tuple[typing.Callable, str], typing.Sequence[float]]] = SECTION_COUNT_THRESHOLDS,
     ) -> typing.Sequence[FitnessTerm]:
@@ -1229,6 +1292,13 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_identical_logical_children = NoIdenticalChildrenInLogicals()
     fitness.register(no_identical_logical_children)
 
+    tautological_boolean_expression = TautologicalBooleanExpression()
+    fitness.register(tautological_boolean_expression)
+
+    # TODO: consider patching boolean.NOT.literalize to not do DeMorgan's law so it doesn't flag unnecessary redundancies
+    redundant_boolean_expression = RedundantBooleanExpression()
+    fitness.register(redundant_boolean_expression)
+
     count_once_per_external_objects_used_correctly = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used_correctly)
     
@@ -1250,13 +1320,12 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_two_number_comparisons = NoTwoNumberOperations()
     fitness.register(no_two_number_comparisons)
 
-    no_count_in_terminal = SectionWithoutPrefOrTotalCounts(TERMINAL)
+    no_count_in_terminal = SectionWithoutPrefOrTotalCounts(ast_parser.TERMINAL)
     fitness.register(no_count_in_terminal, section_rule=True)
 
-    no_count_in_scoring = SectionWithoutPrefOrTotalCounts(SCORING)
+    no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
-    # TODO: deal with the entries in `KNOWN_MISSING_TYPES`
     argument_types_fitness_terms = build_argument_types_fitness_terms()
     fitness.register_multiple(argument_types_fitness_terms)
 
@@ -1276,13 +1345,13 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    aggregator = build_fitness_featurizer(args)
+    featurizer = build_fitness_featurizer(args)
 
     for test_file in args.test_files:
         for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-            aggregator.parse(ast, test_file)
+            featurizer.parse(ast, test_file)
 
-    df = aggregator.to_df()
+    df = featurizer.to_df()
     print(df.groupby('src_file').agg([np.mean, np.std]))
 
     for src_file in df.src_file.unique():

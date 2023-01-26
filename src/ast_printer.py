@@ -6,7 +6,7 @@ import tatsu
 import tatsu.ast
 import typing 
 
-from ast_parser import ASTParser
+import ast_parser
 
 
 DEFAULT_INCREMENT = '  '
@@ -14,7 +14,7 @@ BUFFER = None
 LINE_BUFFER = None
 
 
-class ASTPrinter(ASTParser):
+class ASTPrinter(ast_parser.ASTParser):
     def __init__(self, ast_key, rule_name_substitutions):
         self.ast_key = ast_key
         self.rule_name_substitutions = rule_name_substitutions
@@ -813,17 +813,12 @@ def build_scoring_printer():
     return printer
 
 
-SETUP_KEY = '(:setup'
-PREFERENCES_KEY = '(:constraints'
-TERMINAL_KEY = '(:terminal'
-SCORING_KEY = '(:scoring'
-
 
 PARSE_DICT = {
-    SETUP_KEY: build_setup_printer(),
-    PREFERENCES_KEY: build_constraints_printer(),
-    TERMINAL_KEY: build_terminal_printer(),
-    SCORING_KEY: build_scoring_printer(),
+    ast_parser.SETUP: build_setup_printer(),
+    ast_parser.PREFERENCES: build_constraints_printer(),
+    ast_parser.TERMINAL: build_terminal_printer(),
+    ast_parser.SCORING: build_scoring_printer(),
 }
 
 

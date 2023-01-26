@@ -822,7 +822,7 @@ def extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
     return [str(arg) for arg in args]
 
 
-def extract_predicate_function_name(ast: tatsu.ast.AST):
+def extract_predicate_function_name(ast: tatsu.ast.AST, remove_digits: bool = True):
     if 'pred' in ast:
         rule = ast.pred.parseinfo.rule  # type: ignore
         name = rule.replace('predicate_', '')
@@ -834,8 +834,9 @@ def extract_predicate_function_name(ast: tatsu.ast.AST):
     else:
         raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
 
-    if name[-1].isdigit():
-        name = name[:-2]
+    if remove_digits:
+        if name[-1].isdigit():
+            name = name[:-2]
 
     return name
 

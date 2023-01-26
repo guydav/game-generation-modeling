@@ -991,12 +991,20 @@ class RegrowthSampler(ASTParentMapper):
         node_index = self.rng.choice(len(self.node_keys))
         node_key = self.node_keys[node_index]
         return self.parent_mapping[node_key]
+    
+    def _find_node_depth(self, node: tatsu.ast.AST):
+        node_info = self.parent_mapping[self._ast_key(node)]
+        depth = 1
+        while not (isinstance(node_info[1], tuple) and node_info[1][0] == '(define'):
+            node_info = self.parent_mapping[self._ast_key(node_info[1])]
+            depth += 1
+
+        return depth
 
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None, 
         external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True):
 
         node, parent, selector, global_context, local_context = self._sample_node_to_update()
-
         if external_global_context is not None:
             global_context.update(external_global_context)
         
@@ -1007,9 +1015,10 @@ class RegrowthSampler(ASTParentMapper):
 
         new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
+        node_depth = self._find_node_depth(node)
         if update_game_id: 
-            depth = self.depth_parser(node)
-            new_source = self._update_game_id(new_source, sample_index, f'd{depth}')
+            regrwoth_depth = self.depth_parser(node)
+            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd{regrwoth_depth}')
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 

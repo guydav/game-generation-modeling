@@ -19,14 +19,23 @@ FITNESS_DATA_FILE = '../data/fitness_scores.csv'
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
 
+def _find_nth(text, target, n):
+    start = text.find(target)
+    while start >= 0 and n > 1:
+        start = text.find(target, start+len(target))
+        n -= 1
+    return start
+
+
 def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
     fitness_df = fitness_df.assign(real=fitness_df.src_file == 'interactive-beta.pddl', original_game_name=fitness_df.game_name)
     fitness_df.original_game_name.where(
-        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') == 2)), 
-        fitness_df.original_game_name.apply(lambda s: s[:s.rfind('-')]), 
+        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)), 
+        fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]), 
         inplace=True)
 
+    fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
     return fitness_df
 
 
@@ -283,10 +292,10 @@ class SklearnFitnessWrapper:
 
     def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
         self.model = FitnessEenrgyModel(**self.model_kwargs)
-        if 'margin' in self.train_kwargs:
-            init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
-        else:
-            init_weights = make_init_weight_function()
+        # if 'margin' in self.train_kwargs:
+        #     init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
+        # else:
+        init_weights = make_init_weight_function()
         self.model.apply(init_weights)
         train_kwarg_keys = list(self.train_kwargs.keys())
         for key in train_kwarg_keys:

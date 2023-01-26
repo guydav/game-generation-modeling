@@ -605,7 +605,7 @@
                     (in ?b ?l1)
                     (or 
                         (agent_holds ?l2) 
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)  ; (and (not (agent_holds ?l2)) -- used to be here, redundant with the first if clause
                     )
                 )
                 (touch ?l1 ?l2)
@@ -1953,7 +1953,7 @@
                     (in ?b ?l1)
                     (or 
                         (agent_holds ?l2) 
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)  ; used to be (and (not (agent_holds ?l2)) ...), redundant
                     )
                 )
                 (touch ?l1 ?l2)

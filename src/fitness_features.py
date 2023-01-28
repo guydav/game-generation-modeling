@@ -972,8 +972,8 @@ class NoTwoNumberOperations(FitnessTerm):
         return 1 - (self.two_number_operations / self.total_operations)
     
 
-# COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
-COMMON_SENSE_PREDICATES_FUNCTIONS_WITH_SETUP = ('adjacent', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'object_orientation', 'on', 'touch')  # 'adjacent_side_3', 
+COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
+# COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')  # 'adjacent_side_3', 'between',  'object_orientation',
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []
@@ -1080,7 +1080,7 @@ class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
 
 
 def build_argument_types_fitness_terms(
-    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS_WITH_SETUP,
+    predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS,
     type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
     predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
     fitness_terms = []
@@ -1088,6 +1088,7 @@ def build_argument_types_fitness_terms(
     for predicate in predicates:
         for type_combinations in itertools.product(*([type_categories] * predicate_arity_map[predicate])):  # type: ignore
             fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
+            # fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
 
     return fitness_terms
 

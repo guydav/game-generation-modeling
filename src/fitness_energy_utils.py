@@ -36,6 +36,8 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
         inplace=True)
 
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
+    fitness_df = fitness_df.assign(real=fitness_df.real.astype('int'))
+    fitness_df = fitness_df[list(fitness_df.columns[:4]) + list(fitness_df.columns[-2:]) + list(fitness_df.columns[4:-2])]
     return fitness_df
 
 

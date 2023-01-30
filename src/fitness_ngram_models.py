@@ -75,7 +75,7 @@ class TextNGramModel:
 
     def _default_logprob(self):
         return self.default_logprob
-    
+
     def _compute_ngram_counts(self, game_texts: typing.Sequence[str]):
         return Counter(itertools.chain.from_iterable(_ngrams(text, self.n) for text in game_texts))
 
@@ -83,7 +83,7 @@ class TextNGramModel:
         self.ngram_counts = self._compute_ngram_counts(game_texts)
         self.total_ngram_counts = sum(self.ngram_counts.values())
         self.ngram_logprobs = defaultdict(self._default_logprob, {ngram: np.log(count / self.total_ngram_counts) for ngram, count in self.ngram_counts.items()})
-    
+
     def _text_to_ngrams(self, text: str) -> typing.Iterable[typing.Tuple[str, ...]]:
         return nltk_ngrams(ngram_preprocess(text).split(), self.n)
 
@@ -92,14 +92,14 @@ class TextNGramModel:
 
     def transform(self, game_texts: typing.Sequence[str]):
         return np.array([self._transform_ngrams(self._text_to_ngrams(text)) for text in game_texts])
-    
+
     def fit_transform(self, game_texts: typing.Sequence[str]):
         self.fit(game_texts)
         return self.transform(game_texts)
-    
+
     def _get_dict_item_value(self, item: typing.Tuple[typing.Tuple[str, ...], int]):
         return item[1]
-    
+
     def score(self, text: str, k: typing.Optional[int] = None):
         text_ngrams = list(self._text_to_ngrams(text))
         output = dict(score=self._transform_ngrams(text_ngrams))
@@ -137,5 +137,5 @@ if __name__ == '__main__':
 
     if args.output_path is None:
         args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
-    
+
     main(args)

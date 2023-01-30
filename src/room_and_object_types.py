@@ -3,7 +3,7 @@ import argparse
 
 from pandas import options
 
-# -- CATEGOTIES -- 
+# -- CATEGOTIES --
 
 AGENT = 'agent'
 ANY_OBJECT = 'any_object'
@@ -23,7 +23,7 @@ SIDES = 'sides'
 SMALL_OBJECTS = 'small_objects'
 
 
-# -- OBJECT TYPES -- 
+# -- OBJECT TYPES --
 
 # AGENT
 AGENT = 'agent'
@@ -167,8 +167,8 @@ CATEGORIES_TO_TYPES = {
         BLUE_CUBE_BLOCK, BLUE_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, YELLOW_CUBE_BLOCK,
     ),
     COLORS: (
-        COLOR, BLUE, BROWN, GRAY, GREEN, 
-        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED, 
+        COLOR, BLUE, BROWN, GRAY, GREEN,
+        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED,
         TAN, WHITE, YELLOW,
     ),
     EMPTY_OBJECT: (
@@ -218,7 +218,7 @@ ROOM_NAMES = (FEW, MEDIUM, MANY)
 FULL_ROOMS_UNCATEGORIZED_OBJECTS = 'uncategorized_objects'
 
 ABSTRACT_OBJECTS_IN_ALL_ROOMS = {
-    AGENT: 1, 
+    AGENT: 1,
     GAME_OBJECT: 1,
     BUILDING: 1,
     EMPTY_OBJECT_OBJ: 1,
@@ -345,7 +345,7 @@ FULL_ROOMS_TO_OBJECTS = {
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
             TOP_DRAWER: 1,
-            
+
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -483,22 +483,22 @@ FULL_ROOMS_TO_OBJECTS = {
 # ROOMS_TO_AVAILABLE_OBJECTS = {
 #     FEW: set([
 #         'agent',
-#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 
+#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball',
 #         'block', 'cube_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'curved_wooden_ramp', 'hexagonal_bin',
-#         'laptop', 'pillow', 
+#         'laptop', 'pillow',
 #         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
 #         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',
 #     ]),
 #     MEDIUM: set([
 #         'agent',
 #         'ball', 'basketball', 'beachball', 'dodgeball', 'red_dodgeball',
-#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 
+#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block',
 #         'yellow_pyramid_block', 'red_pyramid_block', 'yellow_cube_block', 'blue_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'doggie_bed', 'hexagonal_bin',  'triangular_ramp',
@@ -511,7 +511,7 @@ FULL_ROOMS_TO_OBJECTS = {
 #         'ball', 'beachball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 'red_dodgeball', 'golfball', 'green_golfball',
 #         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 'triangle_block',
 #         'yellow_pyramid_block', 'red_pyramid_block', 'blue_pyramid_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'curved_wooden_ramp', 'doggie_bed', 'green_triangular_ramp', 'hexagonal_bin',  'triangular_ramp',
@@ -563,7 +563,7 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
 
 # Copied from `reward_machines/config.py`
 META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],
-              BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, 
+              BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK,
                       PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TALL_RECTANGULAR_BLOCK, TRIANGLE_BLOCK],
               COLOR: CATEGORIES_TO_TYPES[COLORS],
               CUBE_BLOCK: [BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK],
@@ -604,8 +604,8 @@ TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
 #         for obj, count in sorted(room_types_to_categories[key].items(), key=lambda x: x[0]):
 
 #             if isinstance (count, list):
-#                 count = f'{{]{", ".join([c.upper() + ": 1" for c in sorted(count)])}, }}' 
-            
+#                 count = f'{{]{", ".join([c.upper() + ": 1" for c in sorted(count)])}, }}'
+
 #             print(f'{" " * 12}{obj.upper()}: {count},')
 
 #         print(f'{" " * 8}}},')
@@ -628,7 +628,7 @@ TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
 #                 category_objects.extend([f'{color}_{key}'.upper() for color in value])
 
 #         print(f'{" " * 8}{", ".join(category_objects)},')
-            
+
 #     print('    ]),')
 
 # print('}')
@@ -768,7 +768,7 @@ def get_room_objects_colors(start_token, skip_categories, skip_types, separator,
                 elif isinstance(count, dict):
                     type_buffer = []
                     for color, color_count in count.items():
-                        
+
                         if color_count == 1:
                             type_buffer.append(color)
                         else:
@@ -804,7 +804,7 @@ MODES_TO_FUNCTIONS = {
     COLOR_MODE: get_room_objects_colors,
 }
 parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
-    
+
 
 def foo(**kwargs):
     print(kwargs)
@@ -814,4 +814,3 @@ if __name__ == '__main__':
     mode = args.mode
     delattr(args, 'mode')
     out = MODES_TO_FUNCTIONS[mode](**args.__dict__)
-

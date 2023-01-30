@@ -10,7 +10,7 @@ import re
 
 import ast_printer
 from ast_parser import ASTParser, ASTParentMapper
-from ast_utils import cached_load_and_parse_games_from_file 
+from ast_utils import cached_load_and_parse_games_from_file
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -35,10 +35,10 @@ parser.add_argument('-u', '--omit-unused-rules', action='store_true')
 
 DEFAULT_PREFIX = r"""\section{DSL Grammar Definitions}
 
-A game is defined by a name, and is expected to be valid in a particular domain, also referenced by a name. 
+A game is defined by a name, and is expected to be valid in a particular domain, also referenced by a name.
 A game is defined by four elements, two of them mandatory, and two optional.
 The mandatory ones are the \dsl{constraints} section, which defines gameplay preferences, and the \dsl{scoring} section, which defines how gameplay preferences are counted to arrive at a score for the player in the game.
-The optional ones are the \dsl{setup} section, which defines how the environment must be prepared before gameplay can begin, and the \dsl{terminal} conditions, which specify when and how the game ends. 
+The optional ones are the \dsl{setup} section, which defines how the environment must be prepared before gameplay can begin, and the \dsl{terminal} conditions, which specify when and how the game ends.
 
 \begin{grammar}
 <game> ::= (define (game <name>) \\
@@ -51,8 +51,8 @@ The optional ones are the \dsl{setup} section, which defines how the environment
 <name> ::= /[A-z][A-z0-9_]*/ "#" a letter, optionally followed by letters, numbers, and underscores
 \end{grammar}
 
-We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types. 
-Finally, we provide a mapping between some aspects of our gameplay preference specification and linear temporal logic (LTL) operators. 
+We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types.
+Finally, we provide a mapping between some aspects of our gameplay preference specification and linear temporal logic (LTL) operators.
 """
 
 TEMPLATE_PLACEHOLDER = '{{BODY}}'
@@ -77,7 +77,7 @@ class DSLToLatexParser(ASTParser):
             self.new_data_start is not None and ast[1].game_name == self.new_data_start:
 
             self.data_is_new = True
-        
+
         return super().__call__(ast, **kwargs)
 
     def _handle_tuple(self, ast, **kwargs):
@@ -90,7 +90,7 @@ class DSLToLatexParser(ASTParser):
         if 'section' in kwargs and ast.parseinfo:
             self.rules_by_section[kwargs['section']][ast.parseinfo.rule].append((ast, self.data_is_new))
 
-        super()._handle_ast(ast, **kwargs)        
+        super()._handle_ast(ast, **kwargs)
 
     def process(self):
         for processor in self.processors:
@@ -102,9 +102,9 @@ class DSLToLatexParser(ASTParser):
 
                     if processor.unused_rules:
                         print(f'After processing section {processor.section_key}, these rules are unused: {processor.unused_rules}')
-                
+
                 else:
-                    raise ValueError(f'Found section processor for unknown section key: {processor.section_key}')    
+                    raise ValueError(f'Found section processor for unknown section key: {processor.section_key}')
 
             elif isinstance(processor, RuleTypeTranslator):
                 for section_data in self.rules_by_section.values():
@@ -148,78 +148,78 @@ POST_NOTES_KEY = 'post'
 
 NOTES = {
     SETUP_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The setup section specifies how the environment must be transformed from its deterministic initial conditions to a state gameplay can begin at. 
+        PRE_NOTES_KEY: r"""The setup section specifies how the environment must be transformed from its deterministic initial conditions to a state gameplay can begin at.
 Currently, a particular environment room always appears in the same initial conditions, in terms of which objects exist and where they are placed.
 Participants in our experiment could, but did not have to, specify how the room must be setup so that their game could be played.
 
 The initial \dsl{setup} element can expand to conjunctions, disjunctions, negations, or quantifications of itself, and then to the \dsl{setup-statement} rule.
 \dsl{setup-statement} elements specify two different types of setup conditions: either those that must be conserved through gameplay (`game-conserved'), or those that are optional through gameplay (`game-optional').
-These different conditions arise as some setup elements must be maintain through gameplay (for example, a participant specified to place a bin on the bed to throw balls into, it shouldn't move unless specified otherwise), while other setup elements can or must change (if a participant specified to set the balls on the desk to throw them, an agent will have to pick them up (and off the desk) in order to throw them). 
+These different conditions arise as some setup elements must be maintain through gameplay (for example, a participant specified to place a bin on the bed to throw balls into, it shouldn't move unless specified otherwise), while other setup elements can or must change (if a participant specified to set the balls on the desk to throw them, an agent will have to pick them up (and off the desk) in order to throw them).
 
-Inside the \dsl{setup-statement} tags we find \dsl{setup-predicate} elements, which can again resolve into logical conditions and quantifications of other \dsl{setup-predicate} elements, but also to function comparisons (\dsl{f-comp}) and predicates (\dsl{predicate}). 
-Function comparisons usually consist of a comparison operator and two arguments, which can either be the evaluation of a function or a number. 
-The one exception is the case where the comparison operator is the equality operator (=), in which case any number of arguments can be provided. 
-Finally, the \dsl{predicate} element expands to a predicate acting on one or more objects or variables. 
+Inside the \dsl{setup-statement} tags we find \dsl{setup-predicate} elements, which can again resolve into logical conditions and quantifications of other \dsl{setup-predicate} elements, but also to function comparisons (\dsl{f-comp}) and predicates (\dsl{predicate}).
+Function comparisons usually consist of a comparison operator and two arguments, which can either be the evaluation of a function or a number.
+The one exception is the case where the comparison operator is the equality operator (=), in which case any number of arguments can be provided.
+Finally, the \dsl{predicate} element expands to a predicate acting on one or more objects or variables.
 We assume the list of predicate existing in a domain will be provided to any models as part of their inputs rather than hard-coded into the grammar.
 For a full list of the predicates we found ourselves using so far, see \fullref{sec:predicates}.
         """,
     },
     PREFERENCES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The gameplay preferences specify the core of a game's semantics, capturing how a game should be played by specifying temporal constraints over predicates. 
-The name for the overall element, \dsl{constraints}, is inherited from the PDDL element with the same name. 
+        PRE_NOTES_KEY: r"""The gameplay preferences specify the core of a game's semantics, capturing how a game should be played by specifying temporal constraints over predicates.
+The name for the overall element, \dsl{constraints}, is inherited from the PDDL element with the same name.
 
-The \dsl{constraints} elements expands into one or more preference definitions, which are defined using the \dsl{pref-def} element. 
-A \dsl{pref-def} either expands to a single preference (\dsl{preference}), or to a \dsl{pref-forall} element, which specifies variants of the same preference for different objects, which can be treated differently in the scoring section. 
+The \dsl{constraints} elements expands into one or more preference definitions, which are defined using the \dsl{pref-def} element.
+A \dsl{pref-def} either expands to a single preference (\dsl{preference}), or to a \dsl{pref-forall} element, which specifies variants of the same preference for different objects, which can be treated differently in the scoring section.
 A \dsl{preference} is defined by a name and a \dsl{preference-quantifier}, which expands to an optional quantification (exists, forall, or neither), inside of which we find the \dsl{preference-body}.
 
 A \dsl{preference-body} expands into one of two options:
-The first is a set of conditions that should be true at the end of gameplay, using the \dsl{at-end} operator. 
+The first is a set of conditions that should be true at the end of gameplay, using the \dsl{at-end} operator.
 Inside an \dsl{at-end} we find a \dsl{pref-predicate}, which like the \dsl{setup-predicate} term, can expand to logical operations over predicates, quantifications over predicates, a function comparison, or a predicate.
 
-The second option is specified using the \dsl{then} syntax, which defines a series of temporal conditions that should hold over a sequence of states. 
-Under a \dsl{then} operator, we find two or more sequence functions (\dsl{seq-func}), which define the specific conditions that must hold and how many states we expect them to hold for. 
-We assume that there are no unaccounted states between the states accounted for by the different operators -- in other words, the \dsl{then} operators expects to find a sequence of contiguous states that satisfy the different sequence functions. 
-The operators under a \dsl{then} operator map onto linear temporal logic (LTL) operators, see \fullref{sec:LTL} for the mapping and examples. 
+The second option is specified using the \dsl{then} syntax, which defines a series of temporal conditions that should hold over a sequence of states.
+Under a \dsl{then} operator, we find two or more sequence functions (\dsl{seq-func}), which define the specific conditions that must hold and how many states we expect them to hold for.
+We assume that there are no unaccounted states between the states accounted for by the different operators -- in other words, the \dsl{then} operators expects to find a sequence of contiguous states that satisfy the different sequence functions.
+The operators under a \dsl{then} operator map onto linear temporal logic (LTL) operators, see \fullref{sec:LTL} for the mapping and examples.
 
 
-The \dsl{once} operator specifies a predicate that must hold for a single world state. 
-If a \dsl{once} operators appears as the first operator of a \dsl{then} definition, and a sequence of states $S_a, S_{a+1}, \cdots, S_b$ satisfy the \dsl{then} operator, it could be the case that the predicate is satisfied before this sequence of states (e.g. by $S_{a-1}, S_{a-2}$, and so forth). 
+The \dsl{once} operator specifies a predicate that must hold for a single world state.
+If a \dsl{once} operators appears as the first operator of a \dsl{then} definition, and a sequence of states $S_a, S_{a+1}, \cdots, S_b$ satisfy the \dsl{then} operator, it could be the case that the predicate is satisfied before this sequence of states (e.g. by $S_{a-1}, S_{a-2}$, and so forth).
 However, only the final such state, $S_a$, is required for the preference to be satisfied.
-The same could be true at the end of the sequence: if a \dsl{then} operator ends with a \dsl{once} term, there could be other states after the final state ($S_{b+1}, S_{b+2}$, etc.) that satisfy the predicate in the \dsl{once} operator, but only one is required. 
+The same could be true at the end of the sequence: if a \dsl{then} operator ends with a \dsl{once} term, there could be other states after the final state ($S_{b+1}, S_{b+2}$, etc.) that satisfy the predicate in the \dsl{once} operator, but only one is required.
 The \dsl{once-measure} operator is a slight variation of the \dsl{once} operator, which in addition to a predicate, takes in a function evaluation, and measures the value of the function evaluated at the state that satisfies the preference.
 This function value can then be used in the scoring definition, see \fullref{sec:scoring}.
 
 A second type of operator that exists is the \dsl{hold} operator.
-It specifies that a predicate must hold true in every state between the one in which the previous operator is satisfied, and until one in which the next operator is satisfied. 
-If a \dsl{hold} operator appears at the beginning or an end of a \dsl{then} sequence, it can be satisfied by a single state, 
-Otherwise, it must be satisfied until the next operator is satisfied. 
-For example, in the minimal definition below: 
+It specifies that a predicate must hold true in every state between the one in which the previous operator is satisfied, and until one in which the next operator is satisfied.
+If a \dsl{hold} operator appears at the beginning or an end of a \dsl{then} sequence, it can be satisfied by a single state,
+Otherwise, it must be satisfied until the next operator is satisfied.
+For example, in the minimal definition below:
 \begin{lstlisting}
 (then
     (once (pred_a))
-    (hold (pred_b)) 
+    (hold (pred_b))
     (once (pred_c))
 )
 \end{lstlisting}
 To find a sequence of states $S_a, S_{a+1}, \cdots, S_b$ that satisfy this \dsl{then} operator, the following conditions must hold true: (1) pred_a is true at state $S_a$, (2) pred_b is true in all states $S_{a+1}, S_{a+2}, \cdots, S_{b-2}, S_{b-1}$, and (3) pred_c is true in state $S_b$.
-There is no minimal number of states that the hold predicate must hold for. 
+There is no minimal number of states that the hold predicate must hold for.
 
 The last operator is \dsl{hold-while}, which offers a variation of the \dsl{hold} operator.
-A \dsl{hold-while} receives at least two predicates. 
-The first acts the same as predicate in a \dsl{hold} operator. 
-The second (and third, and any subsequent ones), must hold true for at least state while the first predicate holds, and must occur in the order specified. 
-In the example above, if we substitute \lstinline{(hold (pred_b))} for \lstinline{(hold-while (pred_b) (pred_d) (pred_e))}, we now expect that in addition to ped_b being true in all states $S_{a+1}, S_{a+2}, \cdots, S_{b-2}, S_{b-1}$, that there is some state $S_d, d \in [a+1, b-1]$ where pred_d holds, and another state, $S_e, e \in [d+1, b-1]$ where pred_e holds. 
+A \dsl{hold-while} receives at least two predicates.
+The first acts the same as predicate in a \dsl{hold} operator.
+The second (and third, and any subsequent ones), must hold true for at least state while the first predicate holds, and must occur in the order specified.
+In the example above, if we substitute \lstinline{(hold (pred_b))} for \lstinline{(hold-while (pred_b) (pred_d) (pred_e))}, we now expect that in addition to ped_b being true in all states $S_{a+1}, S_{a+2}, \cdots, S_{b-2}, S_{b-1}$, that there is some state $S_d, d \in [a+1, b-1]$ where pred_d holds, and another state, $S_e, e \in [d+1, b-1]$ where pred_e holds.
         """,  # .format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR) # Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
         POST_NOTES_KEY: r"""For the full specification of the \dsl{super-predicate} element, see \fullref{sec:setup} above.
         """,
     },
     TERMINAL_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""Specifying explicit terminal conditions is optional, and while some of our participants chose to do so, many did not. 
+        PRE_NOTES_KEY: r"""Specifying explicit terminal conditions is optional, and while some of our participants chose to do so, many did not.
 Conditions explicitly specified in this section terminate the game.
-If none are specified, a game is assumed to terminate whenever the player chooses to end the game. 
+If none are specified, a game is assumed to terminate whenever the player chooses to end the game.
 
-The terminal conditions expand from the \dsl{terminal} element, which can expand to logical conditions on nested \dsl{terminal} elements, or to a terminal comparison. 
-The terminal comparison (\dsl{terminal-comp}) compares two scoring expressions (\dsl{scoring-expr}; see \fullref{sec:scoring}), where in most cases, the scoring expressions are either a preference counting operation or a number literal. 
+The terminal conditions expand from the \dsl{terminal} element, which can expand to logical conditions on nested \dsl{terminal} elements, or to a terminal comparison.
+The terminal comparison (\dsl{terminal-comp}) compares two scoring expressions (\dsl{scoring-expr}; see \fullref{sec:scoring}), where in most cases, the scoring expressions are either a preference counting operation or a number literal.
         """,
         POST_NOTES_KEY: r"""For the full specification of the \dsl{scoring-expr} element, see \fullref{sec:scoring} below.
         """,
@@ -268,7 +268,7 @@ class DSLTranslator:
     def output(self):
         section_notes = self.notes[self.section_key] if self.section_key in self.notes else {}
         return [
-            f'\\subsection{{{self.section_name}}} \\label{{sec:{self.section_key.lower().replace(" ", "-")}}}', 
+            f'\\subsection{{{self.section_name}}} \\label{{sec:{self.section_key.lower().replace(" ", "-")}}}',
             section_notes[PRE_NOTES_KEY] if PRE_NOTES_KEY in section_notes else '',
             f'\\begin{{{self.section_type}}}'
         ] + self.lines + [
@@ -304,7 +304,7 @@ class SectionTranslator(DSLTranslator):
         self.consider_described_rules = consider_described_rules
 
         self.lines = []
-        self.unused_rules = []     
+        self.unused_rules = []
 
     def process(self, section_data):
         keys = set(section_data.keys())
@@ -315,13 +315,13 @@ class SectionTranslator(DSLTranslator):
                 if isinstance(block_rules, str):
                     if block_rules not in keys and block_rules not in self.consider_used_rules:
                         self.unused_rules.append(block_rules)
-                        
+
                         if not is_core or self.omit_unused:
                             continue
 
                         if not self.external_mode:
                             block_text = f'{{ \\color{{{self.unused_rule_color}}} {block_text} }}'
-                        
+
                     elif block_rules in keys:
                         _, block_is_new = zip(*section_data[block_rules])
                         rule_is_new = all(block_is_new)
@@ -335,7 +335,7 @@ class SectionTranslator(DSLTranslator):
                 elif is_core or any([rule in keys for rule in block_rules]):
                     self.lines.extend(block_text.split('\n'))
                     for rule in block_rules:
-                        if isinstance(rule, re.Pattern): 
+                        if isinstance(rule, re.Pattern):
                             keys -= set([key for key in keys if rule.match(key)])
 
                         elif rule in keys:
@@ -353,16 +353,16 @@ class SectionTranslator(DSLTranslator):
                 if isinstance(rule, str):
                     if rule in keys:
                         keys.remove(rule)
-                
+
                 elif isinstance(rule, re.Pattern):
                     keys -= set([key for key in keys if rule.match(key)])
 
         return keys
 
-DEFAULT_RULE_SECTION_TYPE = 'lstlisting' 
+DEFAULT_RULE_SECTION_TYPE = 'lstlisting'
 
 class RuleTypeTranslator(DSLTranslator):
-    def __init__(self, section_key, rule_to_value_extractors, output_lines_func, section_type=DEFAULT_RULE_SECTION_TYPE, 
+    def __init__(self, section_key, rule_to_value_extractors, output_lines_func, section_type=DEFAULT_RULE_SECTION_TYPE,
         descriptions=None, section_name=None, external_mode=False, omit_unused=False):
 
         super().__init__(section_key, section_type, section_name, external_mode=external_mode, omit_unused=omit_unused)
@@ -444,7 +444,7 @@ def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, e
             lines.append(description)
 
         else:
-            if key in unused_keys: 
+            if key in unused_keys:
                 unused_keys.remove(key)
 
             count = count_data[key] if key in count_data else 0
@@ -488,12 +488,12 @@ PREDICATE = 'predicate'
 FUNCTION = 'function_eval'
 SHARED_BLOCKS = {
     FUNCTION_COMPARISON: (r"""<f-comp> ::= "#" A function comparison: either comparing two function evaluations, or checking that two ore more functions evaluate to the same result.
-    \alt (<comp-op> <function-eval-or-number> <function-eval-or-number>) 
+    \alt (<comp-op> <function-eval-or-number> <function-eval-or-number>)
     \alt (= <function-eval-or-number>$^+$)
-    
+
 <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle = "#" Any of the comparison operators.
 
-<function-eval-or-number> ::= <function-eval> | <number> 
+<function-eval-or-number> ::= <function-eval> | <number>
 
 <function-eval> ::= "#" See valid expansions in a separate section below
 """, ('function_comparison', 'multiple_args_equal_comparison', 'two_arg_comparison', 'comparison_arg', FUNCTION,  re.compile('function_[A-Za-z_]+'))),
@@ -519,46 +519,46 @@ SHARED_BLOCKS = {
 
 SETUP_BLOCKS = (
     (r"""<setup> ::= (and <setup> <setup>$^+$) "#" A setup can be expanded to a conjunction, a disjunction, a quantification, or a setup statement (see below).
-    \alt (or <setup> <setup>$^+$) 
+    \alt (or <setup> <setup>$^+$)
     \alt (not <setup>)
     \alt (exists (<typed list(variable)>) <setup>)
-    \alt (forall (<typed list(variable)>) <setup>) 
+    \alt (forall (<typed list(variable)>) <setup>)
     \alt <setup-statement>""", ('setup', 'setup_and', 'setup_or', 'setup_not', 'setup_exists', 'setup_forall', 'setup_statement')),
 
     (r"""<setup-statement> ::= "#" A setup statement specifies that a predicate is either optional during gameplay or must be preserved during gameplay.
-    \alt (game-conserved <super-predicate>) 
+    \alt (game-conserved <super-predicate>)
     \alt (game-optional <super-predicate>)""", ('setup_game_conserved', 'setup_game_optional',)),
 
     (r"""<super-predicate> ::= "#" A super-predicate is a conjunction, disjunction, negation, or quantification over another super-predicate. It can also be directly a function comparison or a predicate.
-    \alt (and <super-predicate>$^+$) 
-    \alt (or <super-predicate>$^+$) 
-    \alt (not <super-predicate> 
-    \alt (exists (<typed list(variable)>) <super-predicate>) 
-    \alt (forall (<typed list(variable)>) <super-predicate>) 
-    \alt <f-comp> 
+    \alt (and <super-predicate>$^+$)
+    \alt (or <super-predicate>$^+$)
+    \alt (not <super-predicate>
+    \alt (exists (<typed list(variable)>) <super-predicate>)
+    \alt (forall (<typed list(variable)>) <super-predicate>)
+    \alt <f-comp>
     \alt <predicate>""", ('super_predicate', 'super_predicate_and', 'super_predicate_or', 'super_predicate_not', 'super_predicate_forall', 'super_predicate_exists')),
 )
 
 
 PREFERENCES_BLOCKS = (
     (r"""<constraints> ::= <pref-def> | (and <pref-def>$^+$)  "#" One or more preferences.
-    
+
 <pref-def> ::= <pref-forall> | <preference> "#" A preference definitions expands to either a forall quantification (see below) or to a preference.
 
 <pref-forall> ::= (forall <variable-list> <preference>) "#" this syntax is used to specify variants of the same preference for different objects, which differ in their scoring. These are specified using the <pref-name-and-types> syntax element's optional types, see scoring below.
-    
+
 <preference> ::= (preference <name> <preference-quantifier>) "#" A preference is defined by a name and a quantifer that includes the preference body.
 
-<preference-quantifier> ::= "#" A preference can quantify exsistentially or universally over one or more variables, or none. 
-\alt (exists (<variable-list>) <preference-body> 
+<preference-quantifier> ::= "#" A preference can quantify exsistentially or universally over one or more variables, or none.
+\alt (exists (<variable-list>) <preference-body>
 \alt  (forall (<variable-list>) <preference-body>)
-\alt <preference-body>) 
+\alt <preference-body>)
 
 <preference-body> ::=  <then> | <at-end>""", ('preferences', 'preference', 'pref_forall', 'pref_def', 'pref_body', 'pref_body_exists', 'pref_forall_prefs')), # | <always>
 
-    (r'<at-end> ::= (at-end <super-predicate>) "#" Specifies a prediicate that should hold in the terminal state.', 'at_end'), 
+    (r'<at-end> ::= (at-end <super-predicate>) "#" Specifies a prediicate that should hold in the terminal state.', 'at_end'),
 
-    # (r'<always> ::= (always <super-predicate>)', 'always'), 
+    # (r'<always> ::= (always <super-predicate>)', 'always'),
 
     (r"""<then> ::= (then <seq-func> <seq-func>$^+$) "#" Specifies a series of conditions that should hold over a sequence of states -- see below for the specific operators (<seq-func>s), and Section 2 for translation of these definitions to linear temporal logicl (LTL).
 
@@ -593,7 +593,7 @@ TERMINAL_BLOCKS = (
     (r"""<terminal> ::= "#" The terminal condition is specified by a conjunction, disjunction, negation, or comparson (see below).
         \alt (and <terminal>$^+$)
         \alt (or <terminal>$+$)
-        \alt (not <terminal>) 
+        \alt (not <terminal>)
         \alt <terminal-comp>""", ('terminal_and', 'terminal_or', 'terminal_not')),
 
     (r"""<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) "#" A comparison operator is used to compare two scoring expressions (see next section).
@@ -606,38 +606,38 @@ SCORING_BLOCKS = (
     (r"""<scoring> ::= <scoring-expr> "#" The scoring conditions maximize a scoring expression. """, ('scoring_expr', )),
 
     (r"""<scoring-expr> ::= "#" A scoring expression can be an arithmetic operation over other scoring expressions, a reference to the total time or score, a comparison, or a preference scoring evaluation.
-        \alt <scoring-external-maximize> 
-        \alt <scoring-external-minimize> 
+        \alt <scoring-external-maximize>
+        \alt <scoring-external-minimize>
         \alt (<multi-op> <scoring-expr>$^+$) "#" Either addition or multiplication.
         \alt (<binary-op> <scoring-expr> <scoring-expr>) "#" Either division or subtraction.
         \alt (- <scoring-expr>)
-        \alt (total-time) 
-        \alt (total-score) 
+        \alt (total-time)
+        \alt (total-score)
         \alt <scoring-comp>
-        \alt <preference-eval> 
-        
+        \alt <preference-eval>
+
     """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr')),
 
     (r"""<scoring-external-maximize> ::= (external-forall-maximize <scoring-expr>) "#" For any preferences under this expression inside a (forall ...), score only for the single externally-quantified object that maximizes this scoring expression.
-    """, ('scoring_external_maximize',)), 
+    """, ('scoring_external_maximize',)),
 
     (r"""<scoring-external-minimize> ::= (external-forall-minimize <scoring-expr>) "#" For any preferences under this expression inside a (forall ...), score only for the single externally-quantified object that minimizes this scoring expression.
-    """, ('scoring_external_minimize',)), 
+    """, ('scoring_external_minimize',)),
 
     (r"""<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
-        \alt (<comp-op> <scoring-expr> <scoring-expr>) 
+        \alt (<comp-op> <scoring-expr> <scoring-expr>)
         \alt (= <scoring-expr>$^+$)
     """, 'scoring_comparison'),
 
-    (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types). 
+    (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types).
         \alt <count>
         \alt <count-overlapping>
-        \alt <count-once> 
-        \alt <count-once-per-objects> 
-        \alt <count-measure> 
-        \alt <count-unique-positions> 
-        \alt <count-same-positions> 
-        \alt <count-once-per-external-objects> 
+        \alt <count-once>
+        \alt <count-once-per-objects>
+        \alt <count-measure>
+        \alt <count-unique-positions>
+        \alt <count-same-positions>
+        \alt <count-once-per-external-objects>
 
     """, 'preference_eval'),
 
@@ -897,7 +897,7 @@ def extract_co_ocurring_types(ast, key):
     if 'type_names' in ast:
         if not isinstance(ast.type_names, str):
             types = list(ast.type_names)
-            if key in types: 
+            if key in types:
                 types.remove(key)
 
             return ('co_ocurring_types', types)
@@ -915,20 +915,20 @@ TYPE_RULES = {
 
 SCORING_CONSIDER_USED_RULES = (
     'scoring_maximize', 'scoring_minimize',
-    'preference-eval', # 'count_maximal_nonoverlapping', 
-    'count_once_per_external_objects', 'scoring_neg_expr', 'pref_object_type', 
+    'preference-eval', # 'count_maximal_nonoverlapping',
+    'count_once_per_external_objects', 'scoring_neg_expr', 'pref_object_type',
     'pref_name_and_types', 'count', 'count_once_per_objects',
-    'count_once', 
+    'count_once',
 )
 
 
 def main(args):
     grammar = open(args.grammar_file).read()
-    grammar_parser = tatsu.compile(grammar) 
+    grammar_parser = tatsu.compile(grammar)
 
     parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
-    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]), 
+    setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]),
         consider_used_rules=['setup_not', 'setup_statement'])
     pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, section_name='Gameplay Preferences',
         consider_described_rules=[re.compile('predicate_[A-Za-z_]+'), re.compile('function_[A-Za-z_]+')])  # additional_blocks=(SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE])
@@ -950,7 +950,7 @@ def main(args):
     parser.register_processor(function_translator)
     parser.register_processor(type_translator)
 
-    for test_file in args.test_files: 
+    for test_file in args.test_files:
         for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, False):
             parser(ast)
 
@@ -974,5 +974,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
-    
+
     main(args)

@@ -1,7 +1,7 @@
 (define (game 61541833a06877a656163b10-54) (:domain many-objects-room-v1)  ; 54
 
-(:constraints (and 
-    (forall (?b - building) 
+(:constraints (and
+    (forall (?b - building)
         (preference blockPlacedInBuilding (exists (?l - cube_block)
             (then
                 (once (agent_holds ?l))
@@ -11,8 +11,8 @@
             )
         ))
     )
-    (forall (?l - cube_block) 
-        (preference blockPickedUp 
+    (forall (?l - cube_block)
+        (preference blockPickedUp
             (then
                 (once (not (agent_holds ?l)))
                 (hold (agent_holds ?l))

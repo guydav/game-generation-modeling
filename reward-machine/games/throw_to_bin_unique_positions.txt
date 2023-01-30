@@ -4,7 +4,7 @@
     (preference throwBallToBin (exists (?b - dodgeball ?h - hexagonal_bin)
         (then
             (once (agent_holds ?b))
-            (hold (and (not (agent_holds ?b)) (in_motion ?b))) 
+            (hold (and (not (agent_holds ?b)) (in_motion ?b)))
             (once (and (not (in_motion ?b)) (in ?h ?b)))
         )
     ))

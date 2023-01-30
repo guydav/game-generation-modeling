@@ -15,7 +15,7 @@ class BuildingHandler:
     currently_held_object_id: str
     objects_to_buildings: typing.Dict[str, str]
     object_building_ratios: typing.List[float]
-    recently_moved_objects: typing.Set[str] 
+    recently_moved_objects: typing.Set[str]
     domain: str
     max_buildings: int
 
@@ -40,15 +40,15 @@ class BuildingHandler:
         return self.active_buildings
 
     def _add_object_to_building(self, obj: ObjectState, building_id: str) -> None:
-        typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id]).add_object(obj)  
+        typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id]).add_object(obj)
         self.active_buildings.add(building_id)
         self.objects_to_buildings[obj.object_id] = building_id
 
-    def _remove_object_from_building(self, obj: ObjectState, debug: bool = False) -> None: 
+    def _remove_object_from_building(self, obj: ObjectState, debug: bool = False) -> None:
         obj_id = obj.object_id
         if obj_id in self.objects_to_buildings:
             obj_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[self.objects_to_buildings[obj_id]])
-            obj_building.remove_object(obj)  
+            obj_building.remove_object(obj)
             self.objects_to_buildings.pop(obj_id)
             if len(obj_building.building_objects) == 0:
                 self.active_buildings.remove(obj_building.object_id)
@@ -60,7 +60,7 @@ class BuildingHandler:
         if debug: print(f'Merging buildings {touched_buildings} into {min_building_id}')
 
         for building_id in touched_buildings:
-            if building_id == min_building_id: 
+            if building_id == min_building_id:
                 continue
 
             other_building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id])
@@ -96,8 +96,8 @@ class BuildingHandler:
 
         for obj_id in current_object_ids_list:  # type: ignore
             obj = current_objects[obj_id]
-            
-            # if the object is in motion, do we mark it immediately as no longer in a building? 
+
+            # if the object is in motion, do we mark it immediately as no longer in a building?
             # or wait for it to settle? Let's try the former
             if current_objects_in_motion_or_held[obj_id]:
                 self.recently_moved_objects.add(obj_id)
@@ -112,25 +112,25 @@ class BuildingHandler:
                 # an object in a building until it stops moving
 
                 self.recently_moved_objects.remove(obj_id)
-                # We only care about touched objects that are both (a) valid for building, and 
+                # We only care about touched objects that are both (a) valid for building, and
                 # (b) not currently being updated, as if they're updated they're either in motion/held
                 # (and therefore not part of a building), or need to be updated at this step, in which
                 # case they'll be dealt with after this object
                 # touched_object_ids = list(filter(lambda o_id: o_id in self.building_valid_objects, obj['touchingObjects']))
                 # touched_object_ids = list(filter(
                 #     lambda o_id: o_id in self.building_valid_objects and (o_id not in current_object_ids
-                #     or (not current_objects_in_motion_or_held[o_id] and current_object_ids_list.index(o_id) < current_object_ids_list.index(obj_id))), 
+                #     or (not current_objects_in_motion_or_held[o_id] and current_object_ids_list.index(o_id) < current_object_ids_list.index(obj_id))),
                 #     obj['touchingObjects']))
 
-                # touched_buildings = set([self.objects_to_buildings[o_id] 
-                #         for o_id in touched_object_ids 
+                # touched_buildings = set([self.objects_to_buildings[o_id]
+                #         for o_id in touched_object_ids
                 #         if o_id in self.objects_to_buildings])
 
-                touched_buildings = set([self.objects_to_buildings[o_id] 
+                touched_buildings = set([self.objects_to_buildings[o_id]
                         for o_id in obj.touching_objects
                         if o_id in self.objects_to_buildings
                     ])
-                
+
                 # Doesn't touch any valid objects, create
                 #  a new building, or continue the previous one
                 if not touched_buildings:
@@ -179,15 +179,15 @@ class BuildingHandler:
                             self._remove_object_from_building(obj, debug=debug)
 
                     self._add_object_to_building(obj, min_building_id)
-                    if debug: 
+                    if debug:
                         print(f'Adding {obj_id} to existing building {min_building_id}')
-        
+
                     self._merge_buildings(touched_buildings, debug)
-                        
+
             else:
                 if obj_id in self.objects_to_buildings:
                     obj_building = self.objects_to_buildings[obj_id]
-                    touched_buildings = set([self.objects_to_buildings[o_id] 
+                    touched_buildings = set([self.objects_to_buildings[o_id]
                         for o_id in obj.touching_objects
                         if o_id in self.objects_to_buildings
                     ])
@@ -203,8 +203,3 @@ class BuildingHandler:
                 for building_id in self.active_buildings:
                     building = typing.cast(BuildingPseudoObject, UNITY_PSEUDO_OBJECTS[building_id])
                     print(f'Building {building_id} has {len(building.building_objects)} objects')
-
-
-
-
-

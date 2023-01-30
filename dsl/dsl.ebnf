@@ -44,9 +44,9 @@ function_distance_side_3 = '(distance_side' arg_1:predicate_or_function_term arg
 function_distance_side_4 = '(distance_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term arg_4:predicate_or_function_term ')';
 function_x_position = '(x_position' arg_1:predicate_or_function_term ')';
 
-# function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable); 
+# function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable);
 
-predicate = pred:(predicate_above | 
+predicate = pred:(predicate_above |
     predicate_adjacent |
     predicate_adjacent_side_3 |
     predicate_adjacent_side_4 |
@@ -72,7 +72,7 @@ predicate = pred:(predicate_above |
     predicate_same_type |
     predicate_toggled_on |
     predicate_touch
-    )   
+    )
     ;
 
 predicate_above = '(above' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
@@ -113,31 +113,31 @@ setup = setup:(setup_and |
     setup_exists |
     setup_forall |
     setup_statement
-    ) 
+    )
     ;
-    
+
 setup_and = '(and' {and_args:setup}+ ')';  # TODO: do we want to enforce more than one?
 setup_or = '(or' {or_args:setup}+ ')';  # TODO: do we want to enforce more than one?
 setup_not = '(not' not_args:setup ')';
 setup_exists = '(exists' exists_vars:variable_list exists_args:setup ')';
 setup_forall = '(forall' forall_vars:variable_list forall_args:setup ')';
-    
+
 setup_statement = statement:(setup_game_conserved | setup_game_optional);
-    
+
 setup_game_conserved = '(game-conserved' conserved_pred:super_predicate ')';
 setup_game_optional = '(game-optional' optional_pred:super_predicate ')';
 
 super_predicate = pred:(
     super_predicate_and |
     super_predicate_or |
-    super_predicate_not | 
+    super_predicate_not |
     super_predicate_exists |
     super_predicate_forall |
     function_comparison |
     predicate
     )
     ;
-    
+
 super_predicate_and = '(and' {and_args:super_predicate}+ ')'; # TODO: do we want to enforce more than one?
 super_predicate_or = '(or' {or_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
 super_predicate_not = '(not' not_args:super_predicate ')';
@@ -145,7 +145,7 @@ super_predicate_exists = '(exists' exists_vars:variable_list exists_args:super_p
 super_predicate_forall = '(forall' forall_vars:variable_list forall_args:super_predicate ')';
 
 # Constraints/Preferences
-preferences = 
+preferences =
     '(and' {preferences:pref_def}+ ')' | # TODO: do we want to enforce more than one?
     preferences:pref_def
     ;
@@ -161,7 +161,7 @@ pref_forall_prefs = '(and' {preferences:preference}+ ')' |  # to allow multiple 
 
 pref_body = body:(
     pref_body_exists |
-    # pref_body_forall | 
+    # pref_body_forall |
     then |
     at_end)
     ;
@@ -190,16 +190,16 @@ hold = '(hold' hold_pred:super_predicate ')';
 while_hold = '(hold-while' hold_pred:super_predicate {while_preds:super_predicate}+ ')';
 hold_for = '(hold-for' num_to_hold:number hold_pred:super_predicate ')';
 hold_to_end = '(hold-to-end' hold_pred:super_predicate ')';
-forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')'; 
+forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')';
 
-# super_predicate = 
+# super_predicate =
 #     super_predicate_and |
 #     super_predicate_or |
 #     super_predicate_not |
 #     super_predicate_exists |
 #     super_predicate_forall |
 #     predicate |
-#     function_comparison 
+#     function_comparison
 #     ;
 
 # super_predicate_and = '(and' {and_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
@@ -223,7 +223,7 @@ terminal_not = '(not' not_args:terminal ')';
 terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')';
 
 # alternatively, if we don't want scoring to be able to refer to '(total-score)''
-# we recreate the definition from above, and add '(total-score)' as a separate literal option 
+# we recreate the definition from above, and add '(total-score)' as a separate literal option
 terminal_expr = expr:scoring_expr;
 
 scoring_expr = expr:(
@@ -239,10 +239,10 @@ scoring_expr = expr:(
     total_score |
     number |
     preference_eval |
-    scoring_comparison 
+    scoring_comparison
     );
     # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
-    
+
 
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
@@ -283,7 +283,7 @@ preference_eval = count_method:(
     count_same_positions |
     # count_maximal_once |
     # count_maximal_once_per_objects |
-    # count_maximal_nonoverlapping | 
+    # count_maximal_nonoverlapping |
     # count_maximal_overlapping |
     count_once_per_external_objects |
     count_measure
@@ -312,6 +312,6 @@ pref_object_type = ':' type_name:type_name;
 
 # Scoring
 scoring = scoring_expr;
-    
+
 # scoring_maximize = 'maximize' expr:scoring_expr;
 # scoring_minimize = 'minimize' expr:scoring_expr;

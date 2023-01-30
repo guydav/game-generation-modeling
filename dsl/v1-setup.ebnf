@@ -6,7 +6,7 @@ setup = expr ("; ", expr)*;
 # Expression types
 expr = exists | forall | valid | logical_expr;
 boolean_expr = logical_expr | distance_expr;
-object_expr = nearest | farthest; 
+object_expr = nearest | farthest;
 valid = "VALID(", quantifier, ")";
 
 ## Do I actually need these? Or can I assume that exists = any and forall = all?
@@ -15,15 +15,15 @@ any = "ANY(", object_type, ")";
 all = "ALL(", object_type, ")";
 
 ## Do we have special object types for the room / floor / walls?
-## do we want to support object categories? such as balls, blocks, 
+## do we want to support object categories? such as balls, blocks,
 object_type = ...  # populated from all object types in the environment
 
 # Quantifiers
 object_expr = object_type | nearest | farthest | center | side;
-## Do I need any additional boolean functions? 
+## Do I need any additional boolean functions?
 ## Do I ever need these with more than two arguments?
-exists = "EXISTS(", object_expr, ", ", object_expr, ", ", boolean_expr, ")";  
-forall = "FORALL(", object_expr, ", ", object_expr, ", ", boolean_expr, ")";  
+exists = "EXISTS(", object_expr, ", ", object_expr, ", ", boolean_expr, ")";
+forall = "FORALL(", object_expr, ", ", object_expr, ", ", boolean_expr, ")";
 
 # object of the second type nearest an/the object of the first type
 neareast = "NEAREST(", object_or_identifier, ", ", object_type, ")";
@@ -48,7 +48,7 @@ distance_arg = center | side | object_or_identifier;
 relation = "<" | "=" | ">";  # I don't think we really need !=, <=, or > =
 positive_literal = integer, [".", integer]
 integer = [0-9]+  # assuming this specifies the same as regexp does
-## Does it make more sense to think of adjacency in terms of the existence of two sides 
+## Does it make more sense to think of adjacency in terms of the existence of two sides
 ## of the objects such that the sides are adjacent?
 ## But I cannot specify functions with arguments with EBNF
 ## So what do I do if we want to specify a particular side?

@@ -38,7 +38,7 @@ def load_and_validate_game_schema(game_file_path, schema_path):
                 meta = game['metadata']
                 print(f'In game {meta["prolific_id"]} ({meta["id"]}): {err.message}')
                 all_valid = False
-        
+
         if all_valid:
             return games
 
@@ -50,5 +50,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
-    
+
     main(args)

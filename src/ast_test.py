@@ -23,4 +23,3 @@ for test_file in DEFAULT_TEST_FILES:
 
 # def get_ast(i):
 #     return grammar.parse(test_cases[i])
-

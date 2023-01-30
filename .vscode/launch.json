@@ -19,10 +19,10 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "-g", "./dsl/dsl.ebnf", 
+                "-g", "./dsl/dsl.ebnf",
                 "-t", "./dsl/interactive-beta-with-comments.pddl",
-                // "./dsl/interactive-beta.pddl",  
-                "-p", 
+                // "./dsl/interactive-beta.pddl",
+                "-p",
                 "-v",
             //    "-c",
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
@@ -45,14 +45,14 @@
             "request": "launch",
             "program": "/Users/guydavidson/projects/game-generation-modeling/src/ast_to_latex_doc.py",
             "args": [
-                "--compile-pdf", 
-                "--grammar-file", "./dsl/dsl.ebnf", 
-                "--test-files", "./dsl/interactive-beta.pddl", 
-                "--output-file", "./latex/updated_dsl_doc.tex", 
+                "--compile-pdf",
+                "--grammar-file", "./dsl/dsl.ebnf",
+                "--test-files", "./dsl/interactive-beta.pddl",
+                "--output-file", "./latex/updated_dsl_doc.tex",
                 "--external"
             ],
             "console": "integratedTerminal",
-            // "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+            // "notes": "\"-n\", \"61541833a06877a656163b10\"",
         },
         {
             "name": "Python: room object types",
@@ -63,7 +63,7 @@
                 "-b", "-m", "colors",
             ],
             "console": "integratedTerminal",
-            // "notes": "\"-n\", \"61541833a06877a656163b10\"", 
+            // "notes": "\"-n\", \"61541833a06877a656163b10\"",
         },
         {
             "name": "Python: ast sampling",
@@ -72,8 +72,8 @@
             "program": "${file}",
             "args": [
                 // "--print-samples",
-                // "--validate-samples", 
-                // "--parse-counter", 
+                // "--validate-samples",
+                // "--parse-counter",
                 "--save-samples",
                 "--num-samples", "128", // "4096",
                 "--sampling-method", "regrowth",
@@ -96,10 +96,10 @@
             "program": "${file}",
             "args": [
                 // "--print-samples",
-                // "--validate-samples", 
-                // "--parse-counter", 
+                // "--validate-samples",
+                // "--parse-counter",
                 "--save-samples",
-                "--num-samples", "100", 
+                "--num-samples", "100",
                 "--sampling-method", "mcmc-regrowth",
                 "--sample-tqdm",
                 "--samples-output-path", "./dsl/ast-mcmc-regrowth-samples.pddl",

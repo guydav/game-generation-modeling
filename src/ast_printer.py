@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy.core.fromnumeric import var
 import tatsu
 import tatsu.ast
-import typing 
+import typing
 
 import ast_parser
 
@@ -39,7 +39,7 @@ class ASTPrinter(ast_parser.ASTParser):
         if len(ast) > 2:
             if len(ast) > 3:
                 raise ValueError(f'Unexpectedly long tuple: {ast}')
-            
+
             _indent_print(ast[2], kwargs['depth'], kwargs['increment'], kwargs['context'])
 
     def _handle_str(self, ast, **kwargs):
@@ -132,7 +132,7 @@ def preprocess_context(context):
             context['html_style'].update(MUTATION_STYLES[str(mutation)])
 
     return context
-            
+
 
 def _indent_print(out, depth, increment, context=None):
     global BUFFER, LINE_BUFFER
@@ -155,12 +155,12 @@ def _indent_print(out, depth, increment, context=None):
             LINE_BUFFER = [f'<div style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items()})}">{out}']
         else:
             LINE_BUFFER = [f'{increment * depth}{out}']
-        
+
 
 def _out_str_to_span(out_str, context):
     if 'html' in context and context['html']:
         return f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">{out_str}</span>'
-    
+
     return out_str
 
 
@@ -171,21 +171,21 @@ def mutation_context(func):
             context = {}
 
         prev_mutation = None
-        if 'mutation' in ast:  
+        if 'mutation' in ast:
             if 'mutation' in context:
                 prev_mutation = context['mutation']
-        
+
             context['mutation'] = ast['mutation']
 
         context = preprocess_context(context)
 
         ret_val = func(caller, rule, ast, depth, increment, context, *args, **kwargs)
 
-        if 'mutation' in ast:  
+        if 'mutation' in ast:
             if prev_mutation is not None:
                 context['mutation'] = prev_mutation
             else:
-                del context['mutation'] 
+                del context['mutation']
 
         return ret_val
 
@@ -195,7 +195,7 @@ def mutation_context(func):
 @mutation_context
 def _parse_variable_list(caller, rule, var_list, depth, increment, context=None):
     formatted_vars = []
-    context = typing.cast(dict, context)  
+    context = typing.cast(dict, context)
 
     if not isinstance(var_list, list):
         var_list = [var_list]
@@ -216,7 +216,7 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
 
         if isinstance(var_type, str):
             var_str = f'{var_names} - {var_type}'
-        
+
         elif var_type.parseinfo.rule == 'either_types':
             type_names = var_type.type_names
             if isinstance(type_names, list):
@@ -236,7 +236,7 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
                 if inner_prev_mutation is not None:
                     context['mutation'] = inner_prev_mutation
                 else:
-                    del context['mutation']                 
+                    del context['mutation']
                 context = preprocess_context(context)
 
             var_str = f'{var_names} - {var_type_str}'
@@ -246,11 +246,11 @@ def _parse_variable_list(caller, rule, var_list, depth, increment, context=None)
 
         formatted_vars.append(_out_str_to_span(var_str, context))
 
-        if 'mutation' in var_def:  
+        if 'mutation' in var_def:
             if prev_mutation is not None:
                 context['mutation'] = prev_mutation
             else:
-                del context['mutation'] 
+                del context['mutation']
 
     return formatted_vars
 
@@ -260,7 +260,7 @@ QUANTIFIER_KEYS = ('args', 'pred', 'then', 'pref')
 
 @mutation_context
 def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
 
     prev_continue_line = context['continue_line'] if 'continue_line' in context else False
 
@@ -281,7 +281,7 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
         vars_node = ast[vars_key]
         formatted_vars = _parse_variable_list(caller, rule, vars_node.variables, depth, increment, context)
         var_str = f'({" ".join(formatted_vars)})'
-    
+
     if vars_node is not None and 'mutation' in vars_node:
         prev_mutation = None
         if 'mutation' in context:
@@ -294,7 +294,7 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
         if prev_mutation is not None:
             context['mutation'] = prev_mutation
         else:
-            del context['mutation'] 
+            del context['mutation']
 
         context = preprocess_context(context)
 
@@ -315,7 +315,7 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
             if key_str in ast:
                 found_args = True
                 caller(ast[key_str], depth + 1, increment, context)
-    
+
     if not found_args:
         print(ast.keys())
         print(rule)
@@ -327,11 +327,11 @@ def _handle_quantifier(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_logical(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
 
     if 'continue_line' in context and context['continue_line'] and 'html' in context and context['html']:
         _indent_print(f'<span style="{"; ".join({f"{k}: {v}" for k, v in context["html_style"].items() if k != "margin-left"})}">', depth, increment, context)
-        
+
     if f'{rule}_args' in ast:
         _indent_print(f'({rule}', depth, increment, context)
         caller(ast[f'{rule}_args'], depth + 1, increment, context)
@@ -378,10 +378,10 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None, ret
 #             func_args = [func_args]
 
 #         formatted_args = [
-#             arg if isinstance(arg, str) 
-#             else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context)) 
+#             arg if isinstance(arg, str)
+#             else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context))
 #             for arg in func_args]
-            
+
 #     return formatted_args
 
 
@@ -389,7 +389,7 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None, ret
 def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None) -> str:
     arg = ast.arg
 
-    if isinstance(arg, tatsu.ast.AST): 
+    if isinstance(arg, tatsu.ast.AST):
         if arg.parseinfo.rule == 'function_eval':  # type: ignore
             # return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
             return _handle_function_eval(caller, arg.rule, arg, depth, increment, context, return_str=True)  # type: ignore
@@ -407,20 +407,20 @@ def _handle_function_comparison(caller, rule, ast, depth, increment, context=Non
         comp_op = ast.comp_op
 
     if 'arg_1' in ast:
-        args = [_inline_format_comparison_arg(caller, ast.arg_1.rule, ast.arg_1, depth, increment, context), 
-            _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]    
+        args = [_inline_format_comparison_arg(caller, ast.arg_1.rule, ast.arg_1, depth, increment, context),
+            _inline_format_comparison_arg(caller, ast.arg_2.rule, ast.arg_2, depth, increment, context)]
 
     else:
         comp_args = ast.equal_comp_args
         if isinstance(comp_args, tatsu.ast.AST):
             comp_args = [comp_args]
-         
+
         args = [_inline_format_comparison_arg(caller, arg.rule, arg, depth, increment, context) if isinstance(arg, tatsu.ast.AST) else str(arg)
             for arg in comp_args
         ]
 
     _indent_print(f'({comp_op} {" ".join(args)})', depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False,
@@ -478,14 +478,14 @@ def _handle_preference(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'(preference {ast.pref_name}', depth, increment, context)
     caller(ast.pref_body, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_then(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'(then', depth, increment, context)
     caller(ast.then_funcs, depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_at_end(caller, rule, ast, depth, increment, context=None):
@@ -499,16 +499,16 @@ def _handle_always(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'(always', depth, increment, context)
     caller(ast.always_pred, depth + 1, increment, context)
     _indent_print(f')', depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_any(caller, rule, ast, depth, increment, context=None):
     _indent_print('(any)', depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_once(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print('(once', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_pred, depth + 1, increment, context)
@@ -518,7 +518,7 @@ def _handle_once(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print('(once-measure', depth, increment, context)
     context['continue_line'] = True
     caller(ast.once_measure_pred, depth + 1, increment, context)
@@ -526,51 +526,51 @@ def _handle_once_measure(caller, rule, ast, depth, increment, context=None):
     _indent_print(_handle_function_eval(caller, ast.measurement.rule, ast.measurement, depth, increment, context, return_str=True), depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    
+
 
 @mutation_context
 def _handle_hold(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print('(hold', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    
+
 
 @mutation_context
 def _handle_while_hold(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print('(hold-while', depth, increment, context)
     context['continue_line'] = True
     caller([ast.hold_pred, ast.while_preds], depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    
+
 
 @mutation_context
 def _handle_hold_for(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print(f'(hold-for {ast.num_to_hold}', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    
+
 
 @mutation_context
 def _handle_hold_to_end(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print('(hold-to-end', depth, increment, context)
     context['continue_line'] = True
     caller(ast.hold_pred, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
     context['continue_line'] = False
-    
+
 
 @mutation_context
 def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     variables = ast.forall_seq_vars.variables
     formatted_vars = _parse_variable_list(caller, rule, variables, depth, increment, context)
     var_str = " ".join(formatted_vars)
@@ -585,11 +585,11 @@ def _handle_forall_seq(caller, rule, ast, depth, increment, context=None):
         if prev_mutation is not None:
             context['mutation'] = prev_mutation
         else:
-            del context['mutation'] 
+            del context['mutation']
 
     else:
         _indent_print(f'(forall-sequence ({" ".join(formatted_vars)})', depth, increment, context)
-    
+
     caller(ast.forall_seq_then, depth + 1, increment, context)
     _indent_print(')', depth, increment, context)
 
@@ -604,7 +604,7 @@ def _handle_preferences(caller, rule, ast, depth, increment, context=None):
 @mutation_context
 def _handle_pref_def(caller, rule, ast, depth, increment, context=None):
     caller(ast.definition, depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_pref_body(caller, rule, ast, depth, increment, context=None):
@@ -622,9 +622,9 @@ def build_constraints_printer():
         _handle_preferences, _handle_pref_def, _handle_pref_body, _handle_seq_func,
         _handle_preference, _handle_super_predicate,
         _handle_function_comparison, _handle_predicate,
-        _handle_at_end, _handle_always, _handle_then, 
+        _handle_at_end, _handle_always, _handle_then,
         _handle_any, _handle_once, _handle_once_measure,
-        _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end, 
+        _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end,
         _handle_forall_seq, _handle_function_eval
     )
     printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
@@ -635,7 +635,7 @@ def build_constraints_printer():
 
 @mutation_context
 def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
     caller([ast.expr_1, ast.expr_2], depth + 1, increment, context)
@@ -645,7 +645,7 @@ def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
 
 @mutation_context
 def _handle_multi_expr(caller, rule, ast, depth, increment, context=None):
-    context = typing.cast(dict, context) 
+    context = typing.cast(dict, context)
     _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
     caller(ast.expr, depth + 1, increment, context)
@@ -704,7 +704,7 @@ def _handle_with(caller, rule, ast, depth, increment, context=None):
         if prev_mutation is not None:
             context['mutation'] = prev_mutation
         else:
-            del context['mutation'] 
+            del context['mutation']
 
         context = preprocess_context(context)
 
@@ -725,7 +725,7 @@ def _handle_count_method(caller, rule, ast, depth, increment, context=None):
         else:
             type_str = ":" + ":".join([t.type_name for t in ast.name_and_types.object_types])
     _indent_print(_out_str_to_span(f'({ast.parseinfo.rule.replace("_", "-")} {ast.name_and_types.pref_name}{type_str})', context), depth, increment, context)
-    
+
 
 @mutation_context
 def _handle_terminal(caller, rule, ast, depth, increment, context=None):
@@ -766,8 +766,8 @@ def build_terminal_printer():
         _handle_terminal, _handle_terminal_expr,
         _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
-        _handle_multi_expr, _handle_binary_expr, 
-        _handle_neg_expr, _handle_equals_comp, 
+        _handle_multi_expr, _handle_binary_expr,
+        _handle_neg_expr, _handle_equals_comp,
         _handle_function_eval, _handle_with
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
@@ -801,10 +801,10 @@ def _handle_scoring_comparison(caller, rule, ast, depth, increment, context=None
 def build_scoring_printer():
     printer = ASTPrinter('(:scoring', ('scoring_',))
     printer.register_exact_matches(
-        _handle_scoring, _handle_maximize, _handle_minimize, 
+        _handle_scoring, _handle_maximize, _handle_minimize,
         _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
-        _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, 
+        _handle_multi_expr, _handle_binary_expr, _handle_neg_expr,
         _handle_equals_comp, _handle_function_eval, _handle_with,
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
@@ -855,4 +855,3 @@ def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: 
     PARSE_DICT[section_key](ast)
     _flush_line_buffer()
     return line_delimiter.join(BUFFER).strip()  # type: ignore
-

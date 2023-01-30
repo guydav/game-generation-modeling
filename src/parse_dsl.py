@@ -19,7 +19,7 @@ parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
-    
+
 def main(args):
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)
@@ -67,8 +67,3 @@ def main(args):
 if __name__ == '__main__':
     args = parser.parse_args()
     main(args)
-
-
-
-
-

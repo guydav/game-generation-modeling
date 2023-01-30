@@ -67,7 +67,7 @@ for col in stats.columns:
 print("\n\nJSON Keys:")
 for key in playtrace[0].keys():
     print(key)
-    
+
 
 programs = load_games_from_file("../dsl/interactive-beta.pddl")
 print("\nNumber of programs: ", len(programs))
@@ -84,7 +84,7 @@ print("\nNumber that contain '(then':", sum(["(then" in program for program in p
 
 """
 (define (game 5f9aba6600cdf11f1c9b915c-109) (:domain many-objects-room-v1)  ; 109
-(:constraints (and 
+(:constraints (and
     (preference ballThrownToBin (exists (?b - ball ?h - hexagonal_bin)
         (then
             (once (agent_holds ?b))
@@ -107,7 +107,7 @@ print("\nNumber that contain '(then':", sum(["(then" in program for program in p
         )
     ))
 ))
-(:scoring maximize (+ 
+(:scoring maximize (+
     (count-once-per-objects ballThrownToBin)
     (count-once-per-objects cubeBlockThrownToTopShelf)
     (count-once-per-objects pillowThrownToDoggieBed)

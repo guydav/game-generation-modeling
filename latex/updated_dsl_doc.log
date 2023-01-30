@@ -413,7 +413,7 @@ Package: catchfile 2019/12/09 v1.8 Catch the contents of a file (HO)
 Package: ifluatex 2019/10/25 v1.5 ifluatex legacy package. Use iftex instead.
 )
 
-Package ifplatform Warning: 
+Package ifplatform Warning:
     shell escape is disabled, so I can only detect \ifwindows.
 
 ) (/usr/local/texlive/2021/texmf-dist/tex/generic/xstring/xstring.sty (/usr/local/texlive/2021/texmf-dist/tex/generic/xstring/xstring.tex
@@ -445,8 +445,8 @@ runsystem(mkdir -p _minted-updated_dsl_doc)...disabled (restricted).
 
 See the minted package documentation for explanation.
 Type  H <return>  for immediate help.
- ...                                              
-                                                  
+ ...
+
 l.15 \usepackage
                 [style=iso]{datetime2}
 Pass the -shell-escape flag to LaTeX. Refer to the minted.sty documentation for more information.
@@ -822,7 +822,7 @@ File: csquotes.def 2021-02-22 v5.2l csquotes generic definitions (JAW)
 Package csquotes Info: Trying to load configuration file 'csquotes.cfg'...
 Package csquotes Info: ... configuration file loaded successfully.
  (/usr/local/texlive/2021/texmf-dist/tex/latex/csquotes/csquotes.cfg
-File: csquotes.cfg 
+File: csquotes.cfg
 ))
 runsystem(which pygmentize && touch updated_dsl_doc.aex)...disabled (restricted).
 
@@ -832,10 +832,10 @@ runsystem(which pygmentize && touch updated_dsl_doc.aex)...disabled (restricted)
 
 See the minted package documentation for explanation.
 Type  H <return>  for immediate help.
- ...                                              
-                                                  
+ ...
+
 l.124 \begin{document}
-                      
+
 Refer to the installation instructions in the minted documentation for more information.
 
 Package csquotes Info: Checking for multilingual support...
@@ -909,7 +909,7 @@ File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Live
 * paper: <default>
 * layout: <same size as paper>
 * layoutoffset:(h,v)=(0.0pt,0.0pt)
-* modes: 
+* modes:
 * h-part:(L,W,R)=(72.26999pt, 469.75502pt, 72.26999pt)
 * v-part:(T,H,B)=(72.26999pt, 650.43001pt, 72.26999pt)
 * \paperwidth=614.295pt
@@ -1086,7 +1086,7 @@ Package rerunfilecheck Warning: File `updated_dsl_doc.out' has changed.
 Package rerunfilecheck Info: Checksums for `updated_dsl_doc.out':
 (rerunfilecheck)             Before: <no file>
 (rerunfilecheck)             After:  95DCC31AD3EEB7FD42F066D32D5DA44F;1803.
- ) 
+ )
 Here is how much of TeX's memory you used:
  34988 strings out of 478994
  665841 string characters out of 5858184
@@ -1102,4 +1102,3 @@ PDF statistics:
  292 compressed objects within 3 object streams
  170 named destinations out of 1000 (max. 500000)
  13 words of extra memory for PDF output out of 10000 (max. 10000000)
-

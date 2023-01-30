@@ -3,6 +3,7 @@ import argparse
 from collections import namedtuple, defaultdict
 import itertools
 import os
+import pickle
 import re
 import sys
 import typing
@@ -20,6 +21,7 @@ from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition,
 import ast_parser 
 import ast_printer
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
+from fitness_ngram_models import TextNGramModel
 import room_and_object_types 
 
 
@@ -72,6 +74,9 @@ class FitnessTerm(ABC):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict) -> None:
         pass
 
+    def parse_full_text(self, full_text: str) -> None:
+        pass
+
     @abstractmethod
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         pass
@@ -88,6 +93,7 @@ COUNT_RULE_PATTERN = re.compile('count.*')
 
 
 class ASTFitnessFeaturizer:
+    full_text_registry: typing.List[FitnessTerm]
     headers: typing.List[str]
     header_registry: typing.Dict[str, FitnessTerm]
     list_reduce: typing.Callable[[typing.Sequence[Number]], Number]
@@ -107,7 +113,8 @@ class ASTFitnessFeaturizer:
 
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
-        self.section_registry = defaultdict(list)    
+        self.section_registry = defaultdict(list)
+        self.full_text_registry = []    
         self.regex_rules = []
         self.header_registry = dict()
 
@@ -119,19 +126,23 @@ class ASTFitnessFeaturizer:
         else:
             self.rule_registry[rule].append(term)
 
-    def register(self, term: FitnessTerm, tuple_rule: bool = False, section_rule: bool = False) -> None:
-        if section_rule:
-            section = typing.cast(str, term.rules[0])
-            if section not in self.section_keys:
-                raise ValueError(f'Invalid section key: {section}')
+    def register(self, term: FitnessTerm, tuple_rule: bool = False, section_rule: bool = False, full_text_rule: bool = False) -> None:
+        if full_text_rule:
+            self.full_text_registry.append(term)
+        
+        else:
+            if section_rule:
+                section = typing.cast(str, term.rules[0])
+                if section not in self.section_keys:
+                    raise ValueError(f'Invalid section key: {section}')
 
-            self.section_registry[section].append(term)  
+                self.section_registry[section].append(term)  
 
-        for rule in term.rules:
-            if isinstance(rule, re.Pattern):
-                self.regex_rules.append((rule, term))
-            else:
-                self._register(term, rule, tuple_rule)
+            for rule in term.rules:
+                if isinstance(rule, re.Pattern):
+                    self.regex_rules.append((rule, term))
+                else:
+                    self._register(term, rule, tuple_rule)
 
         self.header_registry[term.header] = term
         self.headers.append(term.header)
@@ -143,17 +154,20 @@ class ASTFitnessFeaturizer:
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
 
-    def parse(self, ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
+    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
         row = {}
         row['src_file'] = os.path.basename(src_file)
-        row['game_name'] = ast[1]["game_name"]  # type: ignore
-        row['domain_name'] = ast[2]["domain_name"]  # type: ignore
-        ast = ast[3:]  # type: ignore
+        row['game_name'] = full_ast[1]["game_name"]  # type: ignore
+        row['domain_name'] = full_ast[2]["domain_name"]  # type: ignore
+        ast = full_ast[3:]  # type: ignore
 
         for term in self.header_registry.values():
             term.game_start()
 
         self._parse(ast)
+        ast_full_text = ast_printer.ast_to_string(full_ast, ' ')  # type: ignore
+        for term in self.full_text_registry:
+            term.parse_full_text(ast_full_text)
 
         for header, term in self.header_registry.items():
             term_result = term.game_end()
@@ -1263,6 +1277,37 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
         return [term_class(section) for term_class in term_classes for section in sections]
 
 
+DEFAULT_TOP_K_NGRAMS = 10
+N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_5_ngram_model_2023_01_29.pkl')
+
+
+class TextNGramTerm(FitnessTerm):
+    game_output: typing.Optional[dict] = None
+    n_gram_model: TextNGramModel
+    n_gram_model_path: str
+    top_k_ngrams: int
+    
+
+    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = N_GRAM_MODEL_PATH):
+        super().__init__('', 'text_ngram')
+        self.top_k_ngrams = top_k_ngrams
+        self.n_gram_model_path = n_gram_model_path
+        with open(self.n_gram_model_path, 'rb') as f:
+            self.n_gram_model = pickle.load(f)
+
+    def game_start(self) -> None:
+        self.game_output = None
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        pass
+
+    def parse_full_text(self, full_text: str) -> None:
+        self.game_output = self.n_gram_model.score(full_text, self.top_k_ngrams)
+    
+    def game_end(self):
+        return self.game_output
+
+
 def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     fitness = ASTFitnessFeaturizer()
 
@@ -1335,6 +1380,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
+
+    text_ngram_term = TextNGramTerm()
+    fitness.register(text_ngram_term, full_text_rule=True)
 
     return fitness
             

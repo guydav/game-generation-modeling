@@ -22,7 +22,7 @@ from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition,
 import ast_parser
 import ast_printer
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
-from fitness_ngram_models import TextNGramModel
+from fitness_ngram_models import TextNGramModel, TextMultiNGramModel
 import room_and_object_types
 
 
@@ -1279,12 +1279,12 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 
 
 DEFAULT_TOP_K_NGRAMS = 10
-N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_5_ngram_model_2023_01_29.pkl')
+N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_01_30.pkl')
 
 
 class TextNGramTerm(FitnessTerm):
     game_output: typing.Optional[dict] = None
-    n_gram_model: TextNGramModel
+    n_gram_model: typing.Union[TextNGramModel, TextMultiNGramModel]
     n_gram_model_path: str
     top_k_ngrams: int
 

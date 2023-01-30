@@ -27,7 +27,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 DEFAULT_N = 5
-parser.add_argument('-n', '--n', type=int, default=DEFAULT_N)
+parser.add_argument('-n', '--n', type=int, action='append', default=[])
 DEFAULT_OUTPUT_PATH_PATTERN = './models/text_{n}_ngram_model_{today}.pkl'
 parser.add_argument('-o', '--output-path', default=None)
 DEFAULT_LOGPROB = 1e-5
@@ -87,11 +87,14 @@ class TextNGramModel:
     def _text_to_ngrams(self, text: str) -> typing.Iterable[typing.Tuple[str, ...]]:
         return nltk_ngrams(ngram_preprocess(text).split(), self.n)
 
-    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Tuple[str, ...]]):
-        return np.exp(np.mean([self.ngram_logprobs[ngram] for ngram in ngrams]))
+    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Tuple[str, ...]], exp: bool = False):
+        mean_logprob = np.mean([self.ngram_logprobs[ngram] for ngram in ngrams])
+        if exp:
+           return np.exp(mean_logprob)
+        return mean_logprob
 
-    def transform(self, game_texts: typing.Sequence[str]):
-        return np.array([self._transform_ngrams(self._text_to_ngrams(text)) for text in game_texts])
+    def transform(self, game_texts: typing.Sequence[str], exp: bool = False):
+        return np.array([self._transform_ngrams(self._text_to_ngrams(text), exp) for text in game_texts])
 
     def fit_transform(self, game_texts: typing.Sequence[str]):
         self.fit(game_texts)
@@ -115,8 +118,43 @@ class TextNGramModel:
         return output
 
 
+class TextMultiNGramModel:
+    def __init__(self, n_values: typing.Sequence[int], default_logprob: typing.Union[float, typing.Sequence[float]] = DEFAULT_LOGPROB):
+        self.n_values = n_values
+        self.default_logprob = default_logprob
+
+        if isinstance(default_logprob, float):
+            default_logprob = [default_logprob] * len(n_values)
+        else:
+            assert len(default_logprob) == len(n_values)
+
+        self.models = [TextNGramModel(n, dlp) for n, dlp in zip(n_values, default_logprob)]
+
+    def fit(self, game_texts: typing.Sequence[str]):
+        for model in self.models:
+            model.fit(game_texts)
+
+    def transform(self, game_texts: typing.Sequence[str]):
+        return np.array([model.transform(game_texts) for model in self.models])
+
+    def fit_transform(self, game_texts: typing.Sequence[str]):
+        self.fit(game_texts)
+        return self.transform(game_texts)
+
+    def score(self, text: str, k: typing.Optional[int] = None):
+        output_dict = {}
+        for model in self.models:
+            model_output = model.score(text, k)
+            output_dict.update({f'n_{model.n}_{key}': value for key, value in model_output.items()})
+
+        return output_dict
+
+
 def main(args: argparse.Namespace):
-    model = TextNGramModel(n=args.n, default_logprob=args.default_logprob)
+    if len(args.n) == 1:
+        model = TextNGramModel(n=args.n, default_logprob=args.default_logprob)
+    else:
+        model = TextMultiNGramModel(n_values=args.n, default_logprob=args.default_logprob)
 
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
@@ -132,10 +170,14 @@ def main(args: argparse.Namespace):
 
 if __name__ == '__main__':
     args = parser.parse_args()
+
+    if not args.n:
+        args.n = [DEFAULT_N]
+
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
 
     if args.output_path is None:
-        args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
+        args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(n="_".join([str(n) for n in args.n]), today=datetime.now().strftime('%Y_%m_%d'))
 
     main(args)

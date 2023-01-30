@@ -325,19 +325,22 @@ ModelClasses = typing.Union[nn.Module, SklearnFitnessWrapper, Pipeline]
 
 
 
-def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor],
+def _score_samples(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor],
     device: str = 'cpu') -> typing.Tuple[torch.Tensor, torch.Tensor]:
 
     with torch.no_grad():
         if isinstance(model, Pipeline):
+            model.named_steps['fitness'].model.to(device)
             model.named_steps['fitness'].model.eval()
             scores = model.transform(X.to(device))
 
         elif isinstance(model, SklearnFitnessWrapper):
+            model.model.to(device)
             model.model.eval()
             scores = model.transform(X.to(device))
 
         else:
+            model.to(device)
             model.eval()
             scores = model(X.to(device), activate=False)
 
@@ -350,7 +353,7 @@ def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[t
 
 # def evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor] = None,
 #     score_sign: int = 1):
-#     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+#     positive_scores, negative_scores = _score_samples(model, X, y)
 
 #     game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
 #     return game_average_scores.mean().item()
@@ -358,12 +361,12 @@ def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[t
 
 # def evaluate_fitness_flipped_sign(model: ModelClasses,
 #     X: torch.Tensor, y=None):
-#     return evaluate_fitness(model, X, y, score_sign=-1)
+#     return _score_samples(model, X, y, score_sign=-1)
 
 
 def evaluate_fitness_overall_ecdf(model: ModelClasses,
     X: torch.Tensor, y=None) -> float:
-    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+    positive_scores, negative_scores = _score_samples(model, X, y)
     positive_scores = positive_scores.squeeze().cpu().numpy()
     negative_scores = negative_scores.squeeze().cpu().numpy()
     ecdf = ECDF(np.concatenate([positive_scores, negative_scores.reshape(-1)]))
@@ -373,7 +376,7 @@ def evaluate_fitness_overall_ecdf(model: ModelClasses,
 
 
 def evaluate_fitness_single_game_rank(model: ModelClasses, X: torch.Tensor, y=None) -> float:
-    positive_scores, negative_scores = _evaluate_fitness(model, X, y)
+    positive_scores, negative_scores = _score_samples(model, X, y)
     single_game_rank = (positive_scores[:, None] < negative_scores).float().mean(axis=1)  # type: ignore
     return single_game_rank.mean().item()
 
@@ -404,12 +407,13 @@ def train_and_validate_model(model: nn.Module,
 
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    train_dataset = TensorDataset(train_data)
+    model.to(device)
+    train_dataset = TensorDataset(train_data.to(device))
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     validate = val_data is not None
     if validate:
-        val_dataset = TensorDataset(val_data)
+        val_dataset = TensorDataset(val_data.to(device))
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     torch.manual_seed(random_seed)

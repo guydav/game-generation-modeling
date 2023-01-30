@@ -1286,7 +1286,6 @@ class TextNGramTerm(FitnessTerm):
     n_gram_model: TextNGramModel
     n_gram_model_path: str
     top_k_ngrams: int
-    
 
     def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = N_GRAM_MODEL_PATH):
         super().__init__('', 'text_ngram')

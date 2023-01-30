@@ -23,7 +23,7 @@ def get_project_dir(project_name: str = PROJECT_NAME):
 def _vec_dict_to_array(vec: typing.Dict[str, float]):
     if 'x' not in vec or 'y' not in vec:
         raise ValueError(f'x and y must be in vec dict; received {vec}')
-    
+
     if 'z' in vec:
         if 'w' in vec:
             # TODO (GD 2022-10-16): decide if this should be wxyz or xyzw
@@ -178,7 +178,7 @@ class BuildingPseudoObject(PseudoObject):
     building_objects: typing.Dict[str, ObjectState]  # a collection of the objects in the building
     min_corner: np.ndarray
     max_corner: np.ndarray
-    
+
     def __init__(self, building_id: str):
         super().__init__(building_id, BUILDING_TYPE, building_id, np.zeros(3), np.zeros(3), np.zeros(3))
         self.building_objects = {}
@@ -190,7 +190,7 @@ class BuildingPseudoObject(PseudoObject):
         '''
         Add a new object to the building and update the building's position and bounding box
         '''
-        self.building_objects[obj.object_id] = obj        
+        self.building_objects[obj.object_id] = obj
         obj_min, obj_max = _extract_object_limits(obj)
 
         if not self.position_valid:
@@ -203,7 +203,7 @@ class BuildingPseudoObject(PseudoObject):
             self.max_corner = np.maximum(obj_max, self.max_corner)  # type: ignore
 
         self._update_position_from_corners()
-        
+
     def _update_position_from_corners(self) -> None:
         self.position = self.bbox_center = (self.min_corner + self.max_corner) / 2  # type: ignore
         self.bbox_extents = (self.max_corner - self.min_corner) / 2  # type: ignore
@@ -211,18 +211,18 @@ class BuildingPseudoObject(PseudoObject):
     def remove_object(self, obj: ObjectState):
         if obj.object_id not in self.building_objects:
             raise ValueError(f'Object {obj.object_id} is not in building {self.name}')
-        
+
         del self.building_objects[obj.object_id]
 
         if len(self.building_objects) == 0:
             self.position_valid = False
-        
+
         else:
-            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj) 
+            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj)
                 for curr_obj in self.building_objects.values()]))
-            
-            self.min_corner = np.min(object_minima, axis=0)  
-            self.max_corner = np.max(object_maxima, axis=0)  
+
+            self.min_corner = np.min(object_minima, axis=0)
+            self.max_corner = np.max(object_maxima, axis=0)
             self._update_position_from_corners()
 
 
@@ -270,7 +270,7 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
     '''
-    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types 
+    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types
     are returned in lists, even in cases where there is only one possible for the variable in order to handle cases
     where multiple types are linked together with an (either) clause
 
@@ -293,9 +293,9 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
             variables[var_info["var_names"]] = var_type_name
         else:
             var_names = typing.cast(typing.Sequence[str], var_names)
-            for var_name in var_names: 
+            for var_name in var_names:
                 variables[var_name] = var_type_name
-        
+
 
     return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
 
@@ -319,7 +319,7 @@ def extract_predicate_function_name(ast: tatsu.ast.AST):
 
 def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
     '''
-    Recursively extract every variable referenced in the predicate (including inside functions 
+    Recursively extract every variable referenced in the predicate (including inside functions
     used within the predicate)
     '''
     if predicate is None:
@@ -344,11 +344,11 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
                 # Different structure for predicate args vs. function args
                 if isinstance(predicate["term"], tatsu.ast.AST):
-                    pred_vars += [predicate["term"]["arg"]]  # type: ignore 
+                    pred_vars += [predicate["term"]["arg"]]  # type: ignore
                 else:
                     pred_vars += [predicate["term"]]
 
-            # We don't want to capture any variables within an (exists) or (forall) that's inside 
+            # We don't want to capture any variables within an (exists) or (forall) that's inside
             # the preference, since those are not globally required -- see evaluate_predicate()
             elif key == "exists_args":
                 continue
@@ -373,8 +373,8 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
                            used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):
     '''
     Given a room type / domain (few, medium, or many) and a list of lists of variable types,
-    returns a list of every possible assignment of objects in the room to those types. For 
-    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
+    returns a list of every possible assignment of objects in the room to those types. For
+    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return
     every pair of objects consisting of one beachball or dodgeball and one bin.
 
     An optional used_objects argument specifies a list of objects that have already been assigned to
@@ -398,7 +398,7 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
 
 def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
     """
-    Maps from a predicate / function and an object mapping to the key that represents them in the cache. 
+    Maps from a predicate / function and an object mapping to the key that represents them in the cache.
     """
     ast_printer.reset_buffers()
     ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](ast)
@@ -582,4 +582,3 @@ class PreferenceDescriber():
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
         return ''
-        

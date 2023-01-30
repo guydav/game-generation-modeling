@@ -96,7 +96,7 @@ class ASTParentMapper(ASTParser):
         return super().__call__(ast, **kwargs)
 
     def _handle_iterable(self, ast, **kwargs):
-        [self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i]) 
+        [self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i])
         for i, element in enumerate(ast)]
 
     def _build_mapping_value(self, ast, **kwargs):
@@ -127,7 +127,7 @@ class ASTParseinfoSearcher(ASTParser):
     def __call__(self, ast, **kwargs):
         if 'parseinfo' not in kwargs:
             raise ValueError('parseinfo must be passed as a keyword argument')
-        
+
         return super().__call__(ast, **kwargs)
 
     def _handle_iterable(self, ast: typing.Iterable, **kwargs):
@@ -149,30 +149,30 @@ class ASTParseinfoSearcher(ASTParser):
                     return result
 
         return None
-    
+
 
 class ASTDepthParser(ASTParser):
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'depth', 0)
         return super().__call__(ast, **kwargs)
-        
+
     def _handle_iterable(self, ast: typing.Iterable, **kwargs):
         child_values = [self(item, depth=kwargs['depth'] + 1) for item in ast]
         child_values = [cv for cv in child_values if cv is not None]
         if not child_values:
             return kwargs['depth']
-        return max(child_values) 
-    
+        return max(child_values)
+
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         child_values = [self(ast[key], depth=kwargs['depth'] + 1) for key in ast if key != 'parseinfo']
         child_values = [cv for cv in child_values if cv is not None]
         if not child_values:
             return kwargs['depth']
-        return max(child_values) 
-    
+        return max(child_values)
+
     def _handle_str(self, ast: str, **kwargs):
         return kwargs['depth']
-    
+
     def _handle_int(self, ast: typing.Union[int, np.int32, np.int64], **kwargs):
         return kwargs['depth']
 
@@ -194,7 +194,7 @@ class ASTBooleanParser(ASTParser):
         self.false = self.algebra.parse('FALSE')
         self.whitespace_pattern = re.compile(r'\s+')
         self.variable_pattern = re.compile(r'\?[\w\d]+')
-        # self.valid_symbol_names = list(''.join((l, d)) for d, l in itertools.product([''] + [str(x) for x in range(5)], string.ascii_lowercase,))        
+        # self.valid_symbol_names = list(''.join((l, d)) for d, l in itertools.product([''] + [str(x) for x in range(5)], string.ascii_lowercase,))
         self.game_start()
 
     def game_start(self):
@@ -233,7 +233,7 @@ class ASTBooleanParser(ASTParser):
         # return self._all_equal(possible_values)
         return self._all_equal(expr.subs({s: v for s, v in zip(symbols, value_assignments)}, simplify=True)
             for value_assignments in itertools.product([self.true, self.false], repeat=len(symbols)))
-    
+
     def evaluate_redundancy(self, expr: boolean.Expression) -> bool:
         simplified = expr.simplify()
         return (len(str(simplified)) < len(str(expr))) and (len(simplified.args) <= len(expr.args))
@@ -246,10 +246,10 @@ class ASTBooleanParser(ASTParser):
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs) -> boolean.Expression:
         rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
         key = self.whitespace_pattern.sub(' ', ast_printer.ast_section_to_string(ast, f'(:{kwargs[SECTION_CONTEXT_KEY]}' if not kwargs[SECTION_CONTEXT_KEY].startswith('(:') else kwargs[SECTION_CONTEXT_KEY]))
-        
+
         if VARIABLES_CONTEXT_KEY in kwargs:
             variables_in_key = set(self.variable_pattern.findall(key))
-        
+
             for var in variables_in_key:
                 if var in kwargs[VARIABLES_CONTEXT_KEY]:
                     var_types = kwargs[VARIABLES_CONTEXT_KEY][var].var_types
@@ -269,8 +269,8 @@ class ASTBooleanParser(ASTParser):
             if isinstance(arg_mappings, boolean.Expression):
                 expr = arg_mappings
 
-            else: 
-                expr = boolean.AND(*arg_mappings)  
+            else:
+                expr = boolean.AND(*arg_mappings)
 
         elif rule.endswith('_or'):
             arg_mappings = typing.cast(list, self(ast.or_args, **kwargs))  # type: ignore
@@ -280,8 +280,8 @@ class ASTBooleanParser(ASTParser):
             if isinstance(arg_mappings, boolean.Expression):
                 expr = arg_mappings
 
-            else: 
-                expr = boolean.OR(*arg_mappings)  
+            else:
+                expr = boolean.OR(*arg_mappings)
 
         elif rule.endswith('_not'):
             arg_mapping = self(ast.not_args, **kwargs)  # type: ignore
@@ -295,7 +295,7 @@ class ASTBooleanParser(ASTParser):
 
         elif rule.endswith('_exists'):
             var_dict = kwargs[VARIABLES_CONTEXT_KEY] if VARIABLES_CONTEXT_KEY in kwargs else {}
-            ast_utils.extract_variables_from_ast(ast, 'exists_vars', var_dict) 
+            ast_utils.extract_variables_from_ast(ast, 'exists_vars', var_dict)
             kwargs = kwargs.copy()
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 
@@ -303,12 +303,12 @@ class ASTBooleanParser(ASTParser):
 
         elif rule.endswith('_forall'):
             var_dict = kwargs[VARIABLES_CONTEXT_KEY] if VARIABLES_CONTEXT_KEY in kwargs else {}
-            ast_utils.extract_variables_from_ast(ast, 'forall_vars', var_dict) 
+            ast_utils.extract_variables_from_ast(ast, 'forall_vars', var_dict)
             kwargs = kwargs.copy()
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 
             expr = self(ast.forall_args, **kwargs)  # type: ignore
-        
+
         elif rule == 'super_predicate':
             expr = self(ast.pred, **kwargs)  # type: ignore
 
@@ -330,6 +330,5 @@ class ASTBooleanParser(ASTParser):
             raise ValueError(f'No expression found for rule {rule}')
 
         expr = typing.cast(boolean.Expression, expr)
-        self.str_to_expression_mapping[key] = expr 
+        self.str_to_expression_mapping[key] = expr
         return expr
-    

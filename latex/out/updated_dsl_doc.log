@@ -1050,7 +1050,7 @@ Package csquotes Info: Trying to load configuration file 'csquotes.cfg'...
 Package csquotes Info: ... configuration file loaded successfully.
 
 (/usr/local/texlive/2021/texmf-dist/tex/latex/csquotes/csquotes.cfg
-File: csquotes.cfg 
+File: csquotes.cfg
 ))
 runsystem(which pygmentize && touch updated_dsl_doc.aex)...executed.
 
@@ -1138,7 +1138,7 @@ e
 * paper: <default>
 * layout: <same size as paper>
 * layoutoffset:(h,v)=(0.0pt,0.0pt)
-* modes: 
+* modes:
 * h-part:(L,W,R)=(72.26999pt, 469.75502pt, 72.26999pt)
 * v-part:(T,H,B)=(72.26999pt, 650.43001pt, 72.26999pt)
 * \paperwidth=614.295pt
@@ -1251,7 +1251,7 @@ LaTeX Warning: There were undefined references.
 
 Package rerunfilecheck Info: File `updated_dsl_doc.out' has not changed.
 (rerunfilecheck)             Checksum: 95DCC31AD3EEB7FD42F066D32D5DA44F;1803.
- ) 
+ )
 Here is how much of TeX's memory you used:
  35012 strings out of 478994
  665568 string characters out of 5858184
@@ -1286,4 +1286,3 @@ PDF statistics:
  335 compressed objects within 4 object streams
  170 named destinations out of 1000 (max. 500000)
  109 words of extra memory for PDF output out of 10000 (max. 10000000)
-

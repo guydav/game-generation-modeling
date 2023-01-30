@@ -22,7 +22,7 @@ DEFAULT_TEST_FILES = (
 )
 
 
-def load_asts(args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar, 
+def load_asts(args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar,
     should_print: bool = False):
 
     if not args.test_files:
@@ -37,16 +37,16 @@ def load_asts(args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar,
         return results
 
     else:
-        return [grammar_parser.parse(game) 
-            for test_file in args.test_files 
+        return [grammar_parser.parse(game)
+            for test_file in args.test_files
             for game in load_games_from_file(test_file)]
 
 
 DEFAULT_STOP_TOKENS = ('(define', )  # ('(:constraints', )
 
 
-def load_games_from_file(path: str, start_token: str='(define', 
-    stop_tokens: typing.Optional[typing.Sequence[str]] = None, 
+def load_games_from_file(path: str, start_token: str='(define',
+    stop_tokens: typing.Optional[typing.Sequence[str]] = None,
     remove_comments: bool = True, comment_prefixes_to_keep: typing.Optional[typing.Sequence[str]] = None):
 
     if stop_tokens is None or not stop_tokens:
@@ -61,7 +61,7 @@ def load_games_from_file(path: str, start_token: str='(define',
         #         new_lines.append(l[:l.find(';')])
 
         if remove_comments:
-            new_lines = [l[:l.find(';')] for l in lines 
+            new_lines = [l[:l.find(';')] for l in lines
                 if len(l.strip()) > 0 and not l.strip()[0] == ';']
 
         else:
@@ -85,7 +85,7 @@ def load_games_from_file(path: str, start_token: str='(define',
                 test_case = text[start:end]
                 if end < next_start:
                     test_case += ')'
-                
+
                 yield test_case.strip()
 
             start = next_start
@@ -104,7 +104,7 @@ def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str
     name, _ = os.path.splitext(os.path.basename(file_path))
     if relative_path is not None:
         return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
-    else:    
+    else:
         return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
 
 
@@ -132,7 +132,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         with gzip.open(cache_path, 'rb') as f:
             cache = pickle.load(f)
     else:
-        cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {}, 
+        cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
 
     cache_updated = False
@@ -173,7 +173,7 @@ def update_ast(ast: tatsu.ast.AST, key: str, value: typing.Any):
         super(tatsu.ast.AST, ast).__setitem__(key, value)
 
 
-def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.Union[str, int]], 
+def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.Union[str, int]],
     max_index: typing.Optional[int] = None):
 
     if max_index is None:
@@ -183,7 +183,7 @@ def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.
     return parent
 
 
-def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.Sequence[typing.Union[str, int]], 
+def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.Sequence[typing.Union[str, int]],
     new_value: typing.Any):
 
     if isinstance(parent, tuple):
@@ -198,7 +198,7 @@ def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.S
 
     if isinstance(last_selector, str):
         update_ast(last_parent, last_selector, new_value)
-    
+
     elif isinstance(last_selector, int):
         last_parent[last_selector] = new_value
 
@@ -219,7 +219,7 @@ def find_all_parents(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, tuple], 
     return parents
 
 
-def find_selectors_from_root(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, tuple], 
+def find_selectors_from_root(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, tuple],
     ast: tatsu.ast.AST, root_node: typing.Union[str, tatsu.ast.AST] = 'root'):
     selectors = []
     parent = ast
@@ -237,19 +237,18 @@ def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: 
     variables = ast[vars_key].variables  # type: ignore
     if isinstance(variables, tatsu.ast.AST):
         variables = [variables]
-    
+
     for var_def in variables:  # type: ignore
         var_names = var_def.var_names
-        if isinstance(var_names, str): 
+        if isinstance(var_names, str):
             var_names = [var_names]
-        
+
         var_type = var_def.var_type.type  # type: ignore
         if isinstance(var_type, tatsu.ast.AST):
             var_type = var_type.type_names
 
-        if isinstance(var_type, str): 
+        if isinstance(var_type, str):
             var_type = [var_type]
 
         for var_name in var_names:  # type: ignore
             context_vars[var_name] = VariableDefinition(var_names, var_type, var_def.parseinfo)
-

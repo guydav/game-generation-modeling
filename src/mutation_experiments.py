@@ -43,7 +43,7 @@ class ASTScoringPreferenceValidator(ASTParser):
         if 'cleared' not in kwargs:
             self.pref_names = []
             kwargs['cleared'] = True
-        
+
         return super().__call__(ast, **kwargs)
 
 class ASTVariableValidator(ASTParser):
@@ -78,7 +78,7 @@ class ASTVariableValidator(ASTParser):
 
             inner_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
             inner_keys.remove(vars_key)
-            
+
             if len(inner_keys) > 1:
                 raise ValueError(f'Found too many inner keys: {inner_keys}', ast, ast.keys())
 
@@ -108,7 +108,7 @@ class ASTVariableValidator(ASTParser):
                     if arg not in local_valid_vars or (arg in local_valid_vars and arg in used_local_vars):
                         if not valid_vars_copy:
                             raise SamplingFailedException(f'In replace_variables, tried to sample too many different valid variables in a single predicate')
-                        
+
                         new_var = random.choice(valid_vars_copy)
                         update_ast(ast, args_key, new_var)
                         valid_vars_copy.remove(new_var)
@@ -138,7 +138,7 @@ class ASTVariableValidator(ASTParser):
                         self(arg, **kwargs)
             else:
                 raise ValueError(f'Encountered args key "{args_key}" with unexpected value type: {ast[args_key]}', ast)
-            
+
         # if neither of these, do the standard ast treatment
         else:
             return super()._handle_ast(ast, **kwargs)
@@ -147,10 +147,10 @@ class ASTVariableValidator(ASTParser):
 IGNORE_KEYS = ('parseinfo', 'mutation')
 
 
-def find_mutations(ast, mutated_asts=None, should_print=True, depth=0): 
+def find_mutations(ast, mutated_asts=None, should_print=True, depth=0):
     if mutated_asts is None:
         mutated_asts = list()
-    
+
     if isinstance(ast, tatsu.ast.AST):
         if 'mutation' in ast:
             if should_print:  print(depth, ast)
@@ -163,7 +163,7 @@ def find_mutations(ast, mutated_asts=None, should_print=True, depth=0):
         for element in ast:
             find_mutations(element, mutated_asts, should_print=should_print, depth=depth+1)
 
-    return mutated_asts 
+    return mutated_asts
 
 
 def copy_mutation_tags(src_ast, dst_ast):
@@ -204,7 +204,7 @@ class ASTRegrowthSampler(ASTParser):
                     if isinstance(parent, tatsu.ast.AST) and parent.parseinfo in parent_mapping_keys:
                         parent_mapping_keys.remove(parent.parseinfo)
 
-        return regrowth_points    
+        return regrowth_points
 
     def _sample_ast_copy(self):
         return copy_ast(self.grammar_parser, random.choice(self.ast_pool))
@@ -240,7 +240,7 @@ class ASTRegrowthSampler(ASTParser):
             n_regrowths = self.n_regrowth_points()
 
         regrowth_points = self._sample_regrowth_points(current_parent_mapping, n_regrowths)
-        
+
         for regrowth_point in regrowth_points:
             _, regrowth_parent, regrwoth_selector = current_parent_mapping[regrowth_point.parseinfo]
             replacement_node = self._mutate_node(regrowth_point, parent=regrowth_parent, selector=regrwoth_selector, mutation='root')
@@ -300,7 +300,7 @@ class ASTRegrowthSampler(ASTParser):
             if key not in self.ignore_keys:
                 kwargs['selector'] = [key]
                 self(ast[key], **kwargs)
-            
+
     def _mutate_value(self, expected_type, **kwargs):
         parent, selector = kwargs['parent'], kwargs['selector']
         updated = False
@@ -311,9 +311,9 @@ class ASTRegrowthSampler(ASTParser):
             if not isinstance(replacement_value, expected_type):
                 if not replacement_value:
                     continue
-                
+
                 replacement_value = random.choice(replacement_value)
-        
+
             if not isinstance(replacement_value, expected_type):
                 # raise SamplingFailedException(f'Found an incorrectly typed value (expected a {expected_type}) even after sampling from {replacement_node[selector[0]]}')
                 continue
@@ -339,14 +339,14 @@ class ASTRegrowthSampler(ASTParser):
 
         # TODO: if we want to consider adding/removing from a list, we would do it here
         for i, element in enumerate(ast):
-            self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i]) 
-                
+            self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i])
+
     # TODO: do we ever want to replace values in a tuple or an int?
 
 
 def main(args):
     grammar = open(args.grammar_file).read()
-    grammar_parser = tatsu.compile(grammar) 
+    grammar_parser = tatsu.compile(grammar)
 
     asts = load_asts(args, grammar_parser)
 
@@ -355,7 +355,7 @@ def main(args):
     #     validators = [ASTVariableValidator(), ASTScoringPreferenceValidator()]
     #     sampler = ASTRegrowthSampler(grammar_parser, asts, mutation_prob=0.5, validators=validators)
     #     random.seed(seed)
-        
+
     #     try:
     #         # mutated_ast = sampler.sample_regrowth()
     #         mutated_ast = sampler.sample_single_step()

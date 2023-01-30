@@ -108,9 +108,9 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
         "Window|-01.02|+00.93|-03.19"
     ],
     "wall": [
-        NORTH_WALL, 
-        SOUTH_WALL, 
-        EAST_WALL, 
+        NORTH_WALL,
+        SOUTH_WALL,
+        EAST_WALL,
         WEST_WALL
     ]
 }
@@ -310,7 +310,7 @@ class PseudoObject:
         position: np.ndarray
         rotation: np.ndarray
 
-        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray, 
+        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray,
             extents: np.ndarray, rotation: np.ndarray):
 
             self.object_id = object_id
@@ -327,7 +327,7 @@ class PseudoObject:
                 return self.__dict__[item]
 
             raise ValueError(f'PsuedoObjects have only a name and an id, not a {item}')
-        
+
         def __contains__(self, item):
             return item in self.__dict__
 
@@ -349,5 +349,3 @@ UNITY_PSEUDO_OBJECTS = {
         WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WALL_NAME, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),
         DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.875, 1, 0.675]), extents=np.array([0.425, 1, 0.075]) , rotation=np.zeros(3))
 }
-
-

@@ -1,13 +1,13 @@
 (define (game 616da508e4014f74f43c8433-77) (:domain many-objects-room-v1)
 
-(:constraints (and 
+(:constraints (and
     (preference throwToBinFromDistance (exists (?d - dodgeball ?h - hexagonal_bin)
-        (then 
+        (then
             (once-measure (agent_holds ?d) (distance agent ?h))
-            (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
+            (hold (and (not (agent_holds ?d)) (in_motion ?d)))
             (once (and (not (in_motion ?d)) (in ?h ?d)))
         )
     ))
-)) 
+))
 (:scoring (count-measure throwToBinFromDistance)
 ))

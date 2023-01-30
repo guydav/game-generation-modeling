@@ -79,14 +79,14 @@ class MCMCRegrowthSampler:
                 if verbose >= 2: print('Recursion error, skipping sample')
             except SamplingException:
                 if verbose >= 2: print('Sampling exception, skipping sample')
-            
+
         current_proposal_features, current_proposal_fitness = self._score_proposal(current_proposal)  # type: ignore
 
         last_accepted_step = 0
         for step in range(self.max_steps):
             self.step_index = step
             current_proposal, current_proposal_features, current_proposal_fitness, accepted = self.mcmc_step(
-                current_proposal, current_proposal_features, current_proposal_fitness, verbose  
+                current_proposal, current_proposal_features, current_proposal_fitness, verbose
             )
 
             if accepted:
@@ -111,7 +111,7 @@ class MCMCRegrowthSampler:
             self.regrowth_sampler.set_source_ast(current_proposal)
 
     def mcmc_step(self,
-        current_proposal: typing.Union[tatsu.ast.AST, tuple], 
+        current_proposal: typing.Union[tatsu.ast.AST, tuple],
         current_proposal_features: typing.Dict[str, float],
         current_proposal_fitness: float,
         verbose: int,
@@ -139,7 +139,7 @@ class MCMCRegrowthSampler:
 
         new_proposal = typing.cast(tuple, new_proposal)
         new_proposal_features, new_proposal_fitness = self._score_proposal(new_proposal)  # type: ignore
-        
+
         if self.greedy_acceptance:
             accept = new_proposal_fitness < current_proposal_fitness
         else:
@@ -147,13 +147,13 @@ class MCMCRegrowthSampler:
             accept = self.rng.uniform() < acceptance_probability
 
         if accept:
-            return new_proposal, new_proposal_features, new_proposal_fitness, True  
+            return new_proposal, new_proposal_features, new_proposal_fitness, True
         else:
             return current_proposal, current_proposal_features, current_proposal_fitness, False
 
     def _score_proposal(self, proposal: tatsu.ast.AST):
         proposal_features = typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
-        proposal_tensor = torch.tensor([v for k, v in proposal_features.items() if k not in NON_FEATURE_COLUMNS], 
+        proposal_tensor = torch.tensor([v for k, v in proposal_features.items() if k not in NON_FEATURE_COLUMNS],
             dtype=torch.float32)  # type: ignore
         proposal_fitness = self.fitness_function(proposal_tensor)
         return proposal_features, proposal_fitness
@@ -171,7 +171,7 @@ class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE
         ):
-        super().__init__(args=args, 
+        super().__init__(args=args,
             fitness_function_path=fitness_function_path, plateau_patience_steps=plateau_patience_steps,
             max_steps=max_steps, greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature
         )
@@ -184,7 +184,7 @@ class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
         # TODO: consider in the future to optimize setting source ast only to the sampler chosen for this step
         if self.crossover_sampler.source_ast != current_proposal:
             self.crossover_sampler.set_source_ast(current_proposal)
-        
+
         return super()._pre_mcmc_step(current_proposal)
 
     def _generate_step_proposal(self):
@@ -202,7 +202,7 @@ def main(args: argparse.Namespace):
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)
 
-    mcmc = MCMCRegrowthSampler(args, DEFAULT_FITNESS_FUNCTION_PATH, greedy_acceptance=False, 
+    mcmc = MCMCRegrowthSampler(args, DEFAULT_FITNESS_FUNCTION_PATH, greedy_acceptance=False,
         plateau_patience_steps=50, acceptance_temperature=10.0, max_steps=3000)
     mcmc.multiple_samples(args.num_samples, verbose=args.verbose, should_tqdm=args.sample_tqdm)
 
@@ -214,7 +214,7 @@ def main(args: argparse.Namespace):
 
         with open(args.samples_output_path, 'w') as out_file:
             out_file.writelines(text_samples)
-    
+
     sys.setrecursionlimit(original_recursion_limit)
 
 
@@ -223,6 +223,5 @@ def main(args: argparse.Namespace):
 #     if '--sampling-method' not in cmd_args:
 #         cmd_args += ['--sampling-method', MCMC_REGRWOTH]
 
-#     args = parser.parse_args(cmd_args)    
+#     args = parser.parse_args(cmd_args)
 #     main(args)
-

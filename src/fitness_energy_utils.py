@@ -15,7 +15,7 @@ from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
 
-FITNESS_DATA_FILE = '../data/fitness_scores.csv'
+FITNESS_DATA_FILE = '../data/fitness_scores.csv.gz'
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
 
@@ -31,8 +31,8 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
     fitness_df = fitness_df.assign(real=fitness_df.src_file == 'interactive-beta.pddl', original_game_name=fitness_df.game_name)
     fitness_df.original_game_name.where(
-        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)), 
-        fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]), 
+        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
+        fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
         inplace=True)
 
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
@@ -56,7 +56,7 @@ def train_test_split_by_game_name(df: pd.DataFrame, training_prop: float = DEFAU
     return train_df, test_df
 
 
-def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str], 
+def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
     positive_column: str = 'real', positive_value: typing.Any = True):
     return torch.tensor(
         np.stack([
@@ -101,10 +101,10 @@ class CustomSklearnScaler:
         if self.passthrough:
             return X
         return (X - self.mean) / self.std
-    
+
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
-        
+
     def get_feature_names_out(self, input_features=None):
         return [f'x{i}' for i in range(self.mean.shape[0])]  # type: ignore
 
@@ -134,7 +134,7 @@ class FitnessEenrgyModel(nn.Module):
         if hidden_size is None:
             self.fc1 = nn.Linear(self.n_features, self.n_outputs)
             self.hidden_activation = None
-        
+
         else:
             self.fc1 = nn.Linear(self.n_features, hidden_size)
             self.fc2 = nn.Linear(hidden_size, self.n_outputs)
@@ -170,7 +170,7 @@ def _reduce(X: torch.Tensor, reduction: str, dim: typing.Optional[int] = None):
 
 def fitness_nce_loss(scores: torch.Tensor, negative_score_reduction: str = 'sum', reduction: str = 'mean'):
     positive_scores = torch.log(scores[:, 0])
-    negative_scores = _reduce(torch.log(1 - scores[:, 1:]), negative_score_reduction, dim=1)  
+    negative_scores = _reduce(torch.log(1 - scores[:, 1:]), negative_score_reduction, dim=1)
     return _reduce(-(positive_scores + negative_scores), reduction)
 
 
@@ -180,7 +180,7 @@ def fitness_hinge_loss(scores: torch.Tensor, margin: float = 1.0, negative_score
     if negative_score_reduction == 'none':
         positive_scores = positive_scores.unsqueeze(-1)
     return _reduce(torch.relu(positive_scores + margin - negative_scores), reduction)
-    
+
 
 def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 1.0, alpha: float = 0.5,
     negative_score_reduction: str = 'none', reduction: str = 'mean'):
@@ -195,7 +195,7 @@ def fitness_hinge_loss_with_cross_example(scores: torch.Tensor, margin: float = 
 
 def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
-    # negative_scores = scores[:, 1:].sum(dim=1)  
+    # negative_scores = scores[:, 1:].sum(dim=1)
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     if negative_score_reduction == 'none':
         positive_scores = positive_scores.unsqueeze(-1)
@@ -204,7 +204,7 @@ def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'none
 
 def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
-    # negative_scores = scores[:, 1:].sum(dim=1)  
+    # negative_scores = scores[:, 1:].sum(dim=1)
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     if negative_score_reduction == 'none':
         return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
@@ -214,9 +214,9 @@ def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negati
 
 def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, reduction: str = 'mean'):
     return nn.functional.cross_entropy(
-        - beta * scores, 
-        torch.zeros((scores.shape[0], 1), dtype=torch.long, device=scores.device), 
-        reduction=reduction) 
+        - beta * scores,
+        torch.zeros((scores.shape[0], 1), dtype=torch.long, device=scores.device),
+        reduction=reduction)
 
 
 def fitness_softmin_hybrid_loss(scores: torch.Tensor, margin: float = 1.0, beta: float = 1.0, reduction: str = 'mean'):
@@ -241,12 +241,12 @@ DEFAULT_TRAIN_KWARGS = {
     'weight_decay': 0.0,
     'lr': 1e-2,
     'loss_function': fitness_nce_loss,
-    'should_print': False, 
+    'should_print': False,
     'print_interval': 10,
-    'patience_epochs': 5, 
-    'patience_threshold': 0.01, 
-    'batch_size': 8, 
-    'k': 4, 
+    'patience_epochs': 5,
+    'patience_threshold': 0.01,
+    'batch_size': 8,
+    'k': 4,
     'device': 'cpu',
     'random_seed': 33,
 }
@@ -257,9 +257,9 @@ DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
 class SklearnFitnessWrapper:
     def __init__(self,
-        model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
-        train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
-        loss_function_kwarg_keys: typing.Sequence[str] = LOSS_FUNCTION_KAWRG_KEYS, 
+        model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        loss_function_kwarg_keys: typing.Sequence[str] = LOSS_FUNCTION_KAWRG_KEYS,
         **params):
 
         self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_PARAMS)
@@ -307,32 +307,32 @@ class SklearnFitnessWrapper:
                     self.loss_function_kwargs[key] = value
 
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
-        self.model = train_and_validate_model(self.model, X, **self.train_kwargs) 
+        self.model = train_and_validate_model(self.model, X, **self.train_kwargs)
         return self
 
     def transform(self, X, y=None) -> torch.Tensor:
         return self.model(X)
-            
+
     def __call__(self, *args, **kwargs) -> torch.Tensor:
         if self.model is not None:
             return self.model(*args, **kwargs)
 
         return torch.empty(0)
-        
+
 
 
 ModelClasses = typing.Union[nn.Module, SklearnFitnessWrapper, Pipeline]
 
 
 
-def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor], 
+def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor],
     device: str = 'cpu') -> typing.Tuple[torch.Tensor, torch.Tensor]:
 
     with torch.no_grad():
         if isinstance(model, Pipeline):
             model.named_steps['fitness'].model.eval()
             scores = model.transform(X.to(device))
-        
+
         elif isinstance(model, SklearnFitnessWrapper):
             model.model.eval()
             scores = model.transform(X.to(device))
@@ -348,20 +348,20 @@ def _evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[t
     return positive_scores.detach(), negative_scores.detach()
 
 
-# def evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor] = None, 
+# def evaluate_fitness(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torch.Tensor] = None,
 #     score_sign: int = 1):
 #     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
-        
+
 #     game_average_scores = (positive_scores - negative_scores.mean(dim=1)) * score_sign
 #     return game_average_scores.mean().item()
 
 
-# def evaluate_fitness_flipped_sign(model: ModelClasses, 
+# def evaluate_fitness_flipped_sign(model: ModelClasses,
 #     X: torch.Tensor, y=None):
 #     return evaluate_fitness(model, X, y, score_sign=-1)
 
 
-def evaluate_fitness_overall_ecdf(model: ModelClasses, 
+def evaluate_fitness_overall_ecdf(model: ModelClasses,
     X: torch.Tensor, y=None) -> float:
     positive_scores, negative_scores = _evaluate_fitness(model, X, y)
     positive_scores = positive_scores.squeeze().cpu().numpy()
@@ -388,15 +388,15 @@ def build_multiple_scoring_function(
     return _evaluate_fitness_multiple
 
 
-def train_and_validate_model(model: nn.Module, 
-    train_data: torch.Tensor, 
-    val_data: typing.Optional[torch.Tensor] = None, 
+def train_and_validate_model(model: nn.Module,
+    train_data: torch.Tensor,
+    val_data: typing.Optional[torch.Tensor] = None,
     loss_function: typing.Callable = fitness_nce_loss,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
-    n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0, 
+    n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
-    patience_epochs: int = 5, patience_threshold: float = 0.01, 
+    patience_epochs: int = 5, patience_threshold: float = 0.01,
     batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33) -> nn.Module:
 
     if loss_function_kwargs is None:
@@ -418,7 +418,7 @@ def train_and_validate_model(model: nn.Module,
     patience_loss = np.Inf
     patience_update_epoch = 0
     best_model = model
-    
+
     epoch = 0
     for epoch in range(n_epochs):
         model.train()
@@ -495,7 +495,7 @@ def cross_validate(train: torch.Tensor,
     scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
     scaler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, 
+    train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     n_folds: int = 5, verbose: int = 0) -> GridSearchCV:
 
@@ -511,7 +511,7 @@ def cross_validate(train: torch.Tensor,
     if cv_kwargs is None:
         cv_kwargs = {}
 
-    if 'n_jobs' not in cv_kwargs: 
+    if 'n_jobs' not in cv_kwargs:
         cv_kwargs['n_jobs'] = -1
     if 'verbose' not in cv_kwargs:
         cv_kwargs['verbose'] = verbose
@@ -522,20 +522,20 @@ def cross_validate(train: torch.Tensor,
         for param_grid_dict in param_grid:
             param_grid_dict['fitness__n_features'] = [train.shape[-1]]
     else:
-        param_grid['fitness__n_features'] = [train.shape[-1]]        
+        param_grid['fitness__n_features'] = [train.shape[-1]]
 
     random_seed = train_kwargs['random_seed'] if 'random_seed' in train_kwargs else None
 
-    cv = GridSearchCV(pipeline, param_grid, scoring=scoring_function, 
-        cv=KFold(n_folds, shuffle=True, random_state=random_seed), 
+    cv = GridSearchCV(pipeline, param_grid, scoring=scoring_function,
+        cv=KFold(n_folds, shuffle=True, random_state=random_seed),
         **cv_kwargs)
     return cv.fit(train, None)
 
 
 def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor],
-    param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]], 
+    param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]],
     split_test_set: bool = True,
-    feature_columns: typing.Optional[typing.List[str]] = None, 
+    feature_columns: typing.Optional[typing.List[str]] = None,
     random_seed: int = DEFAULT_RANDOM_SEED,
     scoring_function: typing.Callable = evaluate_fitness_overall_ecdf,
     scaler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
@@ -547,7 +547,7 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
 
     if scaler_kwargs is None:
         scaler_kwargs = {}
-    
+
     if model_kwargs is None:
         model_kwargs = {}
 
@@ -560,19 +560,19 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     if isinstance(cv_data, pd.DataFrame):
         if feature_columns is None:
             feature_columns = [c for c in cv_data.columns if c not in NON_FEATURE_COLUMNS]
-            
+
         if split_test_set:
             cv_data, test_data = train_test_split_by_game_name(cv_data, random_seed=random_seed)
-            test_tensor = df_to_tensor(test_data, feature_columns)  
+            test_tensor = df_to_tensor(test_data, feature_columns)
 
         cv_tensor = df_to_tensor(cv_data, feature_columns)
 
     else:
         cv_tensor = cv_data
         if split_test_set:
-            cv_tensor, test_tensor = train_test_split(cv_tensor, random_state=random_seed, 
+            cv_tensor, test_tensor = train_test_split(cv_tensor, random_state=random_seed,
                 train_size=DEFAULT_TRAINING_PROP)
-            
+
         cv_tensor = typing.cast(torch.Tensor, cv_tensor)
 
     if test_tensor is not None:
@@ -581,12 +581,12 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
         print(f'Train tensor shape: {cv_tensor.shape}')
 
 
-    cv = cross_validate(cv_tensor, param_grid,   
+    cv = cross_validate(cv_tensor, param_grid,
         scoring_function=scoring_function,
         scaler_kwargs=scaler_kwargs, model_kwargs=model_kwargs,
-        train_kwargs={'random_seed': random_seed, **train_kwargs}, 
+        train_kwargs={'random_seed': random_seed, **train_kwargs},
         cv_kwargs=cv_kwargs, n_folds=n_folds, verbose=verbose)
-    
+
     test_results = None
 
     if split_test_set:
@@ -601,8 +601,8 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     return cv, (cv_tensor, test_tensor), test_results  # type: ignore
 
 
-def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor, 
-    test_tensor: typing.Optional[torch.Tensor] = None, 
+def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
+    test_tensor: typing.Optional[torch.Tensor] = None,
     test_results: typing.Optional[dict] = None,
     display_by_ecdf: bool = True, display_by_game_rank: bool = True,
     display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
@@ -611,12 +611,12 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     ) -> None:
 
     cv_df = pd.concat([
-        pd.DataFrame(cv.cv_results_["params"]), 
-        pd.DataFrame(cv.cv_results_["mean_test_overall_ecdf"], columns=['ecdf_mean']), 
-        pd.DataFrame(cv.cv_results_["std_test_overall_ecdf"], columns=['ecdf_std']), 
+        pd.DataFrame(cv.cv_results_["params"]),
+        pd.DataFrame(cv.cv_results_["mean_test_overall_ecdf"], columns=['ecdf_mean']),
+        pd.DataFrame(cv.cv_results_["std_test_overall_ecdf"], columns=['ecdf_std']),
         pd.DataFrame(cv.cv_results_["rank_test_overall_ecdf"], columns=['ecdf_rank']),
-        pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']), 
-        pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']), 
+        pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']),
+        pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']),
         pd.DataFrame(cv.cv_results_["rank_test_single_game_rank"], columns=['game_rank_rank']),
     ],axis=1)
 
@@ -652,13 +652,13 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
             colors = cm.colors[:4]
 
-        
+
         plt.hist(hist_scores, label=labels, stacked=True, bins=100, color=colors)  # type: ignore
         if histogram_title_note is not None:
             plt.title(f'{histogram_title_base} ({histogram_title_note})')
         else:
             plt.title(histogram_title_base)
-        
+
         plt.xlabel('Energy score')
 
         if histogram_log_y:
@@ -666,7 +666,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
             plt.semilogy()
         else:
             plt.ylabel('Count')
-        
+
         plt.legend(loc='best')
         plt.show()
 
@@ -707,10 +707,10 @@ def display_game_diff_html(before: str, after: str, html_diff_substitutions: typ
 
 
 
-def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],  
-    feature_names: typing.List[str], full_dataset_tensor: torch.Tensor, 
+def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
+    feature_names: typing.List[str], full_dataset_tensor: torch.Tensor,
     original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
-    top_k: int = 5, display_overall_features: bool = False, display_relative_features: bool = True,  
+    top_k: int = 5, display_overall_features: bool = False, display_relative_features: bool = True,
     display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
     display_features_diff: bool = True) -> None:
 
@@ -720,7 +720,7 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
         row, col = index
     else:
         row, col = index // negatives.shape[1], index % negatives.shape[1]
-    
+
     index_features = negatives[row, col]
     real_game_features = data_tensor[row, 0]
     index_energy = cv.best_estimator_.transform(index_features).item()  # type: ignore
@@ -748,12 +748,12 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
         for i in range(top_k):
             idx = bottom_k_contributions.indices[i]
             display(Markdown(f'{feature_names[idx]}: {bottom_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
-    
+
     if display_relative_features:
         top_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=True)
         if torch.any(top_k_relative_contributions.values > min_display_threshold):
             display(Markdown(f'### Top features pushing the energy up relative to real game [(feature value => scaled feature value) X (weight)]'))
-            
+
             for i in range(top_k):
                 idx = top_k_relative_contributions.indices[i]
                 value = top_k_relative_contributions.values[i]
@@ -763,7 +763,7 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
         bottom_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=False)
         if torch.any(bottom_k_relative_contributions.values < -min_display_threshold):
             display(Markdown(f'### Top features pushing the energy down relative to real game [(feature value => scaled feature value) X (weight)]'))
-            
+
             for i in range(top_k):
                 idx = bottom_k_relative_contributions.indices[i]
                 value = bottom_k_relative_contributions.values[i]
@@ -778,7 +778,7 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
         negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
 
         display_game_diff_html(original_game_text, negative_game_text, html_diff_substitutions)
-        
+
     if display_features_diff:
         display(Markdown('### Feature Diffs'))
         d = index_features - real_game_features
@@ -791,10 +791,3 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
             for i in torch.argsort(diffs):
                 original_idx = inds[i]
                 print(f'{feature_names[original_idx]}: {diffs[i]:.3f} ({scaled_real_game_features[original_idx]:.3f} => {scaled_index_features[original_idx]:.3f})')
-
-
-
-
-
-
-

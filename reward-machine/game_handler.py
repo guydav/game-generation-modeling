@@ -60,11 +60,11 @@ class GameHandler():
         self.cur_step = 0
         self.initial_update_complete = False
 
-        # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will 
+        # Maps from each preference name to the PreferenceHandler (or list of PreferenceHandlers) that will
         # evaluate that preference
         self.preference_handlers = {}
 
-        # Maps from each preference name to a list of satisfaction data. Each entry in the list 
+        # Maps from each preference name to a list of satisfaction data. Each entry in the list
         # is a namedtuple of type PreferenceSatisfcation (defined in preference_handler.py)
         self.preference_satisfactions = {}
 
@@ -75,7 +75,7 @@ class GameHandler():
             # A preference definition expands into either (forall <variable_list> <preference>) or <preference>
             if rule == "preference":
                 name = typing.cast(str, pref_def["pref_name"])
-                
+
                 pref_handler = PreferenceHandler(pref_def, self.predicate_handler, self.domain_name)
                 self.preference_handlers[name] = pref_handler
                 self.preference_satisfactions[name] = []
@@ -86,9 +86,9 @@ class GameHandler():
 
                 forall_vars = pref_def["forall_vars"]
                 forall_pref = pref_def["forall_pref"]
-                
+
                 variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
-                
+
                 sub_preferences = forall_pref["preferences"] # type: ignore
                 if isinstance(sub_preferences, tatsu.ast.AST):
                     sub_preferences = [sub_preferences]
@@ -96,7 +96,7 @@ class GameHandler():
                 for sub_preference in sub_preferences:
                     name = sub_preference["pref_name"]
 
-                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name, 
+                    pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name,
                         additional_variable_mapping=variable_type_mapping)
                     self.preference_handlers[name] = pref_handler
                     self.preference_satisfactions[name] = []
@@ -156,7 +156,7 @@ class GameHandler():
 
 
     def process(self, state: FullState, is_final: bool, debug: bool = False,
-        debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:  
+        debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
@@ -201,7 +201,7 @@ class GameHandler():
                 pass
 
         if is_last_step:
-            score = self.score(self.scoring) 
+            score = self.score(self.scoring)
 
         else:
             score = None
@@ -229,11 +229,11 @@ class GameHandler():
 
         elif rule == "super_predicate":
             evaluation = self.predicate_handler(setup_expression, state, mapping)
-            
+
             return evaluation
 
         elif rule == "setup_not":
-            inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping)  
+            inner_value = self.evaluate_setup(setup_expression["not_args"], state, mapping)
 
             return not inner_value
 
@@ -281,7 +281,7 @@ class GameHandler():
             # For a game-conserved condition, we store the first object assignment that satisfies it
             # and ensure that the condition is satisfied *by those objects* in all future states
             expr_str, mapping_str = ast_cache_key(setup_expression["conserved_pred"], mapping)
-            
+
             evaluation = self.evaluate_setup(setup_expression["conserved_pred"], state, mapping)
 
             # If we've satisfied the condition for the first time, store the mapping in the cache
@@ -304,10 +304,10 @@ class GameHandler():
         rule = terminal_expression["parseinfo"].rule  # type: ignore
 
         if rule == "terminal":
-            return self.evaluate_terminals(terminal_expression["terminal"])  
+            return self.evaluate_terminals(terminal_expression["terminal"])
 
         elif rule == "terminal_not":
-            inner_value = self.evaluate_terminals(terminal_expression["not_args"])  
+            inner_value = self.evaluate_terminals(terminal_expression["not_args"])
 
             return not inner_value
 
@@ -361,7 +361,7 @@ class GameHandler():
 
         else:
             object_types = None
-        
+
         return str(preference_name), object_types
 
 
@@ -419,7 +419,7 @@ class GameHandler():
         # TODO: is the only situation in which we'll directly score a string?
         if isinstance(scoring_expression, str):
             return float(scoring_expression)
-        
+
         rule = scoring_expression["parseinfo"].rule  # type: ignore
 
         if rule == "scoring_expr":
@@ -462,7 +462,7 @@ class GameHandler():
 
         elif rule == "scoring_comparison":
             comp_expr = typing.cast(tatsu.ast.AST, scoring_expression["comp"])
-            comparison_operator = comp_expr["op"]  
+            comparison_operator = comp_expr["op"]
 
             # In this case, we know that the operator is = and that we have more than 2 comparison arguments,
             # so we just determine whether all arguments evaluate to the same value
@@ -498,7 +498,7 @@ class GameHandler():
 
         elif rule == "scoring_external_maximize":
             maximized_preferences = self._extract_scoring_preferences(scoring_expression)
-            
+
             # Make sure that at least one of the predicates is under an external forall, and that the predicates
             # in total are not under more than one external forall
             external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in maximized_preferences
@@ -521,8 +521,8 @@ class GameHandler():
             if len(all_satisfactions) == 0:
                 return 0.0
 
-            # Each entry in the set is a tuple of the objects used to satisfy the external mapping for at least one satisfaction. 
-            # Because the mapping is an OrderedDict, the order of the objects in the tuple is the same as the order of the variables 
+            # Each entry in the set is a tuple of the objects used to satisfy the external mapping for at least one satisfaction.
+            # Because the mapping is an OrderedDict, the order of the objects in the tuple is the same as the order of the variables
             # in the external forall
             used_external_mappings = set([tuple([satisfaction.mapping[key] for key in external_quant]) for satisfaction in all_satisfactions])
 
@@ -532,7 +532,7 @@ class GameHandler():
         elif rule == "scoring_external_minimize":
             # Identical except for a single line to scoring_external_maximize, so see above for comments
             minimized_preferences = self._extract_scoring_preferences(scoring_expression)
-            
+
             external_quantifications = [self.preference_handlers[pref_name].additional_variable_mapping for pref_name in minimized_preferences
                                         if self.preference_handlers[pref_name].additional_variable_mapping != {}]
 
@@ -584,8 +584,8 @@ class GameHandler():
             satisfactions = self._filter_satisfactions(preference_name, object_types, external_mapping)
 
             # Determine the largest set of satisfactions that overlap by sorting the start / end times. Whenever we
-            # encounter a new start time, we increment a counter. Whenever we encounter an end time, we decrement the 
-            # counter. The maximum value of the counter at any point in time is the size of the largest set of satisfactions 
+            # encounter a new start time, we increment a counter. Whenever we encounter an end time, we decrement the
+            # counter. The maximum value of the counter at any point in time is the size of the largest set of satisfactions
             # that overlap
 
             cur_max = 0
@@ -670,7 +670,7 @@ class GameHandler():
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
                         # Obtains the position of the object at its move closest to (but before) the start of the satisfaction
-                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]),
                                             key=lambda move: move.time).pos
 
                         # Check whether this position is too close to any previously used unique positions
@@ -680,7 +680,7 @@ class GameHandler():
 
                         used_positions[obj].append(last_position)
                         encountered_stationary = True
-                
+
                 # If we reach the end of all of the objects without encountering a stationary object in a non-unique position, then we
                 # can count this satisfaction as long as at least one object was stationary
                 if all_unique and encountered_stationary:
@@ -701,9 +701,9 @@ class GameHandler():
                 stationary_position_key = []
                 for obj in satisfaction.mapping.values():
                     if not any([satisfaction.start < time < satisfaction.end for time, pos in self.object_movements[obj]]):
-                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]), 
+                        last_position = max(filter(lambda move: move.time < satisfaction.start, self.object_movements[obj]),
                                             key=lambda move: move.time).pos
-                        
+
                         stationary_position_key.append((obj, tuple(last_position)))
 
                 # If the mapping has at least one stationary object, then increment the appropriate count
@@ -713,7 +713,7 @@ class GameHandler():
             # We return the maximal count if there are any satisfactions that have at least one stationary object, otherwise we return 0
             return max(stationary_position_counts.values()) if stationary_position_counts else 0
 
-        # Count the number of satisfactions of the given preference that use distinct variable mappings for the externally 
+        # Count the number of satisfactions of the given preference that use distinct variable mappings for the externally
         # quantified variables
         elif rule == "count_once_per_external_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_expression)

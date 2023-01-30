@@ -18,7 +18,7 @@ from ast_counter_sampler import RegrowthSampler, ASTSampler, ASTParentMapping, A
 
 class ASTContextFixer(ASTParser):
     local_context_propagating_rules = typing.Sequence[str]
-    
+
     def __init__(self, local_context_propagating_rules: typing.Sequence[str], rng: np.random.Generator):
         super().__init__()
         self.local_context_propagating_rules = local_context_propagating_rules
@@ -46,7 +46,7 @@ class ASTContextFixer(ASTParser):
         if isinstance(var_names, str):
             var_names = [var_names]
             single_variable = True
-        
+
         for i, var_name in enumerate(var_names):  # type: ignore
             if var_name in local_context['variables']:
                 if local_context['variables'][var_name] == ast.parseinfo.pos:  # type: ignore
@@ -54,11 +54,11 @@ class ASTContextFixer(ASTParser):
                 else:
                     new_var = sample_new_variable(global_context, local_context)
                     new_var_name = new_var[1:]
-                    
+
                     global_context['replacement_mappings'][var_name] = new_var_name
                     local_context['variables'][new_var_name] = ast.parseinfo
                     replace_child(ast, ['var_names'] if single_variable else ['var_names', i], new_var)
-            
+
             else:
                 local_context['variables'][var_name[1:]] = ast.parseinfo.pos  # type: ignore
 
@@ -67,7 +67,7 @@ class ASTContextFixer(ASTParser):
         global_context = kwargs['global_context']
 
         rule = ast.parseinfo.rule  # type: ignore
-        
+
         # if we find a defined variable, add it to the local context
         # if there's already a defined variable with this name in the local context, rename this one, and save the mappings
 
@@ -118,7 +118,7 @@ class ASTContextFixer(ASTParser):
         #         local_context['variables'] = dict()
         #     if 'replacement_mappings' not in global_context:
         #         global_context['replacement_mappings'] = dict()
-                
+
         #     inner_ast = typing.cast(tatsu.ast.AST, ast.pred if rule == 'predicate' else ast.func)
         #     arg_keys = [key for key in inner_ast.keys() if key.startswith('arg')]
 
@@ -155,7 +155,7 @@ class ASTContextFixer(ASTParser):
                     global_context['replacement_mappings'][ast.pref_name] = new_pref_name
 
                 replace_child(ast, ['pref_name'], new_pref_name)
-                
+
         for key in ast:
             if key != 'parseinfo':
                 retval = self(ast[key], **kwargs)  # type: ignore
@@ -178,7 +178,7 @@ def _get_node_key(node: typing.Any):
     if isinstance(node, tatsu.ast.AST):
         if node.parseinfo.rule is None:  # type: ignore
             raise ValueError('Node has no rule')
-        return node.parseinfo.rule  # type: ignore 
+        return node.parseinfo.rule  # type: ignore
 
     else:
         return type(node).__name__
@@ -193,10 +193,10 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ASTNodeInfo):
 
     elif crossover_type == CrossoverType.SAME_PARENT_RULE:
         return '_'.join([_get_node_key(node_info[1]), _get_node_key(node_info[0])])
-    
+
     elif crossover_type == CrossoverType.SAME_PARENT_RULE_SELECTOR:
         return '_'.join([_get_node_key(node_info[1]),  *[str(s) for s in node_info[2]],  _get_node_key(node_info[0])])
-    
+
     else:
         raise ValueError(f'Invalid crossover type {crossover_type}')
 
@@ -208,8 +208,8 @@ class CrossoverSampler(RegrowthSampler):
     # parent_mapping_by_id: typing.Dict[str, ASTParentMapping]
     population: typing.List[typing.Union[tatsu.ast.AST, tuple]]
 
-    def __init__(self, crossover_type: CrossoverType, 
-        population: typing.List[typing.Union[tatsu.ast.AST, tuple]], 
+    def __init__(self, crossover_type: CrossoverType,
+        population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
         sampler: ASTSampler, seed: int = 0, use_tqdm: bool = False):
         super().__init__(sampler, seed)
         self.context_fixer = ASTContextFixer(self.sampler.local_context_propagating_rules, self.rng)
@@ -231,9 +231,9 @@ class CrossoverSampler(RegrowthSampler):
 
         self.source_ast = None  # type: ignore
 
-    def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None, 
+    def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
         external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True,
-        crossover_key_to_use: typing.Optional[str] = None) -> typing.Union[tatsu.ast.AST, tuple]: 
+        crossover_key_to_use: typing.Optional[str] = None) -> typing.Union[tatsu.ast.AST, tuple]:
 
         crossover_node_copy = None
         crossover_node_copy_fixed = False
@@ -281,12 +281,12 @@ class CrossoverSampler(RegrowthSampler):
                 continue
 
         # TODO: if the node we're replacing is variable list, do we go to children of the siblings and update them?
-        
+
         new_source = copy.deepcopy(self.source_ast)
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, crossover_node_copy)  # type: ignore
 
-        return new_source 
+        return new_source
 
 
 
@@ -296,24 +296,24 @@ if __name__ == '__main__':
     import os
     from ast_counter_sampler import *
     from ast_utils import cached_load_and_parse_games_from_file
-    
+
     DEFAULT_ARGS = argparse.Namespace(
         grammar_file=DEFAULT_GRAMMAR_FILE,
         parse_counter=False,
         counter_output_path=DEFAULT_COUNTER_OUTPUT_PATH,
         random_seed=33,
     )
-    
+
     grammar = open(DEFAULT_ARGS.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
     counter = parse_or_load_counter(DEFAULT_ARGS, grammar_parser)
     sampler = ASTSampler(grammar_parser, counter, seed=DEFAULT_ARGS.random_seed)
-    asts = [ast for ast in cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', 
+    asts = [ast for ast in cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl',
         grammar_parser, False)]
 
 
     crossover_sampler = CrossoverSampler(
-        CrossoverType.SAME_RULE, 
+        CrossoverType.SAME_RULE,
         asts[1:],
         sampler,
         DEFAULT_ARGS.random_seed,

@@ -21,9 +21,9 @@ STACK_THREE_CUBES_TRACE = pathlib.Path('./reward-machine/traces/stack_3_cube_blo
 COMPLEX_STACKING_TRACE = pathlib.Path('./reward-machine/traces/complex_stacking_trace.json')
 
 REPLAY_NESTING_KEYS = (
-    'participants-v2-develop', 
+    'participants-v2-develop',
     '17tSEDmCvGp1uKVEh5iq',
-    'subCollection', 
+    'subCollection',
     'participants-v2-develop/17tSEDmCvGp1uKVEh5iq/replay-preCreateGame'
 )
 
@@ -53,7 +53,7 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
                 yield (event, (idx == len(batch['events']) - 1) and (batch_idx == len(trace) - 1)) # make sure we're in the last batch and the last event
 
 def load_game(game_name: str):
-    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt') 
+    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt')
     with open(game_path, 'r') as f:
         game = f.read()
     return game

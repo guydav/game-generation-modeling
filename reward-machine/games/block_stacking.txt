@@ -1,8 +1,8 @@
 (define (game block-test) (:domain many-objects-room-v1)
-(:constraints (and 
+(:constraints (and
         (preference blockOnBlock
             (exists (?b1 ?b2 - block)
-                (then 
+                (then
                     (once (agent_holds ?b1))
                     (hold (or (in_motion ?b1) (on ?b2 ?b1)))
                     (hold (on ?b2 ?b1))

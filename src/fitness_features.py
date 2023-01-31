@@ -22,7 +22,7 @@ from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition,
 import ast_parser
 import ast_printer
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
-from fitness_ngram_models import TextNGramModel, TextMultiNGramModel
+from fitness_ngram_models import TextNGramModel, TextMultiNGramModel, ASTMultiNGramModel, NGramASTParser
 import room_and_object_types
 
 
@@ -115,6 +115,7 @@ class ASTFitnessFeaturizer:
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
         self.section_registry = defaultdict(list)
+        self.full_ast_registry = []
         self.full_text_registry = []
         self.regex_rules = []
         self.header_registry = dict()
@@ -127,8 +128,13 @@ class ASTFitnessFeaturizer:
         else:
             self.rule_registry[rule].append(term)
 
-    def register(self, term: FitnessTerm, tuple_rule: bool = False, section_rule: bool = False, full_text_rule: bool = False) -> None:
-        if full_text_rule:
+    def register(self, term: FitnessTerm, tuple_rule: bool = False, section_rule: bool = False,
+                 full_ast_rule: bool = False, full_text_rule: bool = False) -> None:
+
+        if full_ast_rule:
+            self.full_ast_registry.append(term)
+
+        elif full_text_rule:
             self.full_text_registry.append(term)
 
         else:
@@ -166,6 +172,10 @@ class ASTFitnessFeaturizer:
             term.game_start()
 
         self._parse(ast)
+
+        for term in self.full_ast_registry:
+            term.update(full_ast, 'full_ast', {})
+
         ast_full_text = ast_printer.ast_to_string(full_ast, ' ')  # type: ignore
         for term in self.full_text_registry:
             term.parse_full_text(ast_full_text)
@@ -1279,7 +1289,7 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 
 
 DEFAULT_TOP_K_NGRAMS = 10
-N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_01_30.pkl')
+TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_01_30.pkl')
 
 
 class TextNGramTerm(FitnessTerm):
@@ -1288,7 +1298,7 @@ class TextNGramTerm(FitnessTerm):
     n_gram_model_path: str
     top_k_ngrams: int
 
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = N_GRAM_MODEL_PATH):
+    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
         super().__init__('', 'text_ngram')
         self.top_k_ngrams = top_k_ngrams
         self.n_gram_model_path = n_gram_model_path
@@ -1302,7 +1312,33 @@ class TextNGramTerm(FitnessTerm):
         pass
 
     def parse_full_text(self, full_text: str) -> None:
-        self.game_output = self.n_gram_model.score(full_text, self.top_k_ngrams)
+        self.game_output = self.n_gram_model.score(full_text, k=self.top_k_ngrams)
+
+    def game_end(self):
+        return self.game_output
+
+
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_2_3_4_5_ngram_model_2023_01_30.pkl')
+
+
+class ASTNGramTerm(FitnessTerm):
+    game_output: typing.Optional[dict] = None
+    n_gram_model: ASTMultiNGramModel
+    n_gram_model_path: str
+    top_k_ngrams: int
+
+    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
+        super().__init__('', 'ast_ngram')
+        self.top_k_ngrams = top_k_ngrams
+        self.n_gram_model_path = n_gram_model_path
+        with open(self.n_gram_model_path, 'rb') as f:
+            self.n_gram_model = pickle.load(f)
+
+    def game_start(self) -> None:
+        self.game_output = None
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.game_output = self.n_gram_model.score(ast, k=self.top_k_ngrams)  # type: ignore
 
     def game_end(self):
         return self.game_output
@@ -1383,6 +1419,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     text_ngram_term = TextNGramTerm()
     fitness.register(text_ngram_term, full_text_rule=True)
+
+    ast_ngram_term = ASTNGramTerm()
+    fitness.register(ast_ngram_term, full_ast_rule=True)
 
     return fitness
 

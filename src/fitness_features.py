@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import argparse
+
 from collections import namedtuple, defaultdict
 import itertools
 import gzip
@@ -17,14 +18,13 @@ import tatsu.ast
 import tatsu.buffering
 import tatsu.infos
 
-
-from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition, extract_variables_from_ast
+from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 import ast_parser
 import ast_printer
-from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
+from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition, extract_variables_from_ast
+from fitness_features_preprocessing import binarize_features, merge_sparse_features, DEFAULT_MERGE_THRESHOLD
 from fitness_ngram_models import TextNGramModel, TextMultiNGramModel, ASTMultiNGramModel, NGramASTParser
 import room_and_object_types
-
 
 
 parser = argparse.ArgumentParser()
@@ -50,7 +50,9 @@ DEFAULT_OUTPUT_PATH ='./data/fitness_scores.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
-
+parser.add_argument('--no-binarize', action='store_true')
+parser.add_argument('--no-merge', action='store_true')
+parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD)
 
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
@@ -997,8 +999,8 @@ class NoTwoNumberOperations(FitnessTerm):
         return 1 - (self.two_number_operations / self.total_operations)
 
 
-COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
-# COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')  # 'adjacent_side_3', 'between',  'object_orientation',
+# COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
+COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'adjacent_side_3', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'object_orientation', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []
@@ -1010,18 +1012,19 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
     predicate_or_function: str
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
 
-    def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str],
+    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
-        super().__init__(PREDICATE_AND_FUNCTION_RULES, f'arg_types_{predicate}_{"_".join(argument_type_categories)}')
-        self.predicate_or_function = predicate
+        super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
+            f'{predicate_or_function}_arg_types_{"_".join(argument_type_categories)}')
+        self.predicate_or_function = predicate_or_function
         self.argument_type_categories = argument_type_categories
         self.name_to_arity_map = name_to_arity_map
         self.known_missing_types = known_missing_types
 
-        if len(argument_type_categories) != self.name_to_arity_map[predicate]:
-            raise ValueError(f'Predicate {predicate} has arity {self.name_to_arity_map[predicate]} but {len(argument_type_categories)} argument types were provided')
+        if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
+            raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
 
     def game_start(self) -> None:
         self.matching_argument_types_count = 0
@@ -1088,11 +1091,11 @@ PREDICATE_SECTIONS = [ast_parser.SETUP, ast_parser.PREFERENCES]
 class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
     matching_argument_types_count_by_section: typing.Dict[str, Number]
 
-    def __init__(self, predicate: str, argument_type_categories: typing.Sequence[str],
+    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
-        super().__init__(predicate, argument_type_categories, name_to_arity_map, known_missing_types)
+        super().__init__(predicate_or_function, argument_type_categories, name_to_arity_map, known_missing_types)
 
     def game_start(self) -> None:
         self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
@@ -1110,8 +1113,10 @@ def build_argument_types_fitness_terms(
     predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
     fitness_terms = []
 
+    sorted_type_categories = list(sorted(type_categories))
+
     for predicate in predicates:
-        for type_combinations in itertools.product(*([type_categories] * predicate_arity_map[predicate])):  # type: ignore
+        for type_combinations in itertools.product(*([sorted_type_categories] * predicate_arity_map[predicate])):  # type: ignore
             fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
             # fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
 
@@ -1426,6 +1431,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
+
+
 def main(args):
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)
@@ -1440,15 +1447,25 @@ def main(args):
             featurizer.parse(ast, test_file)
 
     df = featurizer.to_df()
+
+    if not args.no_binarize:
+        df = binarize_features(df)
+
+    if not args.no_merge:
+        print(f'Before merging, there are {len(df.columns)} columns')
+        df = merge_sparse_features(df, COMMON_SENSE_PREDICATES_FUNCTIONS, threshold=args.merge_threshold)
+        print(f'After merging, there are {len(df.columns)} columns')
+
+
     print(df.groupby('src_file').agg([np.mean, np.std]))
 
     for src_file in df.src_file.unique():
         zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
-        zero_std_columns = [c for c in zero_std.index if zero_std[c] and not c.startswith('arg_types')]  # type: ignore
+        zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
         print(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
 
     global_zero_std = df.std(numeric_only=True) == 0
-    global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not c.startswith('arg_types')]  # type: ignore
+    global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore
     print(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
 
     if not args.output_path.endswith('.gz'):

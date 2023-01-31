@@ -14,9 +14,12 @@ import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
+from fitness_features_preprocessing import NON_FEATURE_COLUMNS
+
+
 
 FITNESS_DATA_FILE = '../data/fitness_scores.csv.gz'
-NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
+
 
 
 def _find_nth(text, target, n):

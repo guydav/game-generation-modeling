@@ -1,6 +1,7 @@
 from collections import defaultdict
 import copy
 from difflib import HtmlDiff
+from itertools import zip_longest
 import typing
 
 from IPython.display import display, Markdown, HTML
@@ -10,6 +11,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.pipeline import Pipeline
 from statsmodels.distributions.empirical_distribution import ECDF
+from tabulate import tabulate
 import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
@@ -583,10 +585,9 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
         cv_tensor = typing.cast(torch.Tensor, cv_tensor)
 
     if test_tensor is not None:
-        print(f'Train tensor shape: {cv_tensor.shape} | Test tensor shape: {test_tensor.shape}')
+        print(f'Train tensor shape: {cv_tensor.shape} | Test tensor shape: {test_tensor.shape}')  # type: ignore
     else:
         print(f'Train tensor shape: {cv_tensor.shape}')
-
 
     cv = cross_validate(cv_tensor, param_grid,
         scoring_function=scoring_function,
@@ -606,6 +607,54 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
         test_results = dict(ecdf=ecdf, game_rank=game_rank)
 
     return cv, (cv_tensor, test_tensor), test_results  # type: ignore
+
+
+def plot_energy_histogram(energy_model: typing.Union[GridSearchCV, Pipeline],
+    train_tensor: torch.Tensor, test_tensor: typing.Optional[torch.Tensor] = None,
+    histogram_title_base: str = 'Energy scores of all games',
+    histogram_title_note: typing.Optional[str] = None,
+    histogram_log_y: bool = True):
+
+    if isinstance(energy_model, GridSearchCV):
+        energy_model = energy_model.best_estimator_  # type: ignore
+
+    train_positive_scores = energy_model.transform(train_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
+    train_negative_scores = energy_model.transform(train_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
+    hist_scores = [train_positive_scores, train_negative_scores.flatten()]
+    cm = plt.get_cmap('tab20')  # type: ignore
+    colors = cm.colors[0], cm.colors[2]
+
+    if test_tensor is not None:
+        labels = ['Real (train)', 'Regrown (train)']
+        test_positive_scores = energy_model.transform(test_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
+        test_negative_scores = energy_model.transform(test_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
+
+        hist_scores.insert(1, test_positive_scores)
+        hist_scores.append(test_negative_scores.flatten())
+        labels.insert(1, 'Real (test)')
+        labels.append('Regrown (test)')
+
+        colors = cm.colors[:4]
+
+    else:
+        labels = ['Real', 'Regrown']
+
+    plt.hist(hist_scores, label=labels, stacked=True, bins=100, color=colors)  # type: ignore
+    if histogram_title_note is not None:
+        plt.title(f'{histogram_title_base} ({histogram_title_note})')
+    else:
+        plt.title(histogram_title_base)
+
+    plt.xlabel('Energy score')
+
+    if histogram_log_y:
+        plt.ylabel('log(Count)')
+        plt.semilogy()
+    else:
+        plt.ylabel('Count')
+
+    plt.legend(loc='best')
+    plt.show()
 
 
 def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
@@ -640,42 +689,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         display(cv_df.sort_values(by='game_rank_rank').head(10))
 
     if display_energy_histogram:
-        train_positive_scores = cv.best_estimator_.transform(train_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
-        train_negative_scores = cv.best_estimator_.transform(train_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
-        hist_scores = [train_positive_scores, train_negative_scores.flatten()]
-        labels = ['Real (train)', 'Negatives (train)']
-
-        cm = plt.get_cmap('tab20')  # type: ignore
-        colors = cm.colors[0], cm.colors[2]
-
-        if test_tensor is not None:
-            test_positive_scores = cv.best_estimator_.transform(test_tensor[:, 0, :]).detach().squeeze().numpy()  # type: ignore
-            test_negative_scores = cv.best_estimator_.transform(test_tensor[:, 1:, :]).detach().squeeze().numpy()  # type: ignore
-
-            hist_scores.insert(1, test_positive_scores)
-            hist_scores.append(test_negative_scores.flatten())
-            labels.insert(1, 'Real (test)')
-            labels.append('Negatives (test)')
-
-            colors = cm.colors[:4]
-
-
-        plt.hist(hist_scores, label=labels, stacked=True, bins=100, color=colors)  # type: ignore
-        if histogram_title_note is not None:
-            plt.title(f'{histogram_title_base} ({histogram_title_note})')
-        else:
-            plt.title(histogram_title_base)
-
-        plt.xlabel('Energy score')
-
-        if histogram_log_y:
-            plt.ylabel('log(Count)')
-            plt.semilogy()
-        else:
-            plt.ylabel('Count')
-
-        plt.legend(loc='best')
-        plt.show()
+        plot_energy_histogram(cv, train_tensor, test_tensor, histogram_title_base, histogram_title_note, histogram_log_y)
 
     if dispaly_weights_histogram:
         weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().numpy().squeeze()  # type: ignore
@@ -713,35 +727,46 @@ def display_game_diff_html(before: str, after: str, html_diff_substitutions: typ
     display(HTML(diff))
 
 
-
-def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
+def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
     feature_names: typing.List[str], full_dataset_tensor: torch.Tensor,
     original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
-    top_k: int = 5, display_overall_features: bool = False, display_relative_features: bool = True,
+    index_in_negatives: bool = True, top_k: int = 10, display_overall_features: bool = False, display_relative_features: bool = True,
+    display_features_pre_post_scaling: bool = False,
     display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
     display_features_diff: bool = True) -> None:
+
+    energy_model = cv
+    if isinstance(cv, GridSearchCV):
+        energy_model = cv.best_estimator_
 
     negatives = data_tensor[:, 1:, :]
 
     if isinstance(index, tuple):
         row, col = index
     else:
-        row, col = index // negatives.shape[1], index % negatives.shape[1]
+        if index_in_negatives:
+            row, col = index // negatives.shape[1], index % negatives.shape[1]
+        else:
+            row, col = index // full_dataset_tensor.shape[1], index % full_dataset_tensor.shape[1]
 
-    index_features = negatives[row, col]
+    if index_in_negatives:
+        index_features = negatives[row, col]
+    else:
+        index_features = full_dataset_tensor[row, col]
+
     real_game_features = data_tensor[row, 0]
-    index_energy = cv.best_estimator_.transform(index_features).item()  # type: ignore
-    real_game_energy = cv.best_estimator_.transform(data_tensor[row, 0]).item()  # type: ignore
+    index_energy = energy_model.transform(index_features).item()  # type: ignore
+    real_game_energy = energy_model.transform(data_tensor[row, 0]).item()  # type: ignore
 
-    weights = cv.best_estimator_['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
+    weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
 
-    scaled_index_features = cv.best_estimator_['scaler'].transform(index_features)  # type: ignore
-    scaled_real_game_features = cv.best_estimator_['scaler'].transform(data_tensor[row, 0])  # type: ignore
+    scaled_index_features = energy_model['scaler'].transform(index_features)  # type: ignore
+    scaled_real_game_features = energy_model['scaler'].transform(data_tensor[row, 0])  # type: ignore
 
     index_energy_contributions = scaled_index_features * weights
     real_game_contributions = scaled_real_game_features * weights
 
-    print(f'Energy of real game: {real_game_energy:.3f} | Energy of index: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}')
+    display(Markdown(f'### Energy of real game: {real_game_energy:.3f} | Energy of index: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}'))
 
     if display_overall_features:
         display(Markdown(f'### Top features pushing the energy up [(feature value => scaled feature value) X (weight)]'))
@@ -757,30 +782,48 @@ def evaluate_energy_contributions(cv: GridSearchCV, data_tensor: torch.Tensor, i
             display(Markdown(f'{feature_names[idx]}: {bottom_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
 
     if display_relative_features:
+        energy_up_features = []
+        energy_down_features = []
         top_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=True)
         if torch.any(top_k_relative_contributions.values > min_display_threshold):
-            display(Markdown(f'### Top features pushing the energy up relative to real game [(feature value => scaled feature value) X (weight)]'))
+            # display(Markdown(f'### Top features pushing the energy up relative to real game [(feature value => scaled feature value) X (weight)]'))
 
             for i in range(top_k):
                 idx = top_k_relative_contributions.indices[i]
                 value = top_k_relative_contributions.values[i]
                 if value > min_display_threshold:
-                    display(Markdown(f'{feature_names[idx]}: {value:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f} | {real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f}) * {weights[idx]:.3f}'))
+                    if display_features_pre_post_scaling:
+                        energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
+                    else:
+                        energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {index_features[idx]:.3f}) * {weights[idx]:.3f}')
 
         bottom_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=False)
         if torch.any(bottom_k_relative_contributions.values < -min_display_threshold):
-            display(Markdown(f'### Top features pushing the energy down relative to real game [(feature value => scaled feature value) X (weight)]'))
+            # display(Markdown(f'### Top features pushing the energy down relative to real game [(feature value => scaled feature value) X (weight)]'))
 
             for i in range(top_k):
                 idx = bottom_k_relative_contributions.indices[i]
                 value = bottom_k_relative_contributions.values[i]
                 if value < -min_display_threshold:
-                    display(Markdown(f'{feature_names[idx]}: {value:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f} | {real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f}) * {weights[idx]:.3f}'))
+                    if display_features_pre_post_scaling:
+                        energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
+                    else:
+                        energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {index_features[idx]:.3f}) * {weights[idx]:.3f}')
+
+        display(Markdown(f'### Top features changing the energy:\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
+        rows = list(zip_longest(energy_up_features, energy_down_features))
+        headers = ['Features increasing energy (= more fake)', 'Features decreasing energy (= more real)']
+        table = tabulate(rows, headers=headers, tablefmt='github')
+        display(Markdown(table))
 
     if display_game_diff:
         display(Markdown('### Game Diffs'))
-        original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
-        print(f'Original game index: {original_game_index} | Negative game row: {row} | Negative game col: {col}')
+        if index_in_negatives:
+            original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
+            print(f'Original game index: {original_game_index} | Negative game row: {row} | Negative game col: {col}')
+        else:
+            original_game_index = index
+
         original_game_text = original_game_texts[original_game_index]  # type: ignore
         negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
 

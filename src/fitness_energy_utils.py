@@ -711,11 +711,10 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
 HTML_DIFF = HtmlDiff(wrapcolumn=100)
 HTML_DIFF_SUBSTITUTIONS = {
-    '#aaffaa': '#6fa66f',
-    '#ffaaaa': '#a66f6f',
-    '#ffff77': '#999949',
+    '.diff_add {background-color:#aaffaa}': '.diff_add {color: #6fa66f; background-color: inherit; font-weight: bold}',
+    '.diff_chg {background-color:#ffff77}': '.diff_chg {color: #999949; background-color: inherit; font-weight: bold}',
+    '.diff_sub {background-color:#ffaaaa}': '.diff_sub {color: #a66f6f; background-color: inherit; font-weight: bold}',
 }
-
 
 
 def display_game_diff_html(before: str, after: str, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS):

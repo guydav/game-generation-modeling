@@ -1506,8 +1506,6 @@ if __name__ == '__main__':
             raise ValueError(f'File {test_file} does not exist')
 
     if args.featurizer_output_path is None:
-        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
-            n='_'.join([str(n) for n in args.n]), today=datetime.now().strftime('%Y_%m_%d'))
-
+        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
 
     main(args)

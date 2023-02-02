@@ -1805,7 +1805,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
                     )
                 )
                 (touch ?l1 ?l2)

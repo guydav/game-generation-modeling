@@ -711,10 +711,13 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
 HTML_DIFF = HtmlDiff(wrapcolumn=100)
 HTML_DIFF_SUBSTITUTIONS = {
-    'td.diff_header {text-align:right}': 'td {text-align: left}\nth {text-align: center}\ntd.diff_header {text-align:right}',
-    '.diff_add {background-color:#aaffaa}': '.diff_add {color: #6fa66f; background-color: inherit; font-weight: bold}',
-    '.diff_chg {background-color:#ffff77}': '.diff_chg {color: #999949; background-color: inherit; font-weight: bold}',
-    '.diff_sub {background-color:#ffaaaa}': '.diff_sub {color: #a66f6f; background-color: inherit; font-weight: bold}',
+    'td.diff_header {text-align:right}': '.diff td {text-align: left !important}\n.diff th {text-align: center!important }\n.diff td.diff_header {text-align:right !important}',
+    '.diff_add {background-color:#aaffaa}': '.diff_add {background-color: #6fa66f !important; font-weight: bold !important}',
+    '.diff_chg {background-color:#ffff77}': '.diff_chg {background-color: #999949 !important; font-weight: bold !important}',
+    '.diff_sub {background-color:#ffaaaa}': '.diff_sub {background-color: #a66f6f !important; font-weight: bold !important}',
+    # '.diff_add {background-color:#aaffaa}': '.diff_add {color: #6fa66f; background-color: inherit; font-weight: bold}',
+    # '.diff_chg {background-color:#ffff77}': '.diff_chg {color: #999949; background-color: inherit; font-weight: bold}',
+    # '.diff_sub {background-color:#ffaaaa}': '.diff_sub {color: #a66f6f; background-color: inherit; font-weight: bold}',
 }
 
 
@@ -766,7 +769,7 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
     index_energy_contributions = scaled_index_features * weights
     real_game_contributions = scaled_real_game_features * weights
 
-    display(Markdown(f'### Energy of real game: {real_game_energy:.3f} | Energy of index: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}'))
+    display(Markdown(f'### Energy of real game: {real_game_energy:.3f} | Energy of regrown game: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}'))
 
     if display_overall_features:
         display(Markdown(f'### Top features pushing the energy up [(feature value => scaled feature value) X (weight)]'))
@@ -810,7 +813,7 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
                     else:
                         energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {index_features[idx]:.3f}) * {weights[idx]:.3f}')
 
-        display(Markdown(f'### Top features changing the energy:\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
+        display(Markdown(f'### Top features changing the game\'s energy\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
         rows = list(zip_longest(energy_up_features, energy_down_features))
         headers = ['Features increasing energy (= more fake)', 'Features decreasing energy (= more real)']
         table = tabulate(rows, headers=headers, tablefmt='github')

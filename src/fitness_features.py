@@ -762,7 +762,7 @@ class PrefForallUsed(PrefForallTerm):
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
-        if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context:
+        if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context or rule == 'count_once_per_external_objects':
             self.prefs_used_as_pref_forall_prefs.add(pref_name)
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:

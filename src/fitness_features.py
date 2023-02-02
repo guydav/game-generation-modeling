@@ -131,6 +131,16 @@ class ASTFitnessFeaturizer:
 
         self.rows = []
 
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        # Prevents the rows from being dumped to file when this is pickled
+        state = self.__dict__.copy()
+        del state['rows']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self.rows = []
+
     def _register(self, term: FitnessTerm, rule: str, tuple_rule: bool = False) -> None:
         if tuple_rule:
             self.tuple_registry[rule].append(term)
@@ -758,8 +768,8 @@ class PrefForallUsed(PrefForallTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 1
-
-        return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
+        # changed to return 1 if any prefs defined under a forall were used as forall prefs
+        return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) > 0  # / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
 
 
 class PrefForallCorrectArity(PrefForallTerm):

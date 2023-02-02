@@ -236,7 +236,8 @@ class ASTBooleanParser(ASTParser):
 
     def evaluate_redundancy(self, expr: boolean.Expression) -> bool:
         simplified = expr.simplify()
-        return (len(str(simplified)) < len(str(expr))) and (len(simplified.args) <= len(expr.args))
+        redundancy_detected = (len(str(simplified)) < len(str(expr))) and (len(simplified.args) <= len(expr.args))
+        return redundancy_detected
 
     def __call__(self, ast: tatsu.ast.AST, **kwargs) -> typing.Union[boolean.Expression, typing.List[boolean.Expression]]:
         if SECTION_CONTEXT_KEY not in kwargs:
@@ -300,6 +301,7 @@ class ASTBooleanParser(ASTParser):
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 
             expr = self(ast.exists_args, **kwargs)  # type: ignore
+            expr = boolean.Symbol(f'exists_{str(expr).lower()}')
 
         elif rule.endswith('_forall'):
             var_dict = kwargs[VARIABLES_CONTEXT_KEY] if VARIABLES_CONTEXT_KEY in kwargs else {}
@@ -308,6 +310,7 @@ class ASTBooleanParser(ASTParser):
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 
             expr = self(ast.forall_args, **kwargs)  # type: ignore
+            expr = boolean.Symbol(f'forall_{str(expr).lower()}')
 
         elif rule == 'super_predicate':
             expr = self(ast.pred, **kwargs)  # type: ignore

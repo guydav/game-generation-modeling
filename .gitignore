@@ -9,3 +9,7 @@ latex/out/pddl.aux
 **/.DS_Store
 notebooks/sandbox.ipynb
 data/fitness_scores_with_predicate_features_by_section.csv
+data/ast-real-regrowth-samples-gtr-t5-xl-embeddings.pt
+data/ast-real-regrowth-samples-mmarco-minilm-embeddings.pt
+data/interactive-beta-gtr-t5-xl-embeddings.pt
+data/interactive-beta-mmarco-minilm-embeddings.pt

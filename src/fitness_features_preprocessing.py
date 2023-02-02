@@ -162,6 +162,7 @@ DEFAULT_MERGE_COLUMN_SUFFIX = 'other'
 
 
 class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
+    dropped_keys: typing.Set[str]
     feature_suffixes: typing.Sequence[str]
     keys_to_drop: typing.List[str]
     merge_function: typing.Callable
@@ -173,14 +174,16 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
 
     def __init__(self, predicates: typing.Sequence[str], threshold: int = DEFAULT_MERGE_THRESHOLD,
                  merge_function: typing.Callable = np.logical_or, merged_column_suffix: str = DEFAULT_MERGE_COLUMN_SUFFIX,
-                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES):
+                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0):
 
         self.predicates = predicates
         self.threshold = threshold
         self.merge_function = merge_function
         self.merged_column_suffix = merged_column_suffix
         self.feature_suffixes = feature_suffixes
+        self.default_value = default_value
 
+        self.dropped_keys = set()
         self.keys_to_drop = []
         self.merged_key_indices = {}
         self.merged_key_to_original_keys = {}
@@ -188,27 +191,28 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
     def _merge_single_prefix(self, df: pd.DataFrame, feature_prefix: str, feature_suffix: str = '') -> None:
 
         merged_column_key = f'{feature_prefix}_{self.merged_column_suffix}{"_" + feature_suffix if feature_suffix else ""}'
-        prefix_feature_names = [c for c in df.columns if c.startswith(feature_prefix) and c.endswith(feature_suffix)]
+        prefix_feature_names = [str(c) for c in df.columns if str(c).startswith(feature_prefix) and str(c).endswith(feature_suffix)]
         if len(prefix_feature_names) == 0:
             raise ValueError(f'No features found for prefix {feature_prefix} and suffix {feature_suffix}')
         merged_column_insert_index = bisect(prefix_feature_names, merged_column_key)
-        first_prefix_feature_index = list(df.columns).index(prefix_feature_names[0])
-        insert_index = first_prefix_feature_index + merged_column_insert_index
-        self.merged_key_indices[merged_column_key] = insert_index
+        merge_insert_feature_name = prefix_feature_names[merged_column_insert_index]
+        insert_index = list(df.columns).index(merge_insert_feature_name)
 
-        counts = df[[c for c in df.columns if c.startswith(feature_prefix) and c.endswith(feature_suffix)]].sum()
-        keys_to_merge = counts.index[counts < threshold]  # type: ignore
+        counts = df[prefix_feature_names].sum()
+        keys_to_merge = counts.index[counts < self.threshold]  # type: ignore
         if len(keys_to_merge) == 0:
             print(feature_prefix)
             return
 
         new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
-        self.merged_key_to_original_keys[merged_column_key] = list(keys_to_merge)
-
         df.insert(insert_index, merged_column_key, new_series_values)
-        self.keys_to_drop.extend(keys_to_merge)
+        self.keys_to_drop.extend(keys_to_merge)  # type: ignore
+
+        self.merged_key_indices[merged_column_key] = insert_index
+        self.merged_key_to_original_keys[merged_column_key] = list(keys_to_merge)  # type: ignore
 
     def preprocess_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.keys_to_drop = []
         df = df.copy(deep=True)
 
         for feature_suffix in self.feature_suffixes:
@@ -217,6 +221,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
                 self._merge_single_prefix(df, feature_prefix, feature_suffix)
 
         df.drop(self.keys_to_drop, axis=1, inplace=True)
+        self.dropped_keys = set(self.keys_to_drop)
 
         return df
 
@@ -225,14 +230,17 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         keys = list(row.keys())
         merged_key_values = {}
 
-        for merged_key in self.merged_key_indices:
+        for merged_key in self.merged_key_to_original_keys:
             insert_index = self.merged_key_indices[merged_key]
             keys.insert(insert_index, merged_key)
-            merged_key_values[merged_key] = reduce(self.merge_function, [row[k] for k in self.merged_key_to_original_keys[merged_key]], row[self.merged_key_to_original_keys[merged_key][0]])
+            first_key = self.merged_key_to_original_keys[merged_key][0]
+            merged_key_values[merged_key] = int(reduce(self.merge_function,
+                [row[k] if k in row else self.default_value for k in self.merged_key_to_original_keys[merged_key]],
+                row[first_key] if first_key in row else self.default_value))
 
         new_row = {}
         for k in keys:
-            if k in self.keys_to_drop:
+            if k in self.dropped_keys:
                 continue
             if k in merged_key_values:
                 new_row[k] = merged_key_values[k]

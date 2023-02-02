@@ -21,12 +21,17 @@ sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
 
 DEFUALT_RANDOM_SEED = 33
-DEFAULT_FITNESS_FUNCTION_PATH = './models/cv_fitness_model_2022_12_26.pkl.gz'
+DEFAULT_FITNESS_FUNCTION_PATH = './models/cv_fitness_model_2023_01_31.pkl.gz'
+DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_02_02.pkl.gz'
+
+
+def _load_pickle_gzip(path: str):
+    with gzip.open(path, 'rb') as f:
+        return pickle.load(f)
 
 
 def _load_and_wrap_fitness_function(fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH) -> typing.Callable[[torch.Tensor], float]:
-    with gzip.open(fitness_function_path, 'rb') as f:
-        cv_fitness_model = pickle.load(f)
+    cv_fitness_model = _load_pickle_gzip(fitness_function_path)
 
     def _wrap_fitness(features: torch.Tensor):
         return cv_fitness_model.transform(features).item()
@@ -43,6 +48,7 @@ class MCMCRegrowthSampler:
     def __init__(self,
         args: argparse.Namespace,
         fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH,
+        fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
         max_steps: int = DEFAULT_MAX_STEPS,
         greedy_acceptance: bool = False,
@@ -53,8 +59,11 @@ class MCMCRegrowthSampler:
         self.counter = parse_or_load_counter(args, self.grammar_parser)
         self.sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
         self.regrowth_sampler = RegrowthSampler(self.sampler, args.random_seed)
-        self.fitness_featurizer = build_fitness_featurizer(args)
         self.rng = np.random.default_rng(args.random_seed)
+
+        self.fitness_featurizer_path = fitness_featurizer_path
+        self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
+        self.fitness_function_path = fitness_function_path
         self.fitness_function = _load_and_wrap_fitness_function(fitness_function_path)
         self.plateau_patience_steps = plateau_patience_steps
         self.max_steps = max_steps

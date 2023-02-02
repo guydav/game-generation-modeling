@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import argparse
-
+from datetime import datetime
 from collections import namedtuple, defaultdict
 import itertools
 import gzip
@@ -22,7 +22,7 @@ from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_funct
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition, extract_variables_from_ast
-from fitness_features_preprocessing import binarize_features, merge_sparse_features, DEFAULT_MERGE_THRESHOLD
+from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD, BinarizeFitnessFeatures, MergeFitnessFeatures
 from fitness_ngram_models import TextNGramModel, TextMultiNGramModel, ASTMultiNGramModel, NGramASTParser
 import room_and_object_types
 
@@ -48,6 +48,8 @@ parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_OUTPUT_PATH ='./data/fitness_scores.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
+DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
+parser.add_argument('-f', '--featurizer-output-path', default=None)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--no-binarize', action='store_true')
@@ -100,16 +102,21 @@ class ASTFitnessFeaturizer:
     headers: typing.List[str]
     header_registry: typing.Dict[str, FitnessTerm]
     list_reduce: typing.Callable[[typing.Sequence[Number]], Number]
+    preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]]
     regex_rules: typing.List[typing.Tuple[re.Pattern, FitnessTerm]]
     rows: typing.List
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
+    section_keys: typing.List[str]
     section_registry: typing.Dict[str, typing.List[FitnessTerm]]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]]
-    section_keys: typing.List[str]
 
-    def __init__(self, headers: typing.Sequence[str] = DEFAULT_HEADERS,
+
+    def __init__(self, preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]] = None,
+        headers: typing.Sequence[str] = DEFAULT_HEADERS,
         list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
         section_keys: typing.Sequence[str] = ast_parser.SECTION_KEYS):
+
+        self.preprocessors = preprocessors
         self.headers = list(headers)
         self.list_reduce = list_reduce
         self.section_keys = list(section_keys)
@@ -161,7 +168,12 @@ class ASTFitnessFeaturizer:
             self.register(term, tuple_rule, section_rule)
 
     def to_df(self) -> pd.DataFrame:
-        return pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
+        df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
+        if self.preprocessors is not None:
+            for preprocessor in self.preprocessors:
+                df = preprocessor.preprocess_df(df)
+
+        return df
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
         row = {}
@@ -192,9 +204,16 @@ class ASTFitnessFeaturizer:
             else:
                 row[header] = self.list_reduce(row[header])
 
-        self.rows.append(row)
+
         if return_row:
+            if self.preprocessors is not None:
+                for preprocessor in self.preprocessors:
+                    row = preprocessor.preprocess_row(row)
+
             return row
+
+        else:
+            self.rows.append(row)
 
     def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST],
         context: typing.Optional[ContextDict] = None):
@@ -1350,7 +1369,15 @@ class ASTNGramTerm(FitnessTerm):
 
 
 def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
-    fitness = ASTFitnessFeaturizer()
+    preprocessors = []
+
+    if not args.no_binarize:
+        preprocessors.append(BinarizeFitnessFeatures())
+
+    if not args.no_merge:
+        preprocessors.append(MergeFitnessFeatures(COMMON_SENSE_PREDICATES_FUNCTIONS))
+
+    fitness = ASTFitnessFeaturizer(preprocessors=preprocessors)
 
     all_variables_defined = AllVariablesDefined()
     fitness.register(all_variables_defined)
@@ -1431,8 +1458,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-
-
 def main(args):
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)
@@ -1447,15 +1472,6 @@ def main(args):
             featurizer.parse(ast, test_file)
 
     df = featurizer.to_df()
-
-    if not args.no_binarize:
-        df = binarize_features(df)
-
-    if not args.no_merge:
-        print(f'Before merging, there are {len(df.columns)} columns')
-        df = merge_sparse_features(df, COMMON_SENSE_PREDICATES_FUNCTIONS, threshold=args.merge_threshold)
-        print(f'After merging, there are {len(df.columns)} columns')
-
 
     print(df.groupby('src_file').agg([np.mean, np.std]))
 
@@ -1473,6 +1489,10 @@ def main(args):
 
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 
+    if args.featurizer_output_path is not None:
+        with gzip.open(args.featurizer_output_path, 'wb') as f:
+            pickle.dump(featurizer, f)  # type: ignore
+
     sys.setrecursionlimit(original_recursion_limit)
 
 
@@ -1484,5 +1504,10 @@ if __name__ == '__main__':
     for test_file in args.test_files:
         if not os.path.exists(test_file):
             raise ValueError(f'File {test_file} does not exist')
+
+    if args.featurizer_output_path is None:
+        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
+            n='_'.join([str(n) for n in args.n]), today=datetime.now().strftime('%Y_%m_%d'))
+
 
     main(args)

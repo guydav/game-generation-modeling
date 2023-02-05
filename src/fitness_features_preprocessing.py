@@ -23,23 +23,23 @@ class FitnessFeaturesPreprocessor(ABC):
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
 BINARIZE_IGNORE_FEATURES = [
-    'setup_objects_used', 'starts_and_ends_once', 'correct_predicate_function_arity',
-    'section_without_pref_or_total_count_terminal', 'section_without_pref_or_total_count_scoring'
+    'setup_objects_used', 'starts_and_ends_once',
+    'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
+    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
 ]
 
 BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
-    re.compile(r'node_count_[\w\d_]+')
+    re.compile(r'node_count_[\w\d_]+'),
+    re.compile(r'pref_forall_[\w\d_]+')
 ]
 
 BINARIZE_NON_ONE = [
     'all_variables_defined', 'all_variables_used',
-    'all_preferences_used', 'no_adjacent_once', 'variable_not_repeated',
-    'no_nested_logicals', 'no_identical_logical_children',
-    'count_once_per_external_objects_used_correctly',
-    'external_forall_used_correctly', 'pref_forall_used',
-    'pref_forall_correct_arity', 'pref_forall_correct_types', 'no_two_number_operations',
+    'all_preferences_used', 'no_adjacent_once',
+    'variable_not_repeated', 'no_nested_logicals',
+    'no_identical_logical_children', 'no_two_number_operations',
     'tautological_expression_found', 'redundant_expression_found',
 ]
 

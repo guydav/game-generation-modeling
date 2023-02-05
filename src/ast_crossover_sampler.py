@@ -13,14 +13,15 @@ import tqdm
 import ast_printer
 from ast_parser import ASTParser
 from ast_utils import replace_child
-from ast_counter_sampler import RegrowthSampler, ASTSampler, ASTParentMapping, ASTNodeInfo, ContextDict, SamplingException, sample_new_variable, simplified_context_deepcopy
+from ast_counter_sampler import RegrowthSampler, ASTSampler, ASTParentMapping, ASTNodeInfo, ContextDict, SamplingException, simplified_context_deepcopy
 
 
 class ASTContextFixer(ASTParser):
     local_context_propagating_rules = typing.Sequence[str]
 
-    def __init__(self, local_context_propagating_rules: typing.Sequence[str], rng: np.random.Generator):
+    def __init__(self, new_variable_sampler: typing.Callable[[ContextDict, ContextDict], str], local_context_propagating_rules: typing.Sequence[str], rng: np.random.Generator):
         super().__init__()
+        self.new_variable_sampler = new_variable_sampler
         self.local_context_propagating_rules = local_context_propagating_rules
         self.rng = rng
 
@@ -52,7 +53,7 @@ class ASTContextFixer(ASTParser):
                 if local_context['variables'][var_name] == ast.parseinfo.pos:  # type: ignore
                     continue
                 else:
-                    new_var = sample_new_variable(global_context, local_context)
+                    new_var = self.new_variable_sampler(global_context, local_context)
                     new_var_name = new_var[1:]
 
                     global_context['replacement_mappings'][var_name] = new_var_name
@@ -212,7 +213,8 @@ class CrossoverSampler(RegrowthSampler):
         population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
         sampler: ASTSampler, seed: int = 0, use_tqdm: bool = False):
         super().__init__(sampler, seed)
-        self.context_fixer = ASTContextFixer(self.sampler.local_context_propagating_rules, self.rng)
+        # a slightly ugly call to get the variable sampler with the right context
+        self.context_fixer = ASTContextFixer(self.sampler.rules['variable_type_def']['var_names']['samplers']['variable'], self.sampler.local_context_propagating_rules, self.rng)
         self.crossover_type = crossover_type
         self.population = population
         self.node_infos_by_crossover_type_key = defaultdict(list)

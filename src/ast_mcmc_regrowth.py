@@ -15,7 +15,7 @@ from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampl
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
 import ast_printer
 from fitness_features import build_fitness_featurizer
-from fitness_energy_utils import NON_FEATURE_COLUMNS
+from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
@@ -30,15 +30,6 @@ def _load_pickle_gzip(path: str):
         return pickle.load(f)
 
 
-def _load_and_wrap_fitness_function(fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH) -> typing.Callable[[torch.Tensor], float]:
-    cv_fitness_model = _load_pickle_gzip(fitness_function_path)
-
-    def _wrap_fitness(features: torch.Tensor):
-        return cv_fitness_model.transform(features).item()
-
-    return _wrap_fitness
-
-
 DEFAULT_PLATEAU_PATIENCE_STEPS = 10
 DEFAULT_MAX_STEPS = 1000
 DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
@@ -47,6 +38,7 @@ DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 class MCMCRegrowthSampler:
     def __init__(self,
         args: argparse.Namespace,
+        feature_names: typing.List[str],
         fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH,
         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
@@ -54,6 +46,9 @@ class MCMCRegrowthSampler:
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
     ):
+        self.args = args
+        self.feature_names = feature_names
+
         self.grammar = open(args.grammar_file).read()
         self.grammar_parser = tatsu.compile(self.grammar)
         self.counter = parse_or_load_counter(args, self.grammar_parser)
@@ -64,7 +59,7 @@ class MCMCRegrowthSampler:
         self.fitness_featurizer_path = fitness_featurizer_path
         self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
         self.fitness_function_path = fitness_function_path
-        self.fitness_function = _load_and_wrap_fitness_function(fitness_function_path)
+        self.fitness_function = _load_pickle_gzip(fitness_function_path)
         self.plateau_patience_steps = plateau_patience_steps
         self.max_steps = max_steps
         self.greedy_acceptance = greedy_acceptance
@@ -73,6 +68,19 @@ class MCMCRegrowthSampler:
         self.sample_index = 0
         self.step_index = -1
         self.samples = []
+
+    def _evaluate_fitness(self, features: torch.Tensor):
+        return self.fitness_function.transform(features).item()
+
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
+        sample = self.samples[sample_index][0]
+        sample_features_tensor = self._features_to_tensor(self.samples[sample_index][1])
+
+        evaluate_single_game_energy_contributions(
+            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,
+            top_k=top_k, display_overall_features=display_overall_features,
+            display_game=display_game, min_display_threshold=min_display_threshold,
+            )
 
     def multiple_samples(self, n_samples: int, verbose: int = 0, should_tqdm: bool = False):
         sample_iter = tqdm.notebook.trange(n_samples) if should_tqdm else range(n_samples)
@@ -101,12 +109,12 @@ class MCMCRegrowthSampler:
             if accepted:
                 last_accepted_step = step
                 if verbose:
-                    print(f'Accepted step {step} with fitness {current_proposal_fitness}')
+                    print(f'Accepted step {step} with energy {current_proposal_fitness}', end='\r')
 
             else:
                 if step - last_accepted_step > self.plateau_patience_steps:
                     if verbose:
-                        print(f'Plateaued at step {step} with fitness {current_proposal_fitness}')
+                        print(f'Plateaued at step {step} with energy {current_proposal_fitness}')
                     break
 
         self.samples.append((current_proposal, current_proposal_features, current_proposal_fitness))
@@ -160,29 +168,38 @@ class MCMCRegrowthSampler:
         else:
             return current_proposal, current_proposal_features, current_proposal_fitness, False
 
+    def _proposal_to_features(self, proposal: tatsu.ast.AST):
+        return typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
+
+
+    def _features_to_tensor(self, features: typing.Dict[str, typing.Any]):
+        return torch.tensor([v for k, v in features.items() if k in self.feature_names], dtype=torch.float32)  # type: ignore
+
     def _score_proposal(self, proposal: tatsu.ast.AST):
-        proposal_features = typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
-        proposal_tensor = torch.tensor([v for k, v in proposal_features.items() if k not in NON_FEATURE_COLUMNS],
-            dtype=torch.float32)  # type: ignore
-        proposal_fitness = self.fitness_function(proposal_tensor)
+        proposal_features = self._proposal_to_features(proposal)
+        proposal_tensor = self._features_to_tensor(proposal_features)
+        proposal_fitness = self._evaluate_fitness(proposal_tensor)
         return proposal_features, proposal_fitness
 
 
 class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
     def __init__(self,
         args: argparse.Namespace,
+        feature_names: typing.List[str],
         crossover_type: CrossoverType,
         crossover_population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
         p_crossover: float,
         fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH,
+        fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
         max_steps: int = DEFAULT_MAX_STEPS,
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE
         ):
-        super().__init__(args=args,
-            fitness_function_path=fitness_function_path, plateau_patience_steps=plateau_patience_steps,
-            max_steps=max_steps, greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature
+        super().__init__(args=args, feature_names=feature_names,
+            fitness_function_path=fitness_function_path, fitness_featurizer_path=fitness_featurizer_path,
+            plateau_patience_steps=plateau_patience_steps, max_steps=max_steps,
+            greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature
         )
         self.crossover_sampler = CrossoverSampler(crossover_type, crossover_population, self.sampler, args.random_seed)
         self.p_crossover = p_crossover

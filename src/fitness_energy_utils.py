@@ -730,6 +730,28 @@ def display_game_diff_html(before: str, after: str, html_diff_substitutions: typ
     display(HTML(diff))
 
 
+def evaluate_single_game_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], game_features: torch.Tensor, game_text: str,
+    feature_names: typing.List[str], top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,):
+
+    energy_model = cv
+    if isinstance(cv, GridSearchCV):
+        energy_model = cv.best_estimator_
+    weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
+
+    index_energy_contributions = game_features * weights
+
+    real_game_energy = energy_model.transform(game_features).item()  # type: ignore
+
+    display(Markdown(f'### Energy of visualized game: {real_game_energy:.3f}'))
+
+    if display_overall_features:
+        display_energy_contributions_table(index_energy_contributions, game_features, weights, feature_names, top_k, min_display_threshold)
+
+    if display_game:
+        display(Markdown(f'### Game:'))
+        display(Markdown(f'```pddl\n{game_text}\n```'))
+
+
 def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
     feature_names: typing.List[str], full_dataset_tensor: torch.Tensor,
     original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
@@ -772,52 +794,11 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
     display(Markdown(f'### Energy of real game: {real_game_energy:.3f} | Energy of regrown game: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}'))
 
     if display_overall_features:
-        display(Markdown(f'### Top features pushing the energy up [(feature value => scaled feature value) X (weight)]'))
-        top_k_contributions = torch.topk(index_energy_contributions, top_k, largest=True)
-        for i in range(top_k):
-            idx = top_k_contributions.indices[i]
-            display(Markdown(f'{feature_names[idx]}: {top_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
-
-        display(Markdown(f'### Top features pushing the energy down [(feature value => scaled feature value) X (weight)]'))
-        bottom_k_contributions = torch.topk(index_energy_contributions, top_k, largest=False)
-        for i in range(top_k):
-            idx = bottom_k_contributions.indices[i]
-            display(Markdown(f'{feature_names[idx]}: {bottom_k_contributions.values[i]:.3f} = ({index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}'))
+        display_energy_contributions_table(index_energy_contributions, index_features, weights, feature_names, top_k, min_display_threshold)
 
     if display_relative_features:
-        energy_up_features = []
-        energy_down_features = []
-        top_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=True)
-        if torch.any(top_k_relative_contributions.values > min_display_threshold):
-            # display(Markdown(f'### Top features pushing the energy up relative to real game [(feature value => scaled feature value) X (weight)]'))
-
-            for i in range(top_k):
-                idx = top_k_relative_contributions.indices[i]
-                value = top_k_relative_contributions.values[i]
-                if value > min_display_threshold:
-                    if display_features_pre_post_scaling:
-                        energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
-                    else:
-                        energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {index_features[idx]:.3f}) * {weights[idx]:.3f}')
-
-        bottom_k_relative_contributions = torch.topk(index_energy_contributions - real_game_contributions, top_k, largest=False)
-        if torch.any(bottom_k_relative_contributions.values < -min_display_threshold):
-            # display(Markdown(f'### Top features pushing the energy down relative to real game [(feature value => scaled feature value) X (weight)]'))
-
-            for i in range(top_k):
-                idx = bottom_k_relative_contributions.indices[i]
-                value = bottom_k_relative_contributions.values[i]
-                if value < -min_display_threshold:
-                    if display_features_pre_post_scaling:
-                        energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
-                    else:
-                        energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {index_features[idx]:.3f}) * {weights[idx]:.3f}')
-
-        display(Markdown(f'### Top features changing the game\'s energy\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
-        rows = list(zip_longest(energy_up_features, energy_down_features))
-        headers = ['Features increasing energy (= more fake)', 'Features decreasing energy (= more real)']
-        table = tabulate(rows, headers=headers, tablefmt='github')
-        display(Markdown(table))
+        relative_contributions = index_energy_contributions - real_game_contributions
+        display_energy_contributions_table(relative_contributions, index_features, weights, feature_names, top_k, min_display_threshold, real_game_features)
 
     if display_game_diff:
         display(Markdown('### Game Diffs'))
@@ -844,3 +825,46 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
             for i in torch.argsort(diffs):
                 original_idx = inds[i]
                 print(f'{feature_names[original_idx]}: {diffs[i]:.3f} ({scaled_real_game_features[original_idx]:.3f} => {scaled_index_features[original_idx]:.3f})')
+
+def display_energy_contributions_table(energy_contributions: torch.Tensor, feature_values: torch.Tensor, weights: torch.Tensor,
+        feature_names: typing.List[str], top_k: int, min_display_threshold: float = 0.005, real_game_features: typing.Optional[torch.Tensor] = None):
+    energy_up_features = []
+    energy_down_features = []
+
+    top_k_contributions = torch.topk(energy_contributions, top_k, largest=True)
+    if torch.any(top_k_contributions.values > min_display_threshold):
+        for i in range(top_k):
+            idx = top_k_contributions.indices[i]
+            value = top_k_contributions.values[i]
+            if value > min_display_threshold:
+                # if display_features_pre_post_scaling:
+                #     energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
+                # else:
+                if real_game_features is not None:
+                    energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {feature_values[idx]:.3f}) * {weights[idx]:.3f}')
+                else:
+                    energy_up_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({feature_values[idx]:.3f}) * {weights[idx]:.3f}')
+
+    bottom_k_contributions = torch.topk(energy_contributions, top_k, largest=False)
+    if torch.any(bottom_k_contributions.values < -min_display_threshold):
+        for i in range(top_k):
+            idx = bottom_k_contributions.indices[i]
+            value = bottom_k_contributions.values[i]
+            if value < -min_display_threshold:
+                # if display_features_pre_post_scaling:
+                #     energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {scaled_real_game_features[idx]:.3f} | {index_features[idx]:.3f} => {scaled_index_features[idx]:.3f}) * {weights[idx]:.3f}')
+                # else:
+                if real_game_features is not None:
+                    energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({real_game_features[idx]:.3f} => {feature_values[idx]:.3f}) * {weights[idx]:.3f}')
+                else:
+                    energy_down_features.append(f'{feature_names[idx]}: **{value:.3f}** = ({feature_values[idx]:.3f}) * {weights[idx]:.3f}')
+
+    if real_game_features is not None:
+        display(Markdown(f'### Top features changing the game\'s energy\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
+    else:
+        display(Markdown(f'### Top features contributing to the game\'s energy\nfeature name: **value** = (original feature value => regrown feature value) * weight'))
+
+    rows = list(zip_longest(energy_up_features, energy_down_features))
+    headers = ['Features increasing energy (= more fake)', 'Features decreasing energy (= more real)']
+    table = tabulate(rows, headers=headers, tablefmt='github')
+    display(Markdown(table))

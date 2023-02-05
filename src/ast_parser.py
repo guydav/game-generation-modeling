@@ -210,7 +210,7 @@ class ASTBooleanParser(ASTParser):
         symbols = list(expr.symbols)
 
         if len(symbols) > self.max_tautology_eval_length:
-            print(f'Not evaluating tautology for expression with {len(symbols)} symbols')
+            # print(f'Not evaluating tautology for expression with {len(symbols)} symbols')
             return False
 
         # initial_value = None

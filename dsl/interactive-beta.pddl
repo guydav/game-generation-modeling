@@ -1006,7 +1006,7 @@
             (then
                 (once (game_start))
                 (hold (not (agent_holds ?b)))
-                (hold (game_over))
+                (once (game_over))
             )
         )
     )

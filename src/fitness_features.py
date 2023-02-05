@@ -280,7 +280,7 @@ class ASTFitnessFeaturizer:
             child_context[DEPTH_CONTEXT_KEY] += 1  # type: ignore
 
             if ast.parseinfo.rule in ('scoring_external_maximize', 'scoring_external_minimize'):
-                child_context[EXTERNAL_FORALL_CONTEXT_KEY] = ast.parseinfo.rule
+                child_context[EXTERNAL_FORALL_CONTEXT_KEY] = ast.parseinfo
 
             for child_key in ast:
                 if child_key != 'parseinfo':
@@ -442,7 +442,7 @@ class NoAdjacentOnce(FitnessTerm):
     prefs_with_adjacent_once: int = 0
 
     def __init__(self):
-        super().__init__(('then', 'at_end'), 'no_adjacent_once')
+        super().__init__('then', 'no_adjacent_once')
 
     def game_start(self) -> None:
         self.total_prefs = 0
@@ -450,9 +450,6 @@ class NoAdjacentOnce(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         self.total_prefs += 1
-
-        if rule == 'at_end':
-            return
 
         if isinstance(ast.then_funcs, list):  # type: ignore
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
@@ -466,6 +463,33 @@ class NoAdjacentOnce(FitnessTerm):
             return 0
 
         return 1 - (self.prefs_with_adjacent_once / self.total_prefs)
+
+
+class NoAdjacentSameModal(FitnessTerm):
+    then_found: bool = False
+    adjacent_identical_modals_found: bool = False
+
+    def __init__(self):
+        super().__init__('then', 'no_adjacent_same_modal')
+
+    def game_start(self) -> None:
+        self.then_found = False
+        self.adjacent_identical_modals_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            self.then_found = True
+
+            func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
+            consecutive_counts = [len(list(group)) for _, group in itertools.groupby(func_rules)]
+            if max(consecutive_counts) > 1:
+                self.adjacent_identical_modals_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if not self.then_found:
+            return 0
+
+        return -1 if self.adjacent_identical_modals_found else 1
 
 
 class PrefStartsAndEndsWithOnce(FitnessTerm):
@@ -664,8 +688,22 @@ class RedundantBooleanExpression(BooleanLogicTerm):
 
 
 class PrefForallTerm(FitnessTerm):
+    pref_forall_found: bool = False
+    pref_forall_prefs: typing.Set[str] = set()
+    pref_forall_prefs_by_position: typing.Dict[int, typing.Set[str]] = {}
+
     def __init__(self, name: str):
-        super().__init__(('scoring_external_maximize', 'scoring_external_minimize', 'pref_forall', COUNT_RULE_PATTERN), name)
+        super().__init__(('scoring_external_maximize', 'scoring_external_minimize', 'pref_forall', COUNT_RULE_PATTERN), f'pref_forall_{name}')
+
+    def game_start(self) -> None:
+        self.pref_forall_found = False
+        self.pref_forall_prefs = set()
+        self.pref_forall_prefs_by_position = defaultdict(set)
+        self._inner_game_start()
+
+    @abstractmethod
+    def _inner_game_start(self) -> None:
+        pass
 
     def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
         preferences = ast.forall_pref.preferences  # type: ignore
@@ -673,6 +711,7 @@ class PrefForallTerm(FitnessTerm):
             preferences = [preferences]
 
         self.pref_forall_prefs.update([pref.pref_name for pref in preferences])  # type: ignore
+        self.pref_forall_prefs_by_position[ast.parseinfo.pos].update([pref.pref_name for pref in preferences])  # type: ignore
 
     # Not abstract as is optional
     def _update_external_forall(self, ast: tatsu.ast.AST, context: ContextDict):
@@ -686,6 +725,7 @@ class PrefForallTerm(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             if rule == 'pref_forall':
+                self.pref_forall_found = True
                 self._update_pref_forall_def(ast, context)
 
             elif rule in ('scoring_external_maximize', 'scoring_external_minimize'):
@@ -704,8 +744,7 @@ class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
     def __init__(self):
         super().__init__('count_once_per_external_objects_used_correctly')
 
-    def game_start(self) -> None:
-        self.pref_forall_prefs = set()
+    def _inner_game_start(self) -> None:
         self.count_once_per_external_objects_prefs = set()
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
@@ -716,37 +755,42 @@ class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.count_once_per_external_objects_prefs) == 0:
+            return 0
+
+        if len(self.count_once_per_external_objects_prefs.intersection(self.pref_forall_prefs)) == len(self.count_once_per_external_objects_prefs):
             return 1
 
-        return len(self.count_once_per_external_objects_prefs.intersection(self.pref_forall_prefs)) / len(self.count_once_per_external_objects_prefs)
+        return -1
 
 
 class ExternalForallUsedCorrectly(PrefForallTerm):
     pref_forall_prefs: typing.Set[str] = set()
-    external_forall_used: int = 0
-    external_forall_used_with_forall_pref: int = 0
+    external_forall_positions: typing.Set[int] = set()
+    external_forall_used_with_forall_pref_positions: typing.Set[int] = set()
 
     def __init__(self):
         super().__init__('external_forall_used_correctly')
 
-    def game_start(self) -> None:
-        self.pref_forall_prefs = set()
-        self.external_forall_used = 0
-        self.external_forall_used_with_forall_pref = 0
+    def _inner_game_start(self) -> None:
+        self.external_forall_positions = set()
+        self.external_forall_used_with_forall_pref_positions = set()
 
     def _update_external_forall(self, ast: tatsu.ast.AST, context: ContextDict):
-        self.external_forall_used += 1
+        self.external_forall_positions.add(ast.parseinfo.pos)  # type: ignore
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
-        if pref_name in self.pref_forall_prefs:
-            self.external_forall_used_with_forall_pref += 1
+        if pref_name in self.pref_forall_prefs and EXTERNAL_FORALL_CONTEXT_KEY in context:
+            self.external_forall_used_with_forall_pref_positions.add(context[EXTERNAL_FORALL_CONTEXT_KEY].pos)  # type: ignore
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if self.external_forall_used == 0:
+        if len(self.external_forall_positions) == 0:
+            return 0
+
+        if len(self.external_forall_positions.intersection(self.external_forall_used_with_forall_pref_positions)) == len(self.external_forall_positions):
             return 1
 
-        return min(self.external_forall_used_with_forall_pref / self.external_forall_used, 1)
+        return -1
 
 
 class PrefForallUsed(PrefForallTerm):
@@ -754,10 +798,9 @@ class PrefForallUsed(PrefForallTerm):
     prefs_used_as_pref_forall_prefs: typing.Set[str] = set()
 
     def __init__(self):
-        super().__init__('pref_forall_used')
+        super().__init__('used')
 
-    def game_start(self) -> None:
-        self.pref_forall_prefs = set()
+    def _inner_game_start(self) -> None:
         self.prefs_used_as_pref_forall_prefs = set()
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
@@ -767,10 +810,13 @@ class PrefForallUsed(PrefForallTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
-            return 1
-        # changed to return 1 if any prefs defined under a forall were used as forall prefs
-        return len(self.pref_forall_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) > 0  # / len(self.pref_forall_prefs.union(self.prefs_used_as_pref_forall_prefs))
+            return 0
 
+        # return 1 if for each pref forall, at least one pref was used in a manner that requires a forall
+        if all(len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) > 0 for pos_prefs in self.pref_forall_prefs_by_position.values()):
+            return 1
+
+        return -1
 
 class PrefForallCorrectArity(PrefForallTerm):
     correct_usage_count: int = 0
@@ -781,7 +827,7 @@ class PrefForallCorrectArity(PrefForallTerm):
     def __init__(self):
         super().__init__('pref_forall_correct_arity')
 
-    def game_start(self) -> None:
+    def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_counts = dict()
         self.correct_usage_count = 0
         self.incorrect_usage_count = 0
@@ -817,14 +863,13 @@ class PrefForallCorrectArity(PrefForallTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs_to_counts) == 0:
-            return 1
+            return 0
 
         total_usage_count = self.correct_usage_count + self.incorrect_usage_count
         if total_usage_count == 0:
             return 0
 
-        return self.correct_usage_count / total_usage_count
-
+        return 1 if  self.incorrect_usage_count == 0 else -1
 
 
 class PrefForallCorrectTypes(PrefForallTerm):
@@ -834,7 +879,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
     def __init__(self):
         super().__init__('pref_forall_correct_types')
 
-    def game_start(self) -> None:
+    def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_types = defaultdict(dict)
         self.prefs_with_correct_types = list()
 
@@ -874,9 +919,9 @@ class PrefForallCorrectTypes(PrefForallTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs_to_types) == 0 or len(self.prefs_with_correct_types) == 0:
-            return 1
+            return 0
 
-        return np.mean(self.prefs_with_correct_types)  # type: ignore
+        return 1 if np.isclose(np.mean(self.prefs_with_correct_types), 1) else -1  # type: ignore
 
 
 TOTAL_TERMINALS = ('(total-time)', '(total-score)')
@@ -1323,7 +1368,7 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 
 
 DEFAULT_TOP_K_NGRAMS = 10
-TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_01_30.pkl')
+TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_02_05.pkl')
 
 
 class TextNGramTerm(FitnessTerm):
@@ -1404,6 +1449,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)
 
+    no_adjacent_same_modal = NoAdjacentSameModal()
+    fitness.register(no_adjacent_same_modal)
+
     pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()
     fitness.register(pref_starts_and_ends_with_once)
 
@@ -1419,7 +1467,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     tautological_boolean_expression = TautologicalBooleanExpression()
     fitness.register(tautological_boolean_expression)
 
-    # TODO: consider patching boolean.NOT.literalize to not do DeMorgan's law so it doesn't flag unnecessary redundancies
     redundant_boolean_expression = RedundantBooleanExpression()
     fitness.register(redundant_boolean_expression)
 

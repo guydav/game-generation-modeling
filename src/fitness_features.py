@@ -736,13 +736,28 @@ class PrefForallTerm(FitnessTerm):
                 object_types = ast.name_and_types['object_types']  # type: ignore
                 self._update_count(pref_name, object_types, rule, context)
 
+    @abstractmethod
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        pass
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return_value = dict(correct=0, incorrect=0)
+
+        inner_value = self._inner_game_end()
+        if inner_value == 1:
+            return_value['correct'] = 1
+        elif inner_value == -1:
+            return_value['incorrect'] = 1
+
+        return return_value  # type: ignore
+
 
 class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
     pref_forall_prefs: typing.Set[str] = set()
     count_once_per_external_objects_prefs: typing.Set[str] = set()
 
     def __init__(self):
-        super().__init__('count_once_per_external_objects_used_correctly')
+        super().__init__('count_once_per_external_objects_used')
 
     def _inner_game_start(self) -> None:
         self.count_once_per_external_objects_prefs = set()
@@ -753,7 +768,7 @@ class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
         if rule == 'count_once_per_external_objects':
             self.count_once_per_external_objects_prefs.add(pref_name)
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.count_once_per_external_objects_prefs) == 0:
             return 0
 
@@ -769,7 +784,7 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
     external_forall_used_with_forall_pref_positions: typing.Set[int] = set()
 
     def __init__(self):
-        super().__init__('external_forall_used_correctly')
+        super().__init__('external_forall_used')
 
     def _inner_game_start(self) -> None:
         self.external_forall_positions = set()
@@ -783,7 +798,7 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
         if pref_name in self.pref_forall_prefs and EXTERNAL_FORALL_CONTEXT_KEY in context:
             self.external_forall_used_with_forall_pref_positions.add(context[EXTERNAL_FORALL_CONTEXT_KEY].pos)  # type: ignore
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.external_forall_positions) == 0:
             return 0
 
@@ -808,7 +823,7 @@ class PrefForallUsed(PrefForallTerm):
         if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context or rule == 'count_once_per_external_objects':
             self.prefs_used_as_pref_forall_prefs.add(pref_name)
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 0
 
@@ -861,7 +876,7 @@ class PrefForallCorrectArity(PrefForallTerm):
         elif n_vars > 0:
             self.incorrect_usage_count += 1
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs_to_counts) == 0:
             return 0
 
@@ -917,7 +932,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
 
         self.prefs_with_correct_types.append(count_correct / len(object_types))
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs_to_types) == 0 or len(self.prefs_with_correct_types) == 0:
             return 0
 
@@ -1470,14 +1485,14 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     redundant_boolean_expression = RedundantBooleanExpression()
     fitness.register(redundant_boolean_expression)
 
-    count_once_per_external_objects_used_correctly = CountOncePerExternalObjectsUsedCorrectly()
-    fitness.register(count_once_per_external_objects_used_correctly)
+    count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
+    fitness.register(count_once_per_external_objects_used)
 
-    external_forall_used_correctly = ExternalForallUsedCorrectly()
-    fitness.register(external_forall_used_correctly)
+    external_forall_used = ExternalForallUsedCorrectly()
+    fitness.register(external_forall_used)
 
-    pref_forall_used_correctly = PrefForallUsed()
-    fitness.register(pref_forall_used_correctly)
+    pref_forall_used = PrefForallUsed()
+    fitness.register(pref_forall_used)
 
     pref_forall_correct_arity = PrefForallCorrectArity()
     fitness.register(pref_forall_correct_arity)

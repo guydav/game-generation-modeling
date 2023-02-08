@@ -1491,8 +1491,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     external_forall_used = ExternalForallUsedCorrectly()
     fitness.register(external_forall_used)
 
-    pref_forall_used = PrefForallUsed()
-    fitness.register(pref_forall_used)
+    # This feature is just subsumed by the rest of the pref forall features at this point
+    # pref_forall_used = PrefForallUsed()
+    # fitness.register(pref_forall_used)
 
     pref_forall_correct_arity = PrefForallCorrectArity()
     fitness.register(pref_forall_correct_arity)
@@ -1500,8 +1501,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     pref_forall_correct_types = PrefForallCorrectTypes()
     fitness.register(pref_forall_correct_types)
 
-    correct_predicate_arity = CorrectPredicateFunctionArity()
-    fitness.register(correct_predicate_arity)
+    # Changed in the grammar to enforce correct arity
+    # correct_predicate_arity = CorrectPredicateFunctionArity()
+    # fitness.register(correct_predicate_arity)
 
     no_two_number_comparisons = NoTwoNumberOperations()
     fitness.register(no_two_number_comparisons)

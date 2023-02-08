@@ -32,7 +32,8 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
     re.compile(r'node_count_[\w\d_]+'),
-    re.compile(r'pref_forall_[\w\d_]+')
+    re.compile(r'pref_forall_[\w\d_]+'),
+    re.compile(r'length_of_then_modals_[\w\d_]+')
 ]
 
 BINARIZE_NON_ONE = [

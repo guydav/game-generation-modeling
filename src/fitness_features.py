@@ -517,6 +517,33 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
         return self.prefs_start_and_end_with_once / self.total_prefs
 
 
+DEFAULT_LENGTH_OF_THEN_MIN_LENGTH = 1
+DEFAULT_LENGTH_OF_THEN_MAX_LENGTH = 7
+
+
+class LengthOfThenModals(FitnessTerm):
+    then_lengths_found: typing.Dict[int, bool]
+
+    def __init__(self, max_length: int = DEFAULT_LENGTH_OF_THEN_MAX_LENGTH, min_length: int = DEFAULT_LENGTH_OF_THEN_MIN_LENGTH):
+        super().__init__('then', 'length_of_then_modals')
+        self.max_length = max_length
+        self.min_length = min_length
+
+    def game_start(self) -> None:
+        self.then_lengths_found = {i: False for i in range(self.min_length, self.max_length + 1)}
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            self.then_lengths_found[len(ast.then_funcs)] = True  # type: ignore
+
+        else:
+            self.then_lengths_found[1] = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return {k: int(v) for k, v in self.then_lengths_found.items()}
+
+
+
 PREDICATE_AND_FUNCTION_RULES = ('predicate', 'function_eval')
 
 
@@ -943,28 +970,39 @@ TOTAL_TERMINALS = ('(total-time)', '(total-score)')
 
 
 class SectionWithoutPrefOrTotalCounts(FitnessTerm):
+    preference_count_found: bool
+    section: str
     section_found: bool
-    count_rule_found: bool
+    section_name: str
+    total_found: bool
+
     def __init__(self, section: str):
-        super().__init__(section, f'section_without_pref_or_total_count_{section.replace("(:", "")}')
         self.section = section
+        self.section_name = section.replace("(:", "")
+        super().__init__(section, f'section_without_pref_or_total_count_{self.section_name}')
 
     def game_start(self) -> None:
+        self.preference_count_found = False
         self.section_found = False
-        self.count_rule_found = False
+        self.total_found = False
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if SECTION_CONTEXT_KEY in context and context[SECTION_CONTEXT_KEY] == self.section:
             self.section_found = True
 
         if isinstance(ast, tatsu.ast.AST) and COUNT_RULE_PATTERN.match(rule):
-            self.found_count = True
+            self.preference_count_found = True
 
         if rule == 'scoring_expr' and isinstance(ast.expr, str) and ast.expr in TOTAL_TERMINALS:  # type:ignore
-            self.found_count = True
+            self.total_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return 1 if self.section_found == self.count_rule_found else 0
+        # Retrun 0 if either the section isn't in the game, or there's a preference count, or it's a terminal with a total-count
+        if not self.section_found or self.preference_count_found or (self.section_name == 'terminal' and self.total_found):
+            return 0
+
+        # Otherwise return 1
+        return 1
 
 
 PREDICATE_FUNCTION_ARITY_MAP = {
@@ -1469,6 +1507,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()
     fitness.register(pref_starts_and_ends_with_once)
+
+    length_of_then_modals = LengthOfThenModals()
+    fitness.register(length_of_then_modals)
 
     no_repeated_variables_in_predicate = VariableNotRepeatedInPredicateFunction()
     fitness.register(no_repeated_variables_in_predicate)

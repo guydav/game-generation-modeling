@@ -770,9 +770,9 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
         row, col = index
     else:
         if index_in_negatives:
-            row, col = index // negatives.shape[1], index % negatives.shape[1]
+            row, col = torch.div(index, negatives.shape[1], rounding_mode='trunc'), index % negatives.shape[1]
         else:
-            row, col = index // full_dataset_tensor.shape[1], index % full_dataset_tensor.shape[1]
+            row, col = torch.div(index, full_dataset_tensor.shape[1], rounding_mode='trunc') , index % full_dataset_tensor.shape[1]
 
     if index_in_negatives:
         index_features = negatives[row, col]

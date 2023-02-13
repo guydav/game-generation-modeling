@@ -228,27 +228,3 @@ def find_selectors_from_root(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, 
         selectors = selector + selectors
 
     return selectors
-
-
-VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
-
-
-def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, VariableDefinition]) -> None:
-    variables = ast[vars_key].variables  # type: ignore
-    if isinstance(variables, tatsu.ast.AST):
-        variables = [variables]
-
-    for var_def in variables:  # type: ignore
-        var_names = var_def.var_names
-        if isinstance(var_names, str):
-            var_names = [var_names]
-
-        var_type = var_def.var_type.type  # type: ignore
-        if isinstance(var_type, tatsu.ast.AST):
-            var_type = var_type.type_names
-
-        if isinstance(var_type, str):
-            var_type = [var_type]
-
-        for var_name in var_names:  # type: ignore
-            context_vars[var_name] = VariableDefinition(var_names, var_type, var_def.parseinfo)

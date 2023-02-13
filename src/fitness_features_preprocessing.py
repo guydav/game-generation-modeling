@@ -45,13 +45,13 @@ BINARIZE_NON_ONE = [
 ]
 
 SCALE_ZERO_ONE_PATTERNS = [
-    re.compile(r'(ast|text)_ngram_n_\d+_score'),
+    re.compile(r'(ast|text)_ngram(_n_\d+)?_score'),
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [
     re.compile(r'[\w\d+_]+_arg_types_[\w_]+'),
     re.compile(r'compositionality_structure_\d+'),
-    re.compile(r'(ast|text)_ngram_n_\d+_\d+')
+    re.compile(r'(ast|text)_ngram(_n_\d+)?_\d+')
 ]
 
 class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):

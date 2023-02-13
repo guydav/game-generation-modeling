@@ -77,6 +77,18 @@ def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
     )
 
 
+@dataclass
+class ConstrativeTrainingData:
+    positive_samples: torch.Tensor
+    negative_samples: torch.Tensor
+
+    def __init_(self, positive_samples: torch.Tensor, negative_samples: typing.Union[torch.Tensor, typing.List[torch.Tensor]]):
+        self.positive_samples = positive_samples
+        if not isinstance(negative_samples, torch.Tensor):
+            negative_samples = torch.cat(negative_samples, dim=0)
+        self.negative_samples = negative_samples
+
+
 def make_init_weight_function(bias: float = 0.01):
     def init_weights(m):
         if isinstance(m, nn.Linear):
@@ -302,7 +314,7 @@ class SklearnFitnessWrapper:
 
         return self
 
-    def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
+    def _init_model_and_train_kwargs(self):
         self.model = FitnessEenrgyModel(**self.model_kwargs)
         # if 'margin' in self.train_kwargs:
         #     init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
@@ -317,8 +329,20 @@ class SklearnFitnessWrapper:
                     self.loss_function_kwargs[key] = value
 
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
+
+    def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
+        self._init_model_and_train_kwargs()
         self.model = train_and_validate_model(self.model, X, **self.train_kwargs)
         return self
+
+    def fit_with_weighted_negative_sampling(
+        self, train_data: ConstrativeTrainingData,
+        val_data: typing.Optional[ConstrativeTrainingData] = None,) -> 'SklearnFitnessWrapper':
+
+        self._init_model_and_train_kwargs()
+        self.model = train_and_validate_model_weighted_sampling(self.model, train_data, val_data, **self.train_kwargs)
+        return self
+
 
     def transform(self, X, y=None) -> torch.Tensor:
         return self.model(X)
@@ -399,18 +423,6 @@ def build_multiple_scoring_function(
         return {name: evaluator(model, X, y) for name, evaluator in zip(names, evaluators)}
 
     return _evaluate_fitness_multiple
-
-
-@dataclass
-class ConstrativeTrainingData:
-    positive_samples: torch.Tensor
-    negative_samples: torch.Tensor
-
-    def __init_(self, positive_samples: torch.Tensor, negative_samples: typing.Union[torch.Tensor, typing.List[torch.Tensor]]):
-        self.positive_samples = positive_samples
-        if not isinstance(negative_samples, torch.Tensor):
-            negative_samples = torch.cat(negative_samples, dim=0)
-        self.negative_samples = negative_samples
 
 
 DEFAULT_INITIAL_ENERGY = 5.0

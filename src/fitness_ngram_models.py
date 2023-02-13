@@ -36,7 +36,7 @@ parser.add_argument('-o', '--output-path', default=None)
 DEFAULT_STUPID_BACKOFF_DISCOUNT = 0.4
 parser.add_argument('--stupid-backoff-discount', type=float, default=DEFAULT_STUPID_BACKOFF_DISCOUNT)
 DEFAULT_ZERO_LOG_PROB = -7
-parser.add_argument('--default-zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB)
+parser.add_argument('--zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB)
 parser.add_argument('--from-asts', action='store_true')
 
 
@@ -586,6 +586,6 @@ if __name__ == '__main__':
 
     if args.output_path is None:
         args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
-            n='_'.join([str(n) for n in args.n]), today=datetime.now().strftime('%Y_%m_%d'))
+            n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
 
     main(args)

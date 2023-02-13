@@ -1,3 +1,4 @@
+from collections import namedtuple
 import itertools
 import re
 import typing
@@ -20,7 +21,7 @@ VARIABLES_CONTEXT_KEY = 'variables'
 
 
 import ast_printer
-import ast_utils
+import room_and_object_types
 
 
 class ASTParser:
@@ -177,6 +178,67 @@ class ASTDepthParser(ASTParser):
         return kwargs['depth']
 
 
+VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
+
+
+def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, VariableDefinition]) -> None:
+    variables = ast[vars_key].variables  # type: ignore
+    if isinstance(variables, tatsu.ast.AST):
+        variables = [variables]
+
+    for var_def in variables:  # type: ignore
+        var_names = var_def.var_names
+        if isinstance(var_names, str):
+            var_names = [var_names]
+
+        var_type = var_def.var_type.type  # type: ignore
+        if isinstance(var_type, tatsu.ast.AST):
+            var_type = var_type.type_names
+
+        if isinstance(var_type, str):
+            var_type = [var_type]
+
+        for var_name in var_names:  # type: ignore
+            context_vars[var_name] = VariableDefinition(var_names, var_type, var_def.parseinfo)
+
+
+def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typing.Any]) -> dict:
+    vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
+    if len(vars_keys) > 1:
+        raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
+
+    elif len(vars_keys) > 0:
+        vars_key = vars_keys[0]
+        context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
+        extract_variables_from_ast(ast, vars_key, context_vars)
+        context = context.copy()
+        context[VARIABLES_CONTEXT_KEY] = context_vars  # type: ignore
+
+    return context
+
+
+def predicate_function_term_to_type_category(term: str,
+    context_variables: typing.Dict[str, VariableDefinition],
+    known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.Set[str]]:
+    if term.startswith('?'):
+        if term in context_variables:
+            term_type_list = context_variables[term].var_types
+        else:
+            return None
+    else:
+        term_type_list = [term]
+
+    term_categories = set()
+    for term_type in term_type_list:
+        if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
+            if term_type not in known_missing_types and not term_type.isnumeric():
+                continue
+                # print(f'Unknown type {term_type_list} not in the types to categories map')
+        else:
+            term_categories.add(room_and_object_types.TYPES_TO_CATEGORIES[term_type])
+
+    return term_categories
+
 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16
 
@@ -296,7 +358,7 @@ class ASTBooleanParser(ASTParser):
 
         elif rule.endswith('_exists'):
             var_dict = kwargs[VARIABLES_CONTEXT_KEY] if VARIABLES_CONTEXT_KEY in kwargs else {}
-            ast_utils.extract_variables_from_ast(ast, 'exists_vars', var_dict)
+            extract_variables_from_ast(ast, 'exists_vars', var_dict)
             kwargs = kwargs.copy()
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 
@@ -305,7 +367,7 @@ class ASTBooleanParser(ASTParser):
 
         elif rule.endswith('_forall'):
             var_dict = kwargs[VARIABLES_CONTEXT_KEY] if VARIABLES_CONTEXT_KEY in kwargs else {}
-            ast_utils.extract_variables_from_ast(ast, 'forall_vars', var_dict)
+            extract_variables_from_ast(ast, 'forall_vars', var_dict)
             kwargs = kwargs.copy()
             kwargs[VARIABLES_CONTEXT_KEY] = var_dict
 

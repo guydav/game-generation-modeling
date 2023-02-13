@@ -19,11 +19,12 @@ import tatsu.buffering
 import tatsu.infos
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
+from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category
 import ast_parser
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file, VariableDefinition, extract_variables_from_ast
+from ast_utils import cached_load_and_parse_games_from_file
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD, BinarizeFitnessFeatures, MergeFitnessFeatures
-from fitness_ngram_models import TextNGramModel, TextMultiNGramModel, ASTMultiNGramModel, NGramASTParser
+from fitness_ngram_models import NGramTrieModel, ASTNGramTrieModel, NGramASTParser
 import room_and_object_types
 
 
@@ -246,16 +247,7 @@ class ASTFitnessFeaturizer:
 
         elif isinstance(ast, tatsu.ast.AST):
             # Look for variable definitions
-            vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
-            if len(vars_keys) > 1:
-                raise ValueError(f'Found multiple variables keys: {vars_keys}', ast)
-
-            elif len(vars_keys) > 0:
-                vars_key = vars_keys[0]
-                context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-                extract_variables_from_ast(ast, vars_key, context_vars)
-                context = context.copy()
-                context[VARIABLES_CONTEXT_KEY] = context_vars  # type: ignore
+            context = update_context_variables(ast, context)
 
             if 'parseinfo' not in ast or not ast.parseinfo:
                 raise ValueError('No parseinfo found', ast)
@@ -1180,29 +1172,9 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             term_type_lists = []
 
             context_variables = typing.cast(typing.Dict[str, VariableDefinition], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-            for term in terms:
-                if term.startswith('?'):
-                    if term in context_variables:
-                        term_type_lists.append(context_variables[term].var_types)
-                    else:
-                        return
-                else:
-                    term_type_lists.append([term])
+            term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
 
-            term_categories = []
-            for term_type_list in term_type_lists:
-                term_type_categories = set()
-                for term_type in term_type_list:
-                    if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
-                        if term_type not in self.known_missing_types and not term_type.isnumeric():
-                            continue
-                            # print(f'Unknown type {term_type_list} not in the types to categories map')
-                    else:
-                        term_type_categories.add(room_and_object_types.TYPES_TO_CATEGORIES[term_type])
-
-                term_categories.append(term_type_categories)
-
-            if all(self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):
+            if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):
                 self._count(context)
 
     def _count(self, context: ContextDict):
@@ -1426,7 +1398,7 @@ TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text
 
 class TextNGramTerm(FitnessTerm):
     game_output: typing.Optional[dict] = None
-    n_gram_model: typing.Union[TextNGramModel, TextMultiNGramModel]
+    n_gram_model: NGramTrieModel
     n_gram_model_path: str
     top_k_ngrams: int
 
@@ -1455,7 +1427,7 @@ AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_2
 
 class ASTNGramTerm(FitnessTerm):
     game_output: typing.Optional[dict] = None
-    n_gram_model: ASTMultiNGramModel
+    n_gram_model: ASTNGramTrieModel
     n_gram_model_path: str
     top_k_ngrams: int
 

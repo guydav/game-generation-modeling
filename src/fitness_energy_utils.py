@@ -1,5 +1,6 @@
 from collections import defaultdict
 import copy
+from dataclasses import dataclass
 from difflib import HtmlDiff
 from itertools import zip_longest
 import typing
@@ -14,7 +15,7 @@ from statsmodels.distributions.empirical_distribution import ECDF
 from tabulate import tabulate
 import torch
 from torch import nn
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, IterableDataset
 
 from fitness_features_preprocessing import NON_FEATURE_COLUMNS
 
@@ -212,9 +213,13 @@ def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negati
     # negative_scores = scores[:, 1:].sum(dim=1)
     negative_scores = _reduce(scores[:, 1:], negative_score_reduction, dim=1)
     if negative_score_reduction == 'none':
-        return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
+        return fitness_square_square_loss_positive_negative_split(positive_scores, negative_scores, margin, reduction)
 
     return _reduce(positive_scores.pow(2) + torch.relu(margin - negative_scores).pow(2), reduction)
+
+
+def fitness_square_square_loss_positive_negative_split(positive_scores: torch.Tensor, negative_scores: torch.Tensor, margin: float = 1.0, reduction: str = 'mean'):
+    return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
 
 
 def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, reduction: str = 'mean'):
@@ -396,10 +401,178 @@ def build_multiple_scoring_function(
     return _evaluate_fitness_multiple
 
 
+@dataclass
+class ConstrativeTrainingData:
+    positive_samples: torch.Tensor
+    negative_samples: torch.Tensor
+
+    def __init_(self, positive_samples: torch.Tensor, negative_samples: typing.Union[torch.Tensor, typing.List[torch.Tensor]]):
+        self.positive_samples = positive_samples
+        if not isinstance(negative_samples, torch.Tensor):
+            negative_samples = torch.cat(negative_samples, dim=0)
+        self.negative_samples = negative_samples
+
+
+DEFAULT_INITIAL_ENERGY = 5.0
+DEFAULT_ENERGY_BETA = 1.0
+
+
+class EnergyRecencyWeightedDataset(IterableDataset):
+    current_epoch: int
+    data: ConstrativeTrainingData
+    energy_beta: float
+    initial_energy: float
+    k: int
+    n_positives: int
+    negative_energies: torch.Tensor
+    negative_last_sampled: torch.Tensor
+    positive_order: torch.Tensor
+
+    def __init__(self, data: ConstrativeTrainingData, k: int = 4,
+                 energy_beta: float = DEFAULT_ENERGY_BETA, initial_energy: float = DEFAULT_INITIAL_ENERGY):
+        self.data = data
+        self.k = k
+        self.energy_beta = energy_beta
+        self.initial_energy = initial_energy
+
+        self.n_positives = len(data.positive_samples)
+        self.negative_energies = torch.ones(len(data.negative_samples)) * initial_energy
+        self.negative_last_sampled = torch.zeros(len(data.negative_samples))
+        self.current_epoch = 0
+
+        self.latest_negative_indices_yielded = []
+
+    def _new_epoch(self):
+        self.current_epoch += 1
+        unnormalized_logprobs = self.current_epoch - self.negative_last_sampled - (self.negative_energies * self.energy_beta)
+        shifted_logprobs = unnormalized_logprobs - unnormalized_logprobs.max()
+        probs = torch.exp(shifted_logprobs)
+        probs = probs / probs.sum()
+
+        negative_indices = torch.multinomial(probs, self.n_positives * self.k, replacement=False)
+        self.negative_last_sampled[negative_indices] = self.current_epoch
+        self.negative_indices_per_positive = negative_indices.view(self.n_positives, self.k)
+
+        self.positive_order = torch.randperm(self.n_positives)
+
+    def __iter__(self):
+        self._new_epoch()
+        for positive_index in self.positive_order:
+            negative_indices = self.negative_indices_per_positive[positive_index]
+            self.latest_negative_indices_yielded.append(negative_indices)
+            yield torch.cat((self.data.positive_samples[positive_index].unsqueeze(0), self.data.negative_samples[negative_indices]))
+
+    def update_negative_energies(self, negative_energies: torch.Tensor):
+        negative_indices = torch.stack(self.latest_negative_indices_yielded)
+        if negative_indices.shape != negative_energies.shape:
+            raise ValueError(f"Negative indices shape {negative_indices.shape} does not match negative energies shape {negative_energies.shape}")
+
+        self.negative_energies[negative_indices.ravel()] = negative_energies.ravel()
+        self.latest_negative_indices_yielded = []
+
+
+def train_and_validate_model_weighted_sampling(
+        model: nn.Module,
+        train_data: ConstrativeTrainingData,
+        val_data: typing.Optional[ConstrativeTrainingData] = None,
+        loss_function: typing.Callable = fitness_square_square_loss,
+        loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        val_loss_function: typing.Callable = fitness_square_square_loss_positive_negative_split,
+        optimizer_class: typing.Callable = torch.optim.SGD,
+        n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
+        should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+        patience_epochs: int = 5, patience_threshold: float = 0.01,
+        batch_size: int = 8, k: int = 4,
+        dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
+        dataset_initial_energy: float = DEFAULT_INITIAL_ENERGY,
+        num_workers: int = 0, device: str = 'cpu', random_seed: int = 33
+    ) -> nn.Module:
+
+    if loss_function_kwargs is None:
+        loss_function_kwargs = {}
+
+    optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    model.to(device)
+    torch.manual_seed(random_seed)
+
+    train_dataset = EnergyRecencyWeightedDataset(train_data, k=k, energy_beta=dataset_energy_beta, initial_energy=dataset_initial_energy)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    validate = val_data is not None
+
+    min_loss = np.Inf
+    patience_loss = np.Inf
+    patience_update_epoch = 0
+    best_model = model
+
+    epoch = 0
+    for epoch in range(n_epochs):
+        model.train()
+        epoch_train_losses = []
+        for batch in train_dataloader:
+            optimizer.zero_grad()
+            X = batch[0].to(device)
+            scores = model(X)
+            train_dataset.update_negative_energies(scores[:, 1:])
+            loss = loss_function(scores, **loss_function_kwargs)
+            epoch_train_losses.append(loss.item())
+            loss.backward()
+            optimizer.step()
+
+        epoch_val_losses = []
+
+        if validate:
+            model.eval()
+            with torch.no_grad():
+                val_positive_scores = model(val_data.positive_samples.to(device))
+                val_negative_scores = model(val_data.negative_samples.to(device))
+                val_loss = val_loss_function(val_positive_scores, val_negative_scores, **loss_function_kwargs)
+                epoch_val_losses.append(val_loss.item())
+
+        if should_print and epoch % print_interval == 0:
+            if validate:
+                if should_print_weights:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                else:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f}')
+            else:
+                if should_print_weights:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
+                else:
+                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f}')
+
+        epoch_loss = np.mean(epoch_val_losses) if validate else np.mean(epoch_train_losses)
+
+        if epoch_loss < min_loss:
+            if should_print:
+                print(f'Epoch {epoch}: new best model with loss {epoch_loss:.4f}')
+            min_loss = epoch_loss
+            best_model = copy.deepcopy(model).cpu()
+
+        if epoch_loss < patience_loss - patience_threshold:
+            if should_print:
+                print(f'Epoch {epoch}: updating patience loss from {patience_loss:.4f} to {epoch_loss:.4f}')
+            patience_loss = epoch_loss
+            patience_update_epoch = epoch
+
+        if epoch - patience_update_epoch >= patience_epochs:
+            if should_print:
+                print(f'Early stopping after {epoch} epochs')
+            break
+
+    if epoch == n_epochs - 1:
+        print('Training finished without early stopping')
+
+    model = best_model.to(device)
+
+    return model
+
+
 def train_and_validate_model(model: nn.Module,
-    train_data: torch.Tensor,
-    val_data: typing.Optional[torch.Tensor] = None,
-    loss_function: typing.Callable = fitness_nce_loss,
+    train_data: ConstrativeTrainingData,
+    val_data: typing.Optional[ConstrativeTrainingData] = None,
+    loss_function: typing.Callable = fitness_square_square_loss,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
@@ -412,13 +585,22 @@ def train_and_validate_model(model: nn.Module,
 
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
+    if train_data.positive_samples.shape[0] != train_data.negative_samples.shape[0]:
+        raise ValueError(f'train_and_validate_model expects the number of positive samples {train_data.positive_samples.shape[0]} to match the number of negative samples {train_data.negative_samples.shape[0]}')
+
+    train_data_tensor = torch.cat((train_data.positive_samples.unsqueeze(1), train_data.negative_samples), dim=1)
+
     model.to(device)
-    train_dataset = TensorDataset(train_data.to(device))
+    train_dataset = TensorDataset(train_data_tensor.to(device))
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     validate = val_data is not None
     if validate:
-        val_dataset = TensorDataset(val_data.to(device))
+        if val_data.positive_samples.shape[0] != val_data.negative_samples.shape[0]:
+            raise ValueError(f'train_and_validate_model expects the number of positive samples {val_data.positive_samples.shape[0]} to match the number of negative samples {val_data.negative_samples.shape[0]}')
+
+        val_data_tensor = torch.cat((val_data.positive_samples.unsqueeze(1), val_data.negative_samples), dim=1)
+        val_dataset = TensorDataset(val_data_tensor.to(device))
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     torch.manual_seed(random_seed)
@@ -496,7 +678,6 @@ def train_and_validate_model(model: nn.Module,
     model = best_model.to(device)
 
     return model
-
 
 
 def cross_validate(train: torch.Tensor,
@@ -825,6 +1006,7 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
             for i in torch.argsort(diffs):
                 original_idx = inds[i]
                 print(f'{feature_names[original_idx]}: {diffs[i]:.3f} ({scaled_real_game_features[original_idx]:.3f} => {scaled_index_features[original_idx]:.3f})')
+
 
 def display_energy_contributions_table(energy_contributions: torch.Tensor, feature_values: torch.Tensor, weights: torch.Tensor,
         feature_names: typing.List[str], top_k: int, min_display_threshold: float = 0.005, real_game_features: typing.Optional[torch.Tensor] = None):

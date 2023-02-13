@@ -752,7 +752,7 @@ def evaluate_single_game_energy_contributions(cv: typing.Union[GridSearchCV, Pip
         display(Markdown(f'```pddl\n{game_text}\n```'))
 
 
-def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
+def evaluate_energy_contributions(energy_model: typing.Union[GridSearchCV, Pipeline], data_tensor: torch.Tensor, index: typing.Union[int, typing.Tuple[int, int]],
     feature_names: typing.List[str], full_dataset_tensor: torch.Tensor,
     original_game_texts: typing.List[str], negative_game_texts: typing.List[str],
     index_in_negatives: bool = True, top_k: int = 10, display_overall_features: bool = False, display_relative_features: bool = True,
@@ -760,12 +760,7 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
     display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
     display_features_diff: bool = True) -> None:
 
-    energy_model = cv
-    if isinstance(cv, GridSearchCV):
-        energy_model = cv.best_estimator_
-
     negatives = data_tensor[:, 1:, :]
-
     if isinstance(index, tuple):
         row, col = index
     else:
@@ -780,13 +775,42 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
         index_features = full_dataset_tensor[row, col]
 
     real_game_features = data_tensor[row, 0]
-    index_energy = energy_model.transform(index_features).item()  # type: ignore
-    real_game_energy = energy_model.transform(data_tensor[row, 0]).item()  # type: ignore
+
+    if index_in_negatives:
+        original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
+        print(f'Original game index: {original_game_index} | Negative game row: {row} | Negative game col: {col}')
+    else:
+        original_game_index = index
+
+    original_game_text = original_game_texts[original_game_index]  # type: ignore
+    negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
+
+    evaluate_comparison_energy_contributions(
+        real_game_features, index_features, original_game_text,
+        negative_game_text, energy_model, feature_names, top_k,
+        display_overall_features, display_relative_features, display_game_diff,
+        html_diff_substitutions, min_display_threshold, display_features_diff
+    )
+
+def evaluate_comparison_energy_contributions(
+    original_game_features: torch.Tensor, comparison_game_features: torch.Tensor,
+    original_game_text: str, comparison_game_text: str,
+    energy_model: typing.Union[GridSearchCV, Pipeline],
+    feature_names: typing.List[str], top_k: int = 10, display_overall_features: bool = False, display_relative_features: bool = True,
+    display_game_diff: bool = True, html_diff_substitutions: typing.Dict[str, str] = HTML_DIFF_SUBSTITUTIONS, min_display_threshold: float = 0.0005,
+    display_features_diff: bool = True
+    ):
+
+    if isinstance(energy_model, GridSearchCV):
+        energy_model = energy_model.best_estimator_  # type: ignore
+
+    index_energy = energy_model.transform(comparison_game_features).item()  # type: ignore
+    real_game_energy = energy_model.transform(original_game_features).item()  # type: ignore
 
     weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
 
-    scaled_index_features = energy_model['scaler'].transform(index_features)  # type: ignore
-    scaled_real_game_features = energy_model['scaler'].transform(data_tensor[row, 0])  # type: ignore
+    scaled_index_features = energy_model['scaler'].transform(comparison_game_features)  # type: ignore
+    scaled_real_game_features = energy_model['scaler'].transform(original_game_features)  # type: ignore
 
     index_energy_contributions = scaled_index_features * weights
     real_game_contributions = scaled_real_game_features * weights
@@ -794,28 +818,19 @@ def evaluate_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], data
     display(Markdown(f'### Energy of real game: {real_game_energy:.3f} | Energy of regrown game: {index_energy:.3f} | Difference: {index_energy - real_game_energy:.3f}'))
 
     if display_overall_features:
-        display_energy_contributions_table(index_energy_contributions, index_features, weights, feature_names, top_k, min_display_threshold)
+        display_energy_contributions_table(index_energy_contributions, comparison_game_features, weights, feature_names, top_k, min_display_threshold)
 
     if display_relative_features:
         relative_contributions = index_energy_contributions - real_game_contributions
-        display_energy_contributions_table(relative_contributions, index_features, weights, feature_names, top_k, min_display_threshold, real_game_features)
+        display_energy_contributions_table(relative_contributions, comparison_game_features, weights, feature_names, top_k, min_display_threshold, original_game_features)
 
     if display_game_diff:
         display(Markdown('### Game Diffs'))
-        if index_in_negatives:
-            original_game_index = (full_dataset_tensor[:, :2, :] == data_tensor[row, :2, :]).all(dim=-1).all(dim=-1).nonzero().item()
-            print(f'Original game index: {original_game_index} | Negative game row: {row} | Negative game col: {col}')
-        else:
-            original_game_index = index
-
-        original_game_text = original_game_texts[original_game_index]  # type: ignore
-        negative_game_text = negative_game_texts[(original_game_index * negatives.shape[1]) + col]  # type: ignore
-
-        display_game_diff_html(original_game_text, negative_game_text, html_diff_substitutions)
+        display_game_diff_html(original_game_text, comparison_game_text, html_diff_substitutions)
 
     if display_features_diff:
         display(Markdown('### Feature Diffs'))
-        d = index_features - real_game_features
+        d = comparison_game_features - original_game_features
         inds = d.nonzero().squeeze()
         if inds.ndim == 0 or len(inds) == 0:
             print('No features changed')

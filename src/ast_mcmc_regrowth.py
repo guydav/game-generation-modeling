@@ -15,7 +15,7 @@ from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampl
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
 import ast_printer
 from fitness_features import build_fitness_featurizer
-from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions
+from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions, evaluate_comparison_energy_contributions
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
@@ -73,31 +73,44 @@ class MCMCRegrowthSampler:
         return self.fitness_function.transform(features).item()
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
-        sample = self.samples[sample_index][0]
-        sample_features_tensor = self._features_to_tensor(self.samples[sample_index][1])
+        sample_tuple = self.samples[sample_index]
+        sample = sample_tuple[0]
+        sample_features_tensor = self._features_to_tensor(sample_tuple[1])
 
-        evaluate_single_game_energy_contributions(
-            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,
-            top_k=top_k, display_overall_features=display_overall_features,
-            display_game=display_game, min_display_threshold=min_display_threshold,
+        if len(self.samples[sample_index]) > 3:
+            original = sample_tuple[3]
+            original_features_tensor = self._features_to_tensor(sample_tuple[4])
+            evaluate_comparison_energy_contributions(
+                original_features_tensor, sample_features_tensor, ast_printer.ast_to_string(original, '\n'), ast_printer.ast_to_string(sample, '\n'),
+                self.fitness_function, self.feature_names, top_k=top_k, min_display_threshold=min_display_threshold,
             )
 
-    def multiple_samples(self, n_samples: int, verbose: int = 0, should_tqdm: bool = False):
+        else:
+            evaluate_single_game_energy_contributions(
+                self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,
+                top_k=top_k, display_overall_features=display_overall_features,
+                display_game=display_game, min_display_threshold=min_display_threshold,
+                )
+
+    def multiple_samples(self, n_samples: int, verbose: int = 0, should_tqdm: bool = False, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None):
         sample_iter = tqdm.notebook.trange(n_samples) if should_tqdm else range(n_samples)
         for _ in sample_iter:
-            self.sample(verbose)
+            self.sample(verbose, initial_proposal)
 
-    def sample(self, verbose: int = 0):
-        current_proposal = None
-        while current_proposal is None:
+    def sample(self, verbose: int = 0, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None):
+        initial_proposal_provided = initial_proposal is not None
+
+        while initial_proposal is None:
             try:
-                current_proposal = typing.cast(tuple, self.sampler.sample(global_context=dict(original_game_id=f'mcmc-{self.sample_index}')))
+                initial_proposal = typing.cast(tuple, self.sampler.sample(global_context=dict(original_game_id=f'mcmc-{self.sample_index}')))
             except RecursionError:
                 if verbose >= 2: print('Recursion error, skipping sample')
             except SamplingException:
                 if verbose >= 2: print('Sampling exception, skipping sample')
 
-        current_proposal_features, current_proposal_fitness = self._score_proposal(current_proposal)  # type: ignore
+        initial_proposal_features, initial_proposal_fitness = self._score_proposal(initial_proposal)  # type: ignore
+
+        current_proposal, current_proposal_features, current_proposal_fitness = initial_proposal, initial_proposal_features, initial_proposal_fitness
 
         last_accepted_step = 0
         for step in range(self.max_steps):
@@ -109,16 +122,23 @@ class MCMCRegrowthSampler:
             if accepted:
                 last_accepted_step = step
                 if verbose:
-                    print(f'Accepted step {step} with energy {current_proposal_fitness}', end='\r')
+                    print(f'Accepted step {step} with energy {current_proposal_fitness:.5f}', end='\r')
 
             else:
                 if step - last_accepted_step > self.plateau_patience_steps:
                     if verbose:
-                        print(f'Plateaued at step {step} with energy {current_proposal_fitness}')
+                        if initial_proposal_provided:
+                            print(f'Plateaued at step {step} with energy {current_proposal_fitness:.5f} (initial proposal energy: {initial_proposal_fitness:.5f})')
+                        else:
+                            print(f'Plateaued at step {step} with energy {current_proposal_fitness:.5f}')
                     break
 
-        self.samples.append((current_proposal, current_proposal_features, current_proposal_fitness))
-        self.sample_index += 1
+        if initial_proposal_provided:
+            self.samples.append((current_proposal, current_proposal_features, current_proposal_fitness, initial_proposal, initial_proposal_features, initial_proposal_fitness))
+            self.sample_index += 1
+        else:
+            self.samples.append((current_proposal, current_proposal_features, current_proposal_fitness))
+            self.sample_index += 1
 
     def _generate_step_proposal(self) -> typing.Union[tatsu.ast.AST, tuple]:
         return self.regrowth_sampler.sample(self.step_index, update_game_id=False)  # type: ignore

@@ -34,6 +34,7 @@ parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
     './dsl/ast-real-regrowth-samples.pddl',
+    './dsl/ast-mle-samples-large.pddl',
     # './dsl/ast-codex-combine-samples.pddl',
     # './dsl/ast-codex-regrowth-samples.pddl',
 
@@ -47,7 +48,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/fitness_scores.csv.gz'
+DEFAULT_OUTPUT_PATH ='./data/fitness_scores_with_mle_samples.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
 parser.add_argument('-f', '--featurizer-output-path', default=None)
@@ -1578,6 +1579,7 @@ def main(args):
 
     featurizer = build_fitness_featurizer(args)
 
+    # TODO: think about how to parallelize this
     for test_file in args.test_files:
         for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
             featurizer.parse(ast, test_file)

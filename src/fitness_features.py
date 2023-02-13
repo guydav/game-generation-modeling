@@ -462,7 +462,7 @@ class NoAdjacentOnce(FitnessTerm):
         if self.total_prefs == 0:
             return 0
 
-        return 1 - (self.prefs_with_adjacent_once / self.total_prefs)
+        return 1 if self.prefs_with_adjacent_once > 0 else 0
 
 
 class NoAdjacentSameModal(FitnessTerm):
@@ -478,7 +478,8 @@ class NoAdjacentSameModal(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast.then_funcs, list):  # type: ignore
-            self.then_found = True
+            if isinstance(ast.then_funcs, list) and len(ast.then_funcs) > 1:  # type: ignore
+                self.then_found = True
 
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
             consecutive_counts = [len(list(group)) for _, group in itertools.groupby(func_rules)]
@@ -534,7 +535,11 @@ class LengthOfThenModals(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast.then_funcs, list):  # type: ignore
-            self.then_lengths_found[len(ast.then_funcs)] = True  # type: ignore
+            l = len(ast.then_funcs)  # type: ignore
+            if l in self.then_lengths_found:
+                self.then_lengths_found[l] = True
+            else:
+                self.then_lengths_found[self.max_length] = True
 
         else:
             self.then_lengths_found[1] = True

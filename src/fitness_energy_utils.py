@@ -125,7 +125,7 @@ class CustomSklearnScaler:
         return dict(passthrough=self.passthrough)
 
 
-class FitnessEenrgyModel(nn.Module):
+class FitnessEnergyModel(nn.Module):
     def __init__(self, n_features: int, hidden_size: typing.Optional[int] = None,
         hidden_activation: typing.Callable = torch.relu,
         output_activation: typing.Optional[typing.Callable] = None,
@@ -303,7 +303,7 @@ class SklearnFitnessWrapper:
         return self
 
     def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
-        self.model = FitnessEenrgyModel(**self.model_kwargs)
+        self.model = FitnessEnergyModel(**self.model_kwargs)
         # if 'margin' in self.train_kwargs:
         #     init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
         # else:

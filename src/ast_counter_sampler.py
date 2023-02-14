@@ -1025,9 +1025,6 @@ class RegrowthSampler(ASTParentMapper):
         return new_source
 
 
-
-
-
 def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optional[tatsu.grammars.Grammar] = None):
     if args.parse_counter:
         if grammar_parser is None:

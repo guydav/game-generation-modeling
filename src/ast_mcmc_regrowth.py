@@ -13,6 +13,7 @@ import torch
 
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
+from ast_parser import ASTSamplePostprocessor
 import ast_printer
 from fitness_features import build_fitness_featurizer
 from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions, evaluate_comparison_energy_contributions
@@ -65,6 +66,8 @@ class MCMCRegrowthSampler:
         self.greedy_acceptance = greedy_acceptance
         self.acceptance_temperature = acceptance_temperature
 
+        self.postprocessor = ASTSamplePostprocessor()
+
         self.sample_index = 0
         self.step_index = -1
         self.samples = []
@@ -92,12 +95,13 @@ class MCMCRegrowthSampler:
                 display_game=display_game, min_display_threshold=min_display_threshold,
                 )
 
-    def multiple_samples(self, n_samples: int, verbose: int = 0, should_tqdm: bool = False, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None):
+    def multiple_samples(self, n_samples: int, verbose: int = 0, should_tqdm: bool = False,
+                         initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None, postprocess: bool = True):
         sample_iter = tqdm.notebook.trange(n_samples) if should_tqdm else range(n_samples)
         for _ in sample_iter:
-            self.sample(verbose, initial_proposal)
+            self.sample(verbose, initial_proposal, postprocess)
 
-    def sample(self, verbose: int = 0, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None):
+    def sample(self, verbose: int = 0, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None, postprocess: bool = True):
         initial_proposal_provided = initial_proposal is not None
 
         while initial_proposal is None:
@@ -132,6 +136,9 @@ class MCMCRegrowthSampler:
                         else:
                             print(f'Plateaued at step {step} with energy {current_proposal_fitness:.5f}')
                     break
+
+        if postprocess:
+            current_proposal = self.postprocessor(current_proposal)
 
         if initial_proposal_provided:
             self.samples.append((current_proposal, current_proposal_features, current_proposal_fitness, initial_proposal, initial_proposal_features, initial_proposal_fitness))

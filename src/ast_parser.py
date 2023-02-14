@@ -1,4 +1,5 @@
 from collections import namedtuple
+import copy
 import itertools
 import re
 import typing
@@ -21,6 +22,7 @@ VARIABLES_CONTEXT_KEY = 'variables'
 
 
 import ast_printer
+import ast_utils
 import room_and_object_types
 
 
@@ -397,3 +399,84 @@ class ASTBooleanParser(ASTParser):
         expr = typing.cast(boolean.Expression, expr)
         self.str_to_expression_mapping[key] = expr
         return expr
+
+
+PREFERENCE_REPLACEMENT_PATTERN = 'preference{index}'
+VARIABLE_REPLACEMENT_PATTERN = '?v{index}'
+
+
+class ASTSamplePostprocessor(ASTParser):
+    def __init__(self, preference_pattern: str = PREFERENCE_REPLACEMENT_PATTERN, variable_pattern: str = VARIABLE_REPLACEMENT_PATTERN):
+        self.preference_pattern = preference_pattern
+        self.variable_pattern = variable_pattern
+        self._new_parse()
+
+    def _new_parse(self):
+        self.preference_index = 0
+        self.variable_index = 0
+        self.preference_mapping = {}
+        self.variable_mapping = {}
+
+    def __call__(self, ast, **kwargs):
+        initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
+        if initial_call:
+            kwargs['inner_call'] = True
+            self._new_parse()
+
+            ast = copy.deepcopy(ast)
+
+        super().__call__(ast, **kwargs)
+
+        if initial_call:
+            return ast
+
+    def _handle_ast(self, ast, **kwargs):
+        rule = ast.parseinfo.rule  # type: ignore
+
+        if rule == 'preference':
+            pref_name = ast.pref_name
+            if pref_name not in self.preference_mapping:
+                self.preference_mapping[pref_name] = self.preference_pattern.format(index=self.preference_index)
+                self.preference_index += 1
+
+            ast_utils.replace_child(ast, 'pref_name', self.preference_mapping[pref_name])
+
+        elif rule == 'pref_name_and_types':
+            pref_name = ast.pref_name
+            if pref_name not in self.preference_mapping:
+                pref_name = 'preferenceUndefined'
+            else:
+                pref_name = self.preference_mapping[pref_name]
+
+            ast_utils.replace_child(ast, 'pref_name', pref_name)
+
+        elif rule == 'variable_type_def':
+            var_names = ast.var_names
+            if isinstance(var_names, str):
+                if var_names not in self.variable_mapping:
+                    self.variable_mapping[var_names] = self.variable_pattern.format(index=self.variable_index)
+                    self.variable_index += 1
+
+                ast_utils.replace_child(ast, 'var_names', self.variable_mapping[var_names])
+
+            else:
+                new_var_names = []
+                for var_name in var_names:  # type: ignore
+                    if var_name not in self.variable_mapping:
+                        self.variable_mapping[var_name] = self.variable_pattern.format(index=self.variable_index)
+                        self.variable_index += 1
+
+                    new_var_names.append(self.variable_mapping[var_name])
+
+                ast_utils.replace_child(ast, 'var_names', new_var_names)
+
+        if rule == 'predicate_or_function_term':
+            term = ast.term
+            if isinstance(term, str) and term.startswith('?'):
+                if term not in self.variable_mapping:
+                    self.variable_mapping[term] = self.variable_pattern.format(index=self.variable_index)
+                    self.variable_index += 1
+
+                ast_utils.replace_child(ast, 'term', self.variable_mapping[term])
+
+        super()._handle_ast(ast, **kwargs)

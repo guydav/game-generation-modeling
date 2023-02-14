@@ -183,8 +183,11 @@ def apply_selector_list(parent: tatsu.ast.AST, selector: typing.Sequence[typing.
     return parent
 
 
-def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.Sequence[typing.Union[str, int]],
+def replace_child(parent: typing.Union[tuple, tatsu.ast.AST], selector: typing.Union[str, typing.Sequence[typing.Union[str, int]]],
     new_value: typing.Any):
+
+    if isinstance(selector, str):
+        selector = (selector,)
 
     if isinstance(parent, tuple):
         if len(selector) != 1 or not isinstance(selector[0], int):

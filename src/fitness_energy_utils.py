@@ -1139,8 +1139,8 @@ def evaluate_comparison_energy_contributions(
 
     weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
 
-    scaled_index_features = energy_model['scaler'].transform(comparison_game_features)  # type: ignore
-    scaled_real_game_features = energy_model['scaler'].transform(original_game_features)  # type: ignore
+    scaled_index_features = energy_model['scaler'].transform(comparison_game_features) if 'scaler' in energy_model else comparison_game_features   # type: ignore
+    scaled_real_game_features = energy_model['scaler'].transform(original_game_features) if 'scaler' in energy_model else original_game_features  # type: ignore
 
     index_energy_contributions = scaled_index_features * weights
     real_game_contributions = scaled_real_game_features * weights

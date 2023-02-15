@@ -415,13 +415,14 @@ class NGramASTParser(ast_parser.ASTParser):
         self.current_input_ngrams = {}
         self.preorder_ast_tokens = []
 
-    def parse_test_input(self, test_ast: typing.Union[tatsu.ast.AST, tuple], n_values: typing.Optional[typing.Sequence[int]] = None):
+    def parse_test_input(self, test_ast: typing.Union[tatsu.ast.AST, tuple],
+                         n_values: typing.Optional[typing.Sequence[int]] = None, **kwargs):
         if n_values is not None:
             self.current_input_ngrams = {n: [] for n in n_values}
-            self(test_ast, update_model_counts=False, n_values=n_values)
+            self(test_ast, update_model_counts=False, n_values=n_values, **kwargs)
         else:
             self.current_input_ngrams = {self.n: []}
-            self(test_ast, update_model_counts=False)
+            self(test_ast, update_model_counts=False, **kwargs)
         return self.current_input_ngrams
 
     def __call__(self, ast, **kwargs):
@@ -464,7 +465,7 @@ class NGramASTParser(ast_parser.ASTParser):
         if rule == 'predicate_or_function_term':
             term = typing.cast(str, ast.term)
             categories = ast_parser.predicate_function_term_to_type_category(
-                term, kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else None,  # type: ignore
+                term, kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {},  # type: ignore
                 {}
                 )
 

@@ -11,7 +11,7 @@ import pandas as pd
 
 class FitnessFeaturesPreprocessor(ABC):
     @abstractmethod
-    def preprocess_df(self, df: pd.DataFrame) -> pd.DataFrame:
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
         pass
 
 
@@ -62,7 +62,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         self.ignore_columns = ignore_columns
         self.scale_series_min_max_values = {}
 
-    def _binarize_series(self, series: pd.Series, ignore_columns: typing.Iterable[str] = NON_FEATURE_COLUMNS):
+    def _binarize_series(self, series: pd.Series, ignore_columns: typing.Iterable[str] = NON_FEATURE_COLUMNS, use_prior_values: bool = False):
         c = str(series.name)
         if c in ignore_columns:
             return series
@@ -77,8 +77,13 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
             return (series == 1).astype(int)
 
         if any([p.match(c) for p in SCALE_ZERO_ONE_PATTERNS]):
-            min_val, max_val = series.min(), series.max()
-            self.scale_series_min_max_values[c] = (min_val, max_val)
+            if use_prior_values:
+                min_val, max_val = self.scale_series_min_max_values[c]
+
+            else:
+                min_val, max_val = series.min(), series.max()
+                self.scale_series_min_max_values[c] = (min_val, max_val)
+
             return (series - min_val) / (max_val - min_val)
 
         if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
@@ -86,8 +91,8 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
         raise ValueError(f'No binarization rule for column {c}')
 
-    def preprocess_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.apply(self._binarize_series, axis=0, ignore_columns=self.ignore_columns)
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
+        return df.apply(self._binarize_series, axis=0, ignore_columns=self.ignore_columns, use_prior_values=use_prior_values)
 
     def preprocess_row(self, row: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
         for k, v in row.items():
@@ -212,14 +217,27 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         self.merged_key_indices[merged_column_key] = insert_index
         self.merged_key_to_original_keys[merged_column_key] = list(keys_to_merge)  # type: ignore
 
-    def preprocess_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        self.keys_to_drop = []
+    def _merge_single_prefix_from_prior_merge(self, df: pd.DataFrame, feature_prefix: str, feature_suffix: str = '') -> None:
+        merged_column_key = f'{feature_prefix}_{self.merged_column_suffix}{"_" + feature_suffix if feature_suffix else ""}'
+        if merged_column_key in self.merged_key_indices:
+            insert_index = self.merged_key_indices[merged_column_key]
+            keys_to_merge = self.merged_key_to_original_keys[merged_column_key]
+            new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
+            df.insert(insert_index, merged_column_key, new_series_values)
+
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
+        if not use_prior_values:
+            self.keys_to_drop = []
+
         df = df.copy(deep=True)
 
         for feature_suffix in self.feature_suffixes:
             for p in self.predicates:
                 feature_prefix = f'{p}_arg_types'
-                self._merge_single_prefix(df, feature_prefix, feature_suffix)
+                if use_prior_values:
+                    self._merge_single_prefix_from_prior_merge(df, feature_prefix, feature_suffix)
+                else:
+                    self._merge_single_prefix(df, feature_prefix, feature_suffix)
 
         df.drop(self.keys_to_drop, axis=1, inplace=True)
         self.dropped_keys = set(self.keys_to_drop)

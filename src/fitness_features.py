@@ -4,6 +4,7 @@ from datetime import datetime
 from collections import namedtuple, defaultdict
 import itertools
 import gzip
+import multiprocessing
 import os
 import pickle
 import re
@@ -17,6 +18,7 @@ import tatsu
 import tatsu.ast
 import tatsu.buffering
 import tatsu.infos
+from tqdm import tqdm
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category
@@ -34,7 +36,8 @@ parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
     './dsl/ast-real-regrowth-samples.pddl',
-    './dsl/ast-mle-samples-large.pddl',
+    # './dsl/ast-mle-samples-large.pddl',
+
     # './dsl/ast-codex-combine-samples.pddl',
     # './dsl/ast-codex-regrowth-samples.pddl',
 
@@ -48,7 +51,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/fitness_scores_with_mle_samples.csv.gz'
+DEFAULT_OUTPUT_PATH ='./data/fitness_features.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
 parser.add_argument('-f', '--featurizer-output-path', default=None)
@@ -57,6 +60,8 @@ parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIM
 parser.add_argument('--no-binarize', action='store_true')
 parser.add_argument('--no-merge', action='store_true')
 parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD)
+parser.add_argument('--existing-featurizer-path', default=None)
+parser.add_argument('--n-workers', type=int, default=1)
 
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
@@ -179,15 +184,18 @@ class ASTFitnessFeaturizer:
         for term in terms:
             self.register(term, tuple_rule, section_rule)
 
-    def to_df(self) -> pd.DataFrame:
+    def combine_featurizers(self, *others: 'ASTFitnessFeaturizer') -> None:
+        self.rows.extend(itertools.chain.from_iterable(other.rows for other in others))
+
+    def to_df(self, use_prior_values: bool = False) -> pd.DataFrame:
         df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
         if self.preprocessors is not None:
             for preprocessor in self.preprocessors:
-                df = preprocessor.preprocess_df(df)
+                df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values)
 
         return df
 
-    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False):
+    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
         row = {}
         row['src_file'] = os.path.basename(src_file)
         row['game_name'] = full_ast[1]["game_name"]  # type: ignore
@@ -216,11 +224,11 @@ class ASTFitnessFeaturizer:
             else:
                 row[header] = self.list_reduce(row[header])
 
-
         if return_row:
-            if self.preprocessors is not None:
-                for preprocessor in self.preprocessors:
-                    row = preprocessor.preprocess_row(row)
+            if preprocess_row:
+                if self.preprocessors is not None:
+                    for preprocessor in self.preprocessors:
+                        row = preprocessor.preprocess_row(row)
 
             return row
 
@@ -1180,7 +1188,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             context_variables = typing.cast(typing.Dict[str, VariableDefinition], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
 
-            if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):
+            if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):  # type: ignore
                 self._count(context)
 
     def _count(self, context: ContextDict):
@@ -1570,21 +1578,60 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def main(args):
+
+def parse_single_game(game_and_src_file):
+    return featurizer.parse(*game_and_src_file, return_row=True, preprocess_row=False)
+
+def game_iterator():
+    for src_file in args.test_files:
+        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False):
+            yield game, src_file
+
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    if not args.test_files:
+        args.test_files.extend(DEFAULT_TEST_FILES)
+
+    for test_file in args.test_files:
+        if not os.path.exists(test_file):
+            raise ValueError(f'File {test_file} does not exist')
+
+    if args.featurizer_output_path is None:
+        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
+
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)
 
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    featurizer = build_fitness_featurizer(args)
+    if args.existing_featurizer_path is not None:
+        print(f'Loading featurizer from {args.existing_featurizer_path}')
+        with gzip.open(args.existing_featurizer_path, 'rb') as f:
+            featurizer = pickle.load(f)  # type: ignore
 
-    # TODO: think about how to parallelize this
-    for test_file in args.test_files:
-        for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-            featurizer.parse(ast, test_file)
+    else:
+        featurizer = build_fitness_featurizer(args)
 
-    df = featurizer.to_df()
+    if args.n_workers > 1:
+        rows = []
+
+        print(f'Abount to start pool with {args.n_workers} workers')
+        with multiprocessing.Pool(args.n_workers) as p:
+            print('Pool started')
+            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator())):
+                rows.append(row)
+
+        featurizer.rows = rows
+
+    else:
+        for test_file in args.test_files:
+            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
+                featurizer.parse(ast, test_file)
+
+    print('Done parsing games, about to convert to dataframe')
+    df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)
 
     print(df.groupby('src_file').agg([np.mean, np.std]))
 
@@ -1600,25 +1647,11 @@ def main(args):
     if not args.output_path.endswith('.gz'):
         args.output_path += '.gz'
 
+    print(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 
-    if args.featurizer_output_path is not None:
+    if args.existing_featurizer_path is None and args.featurizer_output_path is not None:
         with gzip.open(args.featurizer_output_path, 'wb') as f:
             pickle.dump(featurizer, f)  # type: ignore
 
     sys.setrecursionlimit(original_recursion_limit)
-
-
-if __name__ == '__main__':
-    args = parser.parse_args()
-    if not args.test_files:
-        args.test_files.extend(DEFAULT_TEST_FILES)
-
-    for test_file in args.test_files:
-        if not os.path.exists(test_file):
-            raise ValueError(f'File {test_file} does not exist')
-
-    if args.featurizer_output_path is None:
-        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
-
-    main(args)

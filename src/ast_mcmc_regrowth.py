@@ -73,6 +73,8 @@ class MCMCRegrowthSampler:
         self.samples = []
 
     def _evaluate_fitness(self, features: torch.Tensor):
+        if 'wrapper' in self.fitness_function.named_steps:
+            self.fitness_function.named_steps['wrapper'].eval()
         return self.fitness_function.transform(features).item()
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):

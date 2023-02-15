@@ -21,7 +21,8 @@ import tatsu.infos
 from tqdm import tqdm
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
-from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category
+from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category,\
+    VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
@@ -96,8 +97,7 @@ class FitnessTerm(ABC):
 
 DEFAULT_HEADERS = ('src_file', 'game_name', 'domain_name')
 
-VARIABLES_CONTEXT_KEY = 'variables'
-SECTION_CONTEXT_KEY = 'section'
+
 DEPTH_CONTEXT_KEY = 'depth'
 EXTERNAL_FORALL_CONTEXT_KEY = 'external_forall'
 
@@ -548,6 +548,82 @@ class LengthOfThenModals(FitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return {k: int(v) for k, v in self.then_lengths_found.items()}
 
+
+DEFAULT_MAX_QUANTIFICATION_COUNT = 5
+
+
+class MaxQuantificationCount(FitnessTerm):
+    min_count: int = 0
+    max_count: int = DEFAULT_MAX_QUANTIFICATION_COUNT
+    max_count_by_section: typing.Dict[str, int] = {}
+
+    def __init__(self, max_count: int = DEFAULT_MAX_QUANTIFICATION_COUNT, min_count: int = 0):
+        super().__init__(re.compile(r'[\w_]+_(exists|forall)'), 'max_quantification_count')
+        self.max_count = max_count
+        self.min_count = min_count
+
+    def game_start(self) -> None:
+        self.max_count_by_section = {ast_parser.SETUP: 0, ast_parser.PREFERENCES: 0}
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            section = typing.cast(str, context[SECTION_CONTEXT_KEY])
+            depth = typing.cast(int, context[QUANTIFICATIONS_CONTEXT_KEY] if QUANTIFICATIONS_CONTEXT_KEY in context else 0)
+            if rule not in self.max_count_by_section:
+                self.max_count_by_section[section] = depth
+            else:
+                self.max_count_by_section[section] = max(self.max_count_by_section[rule], depth)
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        output = {f'{section.replace("(:", "")}_{d}': 0 for section in self.max_count_by_section for d in range(self.min_count, self.max_count + 1)}
+        for section, depth in self.max_count_by_section.items():
+            output[f'{section.replace("(:", "")}_{np.clip(depth, self.min_count, self.max_count)}'] = 1
+
+        return output  # type: ignore
+
+
+DEFAULT_MAX_VARIABLES_TYPES = 8
+
+
+class MaxNumberVariablesTypesQuantified(FitnessTerm):
+    max_count: int = DEFAULT_MAX_VARIABLES_TYPES
+    max_types_quantified: int = 0
+    max_variables_quantified: int = 0
+    min_count: int = 1
+
+    def __init__(self, max_count: int = DEFAULT_MAX_VARIABLES_TYPES, min_count: int = 1):
+        super().__init__('variable_type_def', 'max_number_variables_types_quantified')
+        self.max_count = max_count
+        self.min_count = min_count
+
+    def game_start(self) -> None:
+        self.max_types_quantified = 0
+        self.max_variables_quantified = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            var_type = ast.var_type.type  # type: ignore
+            if isinstance(var_type, str):
+                n_types = 1
+            else:
+                n_types = len(var_type.type_names) if isinstance(var_type.type_names, list) else 1
+            self.max_types_quantified = max(self.max_types_quantified, n_types)
+
+            variables = ast.var_names
+            if isinstance(variables, str):
+                n_variables = 1
+            else:
+                n_variables = len(variables)  # type: ignore
+            self.max_variables_quantified = max(self.max_variables_quantified, n_variables)  # type: ignore
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        output = {f'types_{d}': 0 for d in range(self.min_count, self.max_count + 1)}
+        output[f'types_{np.clip(self.max_types_quantified, self.min_count, self.max_count)}'] = 1
+
+        output.update({f'variables_{d}': 0 for d in range(self.min_count, self.max_count + 1)})
+        output[f'variables_{np.clip(self.max_variables_quantified, self.min_count, self.max_count)}'] = 1
+
+        return output  # type: ignore
 
 
 PREDICATE_AND_FUNCTION_RULES = ('predicate', 'function_eval')
@@ -1515,6 +1591,12 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     length_of_then_modals = LengthOfThenModals()
     fitness.register(length_of_then_modals)
+
+    max_quantification_count = MaxQuantificationCount()
+    fitness.register(max_quantification_count)
+
+    max_number_variables_types = MaxNumberVariablesTypesQuantified()
+    fitness.register(max_number_variables_types)
 
     no_repeated_variables_in_predicate = VariableNotRepeatedInPredicateFunction()
     fitness.register(no_repeated_variables_in_predicate)

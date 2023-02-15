@@ -19,6 +19,7 @@ SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 
 SECTION_CONTEXT_KEY = 'section'
 VARIABLES_CONTEXT_KEY = 'variables'
+QUANTIFICATIONS_CONTEXT_KEY = 'quantifications'
 
 
 import ast_printer
@@ -215,6 +216,10 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
         extract_variables_from_ast(ast, vars_key, context_vars)
         context = context.copy()
         context[VARIABLES_CONTEXT_KEY] = context_vars  # type: ignore
+        if QUANTIFICATIONS_CONTEXT_KEY not in context:
+            context[QUANTIFICATIONS_CONTEXT_KEY] = 0
+
+        context[QUANTIFICATIONS_CONTEXT_KEY] += 1
 
     return context
 

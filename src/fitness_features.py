@@ -62,7 +62,7 @@ parser.add_argument('--no-merge', action='store_true')
 parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD)
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
-
+parser.add_argument('--chunksize', type=int, default=128)
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
@@ -1617,10 +1617,10 @@ if __name__ == '__main__':
     if args.n_workers > 1:
         rows = []
 
-        print(f'Abount to start pool with {args.n_workers} workers')
+        print(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
             print('Pool started')
-            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator())):
+            for row in tqdm(p.imap(parse_single_game, game_iterator(), chunksize=args.chunksize)):
                 rows.append(row)
 
         featurizer.rows = rows

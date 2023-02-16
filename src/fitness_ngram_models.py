@@ -524,9 +524,17 @@ class NGramASTParser(ast_parser.ASTParser):
         if rule == 'pref_name_and_types':
             output = ['pref_name']
             if ast.object_types is not None and len(ast.object_types) > 0:
-                object_types = [t.type_name for t in  ast.object_types]
+                object_types = ast.object_types
+                if not isinstance(object_types, (list, tuple)):
+                    object_types = [object_types]
+
+                object_types = [t.type_name if isinstance(t, tatsu.ast.AST) else str(t) for t in object_types]
                 for obj_type in object_types:
                     object_category = ast_parser.predicate_function_term_to_type_category(obj_type, {}, {})
+                    if object_category is None or len(object_category) == 0:
+                        # print(ast)
+                        # print(ast.object_types)
+                        raise ValueError(f'Could not find category for object type {obj_type}: {object_category}')
                     output.append(f'object_type_{object_category.pop()}')
 
             return output

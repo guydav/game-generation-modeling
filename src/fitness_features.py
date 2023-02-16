@@ -1531,7 +1531,7 @@ class TextNGramTerm(FitnessTerm):
         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_13.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_16.pkl')
 
 
 class ASTNGramTerm(FitnessTerm):

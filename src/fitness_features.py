@@ -1529,7 +1529,7 @@ class ASTNGramTerm(FitnessTerm):
     def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
                  stupid_backoff: bool = True, log: bool = True,
                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
-                 top_k_max_n: typing.Optional[int] = None,
+                 top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
                  n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
         self.top_k_ngrams = top_k_ngrams
@@ -1538,6 +1538,7 @@ class ASTNGramTerm(FitnessTerm):
         self.filter_padding_top_k = filter_padding_top_k
         self.top_k_min_n = top_k_min_n
         self.top_k_max_n = top_k_max_n
+        self.score_all = score_all
         self.n_gram_model_path = n_gram_model_path
 
         with open(self.n_gram_model_path, 'rb') as f:
@@ -1550,7 +1551,8 @@ class ASTNGramTerm(FitnessTerm):
         self.game_output = self.n_gram_model.score(
             ast, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
-            top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n
+            top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
+            score_all=self.score_all
         )
 
     def game_end(self):
@@ -1654,7 +1656,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     # text_ngram_term = TextNGramTerm()
     # fitness.register(text_ngram_term, full_text_rule=True)
 
-    ast_ngram_term = ASTNGramTerm(top_k_min_n=2)
+    ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True)
     fitness.register(ast_ngram_term, full_ast_rule=True)
 
     return fitness

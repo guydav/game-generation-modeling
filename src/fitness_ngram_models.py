@@ -17,7 +17,7 @@ import tatsu.ast
 import ast_printer
 import ast_parser
 from ast_utils import cached_load_and_parse_games_from_file
-
+import room_and_object_types
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -47,7 +47,7 @@ NUMBER_AND_DECIMAL_PATTERN = re.compile(r'\-?[0-9]+(\.[0-9]+)?')
 NON_TOKEN_CHARACTERS_PATTERN = re.compile(r'(\(:)|\(|\)|( \- )')
 
 
-def ngram_preprocess(game_text: str):
+def ngram_preprocess(game_text: str) -> typing.List[str]:
     # remove game preamble
     domain_start = game_text.find('(:domain')
     domain_end = game_text.find(')', domain_start)
@@ -63,10 +63,15 @@ def ngram_preprocess(game_text: str):
     game_text = NUMBER_AND_DECIMAL_PATTERN.sub('number', game_text)
     # remove non-token characters
     game_text = NON_TOKEN_CHARACTERS_PATTERN.sub('', game_text)
+    # replace any remaining colons with spaces
+    game_text = game_text.replace(':', ' ')
     # standardize whitespace
     game_text = WHITESPACE_PATTERN.sub(' ', game_text)
-
-    return game_text.strip()
+    # tokenize
+    tokens = game_text.strip().split()
+    # convert types to categories
+    tokens = [room_and_object_types.TYPES_TO_CATEGORIES.get(token, token) for token in tokens]
+    return tokens
 
 
 START_PAD = '<start>'
@@ -74,7 +79,7 @@ END_PAD = '<end>'
 UNKNOWN_CATEGORY = '<unknown>'
 
 def _ngrams(text: str, n: int, pad: int = 0, start_pad: str = START_PAD, end_pad: str = END_PAD) -> typing.Iterable[typing.Tuple[str, ...]]:
-    tokens = ngram_preprocess(text).split()
+    tokens = ngram_preprocess(text)
     if pad > 0:
         tokens = [start_pad] * pad + tokens + [end_pad] * pad
     return nltk_ngrams(tokens, n)
@@ -122,8 +127,10 @@ class NGramTrieModel:
         for ngram in ngrams:
             self._add(ngram, count)
 
-    def _text_to_ngrams(self, text: str) -> typing.Iterable[typing.Tuple[str, ...]]:
-        return _ngrams(text, self.n, pad=self.n - 1 if self.should_pad else 0)
+    def _text_to_ngrams(self, text: str, n: typing.Optional[int] = None) -> typing.Iterable[typing.Tuple[str, ...]]:
+        if n is None:
+            n = self.n
+        return _ngrams(text, n, pad=n - 1 if self.should_pad else 0)
 
     def fit(self, game_texts: typing.Optional[typing.Sequence[str]] = None,
             ngram_counts: typing.Optional[typing.Dict[typing.Tuple[str, ...], int]] = None,
@@ -249,11 +256,6 @@ class NGramTrieModel:
         if input_text is not None and input_ngrams is not None:
             raise ValueError('Must provide either text or ngrams, not both')
 
-        if input_text is not None:
-            input_ngrams = {self.n: list(self._text_to_ngrams(input_text))}
-
-        input_ngrams = typing.cast(typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]], input_ngrams)
-
         use_top_k = False
         if top_k_min_n is not None or top_k_max_n is not None:
             use_top_k = True
@@ -262,6 +264,14 @@ class NGramTrieModel:
 
             if top_k_max_n is None:
                 top_k_max_n = self.n
+
+        if input_text is not None:
+            if use_top_k:
+                input_ngrams = {n: list(self._text_to_ngrams(input_text)) for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
+            else:
+                input_ngrams = {self.n: list(self._text_to_ngrams(input_text))}
+
+        input_ngrams = typing.cast(typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]], input_ngrams)
 
         if use_top_k and score_all:
             output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')

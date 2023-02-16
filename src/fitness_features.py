@@ -1512,7 +1512,7 @@ class TextNGramTerm(FitnessTerm):
         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_13.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_16.pkl')
 
 
 class ASTNGramTerm(FitnessTerm):
@@ -1653,8 +1653,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 
-    # text_ngram_term = TextNGramTerm()
-    # fitness.register(text_ngram_term, full_text_rule=True)
+    text_ngram_term = TextNGramTerm()
+    fitness.register(text_ngram_term, full_text_rule=True)
 
     ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True)
     fitness.register(ast_ngram_term, full_ast_rule=True)

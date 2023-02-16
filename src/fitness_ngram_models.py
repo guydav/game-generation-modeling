@@ -45,7 +45,7 @@ WHITESPACE_PATTERN = re.compile(r'\s+')
 VARIABLE_PATTERN = re.compile(r'\?[A-Za-z0-9_]+')
 PREFERENCE_NAME_PATTERN = re.compile(r'\(preference\s+([A-Za-z0-9_]+)\s+')
 NUMBER_AND_DECIMAL_PATTERN = re.compile(r'\-?[0-9]+(\.[0-9]+)?')
-NON_TOKEN_CHARACTERS_PATTERN = re.compile(r'\(|\)|\:|\-')
+NON_TOKEN_CHARACTERS_PATTERN = re.compile(r'(\(:)|\(|\)|( \- )')
 
 
 def ngram_preprocess(game_text: str):
@@ -242,7 +242,7 @@ class NGramTrieModel:
               input_ngrams: typing.Optional[typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]]] = None,
               k: typing.Optional[int] = None, stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None):
+              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
 
         if input_text is None and input_ngrams is None:
             raise ValueError('Must provide either text or ngrams')
@@ -254,7 +254,22 @@ class NGramTrieModel:
             input_ngrams = {self.n: list(self._text_to_ngrams(input_text))}
 
         input_ngrams = typing.cast(typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]], input_ngrams)
-        output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
+
+        use_top_k = False
+        if top_k_min_n is not None or top_k_max_n is not None:
+            use_top_k = True
+            if top_k_min_n is None:
+                top_k_min_n = 2
+
+            if top_k_max_n is None:
+                top_k_max_n = self.n
+
+        if use_top_k and score_all:
+            output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
+                      for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
+
+        else:
+            output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
 
         if k is not None:
             if k != self.k:
@@ -263,19 +278,13 @@ class NGramTrieModel:
                 self.top_k_ngrams = {n: sorted(n_counts.items(), key=self._get_dict_item_value, reverse=True)[:k]
                                      for n, n_counts in self.ngram_counts.items()}
 
-            if top_k_min_n is None and top_k_max_n is None:
+            if not use_top_k:
                 text_ngram_counts = Counter(input_ngrams[self.n])
                 for i, (ngram, _) in enumerate(self.top_k_ngrams[self.n]):
                     output[i] = text_ngram_counts[ngram]  # type: ignore
 
             else:
-                if top_k_min_n is None:
-                    top_k_min_n = 2
-
-                if top_k_max_n is None:
-                    top_k_max_n = self.n
-
-                for n in range(top_k_min_n, top_k_max_n + 1):
+                for n in range(top_k_min_n, top_k_max_n + 1):  # type: ignore
                     text_ngram_counts = Counter(input_ngrams[n])
                     for i, (ngram, _) in enumerate(self.top_k_ngrams[n]):
                         output[f'n_{n}_{i}'] = text_ngram_counts[ngram]  # type: ignore
@@ -497,6 +506,10 @@ class NGramASTParser(ast_parser.ASTParser):
 
                 return ['either_types'] + categories
 
+        if rule == 'scoring_multi_expr':
+            return ast.op  # type: ignore
+
+
         return rule
 
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
@@ -539,7 +552,7 @@ class ASTNGramTrieModel:
     def score(self, ast: typing.Union[tuple,tatsu.ast.AST], k: typing.Optional[int] = None,
               stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None):
+              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
 
         n_values = None
         if top_k_min_n is not None:
@@ -552,7 +565,8 @@ class ASTNGramTrieModel:
         return self.model.score(input_ngrams=current_input_ngrams, k=k,
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,
-                                top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n)
+                                top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
+                                score_all=score_all)
 
 
 def main(args: argparse.Namespace):

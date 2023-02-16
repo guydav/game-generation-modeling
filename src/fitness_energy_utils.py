@@ -1004,7 +1004,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']),
         pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']),
         pd.DataFrame(cv.cv_results_["rank_test_single_game_rank"], columns=['game_rank_rank']),
-    ],axis=1)
+    ], axis=1)
 
     if test_results is not None:
         display(Markdown('### Test results:'))

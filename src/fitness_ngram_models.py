@@ -40,7 +40,6 @@ parser.add_argument('--zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB
 parser.add_argument('--from-asts', action='store_true')
 
 
-
 WHITESPACE_PATTERN = re.compile(r'\s+')
 VARIABLE_PATTERN = re.compile(r'\?[A-Za-z0-9_]+')
 PREFERENCE_NAME_PATTERN = re.compile(r'\(preference\s+([A-Za-z0-9_]+)\s+')
@@ -405,20 +404,22 @@ class NGramTrieModel:
 
 IGNORE_RULES = [
     'setup', 'setup_statement',
-    'type_definition', 'either_types',
-    'super_predicate', 'predicate', 'function_eval',
-    'pref_def', 'pref_body', 'seq_func',
-    'terminal', 'scoring_expr', 'preference_eval',
+    'variable_list', 'type_definition', 'either_types',
+    'super_predicate', 'predicate', 'function_eval', 'comparison_arg',
+    'pref_forall_prefs', 'pref_def', 'pref_body', 'seq_func',
+    'terminal', 'terminal_expr', 'scoring_expr',
+    'preference_eval', 'pref_object_type',
 ]
 
 
 class NGramASTParser(ast_parser.ASTParser):
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
-                preorder_traversal: bool = True, pad: int = 0):
+                preorder_traversal: bool = True, pad: int = 0, skip_game_and_domain: bool = True):
         self.n = n
         self.ignore_rules = set(ignore_rules)
         self.preorder_traversal = preorder_traversal
         self.pad = pad
+        self.skip_game_and_domain = skip_game_and_domain
 
         self.ngram_counts = defaultdict(int)
         self.current_input_ngrams = {}
@@ -447,6 +448,10 @@ class NGramASTParser(ast_parser.ASTParser):
         if self.pad > 0 and initial_call:
             for _ in range(self.pad):
                 ast_tokens.append(START_PAD)
+
+        if initial_call:
+            if self.skip_game_and_domain:
+                ast = ast[3:]
 
         super().__call__(ast, **kwargs)
 
@@ -506,15 +511,52 @@ class NGramASTParser(ast_parser.ASTParser):
 
                 return ['either_types'] + categories
 
-        if rule == 'scoring_multi_expr':
+        if rule == 'pref_name_and_types':
+            output = ['pref_name']
+            if ast.object_types is not None and len(ast.object_types) > 0:
+                object_types = [t.type_name for t in  ast.object_types]
+                for obj_type in object_types:
+                    object_category = ast_parser.predicate_function_term_to_type_category(obj_type, {}, {})
+                    output.append(f'object_type_{object_category.pop()}')
+
+            return output
+
+        if rule in ('terminal_comp', 'scoring_comp', 'scoring_multi_expr'):
             return ast.op  # type: ignore
 
+        if rule == 'two_arg_comparison':
+            return ast.comp_op  # type: ignore
+
+        if rule in ('scoring_equals_comp', 'multiple_args_equal_comparison'):
+            return '='
+
+        if rule == 'scoring_neg_expr':
+            return '-'
 
         return rule
 
+    def _get_ast_tokens(self, **kwargs):
+        return kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
+
+    def _handle_tuple(self, ast: tuple, **kwargs):
+        if isinstance(ast[0], str) and ast[0].startswith('(:'):
+            ast_tokens = self._get_ast_tokens(**kwargs)
+            ast_tokens.append(ast[0][2:])
+
+        super()._handle_tuple(ast, **kwargs)
+
+    def _handle_str(self, ast: str, **kwargs):
+        if NUMBER_AND_DECIMAL_PATTERN.match(ast):
+            ast_tokens = self._get_ast_tokens(**kwargs)
+            ast_tokens.append('number')
+
+    def _handle_int(self, ast: int, **kwargs):
+        ast_tokens = self._get_ast_tokens(**kwargs)
+        ast_tokens.append('number')
+
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
-        ast_tokens = ast_tokens = kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
+        ast_tokens = self._get_ast_tokens(**kwargs)
 
         kwargs = ast_parser.update_context_variables(ast, kwargs)
 

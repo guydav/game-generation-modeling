@@ -263,6 +263,14 @@ def fitness_log_loss(scores: torch.Tensor, negative_score_reduction: str = 'none
     return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)), reduction)
 
 
+def fitness_weird_log_loss(scores: torch.Tensor, positive_margin: float = 2.0, margin: float = 4.0, reduction: str = 'mean',  negative_score_reduction: str = 'none'):
+    positive_scores = scores[:, 0]
+    negative_scores = scores[:, 1:]
+    if negative_score_reduction != 'none':
+        negative_scores = _reduce(negative_scores, negative_score_reduction, dim=1)
+    return _reduce(torch.exp(positive_scores - positive_margin), reduction) + _reduce(torch.relu(margin - torch.log(negative_scores)), reduction)
+
+
 def fitness_square_square_loss(scores: torch.Tensor, margin: float = 1.0, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     positive_scores = scores[:, 0]
     # negative_scores = scores[:, 1:].sum(dim=1)
@@ -308,7 +316,8 @@ DEFAULT_TRAIN_KWARGS = {
     'loss_function': fitness_nce_loss,
     'should_print': False,
     'print_interval': 10,
-    'patience_epochs': 5,
+    'n_epochs': 1000,
+    'patience_epochs': 20,
     'patience_threshold': 0.01,
     'batch_size': 8,
     'k': 4,
@@ -593,7 +602,7 @@ def train_and_validate_model_weighted_sampling(
         batch_size: int = 8, k: int = 4,
         dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
         dataset_initial_energy: float = DEFAULT_INITIAL_ENERGY,
-        num_workers: int = 0, device: str = 'cpu', random_seed: int = 33
+        num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
     ) -> nn.Module:
 
     if loss_function_kwargs is None:
@@ -678,37 +687,28 @@ def train_and_validate_model_weighted_sampling(
 
 
 def train_and_validate_model(model: nn.Module,
-    train_data: ConstrativeTrainingData,
-    val_data: typing.Optional[ConstrativeTrainingData] = None,
+    train_data: torch.Tensor,
+    val_data: typing.Optional[torch.Tensor] = None,
     loss_function: typing.Callable = fitness_square_square_loss,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33) -> nn.Module:
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33, **kwargs) -> nn.Module:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
 
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    if train_data.positive_samples.shape[0] != train_data.negative_samples.shape[0]:
-        raise ValueError(f'train_and_validate_model expects the number of positive samples {train_data.positive_samples.shape[0]} to match the number of negative samples {train_data.negative_samples.shape[0]}')
-
-    train_data_tensor = torch.cat((train_data.positive_samples.unsqueeze(1), train_data.negative_samples), dim=1)
-
     model.to(device)
-    train_dataset = TensorDataset(train_data_tensor.to(device))
+    train_dataset = TensorDataset(train_data.to(device))
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     validate = val_data is not None
     if validate:
-        if val_data.positive_samples.shape[0] != val_data.negative_samples.shape[0]:
-            raise ValueError(f'train_and_validate_model expects the number of positive samples {val_data.positive_samples.shape[0]} to match the number of negative samples {val_data.negative_samples.shape[0]}')
-
-        val_data_tensor = torch.cat((val_data.positive_samples.unsqueeze(1), val_data.negative_samples), dim=1)
-        val_dataset = TensorDataset(val_data_tensor.to(device))
+        val_dataset = TensorDataset(val_data.to(device))
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     torch.manual_seed(random_seed)
@@ -1004,7 +1004,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']),
         pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']),
         pd.DataFrame(cv.cv_results_["rank_test_single_game_rank"], columns=['game_rank_rank']),
-    ],axis=1)
+    ], axis=1)
 
     if test_results is not None:
         display(Markdown('### Test results:'))

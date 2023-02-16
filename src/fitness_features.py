@@ -1483,19 +1483,33 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 
 
 DEFAULT_TOP_K_NGRAMS = 10
-TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_2_3_4_5_ngram_model_2023_02_05.pkl')
+TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
 
 
 class TextNGramTerm(FitnessTerm):
     game_output: typing.Optional[dict] = None
     n_gram_model: NGramTrieModel
     n_gram_model_path: str
+    stupid_backoff: bool
+    top_k_max_n: typing.Optional[int]
+    top_k_min_n: typing.Optional[int]
     top_k_ngrams: int
 
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS, n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
+    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
+                 stupid_backoff: bool = True, log: bool = True,
+                 filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
+                 top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+                 n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
         super().__init__('', 'text_ngram')
         self.top_k_ngrams = top_k_ngrams
+        self.stupid_backoff = stupid_backoff
+        self.log = log
+        self.filter_padding_top_k = filter_padding_top_k
+        self.top_k_min_n = top_k_min_n
+        self.top_k_max_n = top_k_max_n
+        self.score_all = score_all
         self.n_gram_model_path = n_gram_model_path
+
         with open(self.n_gram_model_path, 'rb') as f:
             self.n_gram_model = pickle.load(f)
 
@@ -1506,7 +1520,12 @@ class TextNGramTerm(FitnessTerm):
         pass
 
     def parse_full_text(self, full_text: str) -> None:
-        self.game_output = self.n_gram_model.score(full_text, k=self.top_k_ngrams)
+        self.game_output = self.n_gram_model.score(
+            full_text, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
+            log=self.log, filter_padding_top_k=self.filter_padding_top_k,
+            top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
+            score_all=self.score_all
+        )
 
     def game_end(self):
         return self.game_output
@@ -1653,8 +1672,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 
-    # text_ngram_term = TextNGramTerm()
-    # fitness.register(text_ngram_term, full_text_rule=True)
+    text_ngram_term = TextNGramTerm()
+    fitness.register(text_ngram_term, full_text_rule=True)
 
     ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True)
     fitness.register(ast_ngram_term, full_ast_rule=True)

@@ -1681,9 +1681,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-
 def parse_single_game(game_and_src_file):
     return featurizer.parse(*game_and_src_file, return_row=True, preprocess_row=False)
+
 
 def game_iterator():
     for src_file in args.test_files:
@@ -1721,6 +1721,7 @@ if __name__ == '__main__':
         rows = []
 
         print(f'About to start pool with {args.n_workers} workers')
+        print(featurizer)
         with multiprocessing.Pool(args.n_workers) as p:
             print('Pool started')
             for row in tqdm(p.imap(parse_single_game, game_iterator(), chunksize=args.chunksize)):

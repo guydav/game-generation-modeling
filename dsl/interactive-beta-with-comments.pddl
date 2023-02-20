@@ -660,7 +660,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)
                     )
                 )
                 (touch ?l1 ?l2)
@@ -1088,17 +1088,17 @@
         ; PREFERENCE: count any throws of a dodgeball or a golfball
         (preference throwAttempt
             (then
-                (once (agent_holds ?d))
-                (hold (and (not (agent_holds ?d)) (in_motion ?d)))
-                (once (not (in_motion ?d)))
+                (once (agent_holds ?b))
+                (hold (and (not (agent_holds ?b)) (in_motion ?b)))
+                (once (not (in_motion ?b)))
             )
         )
         ; PREFERENCE: count any dodgeball or golfball that is never thrown by the agent
         (preference ballNeverThrown
             (then
                 (once (game_start))
-                (hold (not (agent_holds ?d)))
-                (hold (game_over))
+                (hold (not (agent_holds ?b)))
+                (once (game_over))
             )
         )
     )
@@ -1985,7 +1985,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)
                     )
                 )
                 (touch ?l1 ?l2)
@@ -2147,7 +2147,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (and (not (agent_holds ?l2)) (in_motion ?l2))
+                        (in_motion ?l2)
                     )
                 )
                 (touch ?l1 ?l2)

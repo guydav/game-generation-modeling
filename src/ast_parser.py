@@ -119,6 +119,8 @@ class ASTParentMapper(ASTParser):
     def _add_ast_to_mapping(self, ast, **kwargs):
         self.parent_mapping[self._ast_key(ast)] = self._build_mapping_value(ast, **kwargs)  # type: ignore
 
+    def get_parent_info(self, ast):
+        return self.parent_mapping[self._ast_key(ast)]
 
 DEFAULT_PARSEINFO_COMPARISON_INDICES = (1, 2, 3)
 

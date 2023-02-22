@@ -313,7 +313,8 @@ SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('predicate_or_function_term', 'term'): ('type_name', 'variable',),
     # ('function_term', 'term'): ('type_name', 'variable',),
     # ('predicate_term', 'term'): ('type_name', 'variable'),
-    ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
+    ('terminal_expr', 'expr'): ('total_time', 'total_score'),
+    ('scoring_expr_or_number', 'expr'): 'number',
 }
 
 PATTERN_TYPE_MAPPINGS = {

@@ -292,7 +292,11 @@ class ASTFitnessFeaturizer:
             rule = ast.parseinfo.rule
 
             if rule == 'seq_func':
-                context[MODAL_CONTEXT_KEY] = ast.seq_func.parseinfo.rule
+                seq_func = ast.seq_func
+                if isinstance(seq_func, str):
+                    context[MODAL_CONTEXT_KEY] = seq_func
+                else:
+                    context[MODAL_CONTEXT_KEY] = seq_func.parseinfo.rule
             elif rule == 'at_end':
                 context[MODAL_CONTEXT_KEY] = 'at_end'
 

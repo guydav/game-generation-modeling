@@ -48,6 +48,9 @@ parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--verbose', action='store_true')
+parser.add_argument('--file-open-mode', default='w')
+parser.add_argument('--regrowth-start-index', type=int, default=0)
+parser.add_argument('--regrowth-end-index', type=int, default=-1)
 
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
@@ -1046,7 +1049,7 @@ def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optio
     return counter
 
 
-def test_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar):
+def test_and_stringify_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar):
     first_print_out = ''
 
     try:
@@ -1074,9 +1077,6 @@ def test_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammar
 
 
 def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
-    samples = []
-    text_samples = []
-
     sample_iter = range(args.num_samples)
     if args.sample_tqdm:
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
@@ -1085,34 +1085,31 @@ def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar
         generated_sample = False
         while not generated_sample:
             try:
-                ast = sampler.sample(global_context=dict(sample_id=sample_id))
-                sample_text = test_ast_sample(ast, args, grammar_parser)
-                samples.append(ast)
-                text_samples.append(sample_text)
+                sample_ast = sampler.sample(global_context=dict(sample_id=sample_id))
+                sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
                 generated_sample = True
+                yield sample_ast, sample_str + '\n\n'
+
             except ValueError as e:
                 print(f'ValueError while sampling, repeating: {e}')
             except SamplingException as e:
                 print(f'SamplingException while sampling, repeating: {e}')
 
-    return samples, text_samples
-
 
 def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
-    samples = []
-    text_samples = []
-
     regrowth_sampler = RegrowthSampler(sampler, args.random_seed)
 
-    real_games = []
+    real_games = [sample_ast for test_file in args.test_files for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm)]
+    if args.regrowth_end_index == -1:
+        args.regrowth_end_index = len(real_games)
 
-    for test_file in args.test_files:
-        for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-            real_games.append(sample_ast)
+    else:
+        args.regrowth_end_index = min(args.regrowth_end_index, len(real_games))
 
-    game_iter = enumerate(real_games)
+
+    game_iter = enumerate(real_games[args.regrowth_start_index:args.regrowth_end_index])
     if args.sample_tqdm:
-        game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=len(real_games))
+        game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=args.regrowth_end_index - args.regrowth_start_index)
 
     for game_index, real_game in game_iter:
         regrowth_sampler.set_source_ast(real_game)
@@ -1125,24 +1122,21 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
             while not sample_generated:
                 try:
                     sample_ast = regrowth_sampler.sample(sample_index)
-                    sample_str = test_ast_sample(sample_ast, args, grammar_parser)
+                    sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
                     sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
 
                     if sample_hash in sample_hashes:
                         if args.verbose: print('Regrowth generated identical games, repeating')
                     else:
                         sample_generated = True
-                        samples.append(sample_ast)
-                        text_samples.append(sample_str + '\n\n')
                         sample_hashes.add(sample_hash)
+                        yield sample_ast, sample_str + '\n\n'
 
                 except RecursionError:
                     if args.verbose: print('Recursion error, skipping sample')
 
                 except SamplingException:
                     if args.verbose: print('Sampling exception, skipping sample')
-
-    return samples, text_samples
 
 
 def main(args):
@@ -1154,12 +1148,11 @@ def main(args):
     counter = parse_or_load_counter(args, grammar_parser)
 
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)
-    samples, text_samples = None, None
 
     if args.sampling_method == MLE_SAMPLING:
-        samples, text_samples = _generate_mle_samples(args, sampler, grammar_parser)
+        sample_iter = _generate_mle_samples(args, sampler, grammar_parser)
     elif args.sampling_method == REGROWTH_SAMPLING:
-        samples, text_samples = _generate_regrowth_samples(args, sampler, grammar_parser)
+        sample_iter = _generate_regrowth_samples(args, sampler, grammar_parser)
     else:
         raise ValueError(f'Unknown sampling method: {args.sampling_method}')
 
@@ -1173,12 +1166,13 @@ def main(args):
     sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
-        if text_samples is None:
-            raise ValueError('No samples to save')
+        with open(args.samples_output_path, args.file_open_mode) as out_file:
+            for _, sample in sample_iter:
+                out_file.write(sample + '\n\n')
 
-        with open(args.samples_output_path, 'w') as out_file:
-            text_samples = [sample + '\n\n' for sample in text_samples]
-            out_file.writelines(text_samples)
+    else:
+        for ast, sample in sample_iter:
+            continue
 
     return
 

@@ -743,6 +743,11 @@ def _handle_scoring_expr(caller, rule, ast, depth, increment, context=None):
 
 
 @mutation_context
+def _handle_scoring_expr_or_number(caller, rule, ast, depth, increment, context=None):
+    caller(ast.expr, depth, increment, context)
+
+
+@mutation_context
 def _handle_scoring_external_maximize(caller, rule, ast, depth, increment, context=None):
     _indent_print(f'(external-forall-maximize', depth, increment, context)
     caller(ast.scoring_expr, depth + 1, increment, context)
@@ -764,7 +769,8 @@ def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
     printer.register_exact_matches(
         _handle_terminal, _handle_terminal_expr,
-        _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
+        _handle_scoring_expr, _handle_scoring_expr_or_number,
+        _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr,
         _handle_neg_expr, _handle_equals_comp,
@@ -802,7 +808,8 @@ def build_scoring_printer():
     printer = ASTPrinter('(:scoring', ('scoring_',))
     printer.register_exact_matches(
         _handle_scoring, _handle_maximize, _handle_minimize,
-        _handle_scoring_expr, _handle_preference_eval, _handle_scoring_comparison,
+        _handle_scoring_expr, _handle_scoring_expr_or_number,
+        _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr,
         _handle_equals_comp, _handle_function_eval, _handle_with,

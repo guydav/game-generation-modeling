@@ -323,6 +323,9 @@ DEFAULT_TRAIN_KWARGS = {
     'k': 4,
     'device': 'cpu',
     'dataset_energy_beta': 1.0,
+    'shuffle_negatives': False,
+    'regularizer': None,
+    'regularization_weight': 0.0,
     'random_seed': 33,
 }
 
@@ -527,16 +530,17 @@ class EnergyRecencyWeightedDataset(IterableDataset):
 
     def __init__(self, data: ConstrativeTrainingData, k: int = 4,
                  energy_beta: float = DEFAULT_ENERGY_BETA, initial_energy: float = DEFAULT_INITIAL_ENERGY,
-                 max_energy: float = DEFAULT_MAX_ENERGY):
+                 max_energy: float = DEFAULT_MAX_ENERGY, device: str = 'cpu'):
         self.data = data
         self.k = k
         self.energy_beta = energy_beta
         self.initial_energy = initial_energy
         self.max_energy = max_energy
+        self.device = device
 
         self.n_positives = len(data.positive_samples)
-        self.negative_energies = torch.ones(len(data.negative_samples)) * initial_energy
-        self.negative_last_sampled = torch.zeros(len(data.negative_samples))
+        self.negative_energies = torch.ones(len(data.negative_samples), device=self.device) * initial_energy
+        self.negative_last_sampled = torch.zeros(len(data.negative_samples), device=self.device)
         self.current_epoch = 0
 
         self.latest_negative_indices_yielded = []
@@ -602,6 +606,7 @@ def train_and_validate_model_weighted_sampling(
         batch_size: int = 8, k: int = 4,
         dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
         dataset_initial_energy: float = DEFAULT_INITIAL_ENERGY,
+        regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
         num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
     ) -> nn.Module:
 
@@ -613,7 +618,7 @@ def train_and_validate_model_weighted_sampling(
     model.to(device)
     torch.manual_seed(random_seed)
 
-    train_dataset = EnergyRecencyWeightedDataset(train_data, k=k, energy_beta=dataset_energy_beta, initial_energy=dataset_initial_energy)
+    train_dataset = EnergyRecencyWeightedDataset(train_data, k=k, energy_beta=dataset_energy_beta, initial_energy=dataset_initial_energy, device=device)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     validate = val_data is not None
@@ -633,6 +638,8 @@ def train_and_validate_model_weighted_sampling(
             scores = model(X)
             train_dataset.update_negative_energies(scores[:, 1:].detach().squeeze())
             loss = loss_function(scores, **loss_function_kwargs)
+            if regularizer is not None:
+                loss += regularization_weight * regularizer(model)
             epoch_train_losses.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -645,6 +652,8 @@ def train_and_validate_model_weighted_sampling(
                 val_positive_scores = model(val_data.positive_samples.to(device))
                 val_negative_scores = model(val_data.negative_samples.to(device))
                 val_loss = val_loss_function(val_positive_scores, val_negative_scores, **loss_function_kwargs)
+                if regularizer is not None:
+                    val_loss += regularization_weight * regularizer(model)
                 epoch_val_losses.append(val_loss.item())
 
         if should_print and epoch % print_interval == 0:
@@ -686,6 +695,32 @@ def train_and_validate_model_weighted_sampling(
     return model
 
 
+class NegativeShuffleDataset(IterableDataset):
+    dataset: torch.Tensor
+    negatives: torch.Tensor
+    positives: torch.Tensor
+
+    def __init__(self, tensor):
+        self.positives = tensor[:, 0, :]
+        self.negatives = tensor[:, 1:, :]
+
+    def __len__(self):
+        return self.positives.shape[0]
+
+    def _new_epoch(self):
+        negatives_permuation = torch.randperm(self.negatives.shape[0] * self.negatives.shape[1])
+        shuffled_negatives = self.negatives.reshape(-1, self.negatives.shape[2])[negatives_permuation].reshape(self.negatives.shape)
+        positives_permutation = torch.randperm(self.positives.shape[0])
+        self.dataset = torch.cat((self.positives[positives_permutation].unsqueeze(1), shuffled_negatives), dim=1)
+
+    def __iter__(self):
+        self._new_epoch()
+        return iter(self.dataset)
+
+
+
+
+
 def train_and_validate_model(model: nn.Module,
     train_data: torch.Tensor,
     val_data: typing.Optional[torch.Tensor] = None,
@@ -694,7 +729,8 @@ def train_and_validate_model(model: nn.Module,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
-    patience_epochs: int = 5, patience_threshold: float = 0.01,
+    patience_epochs: int = 5, patience_threshold: float = 0.01, shuffle_negatives: bool = False,
+    regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
     batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33, **kwargs) -> nn.Module:
 
     if loss_function_kwargs is None:
@@ -703,8 +739,13 @@ def train_and_validate_model(model: nn.Module,
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     model.to(device)
-    train_dataset = TensorDataset(train_data.to(device))
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    if shuffle_negatives:
+        train_dataset = NegativeShuffleDataset(train_data.to(device))
+        shuffle = None
+    else:
+        train_dataset = TensorDataset(train_data.to(device))
+        shuffle = True
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
     validate = val_data is not None
     if validate:
@@ -723,13 +764,18 @@ def train_and_validate_model(model: nn.Module,
         model.train()
         epoch_train_losses = []
         for batch in train_dataloader:
-            X = batch[0]
+            if shuffle_negatives:
+                X = batch
+            else:
+                X = batch[0]
             optimizer.zero_grad()
             negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
             indices = torch.cat((torch.tensor([0]), negative_indices))
             X = X[:, indices].to(device)
             scores = model(X)
             loss = loss_function(scores, **loss_function_kwargs)
+            if regularizer is not None:
+                loss += regularization_weight * regularizer(model)
             epoch_train_losses.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -740,13 +786,18 @@ def train_and_validate_model(model: nn.Module,
             model.eval()
             with torch.no_grad():
                 for batch in val_dataloader:  # type: ignore
-                    X = batch[0]
+                    if shuffle_negatives:
+                        X = batch
+                    else:
+                        X = batch[0]
                     negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
                     indices = torch.cat((torch.tensor([0]), negative_indices))
                     X = X[:, indices].to(device)
 
                     scores = model(X)
                     loss = loss_function(scores, **loss_function_kwargs)
+                    if regularizer is not None:
+                        loss += regularization_weight * regularizer(model)
                     epoch_val_losses.append(loss.item())
 
         if should_print and epoch % print_interval == 0:
@@ -1133,6 +1184,9 @@ def evaluate_comparison_energy_contributions(
 
     if isinstance(energy_model, GridSearchCV):
         energy_model = energy_model.best_estimator_  # type: ignore
+
+    if 'wrapper' in energy_model.named_steps:
+        energy_model['wrapper'].eval()
 
     index_energy = energy_model.transform(comparison_game_features).item()  # type: ignore
     real_game_energy = energy_model.transform(original_game_features).item()  # type: ignore

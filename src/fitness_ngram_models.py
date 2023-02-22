@@ -276,7 +276,6 @@ class NGramTrieModel:
         if use_top_k and score_all:
             output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
                       for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
-
         else:
             output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
 
@@ -496,7 +495,12 @@ class NGramASTParser(ast_parser.ASTParser):
             if categories is None or len(categories) == 0:
                 return UNKNOWN_CATEGORY
 
-            return list(categories)[0]
+            categories = list(categories)
+            if len(categories) == 1:
+                return categories[0]
+            else:
+                # TODO: is this the right way to handle this here?
+                return f'either_types_{"_".join(sorted(categories))}'
 
         if rule == 'variable_type_def':
             var_type = ast.var_type.type  # type: ignore
@@ -504,7 +508,11 @@ class NGramASTParser(ast_parser.ASTParser):
                 category_set = ast_parser.predicate_function_term_to_type_category(var_type, {}, {})
                 if category_set is None or len(category_set) == 0:
                     return UNKNOWN_CATEGORY
-                return list(category_set)[0]
+                categories = list(category_set)
+                if len(categories) == 1:
+                    return categories[0]
+                else:
+                    raise ValueError(f'Variable type {var_type} has multiple categories: {categories}')
 
             elif isinstance(var_type, tatsu.ast.AST):
                 type_names = var_type.type_names  # type: ignore
@@ -612,7 +620,7 @@ class ASTNGramTrieModel:
     def score(self, ast: typing.Union[tuple,tatsu.ast.AST], k: typing.Optional[int] = None,
               stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
+              top_k_max_n: typing.Optional[int] = None, score_all: bool = False, debug: bool = False):
 
         n_values = None
         if top_k_min_n is not None:
@@ -622,6 +630,9 @@ class ASTNGramTrieModel:
             n_values = list(range(top_k_min_n, top_k_max_n + 1))
 
         current_input_ngrams = self.ngram_ast_parser.parse_test_input(ast, n_values=n_values)
+
+        if debug: print(current_input_ngrams[2])
+
         return self.model.score(input_ngrams=current_input_ngrams, k=k,
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,

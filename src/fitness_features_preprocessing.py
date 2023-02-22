@@ -111,7 +111,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         return row
 
 
-DEFAULT_MERGE_THRESHOLD = 10
+DEFAULT_MERGE_THRESHOLD_PROPORTION = 0.001
 DEFAULT_FEATURE_SUFFIXES = ('setup', 'constraints')
 DEFAULT_MERGE_COLUMN_SUFFIX = 'other'
 
@@ -178,14 +178,14 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
     merged_key_indices: typing.Dict[str, int]
     merged_key_to_original_keys: typing.Dict[str, typing.List[str]]
     predicates: typing.Sequence[str]
-    threshold: int
+    threshold_proportion: float
 
-    def __init__(self, predicates: typing.Sequence[str], threshold: int = DEFAULT_MERGE_THRESHOLD,
+    def __init__(self, predicates: typing.Sequence[str], threshold_proportion: float = DEFAULT_MERGE_THRESHOLD_PROPORTION,
                  merge_function: typing.Callable = np.logical_or, merged_column_suffix: str = DEFAULT_MERGE_COLUMN_SUFFIX,
                  feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0):
 
         self.predicates = predicates
-        self.threshold = threshold
+        self.threshold_proportion = threshold_proportion
         self.merge_function = merge_function
         self.merged_column_suffix = merged_column_suffix
         self.feature_suffixes = feature_suffixes
@@ -207,7 +207,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         insert_index = list(df.columns).index(merge_insert_feature_name)
 
         counts = df[prefix_feature_names].sum()
-        keys_to_merge = counts.index[counts < self.threshold]  # type: ignore
+        keys_to_merge = counts.index[counts < self.threshold_proportion * df.shape[0]]  # type: ignore
         if len(keys_to_merge) == 0:
             print(feature_prefix)
             return

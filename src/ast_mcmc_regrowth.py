@@ -200,9 +200,8 @@ class MCMCRegrowthSampler:
     def _proposal_to_features(self, proposal: tatsu.ast.AST):
         return typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
 
-
     def _features_to_tensor(self, features: typing.Dict[str, typing.Any]):
-        return torch.tensor([v for k, v in features.items() if k in self.feature_names], dtype=torch.float32)  # type: ignore
+        return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
 
     def _score_proposal(self, proposal: tatsu.ast.AST):
         proposal_features = self._proposal_to_features(proposal)

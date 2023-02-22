@@ -2,8 +2,11 @@ from abc import ABC, abstractmethod
 import argparse
 from datetime import datetime
 from collections import namedtuple, defaultdict
+import csv
 import itertools
+import glob
 import gzip
+import logging
 import multiprocessing
 import os
 import pickle
@@ -22,11 +25,11 @@ from tqdm import tqdm
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category,\
-    VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY
+    VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
-from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD, BinarizeFitnessFeatures, MergeFitnessFeatures
+from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser
 import room_and_object_types
 
@@ -36,7 +39,8 @@ DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
-    './dsl/ast-real-regrowth-samples.pddl',
+    './dsl/ast-real-regrowth-samples-1024.pddl',
+    # './dsl/ast-real-regrowth-samples.pddl',
     # './dsl/ast-mle-samples-large.pddl',
 
     # './dsl/ast-codex-combine-samples.pddl',
@@ -52,7 +56,8 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-DEFAULT_OUTPUT_PATH ='./data/fitness_features.csv.gz'
+# DEFAULT_OUTPUT_PATH ='./data/fitness_features_with_text_ngrams.csv.gz'
+DEFAULT_OUTPUT_PATH ='./data/fitness_features_1024_regrowths.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
 parser.add_argument('-f', '--featurizer-output-path', default=None)
@@ -60,13 +65,22 @@ DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--no-binarize', action='store_true')
 parser.add_argument('--no-merge', action='store_true')
-parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD)
+parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD_PROPORTION)
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=128)
+parser.add_argument('--maxtasksperchild', default=None)
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.DEBUG,
+    datefmt='%Y-%m-%d %H:%M:%S')
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
+
+
+TEMP_DIR = '/scratch/gd1279/fitness_features'
 
 
 class FitnessTerm(ABC):
@@ -112,6 +126,7 @@ class ASTFitnessFeaturizer:
     preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]]
     regex_rules: typing.List[typing.Tuple[re.Pattern, FitnessTerm]]
     rows: typing.List
+    rows_df: typing.Optional[pd.DataFrame]
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
     section_keys: typing.List[str]
     section_registry: typing.Dict[str, typing.List[FitnessTerm]]
@@ -137,6 +152,7 @@ class ASTFitnessFeaturizer:
         self.header_registry = dict()
 
         self.rows = []
+        self.rows_df = None
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -187,9 +203,13 @@ class ASTFitnessFeaturizer:
     def combine_featurizers(self, *others: 'ASTFitnessFeaturizer') -> None:
         self.rows.extend(itertools.chain.from_iterable(other.rows for other in others))
 
-    def to_df(self, use_prior_values: bool = False) -> pd.DataFrame:
-        df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
-        if self.preprocessors is not None:
+    def to_df(self, use_prior_values: bool = False, preprocess: bool = True) -> pd.DataFrame:
+        if self.rows_df is not None:
+            df = self.rows_df
+        else:
+            df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
+
+        if preprocess and self.preprocessors is not None:
             for preprocessor in self.preprocessors:
                 df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values)
 
@@ -198,17 +218,21 @@ class ASTFitnessFeaturizer:
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
         row = {}
         row['src_file'] = os.path.basename(src_file)
-        row['game_name'] = full_ast[1]["game_name"]  # type: ignore
-        row['domain_name'] = full_ast[2]["domain_name"]  # type: ignore
+        game_name = full_ast[1]['game_name']
+        domain_name = full_ast[2]['domain_name']
+        row['game_name'] = game_name  # type: ignore
+        row['domain_name'] = domain_name  # type: ignore
         ast = full_ast[3:]  # type: ignore
 
         for term in self.header_registry.values():
             term.game_start()
 
-        self._parse(ast)
+        context = dict(game_name=game_name, domain_name=domain_name)
+
+        self._parse(ast, context=context)  # type: ignore
 
         for term in self.full_ast_registry:
-            term.update(full_ast, 'full_ast', {})
+            term.update(full_ast, 'full_ast', context=context.copy())
 
         ast_full_text = ast_printer.ast_to_string(full_ast, ' ')  # type: ignore
         for term in self.full_text_registry:
@@ -238,7 +262,10 @@ class ASTFitnessFeaturizer:
     def _parse(self, ast: typing.Union[str, int, tatsu.buffering.Buffer, tuple, list, tatsu.ast.AST],
         context: typing.Optional[ContextDict] = None):
         if context is None:
-            context = {DEPTH_CONTEXT_KEY: 0}
+            context = {}
+
+        if DEPTH_CONTEXT_KEY not in context:
+            context[DEPTH_CONTEXT_KEY] = 0
 
         if not ast or isinstance(ast, (str, int, np.int32, np.int64, tatsu.buffering.Buffer)):  # type: ignore
             return
@@ -263,6 +290,12 @@ class ASTFitnessFeaturizer:
 
             # Check for any handlers of the current node
             rule = ast.parseinfo.rule
+
+            if rule == 'seq_func':
+                context[MODAL_CONTEXT_KEY] = ast.seq_func.parseinfo.rule
+            elif rule == 'at_end':
+                context[MODAL_CONTEXT_KEY] = 'at_end'
+
             stat_parsers = self.rule_registry[rule]
             for stat in stat_parsers:
                 stat.update(ast, rule, context)
@@ -288,7 +321,7 @@ class ASTFitnessFeaturizer:
                     self._parse(ast[child_key], child_context)  # type: ignore
 
         else:
-            print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
+            logging.warn(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
 
 
 class ASTNodeCounter(ast_parser.ASTParser):
@@ -305,6 +338,41 @@ class ASTNodeCounter(ast_parser.ASTParser):
     def _handle_ast(self, ast, **kwargs):
         self.count += 1
         super()._handle_ast(ast, **kwargs)
+
+
+class NoVariablesRepeatedFitnessTerm(FitnessTerm):
+    variable_repeated: bool = False
+
+    def __init__(self):
+        super().__init__('variable_list', 'variable_not_repeated')
+        self.variable_repeated = False
+
+    def game_start(self) -> None:
+        self.variable_repeated = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            variables = ast.variables
+            if not isinstance(variables, list):
+                variables = [variables]
+
+            if VARIABLES_CONTEXT_KEY in context:
+                context_vars = context[VARIABLES_CONTEXT_KEY]
+                for var in variables:  # type: ignore
+                    var_names = var.var_names
+                    if not isinstance(var_names, list):
+                        var_names = [var_names]
+
+                    if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
+                        self.variable_repeated = True
+                        return
+
+            all_variable_names = list(itertools.chain.from_iterable(var.var_names if isinstance(var.var_names, list) else [var.var_names] for var in variables))  # type: ignore
+            if len(set(all_variable_names)) != len(all_variable_names):
+                self.variable_repeated = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return 0 if self.variable_repeated else 1
 
 
 class VariableBasedFitnessTerm(FitnessTerm):
@@ -634,7 +702,7 @@ class VariableNotRepeatedInPredicateFunction(FitnessTerm):
     count_with_repeats: int = 0
 
     def __init__(self):
-        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'variable_not_repeated')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'variable_not_repeated_in_predicate')
 
     def game_start(self) -> None:
         self.total_count = 0
@@ -918,7 +986,6 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
 
 
 class PrefForallUsed(PrefForallTerm):
-    pref_forall_prefs: typing.Set[str] = set()
     prefs_used_as_pref_forall_prefs: typing.Set[str] = set()
 
     def __init__(self):
@@ -936,17 +1003,25 @@ class PrefForallUsed(PrefForallTerm):
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 0
 
-        # return 1 if for each pref forall, at least one pref was used in a manner that requires a forall
-        if all(len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) > 0 for pos_prefs in self.pref_forall_prefs_by_position.values()):
-            return 1
+        # for set of preferences defined as a forall pref
+        for pos_prefs in self.pref_forall_prefs_by_position.values():
+            # if none of them were used as a forall pref, return -1
+            if len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) == 0:
+                return -1
 
-        return -1
+            # remove the preferences that were used as a forall pref
+            self.prefs_used_as_pref_forall_prefs.difference_update(pos_prefs)
+
+        # if there are any preferences left that were used as a forall pref, return -1, since they were not defined as forall prefs
+        if len(self.prefs_used_as_pref_forall_prefs) > 0:
+            return -1
+
+        return 1
 
 class PrefForallCorrectArity(PrefForallTerm):
     correct_usage_count: int = 0
     incorrect_usage_count: int = 0
     pref_forall_prefs_to_counts: typing.Dict[str, int] = dict()
-
 
     def __init__(self):
         super().__init__('pref_forall_correct_arity')
@@ -1213,6 +1288,43 @@ COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'adjacent_side_3', 'agent_holds
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []
+
+
+MODALS = ['once', 'once_measure', 'hold', 'while_hold', 'hold_for']
+
+
+class PredicateUnderModal(FitnessTerm):
+    modals: typing.Set[str]
+    predicates_or_functions: typing.Set[str]
+    modal_to_predicate_map: typing.Dict[str, typing.Dict[str, bool]]
+
+    def __init__(self, modals: typing.Sequence[str], predicates_or_functions: typing.Sequence[str],):
+        super().__init__(('predicate', 'function'), 'predicate_under_modal')
+        self.modals = set(modals)
+        self.predicates_or_functions = set(predicates_or_functions)
+        self.modal_to_predicate_map = {modal: {predicate_or_function: False for predicate_or_function in predicates_or_functions} for modal in modals}
+
+    def game_start(self) -> None:
+        self.modal_to_predicate_map = {modal: {predicate_or_function: False for predicate_or_function in self.predicates_or_functions} for modal in self.modals}
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            if rule == 'predicate':
+                pred = ast.pred.parseinfo.rule.replace('predicate_', '')
+
+            else:
+                pred = ast.func.parseinfo.rule.replace('function_', '')
+
+            if MODAL_CONTEXT_KEY not in context:
+                return
+
+            modal = context[MODAL_CONTEXT_KEY]
+
+            if modal in self.modals and pred in self.predicates_or_functions:
+                self.modal_to_predicate_map[modal][pred] = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return {f'{modal}_{pred}': 1 if self.modal_to_predicate_map[modal][pred] else 0  for modal in self.modals for pred in self.predicates_or_functions}
 
 
 class PredicateFunctionArgumentTypes(FitnessTerm):
@@ -1571,7 +1683,7 @@ class ASTNGramTerm(FitnessTerm):
             ast, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
             top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
-            score_all=self.score_all
+            score_all=self.score_all,
         )
 
     def game_end(self):
@@ -1594,6 +1706,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     all_variables_used = AllVariablesUsed()
     fitness.register(all_variables_used)
+
+    no_variables_repeated = NoVariablesRepeatedFitnessTerm()
+    fitness.register(no_variables_repeated)
 
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
@@ -1640,9 +1755,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     external_forall_used = ExternalForallUsedCorrectly()
     fitness.register(external_forall_used)
 
-    # This feature is just subsumed by the rest of the pref forall features at this point
-    # pref_forall_used = PrefForallUsed()
-    # fitness.register(pref_forall_used)
+    pref_forall_used = PrefForallUsed()
+    fitness.register(pref_forall_used)
 
     pref_forall_correct_arity = PrefForallCorrectArity()
     fitness.register(pref_forall_correct_arity)
@@ -1663,6 +1777,10 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
+    # TODO: consider if I should merge these, too
+    predicate_under_modal = PredicateUnderModal(MODALS, COMMON_SENSE_PREDICATES_FUNCTIONS)
+    fitness.register(predicate_under_modal)
+
     argument_types_fitness_terms = build_argument_types_fitness_terms()
     fitness.register_multiple(argument_types_fitness_terms)
 
@@ -1672,8 +1790,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
 
-    text_ngram_term = TextNGramTerm()
-    fitness.register(text_ngram_term, full_text_rule=True)
+    # text_ngram_term = TextNGramTerm(top_k_min_n=2, score_all=True)
+    # fitness.register(text_ngram_term, full_text_rule=True)
 
     ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True)
     fitness.register(ast_ngram_term, full_ast_rule=True)
@@ -1681,8 +1799,10 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_and_src_file):
-    return featurizer.parse(*game_and_src_file, return_row=True, preprocess_row=False)
+def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
+    process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
+    row = featurizers[process_index].parse(*game_and_src_file, return_row=True, preprocess_row=False)  # type: ignore
+    temp_csv_writers[process_index].writerow([row[h] for h in headers])
 
 
 def game_iterator():
@@ -1690,6 +1810,42 @@ def game_iterator():
         for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False):
             yield game, src_file
 
+
+def get_headers(args: argparse.Namespace, featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
+    src_file = args.test_files[0]
+    game = next(cached_load_and_parse_games_from_file(src_file, grammar_parser, False))
+    row = featurizer.parse(game, src_file, return_row=True, preprocess_row=False)
+    return list(row.keys())  # type: ignore
+
+
+def extract_game_index(game_name: str):
+    first_dash = game_name.find('-')
+    second_dash = game_name.find('-', first_dash + 1)
+    index = game_name[first_dash + 1:second_dash] if second_dash != -1 else game_name[first_dash + 1:]
+    return int(index)
+
+
+def extract_negative_index(game_name: str):
+    first_dash = game_name.find('-')
+    second_dash = game_name.find('-', first_dash + 1)
+    if second_dash == -1:
+        return -1
+
+    third_dash = game_name.find('-', second_dash + 1)
+    index = game_name[second_dash + 1:third_dash]
+    return int(index)
+
+
+def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
+    if args.existing_featurizer_path is not None:
+        logging.info(f'Loading featurizer from {args.existing_featurizer_path}')
+        with gzip.open(args.existing_featurizer_path, 'rb') as f:
+            featurizer = pickle.load(f)  # type: ignore
+
+    else:
+        featurizer = build_fitness_featurizer(args)
+
+    return featurizer
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -1700,6 +1856,9 @@ if __name__ == '__main__':
         if not os.path.exists(test_file):
             raise ValueError(f'File {test_file} does not exist')
 
+    if not args.output_path.endswith('.gz'):
+        args.output_path += '.gz'
+
     if args.featurizer_output_path is None:
         args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
 
@@ -1709,49 +1868,69 @@ if __name__ == '__main__':
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    if args.existing_featurizer_path is not None:
-        print(f'Loading featurizer from {args.existing_featurizer_path}')
-        with gzip.open(args.existing_featurizer_path, 'rb') as f:
-            featurizer = pickle.load(f)  # type: ignore
-
-    else:
-        featurizer = build_fitness_featurizer(args)
-
     if args.n_workers > 1:
-        rows = []
+        featurizers = [build_or_load_featurizer(args) for _ in range(args.n_workers)]
+        headers = get_headers(args, featurizers[0])
 
-        print(f'About to start pool with {args.n_workers} workers')
-        print(featurizer)
+        # rows = []
+        for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
+            os.remove(file)
+
+        temp_output_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{i}.temp.csv') for i in range(args.n_workers)]
+        temp_files = [open(temp_output_path, 'a', newline='') for temp_output_path in temp_output_paths]
+        temp_csv_writers = [csv.writer(temp_file) for temp_file in temp_files]
+
+        # TODO: consider rewriting with asyncio instead of multiprocessing
+
+        logging.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
-            print('Pool started')
-            for row in tqdm(p.imap(parse_single_game, game_iterator(), chunksize=args.chunksize)):
-                rows.append(row)
+            logging.info('Pool started')
+            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):
+                continue
+                # if headers is None:
+                #     headers = list(row.keys())
+                # rows.append(row)
 
-        featurizer.rows = rows
+        for temp_file in temp_files:
+            temp_file.close()
+
+        featurizer = featurizers[0]
+        # featurizer.rows = rows
+        logging.info('About to parse rows from temp files into dataframe')
+        rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
+        rows_df = pd.concat(rows_dfs, sort=False)
+
+        rows_df = rows_df.assign(real=(rows_df.src_file == 'interactive-beta.pddl').astype(int))
+        rows_df = rows_df.assign(game_index=rows_df.game_name.apply(extract_game_index),
+                                 negative_index= rows_df.game_name.apply(extract_negative_index), fake=~rows_df.real)
+        rows_df = rows_df.sort_values(by=['fake', 'game_index', 'negative_index'], ignore_index=True).reset_index(drop=True)
+        rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
+
+        featurizer.rows_df = rows_df.reset_index(drop=True)
+        for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
+            os.remove(file)
 
     else:
+        featurizer = build_or_load_featurizer(args)
         for test_file in args.test_files:
             for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
                 featurizer.parse(ast, test_file)
 
-    print('Done parsing games, about to convert to dataframe')
+    logging.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)
 
-    print(df.groupby('src_file').agg([np.mean, np.std]))
+    logging.debug(df.groupby('src_file').agg([np.mean, np.std]))
 
     for src_file in df.src_file.unique():
         zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
         zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
-        print(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
+        logging.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
 
     global_zero_std = df.std(numeric_only=True) == 0
     global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore
-    print(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
+    logging.debug(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
 
-    if not args.output_path.endswith('.gz'):
-        args.output_path += '.gz'
-
-    print(f'Writing to {args.output_path}')
+    logging.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 
     if args.existing_featurizer_path is None and args.featurizer_output_path is not None:

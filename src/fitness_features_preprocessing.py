@@ -36,24 +36,25 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
+    re.compile(r'predicate_under_modal_[\w\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [
     'all_variables_defined', 'all_variables_used',
     'all_preferences_used', 'no_adjacent_once',
-    'variable_not_repeated', 'no_nested_logicals',
+    'no_variables_repeated', 'no_nested_logicals',
     'no_identical_logical_children', 'no_two_number_operations',
     'tautological_expression_found', 'redundant_expression_found',
 ]
 
 SCALE_ZERO_ONE_PATTERNS = [
-    re.compile(r'(ast|text)_ngram(_n_\d+)?_score'),
+    re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score'),
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [
     re.compile(r'[\w\d+_]+_arg_types_[\w_]+'),
     re.compile(r'compositionality_structure_\d+'),
-    re.compile(r'(ast|text)_ngram(_n_\d+)?_\d+')
+    re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
 ]
 
 class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):

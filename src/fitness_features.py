@@ -158,11 +158,13 @@ class ASTFitnessFeaturizer:
         # Prevents the rows from being dumped to file when this is pickled
         state = self.__dict__.copy()
         del state['rows']
+        del state['rows_df']
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
         self.rows = []
+        self.rows_df = None
 
     def _register(self, term: FitnessTerm, rule: str, tuple_rule: bool = False) -> None:
         if tuple_rule:
@@ -342,41 +344,6 @@ class ASTNodeCounter(ast_parser.ASTParser):
     def _handle_ast(self, ast, **kwargs):
         self.count += 1
         super()._handle_ast(ast, **kwargs)
-
-
-class NoVariablesRepeatedFitnessTerm(FitnessTerm):
-    variable_repeated: bool = False
-
-    def __init__(self):
-        super().__init__('variable_list', 'variable_not_repeated')
-        self.variable_repeated = False
-
-    def game_start(self) -> None:
-        self.variable_repeated = False
-
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            variables = ast.variables
-            if not isinstance(variables, list):
-                variables = [variables]
-
-            if VARIABLES_CONTEXT_KEY in context:
-                context_vars = context[VARIABLES_CONTEXT_KEY]
-                for var in variables:  # type: ignore
-                    var_names = var.var_names
-                    if not isinstance(var_names, list):
-                        var_names = [var_names]
-
-                    if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
-                        self.variable_repeated = True
-                        return
-
-            all_variable_names = list(itertools.chain.from_iterable(var.var_names if isinstance(var.var_names, list) else [var.var_names] for var in variables))  # type: ignore
-            if len(set(all_variable_names)) != len(all_variable_names):
-                self.variable_repeated = True
-
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return 0 if self.variable_repeated else 1
 
 
 class VariableBasedFitnessTerm(FitnessTerm):
@@ -701,25 +668,47 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
 PREDICATE_AND_FUNCTION_RULES = ('predicate', 'function_eval')
 
 
-class VariableNotRepeatedInPredicateFunction(FitnessTerm):
-    total_count: int = 0
+class NoVariablesRepeated(FitnessTerm):
     count_with_repeats: int = 0
+    total_count: int = 0
+    variable_definition_repeated: bool = False
 
     def __init__(self):
-        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'variable_not_repeated_in_predicate')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES + ('variable_list',), 'no_variables_repeated')
 
     def game_start(self) -> None:
         self.total_count = 0
         self.count_with_repeats = 0
+        self.variable_definition_repeated = False
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            self.total_count += 1
-            args = list(extract_predicate_function_args(ast))
-            self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
+            if rule == 'variable_list':
+                variables = ast.variables
+                if not isinstance(variables, list):
+                    variables = [variables]
+
+                if VARIABLES_CONTEXT_KEY in context:
+                    context_vars = context[VARIABLES_CONTEXT_KEY]
+                    for var in variables:  # type: ignore
+                        var_names = var.var_names  # type: ignore
+                        if not isinstance(var_names, list):
+                            var_names = [var_names]
+
+                        if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
+                            self.variable_definition_repeated = True
+                            return
+
+                all_variable_names = list(itertools.chain.from_iterable(var.var_names if isinstance(var.var_names, list) else [var.var_names] for var in variables))  # type: ignore
+                if len(set(all_variable_names)) != len(all_variable_names):
+                    self.variable_definition_repeated = True
+            else:
+                self.total_count += 1
+                args = list(extract_predicate_function_args(ast))
+                self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if self.total_count == 0:
+        if self.total_count == 0 or self.variable_definition_repeated:
             return 0
 
         return 1 - (self.count_with_repeats / self.total_count)
@@ -1314,10 +1303,10 @@ class PredicateUnderModal(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             if rule == 'predicate':
-                pred = ast.pred.parseinfo.rule.replace('predicate_', '')
+                pred = ast.pred.parseinfo.rule.replace('predicate_', '')  # type: ignore
 
             else:
-                pred = ast.func.parseinfo.rule.replace('function_', '')
+                pred = ast.func.parseinfo.rule.replace('function_', '')  # type: ignore
 
             if MODAL_CONTEXT_KEY not in context:
                 return
@@ -1598,73 +1587,84 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
         return [term_class(section) for term_class in term_classes for section in sections]
 
 
+# TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
+
+
+# class TextNGramTerm(FitnessTerm):
+#     game_output: typing.Optional[dict] = None
+#     n_gram_model: NGramTrieModel
+#     n_gram_model_path: str
+#     stupid_backoff: bool
+#     top_k_max_n: typing.Optional[int]
+#     top_k_min_n: typing.Optional[int]
+#     top_k_ngrams: int
+
+#     def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
+#                  stupid_backoff: bool = True, log: bool = True,
+#                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
+#                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+#                  n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
+#         super().__init__('', 'text_ngram')
+#         self.top_k_ngrams = top_k_ngrams
+#         self.stupid_backoff = stupid_backoff
+#         self.log = log
+#         self.filter_padding_top_k = filter_padding_top_k
+#         self.top_k_min_n = top_k_min_n
+#         self.top_k_max_n = top_k_max_n
+#         self.score_all = score_all
+#         self.n_gram_model_path = n_gram_model_path
+
+#         with open(self.n_gram_model_path, 'rb') as f:
+#             self.n_gram_model = pickle.load(f)
+
+#     def game_start(self) -> None:
+#         self.game_output = None
+
+#     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+#         pass
+
+#     def parse_full_text(self, full_text: str) -> None:
+#         self.game_output = self.n_gram_model.score(
+#             full_text, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
+#             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
+#             top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
+#             score_all=self.score_all
+#         )
+
+#     def game_end(self):
+#         return self.game_output
+
+
 DEFAULT_TOP_K_NGRAMS = 10
-TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
-
-
-class TextNGramTerm(FitnessTerm):
-    game_output: typing.Optional[dict] = None
-    n_gram_model: NGramTrieModel
-    n_gram_model_path: str
-    stupid_backoff: bool
-    top_k_max_n: typing.Optional[int]
-    top_k_min_n: typing.Optional[int]
-    top_k_ngrams: int
-
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
-                 stupid_backoff: bool = True, log: bool = True,
-                 filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
-                 top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
-                 n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
-        super().__init__('', 'text_ngram')
-        self.top_k_ngrams = top_k_ngrams
-        self.stupid_backoff = stupid_backoff
-        self.log = log
-        self.filter_padding_top_k = filter_padding_top_k
-        self.top_k_min_n = top_k_min_n
-        self.top_k_max_n = top_k_max_n
-        self.score_all = score_all
-        self.n_gram_model_path = n_gram_model_path
-
-        with open(self.n_gram_model_path, 'rb') as f:
-            self.n_gram_model = pickle.load(f)
-
-    def game_start(self) -> None:
-        self.game_output = None
-
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        pass
-
-    def parse_full_text(self, full_text: str) -> None:
-        self.game_output = self.n_gram_model.score(
-            full_text, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
-            log=self.log, filter_padding_top_k=self.filter_padding_top_k,
-            top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
-            score_all=self.score_all
-        )
-
-    def game_end(self):
-        return self.game_output
-
-
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_16.pkl')
+DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
+DEFAULT_N_BY_SECTION = {
+    ast_parser.SETUP: 5,
+    ast_parser.PREFERENCES: 7,
+    ast_parser.TERMINAL: 5,
+    ast_parser.SCORING: 5,
+}
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_22.pkl')
 
 
 class ASTNGramTerm(FitnessTerm):
     filter_padding_top_k: bool
     game_output: typing.Optional[dict] = None
     log: bool
+    n_by_section: typing.Dict[str, int]
     n_gram_model: ASTNGramTrieModel
     n_gram_model_path: str
     stupid_backoff: bool
     top_k_max_n: typing.Optional[int]
     top_k_min_n: typing.Optional[int]
     top_k_ngrams: int
+    top_k_ngrams_for_sections: int
 
     def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
                  stupid_backoff: bool = True, log: bool = True,
                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+                 top_k_ngrams_for_sections: int = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
+                 n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
                  n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
         self.top_k_ngrams = top_k_ngrams
@@ -1674,6 +1674,8 @@ class ASTNGramTerm(FitnessTerm):
         self.top_k_min_n = top_k_min_n
         self.top_k_max_n = top_k_max_n
         self.score_all = score_all
+        self.top_k_ngrams_for_sections = top_k_ngrams_for_sections
+        self.n_by_section = n_by_section
         self.n_gram_model_path = n_gram_model_path
 
         with open(self.n_gram_model_path, 'rb') as f:
@@ -1687,7 +1689,7 @@ class ASTNGramTerm(FitnessTerm):
             ast, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
             top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
-            score_all=self.score_all,
+            score_all=self.score_all, k_for_sections=self.top_k_ngrams_for_sections,
         )
 
     def game_end(self):
@@ -1710,9 +1712,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     all_variables_used = AllVariablesUsed()
     fitness.register(all_variables_used)
-
-    no_variables_repeated = NoVariablesRepeatedFitnessTerm()
-    fitness.register(no_variables_repeated)
 
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
@@ -1738,7 +1737,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     max_number_variables_types = MaxNumberVariablesTypesQuantified()
     fitness.register(max_number_variables_types)
 
-    no_repeated_variables_in_predicate = VariableNotRepeatedInPredicateFunction()
+    no_repeated_variables_in_predicate = NoVariablesRepeated()
     fitness.register(no_repeated_variables_in_predicate)
 
     no_nested_logicals = NoNestedLogicals()

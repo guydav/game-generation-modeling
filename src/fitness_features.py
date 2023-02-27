@@ -56,7 +56,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-# DEFAULT_OUTPUT_PATH ='./data/fitness_features_with_text_ngrams.csv.gz'
+# DEFAULT_OUTPUT_PATH ='./data/fitness_features.csv.gz'
 DEFAULT_OUTPUT_PATH ='./data/fitness_features_1024_regrowths.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
@@ -80,7 +80,7 @@ ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
 
 
-TEMP_DIR = '/scratch/gd1279/fitness_features'
+TEMP_DIR = '/tmp/gd1279/fitness_features'
 
 
 class FitnessTerm(ABC):
@@ -153,6 +153,8 @@ class ASTFitnessFeaturizer:
 
         self.rows = []
         self.rows_df = None
+        self.df_keys_set = set()
+        self.df_keys = []
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -209,13 +211,25 @@ class ASTFitnessFeaturizer:
         if self.rows_df is not None:
             df = self.rows_df
         else:
-            df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
+            df = pd.DataFrame.from_records(self.rows, columns=self.df_keys)
 
         if preprocess and self.preprocessors is not None:
             for preprocessor in self.preprocessors:
                 df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values)
 
         return df
+
+    def _add_df_key(self, key: str, previous_key: typing.Optional[str]):
+        if key in self.df_keys_set:
+            return
+
+        self.df_keys_set.add(key)
+        if previous_key is None:
+            self.df_keys.append(key)
+
+        else:
+            previous_index = self.df_keys.index(previous_key)
+            self.df_keys.insert(previous_index + 1, key)
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -240,15 +254,24 @@ class ASTFitnessFeaturizer:
         for term in self.full_text_registry:
             term.parse_full_text(ast_full_text)
 
+        previous_key = None
+
         for header, term in self.header_registry.items():
             term_result = term.game_end()
             if isinstance(term_result, (int, float)):
                 row[header] = term_result
+                self._add_df_key(header, previous_key)
+                previous_key = header
             elif isinstance(term_result, dict):
                 for key, val in term_result.items():
-                    row[f'{header}_{key}'] = val
+                    header_key = f'{header}_{key}'
+                    row[header_key] = val
+                    self._add_df_key(header_key, previous_key)
+                    previous_key = header_key
             else:
                 row[header] = self.list_reduce(row[header])
+                self._add_df_key(header, previous_key)
+                previous_key = header
 
         if return_row:
             if preprocess_row:
@@ -1643,7 +1666,7 @@ DEFAULT_N_BY_SECTION = {
     ast_parser.TERMINAL: 5,
     ast_parser.SCORING: 5,
 }
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_22.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_27.pkl')
 
 
 class ASTNGramTerm(FitnessTerm):
@@ -1656,14 +1679,14 @@ class ASTNGramTerm(FitnessTerm):
     stupid_backoff: bool
     top_k_max_n: typing.Optional[int]
     top_k_min_n: typing.Optional[int]
-    top_k_ngrams: int
-    top_k_ngrams_for_sections: int
+    top_k_ngrams: typing.Optional[int]
+    top_k_ngrams_for_sections: typing.Optional[int]
 
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
+    def __init__(self, top_k_ngrams: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS,
                  stupid_backoff: bool = True, log: bool = True,
                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
-                 top_k_ngrams_for_sections: int = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
+                 top_k_ngrams_for_sections: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
                  n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
                  n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
@@ -1874,6 +1897,9 @@ if __name__ == '__main__':
     if args.n_workers > 1:
         featurizers = [build_or_load_featurizer(args) for _ in range(args.n_workers)]
         headers = get_headers(args, featurizers[0])
+
+        if not os.path.exists(TEMP_DIR):
+            os.makedirs(TEMP_DIR, exist_ok=True)
 
         # rows = []
         for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):

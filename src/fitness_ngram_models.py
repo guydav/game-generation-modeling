@@ -101,6 +101,14 @@ class NGramTrieNode:
 
 
 class NGramTrieModel:
+    k: typing.Optional[int]
+    n: int
+    should_pad: bool
+    stupid_backoff_discount: float
+    total_token_count: int
+    tree: typing.Dict[typing.Tuple[str, ...], int]
+    zero_log_prob: float
+
     def __init__(self, n: int, stupid_backoff_discount: float = DEFAULT_STUPID_BACKOFF_DISCOUNT,
                  zero_log_prob: float = DEFAULT_ZERO_LOG_PROB, should_pad: bool = True):
         self.n = n
@@ -109,19 +117,23 @@ class NGramTrieModel:
         self.should_pad = should_pad
 
         self.k = None
-        self.root = NGramTrieNode(children={}, count=0)
+        # self.root = NGramTrieNode(children={}, count=0)
+        self.tree = defaultdict(int)
         self.total_token_count = 0
 
-    def _add(self, ngram: typing.Sequence[str], count: int = 1):
-        node = self.root
-        for i in range(self.n):
-            if ngram[i] not in node:
-                node[ngram[i]] = NGramTrieNode()
+    def _add(self, ngram: typing.Tuple[str, ...], count: int = 1):
+        # node = self.root
+        # for i in range(self.n):
+        #     if ngram[i] not in node:
+        #         node[ngram[i]] = NGramTrieNode()
 
-            node = node[ngram[i]]
-            node.count += count
+        #     node = node[ngram[i]]
+        #     node.count += count
 
-    def _add_all(self, ngrams: typing.Iterable[typing.Sequence[str]], count: int = 1):
+        for i in range(1, len(ngram) + 1):
+            self.tree[ngram[:i]] += count
+
+    def _add_all(self, ngrams: typing.Iterable[typing.Tuple[str, ...]], count: int = 1):
         ngrams = list(ngrams)
         self.total_token_count += (len(ngrams) - self.n + 1) * count
         for ngram in ngrams:
@@ -158,24 +170,27 @@ class NGramTrieModel:
 
             self.total_token_count = sum([v.count for v in self.root.children.values()]) + ((self.n - 1) * n_games)
 
-    def get(self, ngram: typing.Sequence[str]):
-        node = self.root
-        for i in range(min(self.n, len(ngram))):
-            if ngram[i] not in node:
-                return 0
-            node = node[ngram[i]]
+    def get(self, ngram: typing.Tuple[str, ...]):
+        return self.tree[ngram]
+        # node = self.root
+        # for i in range(min(self.n, len(ngram))):
+        #     if ngram[i] not in node:
+        #         return 0
+        #     node = node[ngram[i]]
 
-        return node.count
+        # return node.count
 
-    def _score_ngram(self, ngram: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False):
+    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False):
         if stupid_backoff:
             discount_factor = 1.0
             start_index = 0
             n = min(self.n, len(ngram))
             ret_val = 0
+            ngram_count = 0
 
             while start_index < n:
-                if self.get(ngram[start_index:]) > 0:
+                ngram_count = self.get(ngram[start_index:])
+                if ngram_count > 0:
                     break
                 start_index += 1
                 discount_factor *= self.stupid_backoff_discount
@@ -184,21 +199,26 @@ class NGramTrieModel:
                 ret_val = 0
 
             elif start_index == n - 1:
-                ret_val =  discount_factor * self.get(ngram[start_index:]) / self.total_token_count
+                ret_val =  discount_factor * ngram_count / self.total_token_count
 
             else:
-                ret_val = discount_factor * self.get(ngram[start_index:]) / self.get(ngram[start_index:-1])
+                ret_val = discount_factor * ngram_count / self.get(ngram[start_index:-1])
 
             if log:
                 return np.log(ret_val) if ret_val > 0 else self.zero_log_prob
 
             return ret_val
 
-        return self.get(ngram) / self.get(ngram[:-1])
+        else:
+            return self.get(ngram) / self.get(ngram[:-1])
 
-    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Sequence[str]],
+    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Tuple[str, ...]],
                   stupid_backoff: bool = True, log: bool = False,
                   reduction: str = 'mean'):
+
+        if len(ngrams) == 0:
+            return None
+
         scores = [self._score_ngram(ngram, stupid_backoff, log) for ngram in ngrams]
         if reduction == 'mean':
             return np.mean(scores)
@@ -287,15 +307,17 @@ class NGramTrieModel:
                                      for n, n_counts in self.ngram_counts.items()}
 
             if not use_top_k:
-                text_ngram_counts = Counter(input_ngrams[self.n])
-                for i, (ngram, _) in enumerate(self.top_k_ngrams[self.n]):
-                    output[i] = text_ngram_counts[ngram]  # type: ignore
+                if len(input_ngrams[self.n]) > 0:
+                    text_ngram_counts = Counter(input_ngrams[self.n])
+                    for i, (ngram, _) in enumerate(self.top_k_ngrams[self.n]):
+                        output[i] = text_ngram_counts[ngram]  # type: ignore
 
             else:
                 for n in range(top_k_min_n, top_k_max_n + 1):  # type: ignore
-                    text_ngram_counts = Counter(input_ngrams[n])
-                    for i, (ngram, _) in enumerate(self.top_k_ngrams[n]):
-                        output[f'n_{n}_{i}'] = text_ngram_counts[ngram]  # type: ignore
+                    if len(input_ngrams[n]) > 0:
+                        text_ngram_counts = Counter(input_ngrams[n])
+                        for i, (ngram, _) in enumerate(self.top_k_ngrams[n]):
+                            output[f'n_{n}_{i}'] = text_ngram_counts[ngram]  # type: ignore
 
         return output
 
@@ -461,7 +483,7 @@ class NGramASTParser(ast_parser.ASTParser):
             self(test_ast, update_model_counts=False, n_values=n_values, **kwargs)
         else:
             self.current_input_ngrams = {self.n: []}
-            self.current_input_ngrams_by_section = self.current_input_ngrams_by_section = {section: {self.n: []} for section in ast_parser.SECTION_KEYS}
+            self.current_input_ngrams_by_section = {section: {self.n: []} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, **kwargs)
         return self.current_input_ngrams, self.current_input_ngrams_by_section
 
@@ -471,6 +493,7 @@ class NGramASTParser(ast_parser.ASTParser):
         if initial_call:
             kwargs['inner_call'] = True
             self.preorder_ast_tokens = []
+            self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 
         if initial_call:
             if self.skip_game_and_domain:
@@ -694,6 +717,8 @@ class ASTNGramTrieModel:
                                 score_all=score_all)}
 
         for section, model in self.model_by_section.items():
+            # if any(len(ngrams) == 0 for ngrams in current_input_ngrams_by_section[section].values()):
+            #     continue
             outputs[section.replace('(:', '')] = model.score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,
                                            stupid_backoff=stupid_backoff, log=log,
                                            filter_padding_top_k=filter_padding_top_k,

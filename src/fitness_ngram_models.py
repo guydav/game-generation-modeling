@@ -657,6 +657,9 @@ def main(args: argparse.Namespace):
             game_inputs.extend(ast_printer.ast_to_string(ast, '\n') for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, False))
 
     model.fit(game_inputs)
+
+    [print(model.score(game)) for game in game_inputs]
+
     with open(args.output_path, 'wb') as f:
         pickle.dump(model, f)
 

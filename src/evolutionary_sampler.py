@@ -6,10 +6,10 @@ import typing
 import sys
 
 import numpy as np
-import tqdm
 import tatsu
 import tatsu.ast
 import torch
+import tqdm
 
 import ast_printer
 from ast_counter_sampler import *
@@ -31,6 +31,7 @@ class EvolutionarySampler():
                  population_size: int = 100,
                  verbose: int = 0):
 
+        self.fitness_function = fitness_function
         self.population_size = population_size
         self.verbose = verbose
 
@@ -45,9 +46,19 @@ class EvolutionarySampler():
         self.regrowth_sampler = RegrowthSampler(self.initial_sampler, args.random_seed)
 
         # Generate the initial population
-        self.population = [self._init_sample(idx) for idx in range(self.population_size)]
+        self.population = [self._gen_init_sample(idx) for idx in range(self.population_size)]
+        self.fitness_values = [self.fitness_function(game) for game in self.population]
 
-    def _init_sample(self, idx):
+    def _best_fitness(self):
+        return max(self.fitness_values)
+    
+    def _avg_fitness(self):
+        return np.mean(self.fitness_values)
+    
+    def _best_individual(self):
+        return self.population[np.argmax(self.fitness_values)]
+
+    def _gen_init_sample(self, idx):
         '''
         Helper function for generating an initial sample (repeating until one is generated
         without errors)
@@ -64,9 +75,58 @@ class EvolutionarySampler():
                 if self.verbose >= 2: print('Sampling exception in sample {idx} -- skipping')
 
         return sample
+    
+    def _gen_regrowth_sample(self, game):
+        '''
+        Helper function for generating a new sample from an existing game (repeating until one is generated
+        without errors)
+        '''
 
-    def step(self):
-        pass
+        # Set the source AST of the regrowth sampler to the current game
+        self.regrowth_sampler.set_source_ast(game)
+
+        new_proposal = None
+        sample_generated = False
+
+        while not sample_generated:
+            try:
+                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False) # TODO: does sample_index need to change? 
+
+                if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
+                    if self.verbose >= 2: print('Regrowth generated identical games, repeating')
+                else:
+                    sample_generated = True
+
+            except RecursionError:
+                if self.verbose >= 2: print('Recursion error, skipping sample')
+
+            except SamplingException:
+                if self.verbose >= 2: print('Sampling exception, skipping sample')
+
+        new_proposal = typing.cast(tuple, new_proposal)
+
+        return new_proposal
+
+    def beam_step(self, k: int = 10):
+        '''
+        The simplest kind of evolutionary step. Each member of the population is mutated k times using
+        the regrowth sampler, giving a total of k * n new samples. Each sample is scored using the fitness
+        function, and then the top n samples are selected to form the next generation (including the initial samples)
+        '''
+
+        # Generate the new samples
+        samples = self.population.copy()
+        for game in self.population:
+            for i in range(k):
+                samples.append(self._gen_regrowth_sample(game))
+
+        # Score the new samples
+        scores = [self.fitness_function(sample) for sample in samples]
+
+        # Select the top n samples
+        top_indices = np.argsort(scores)[-self.population_size:]
+        self.population = [samples[i] for i in top_indices]
+        self.fitness_values = [scores[i] for i in top_indices]
 
 if __name__ == '__main__':
 
@@ -95,5 +155,6 @@ if __name__ == '__main__':
 
     evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
 
-    for i in range(len(evosampler.population)):
-        print(fitness_function(evosampler.population[i]))
+    for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
+        evosampler.beam_step(k=10)
+        print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")

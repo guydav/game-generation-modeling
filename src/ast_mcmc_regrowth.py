@@ -272,10 +272,56 @@ def main(args: argparse.Namespace):
     sys.setrecursionlimit(original_recursion_limit)
 
 
-# if __name__ == '__main__':
-#     cmd_args = sys.argv[1:]
-#     if '--sampling-method' not in cmd_args:
-#         cmd_args += ['--sampling-method', MCMC_REGRWOTH]
+if __name__ == '__main__':
+    # cmd_args = sys.argv[1:]
+    # if '--sampling-method' not in cmd_args:
+    #     cmd_args += ['--sampling-method', MCMC_REGRWOTH]
 
-#     args = parser.parse_args(cmd_args)
-#     main(args)
+    # args = parser.parse_args(cmd_args)
+    # main(args)
+
+    import fitness_energy_utils as utils
+    from ast_utils import *
+
+    sys.path.append(os.path.abspath('..'))
+    sys.path.append(os.path.abspath('../src'))
+    from ast_utils import _extract_game_id
+    from fitness_energy_utils import NON_FEATURE_COLUMNS
+    from fitness_features import *
+    from ast_counter_sampler import *
+    from ast_mcmc_regrowth import *
+
+    DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
+    DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
+    DEFUALT_RANDOM_SEED = 0
+
+    grammar = open('../dsl/dsl.ebnf').read()
+    grammar_parser = tatsu.compile(grammar)
+    game_asts = list(cached_load_and_parse_games_from_file('../dsl/interactive-beta.pddl', grammar_parser, False, relative_path='..'))
+    real_game_texts = [ast_printer.ast_to_string(ast, '\n') for ast in game_asts]
+    regrown_game_texts = list(load_games_from_file('../dsl/ast-real-regrowth-samples.pddl'))
+
+    fitness_df = utils.load_fitness_data('../data/fitness_features_1024_regrowths.csv.gz')
+
+    DEFAULT_ARGS = argparse.Namespace(
+        grammar_file=os.path.join('..', DEFAULT_GRAMMAR_FILE),
+        parse_counter=False,
+        counter_output_path=os.path.join('..', DEFAULT_COUNTER_OUTPUT_PATH),
+        random_seed=DEFUALT_RANDOM_SEED,
+    )
+
+
+    # Currently testing with older featurizer / model due to issue with extremely large dataframes
+    FITNESS_MODEL_PATH = '../models/cv_fitness_model_2023_02_14.pkl.gz'
+    FITNESS_FEATURIZER_PATH = '../models/fitness_featurizer_2023_02_16.pkl.gz'
+
+    feature_columns = [str(c) for c in fitness_df.columns if c not in NON_FEATURE_COLUMNS]
+    for n in range(2, 7):
+        feature_columns.remove(f'ast_ngram_n_{n}_score')
+
+    mcmc = MCMCRegrowthSampler(DEFAULT_ARGS, feature_columns,
+        FITNESS_MODEL_PATH, FITNESS_FEATURIZER_PATH, greedy_acceptance=True, 
+        plateau_patience_steps=100, max_steps=10000)  #   acceptance_temperature=10.0, 
+
+    mcmc.sample()
+    print(mcmc.samples[0])

@@ -78,11 +78,11 @@ START_PAD = '<start>'
 END_PAD = '<end>'
 UNKNOWN_CATEGORY = '<unknown>'
 
-def _ngrams(text: str, n: int, pad: int = 0, start_pad: str = START_PAD, end_pad: str = END_PAD) -> typing.Iterable[typing.Tuple[str, ...]]:
+def _ngrams(text: str, n: int, pad: int = 0, start_pad: str = START_PAD, end_pad: str = END_PAD) -> typing.Sequence[typing.Tuple[str, ...]]:
     tokens = ngram_preprocess(text)
     if pad > 0:
         tokens = [start_pad] * pad + tokens + [end_pad] * pad
-    return nltk_ngrams(tokens, n)
+    return list(nltk_ngrams(tokens, n))
 
 
 @dataclass
@@ -101,6 +101,14 @@ class NGramTrieNode:
 
 
 class NGramTrieModel:
+    k: typing.Optional[int]
+    n: int
+    should_pad: bool
+    stupid_backoff_discount: float
+    total_token_count: int
+    tree: typing.Dict[typing.Tuple[str, ...], int]
+    zero_log_prob: float
+
     def __init__(self, n: int, stupid_backoff_discount: float = DEFAULT_STUPID_BACKOFF_DISCOUNT,
                  zero_log_prob: float = DEFAULT_ZERO_LOG_PROB, should_pad: bool = True):
         self.n = n
@@ -109,25 +117,29 @@ class NGramTrieModel:
         self.should_pad = should_pad
 
         self.k = None
-        self.root = NGramTrieNode(children={}, count=0)
+        # self.root = NGramTrieNode(children={}, count=0)
+        self.tree = defaultdict(int)
         self.total_token_count = 0
 
-    def _add(self, ngram: typing.Sequence[str], count: int = 1):
-        node = self.root
-        for i in range(self.n):
-            if ngram[i] not in node:
-                node[ngram[i]] = NGramTrieNode()
+    def _add(self, ngram: typing.Tuple[str, ...], count: int = 1):
+        # node = self.root
+        # for i in range(self.n):
+        #     if ngram[i] not in node:
+        #         node[ngram[i]] = NGramTrieNode()
 
-            node = node[ngram[i]]
-            node.count += count
+        #     node = node[ngram[i]]
+        #     node.count += count
 
-    def _add_all(self, ngrams: typing.Iterable[typing.Sequence[str]], count: int = 1):
+        for i in range(1, len(ngram) + 1):
+            self.tree[ngram[:i]] += count
+
+    def _add_all(self, ngrams: typing.Iterable[typing.Tuple[str, ...]], count: int = 1):
         ngrams = list(ngrams)
         self.total_token_count += (len(ngrams) - self.n + 1) * count
         for ngram in ngrams:
             self._add(ngram, count)
 
-    def _text_to_ngrams(self, text: str, n: typing.Optional[int] = None) -> typing.Iterable[typing.Tuple[str, ...]]:
+    def _text_to_ngrams(self, text: str, n: typing.Optional[int] = None) -> typing.Sequence[typing.Tuple[str, ...]]:
         if n is None:
             n = self.n
         return _ngrams(text, n, pad=n - 1 if self.should_pad else 0)
@@ -158,24 +170,27 @@ class NGramTrieModel:
 
             self.total_token_count = sum([v.count for v in self.root.children.values()]) + ((self.n - 1) * n_games)
 
-    def get(self, ngram: typing.Sequence[str]):
-        node = self.root
-        for i in range(min(self.n, len(ngram))):
-            if ngram[i] not in node:
-                return 0
-            node = node[ngram[i]]
+    def get(self, ngram: typing.Tuple[str, ...]):
+        return self.tree[ngram]
+        # node = self.root
+        # for i in range(min(self.n, len(ngram))):
+        #     if ngram[i] not in node:
+        #         return 0
+        #     node = node[ngram[i]]
 
-        return node.count
+        # return node.count
 
-    def _score_ngram(self, ngram: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False):
+    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False):
         if stupid_backoff:
             discount_factor = 1.0
             start_index = 0
             n = min(self.n, len(ngram))
             ret_val = 0
+            ngram_count = 0
 
             while start_index < n:
-                if self.get(ngram[start_index:]) > 0:
+                ngram_count = self.get(ngram[start_index:])
+                if ngram_count > 0:
                     break
                 start_index += 1
                 discount_factor *= self.stupid_backoff_discount
@@ -184,21 +199,26 @@ class NGramTrieModel:
                 ret_val = 0
 
             elif start_index == n - 1:
-                ret_val =  discount_factor * self.get(ngram[start_index:]) / self.total_token_count
+                ret_val =  discount_factor * ngram_count / self.total_token_count
 
             else:
-                ret_val = discount_factor * self.get(ngram[start_index:]) / self.get(ngram[start_index:-1])
+                ret_val = discount_factor * ngram_count / self.get(ngram[start_index:-1])
 
             if log:
                 return np.log(ret_val) if ret_val > 0 else self.zero_log_prob
 
             return ret_val
 
-        return self.get(ngram) / self.get(ngram[:-1])
+        else:
+            return self.get(ngram) / self.get(ngram[:-1])
 
-    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Sequence[str]],
+    def _transform_ngrams(self, ngrams: typing.Sequence[typing.Tuple[str, ...]],
                   stupid_backoff: bool = True, log: bool = False,
                   reduction: str = 'mean'):
+
+        if len(ngrams) == 0:
+            return None
+
         scores = [self._score_ngram(ngram, stupid_backoff, log) for ngram in ngrams]
         if reduction == 'mean':
             return np.mean(scores)
@@ -245,7 +265,7 @@ class NGramTrieModel:
         return item[1]
 
     def score(self, input_text: typing.Optional[str] = None,
-              input_ngrams: typing.Optional[typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]]] = None,
+              input_ngrams: typing.Optional[typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]]] = None,
               k: typing.Optional[int] = None, stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
               top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
@@ -271,12 +291,11 @@ class NGramTrieModel:
             else:
                 input_ngrams = {self.n: list(self._text_to_ngrams(input_text))}
 
-        input_ngrams = typing.cast(typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]], input_ngrams)
+        input_ngrams = typing.cast(typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]], input_ngrams)
 
         if use_top_k and score_all:
             output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
                       for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
-
         else:
             output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
 
@@ -288,15 +307,17 @@ class NGramTrieModel:
                                      for n, n_counts in self.ngram_counts.items()}
 
             if not use_top_k:
-                text_ngram_counts = Counter(input_ngrams[self.n])
-                for i, (ngram, _) in enumerate(self.top_k_ngrams[self.n]):
-                    output[i] = text_ngram_counts[ngram]  # type: ignore
+                if len(input_ngrams[self.n]) > 0:
+                    text_ngram_counts = Counter(input_ngrams[self.n])
+                    for i, (ngram, _) in enumerate(self.top_k_ngrams[self.n]):
+                        output[i] = text_ngram_counts[ngram]  # type: ignore
 
             else:
                 for n in range(top_k_min_n, top_k_max_n + 1):  # type: ignore
-                    text_ngram_counts = Counter(input_ngrams[n])
-                    for i, (ngram, _) in enumerate(self.top_k_ngrams[n]):
-                        output[f'n_{n}_{i}'] = text_ngram_counts[ngram]  # type: ignore
+                    if len(input_ngrams[n]) > 0:
+                        text_ngram_counts = Counter(input_ngrams[n])
+                        for i, (ngram, _) in enumerate(self.top_k_ngrams[n]):
+                            output[f'n_{n}_{i}'] = text_ngram_counts[ngram]  # type: ignore
 
         return output
 
@@ -432,32 +453,50 @@ class NGramASTParser(ast_parser.ASTParser):
         self.skip_game_and_domain = skip_game_and_domain
 
         self.ngram_counts = defaultdict(int)
+        self.ngram_counts_by_section = {section: defaultdict(int) for section in ast_parser.SECTION_KEYS}
         self.current_input_ngrams = {}
+        self.current_input_ngrams_by_section = {section: {} for section in ast_parser.SECTION_KEYS}
         self.preorder_ast_tokens = []
+        self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
+        self.ast_counts_by_section = defaultdict(int)
+
+    def _add_token(self, token: str, at_start: bool = False, **kwargs):
+        if at_start:
+            self.preorder_ast_tokens.insert(0, token)
+        else:
+            self.preorder_ast_tokens.append(token)
+
+        if ast_parser.SECTION_CONTEXT_KEY in kwargs:
+            if at_start:
+                self.preorder_ast_tokens_by_section[kwargs[ast_parser.SECTION_CONTEXT_KEY]].insert(0, token)
+            else:
+                self.preorder_ast_tokens_by_section[kwargs[ast_parser.SECTION_CONTEXT_KEY]].append(token)
+
+    def _add_tokens(self, tokens: typing.Sequence[str], at_start: bool = False, **kwargs):
+        for token in tokens:
+            self._add_token(token, at_start=at_start, **kwargs)
 
     def parse_test_input(self, test_ast: typing.Union[tatsu.ast.AST, tuple],
                          n_values: typing.Optional[typing.Sequence[int]] = None, **kwargs):
         if n_values is not None:
             self.current_input_ngrams = {n: [] for n in n_values}
+            self.current_input_ngrams_by_section = {section: {n: [] for n in n_values} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, n_values=n_values, **kwargs)
+
         else:
             self.current_input_ngrams = {self.n: []}
+            self.current_input_ngrams_by_section = {section: {self.n: []} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, **kwargs)
-        return self.current_input_ngrams
+
+        return self.current_input_ngrams, self.current_input_ngrams_by_section
 
     def __call__(self, ast, **kwargs):
-        self._default_kwarg(kwargs, 'ast_tokens', [])
         self._default_kwarg(kwargs, 'update_model_counts', False)
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
             self.preorder_ast_tokens = []
-
-        ast_tokens = kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
-
-        if self.pad > 0 and initial_call:
-            for _ in range(self.pad):
-                ast_tokens.append(START_PAD)
+            self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 
         if initial_call:
             if self.skip_game_and_domain:
@@ -466,23 +505,43 @@ class NGramASTParser(ast_parser.ASTParser):
         super().__call__(ast, **kwargs)
 
         if initial_call:
+            if ast_parser.SECTION_CONTEXT_KEY in kwargs:
+                del kwargs[ast_parser.SECTION_CONTEXT_KEY]
+
             if self.pad > 0:
-                for _ in range(self.pad):
-                    ast_tokens.append(END_PAD)
+                self._add_tokens([START_PAD] * self.pad, at_start=True)
+                for section in self.preorder_ast_tokens_by_section:
+                    self.preorder_ast_tokens_by_section[section] = ([START_PAD] * self.pad) + self.preorder_ast_tokens_by_section[section]
+
+                self._add_tokens([END_PAD] * self.pad)
+                for section in self.preorder_ast_tokens_by_section:
+                    self.preorder_ast_tokens_by_section[section] = self.preorder_ast_tokens_by_section[section] + ([END_PAD] * self.pad)
 
             if 'n_values' in kwargs:
                 for n in kwargs['n_values']:
-                    for start_index in range(len(ast_tokens) - n + 1):
-                        ngram = tuple(ast_tokens[start_index:start_index + n])
-                        self.current_input_ngrams[n].append(ngram)
+                    self._count_ngrams_from_tokens(self.preorder_ast_tokens, n, update_model_counts=kwargs['update_model_counts'])
+                    for section in self.preorder_ast_tokens_by_section:
+                        self._count_ngrams_from_tokens(self.preorder_ast_tokens_by_section[section], n, update_model_counts=kwargs['update_model_counts'], section=section)
 
             else:
-                for start_index in range(len(ast_tokens) - self.n + 1):
-                    ngram = tuple(ast_tokens[start_index:start_index + self.n])
-                    if kwargs['update_model_counts']:
-                        self.ngram_counts[ngram] += 1
-                    else:
-                        self.current_input_ngrams[self.n].append(ngram)
+                self._count_ngrams_from_tokens(self.preorder_ast_tokens, self.n, update_model_counts=kwargs['update_model_counts'])
+                for section in self.preorder_ast_tokens_by_section:
+                    self._count_ngrams_from_tokens(self.preorder_ast_tokens_by_section[section], self.n, update_model_counts=kwargs['update_model_counts'], section=section)
+
+    def _count_ngrams_from_tokens(self, tokens: typing.List[str], n: int, update_model_counts: bool = True, section: typing.Optional[str] = None):
+        for start_index in range(len(tokens) - n + 1):
+            ngram = tuple(tokens[start_index:start_index + n])
+            if update_model_counts:
+                if section is None:
+                    self.ngram_counts[ngram] += 1
+                else:
+                    self.ast_counts_by_section[section] += 1
+                    self.ngram_counts_by_section[section][ngram] += 1
+            else:
+                if section is None:
+                    self.current_input_ngrams[n].append(ngram)
+                else:
+                    self.current_input_ngrams_by_section[section][n].append(ngram)
 
     def _tokenize_ast_node(self, ast: tatsu.ast.AST, **kwargs) -> typing.Union[str, typing.List[str]]:
         rule = ast.parseinfo.rule  # type: ignore
@@ -496,7 +555,12 @@ class NGramASTParser(ast_parser.ASTParser):
             if categories is None or len(categories) == 0:
                 return UNKNOWN_CATEGORY
 
-            return list(categories)[0]
+            categories = list(categories)
+            if len(categories) == 1:
+                return categories[0]
+            else:
+                # TODO: is this the right way to handle this here?
+                return f'either_types_{"_".join(sorted(categories))}'
 
         if rule == 'variable_type_def':
             var_type = ast.var_type.type  # type: ignore
@@ -504,7 +568,11 @@ class NGramASTParser(ast_parser.ASTParser):
                 category_set = ast_parser.predicate_function_term_to_type_category(var_type, {}, {})
                 if category_set is None or len(category_set) == 0:
                     return UNKNOWN_CATEGORY
-                return list(category_set)[0]
+                categories = list(category_set)
+                if len(categories) == 1:
+                    return categories[0]
+                else:
+                    raise ValueError(f'Variable type {var_type} has multiple categories: {categories}')
 
             elif isinstance(var_type, tatsu.ast.AST):
                 type_names = var_type.type_names  # type: ignore
@@ -530,7 +598,7 @@ class NGramASTParser(ast_parser.ASTParser):
 
                 object_types = [t.type_name if isinstance(t, tatsu.ast.AST) else str(t) for t in object_types]
                 for obj_type in object_types:
-                    object_category = ast_parser.predicate_function_term_to_type_category(obj_type, {}, {})
+                    object_category = ast_parser.predicate_function_term_to_type_category(obj_type, {}, {})  # type: ignore
                     if object_category is None or len(object_category) == 0:
                         # print(ast)
                         # print(ast.object_types)
@@ -553,66 +621,86 @@ class NGramASTParser(ast_parser.ASTParser):
 
         return rule
 
-    def _get_ast_tokens(self, **kwargs):
-        return kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
-
     def _handle_tuple(self, ast: tuple, **kwargs):
         if isinstance(ast[0], str) and ast[0].startswith('(:'):
-            ast_tokens = self._get_ast_tokens(**kwargs)
-            ast_tokens.append(ast[0][2:])
+            section = ast[0]
+            kwargs[ast_parser.SECTION_CONTEXT_KEY] = section
+            self._add_token(section[2:], **kwargs)
 
         super()._handle_tuple(ast, **kwargs)
 
     def _handle_str(self, ast: str, **kwargs):
+        token = None
         if NUMBER_AND_DECIMAL_PATTERN.match(ast):
-            ast_tokens = self._get_ast_tokens(**kwargs)
-            ast_tokens.append('number')
+            token = 'number'
+        elif ast.startswith('(total-'):
+            token = ast.replace('(', '').replace(')', '')
+
+        if token is not None:
+            self._add_token(token, **kwargs)
 
     def _handle_int(self, ast: int, **kwargs):
-        ast_tokens = self._get_ast_tokens(**kwargs)
-        ast_tokens.append('number')
+        self._add_token('number', **kwargs)
 
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
-        ast_tokens = self._get_ast_tokens(**kwargs)
-
         kwargs = ast_parser.update_context_variables(ast, kwargs)
 
         if rule not in self.ignore_rules:
             token = self._tokenize_ast_node(ast, **kwargs)
             if isinstance(token, list):
-                ast_tokens.extend(token)
+                self._add_tokens(token, **kwargs)
             else:
-                ast_tokens.append(token)
-
-        kwargs['ast_tokens'] = ast_tokens
+                self._add_token(token, **kwargs)
 
         for child_key in ast:
             if child_key != 'parseinfo':
                 self(ast[child_key], **kwargs)
 
 
+DEFAULT_N_BY_SECTION = {
+    ast_parser.SETUP: 5,
+    ast_parser.PREFERENCES: 7,
+    ast_parser.TERMINAL: 5,
+    ast_parser.SCORING: 5,
+}
+
+
 class ASTNGramTrieModel:
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
                  stupid_backoff_discount: float = DEFAULT_STUPID_BACKOFF_DISCOUNT,
-                 zero_log_prob: float = DEFAULT_ZERO_LOG_PROB, preorder_traversal: bool = True, pad: int = 0):
+                 zero_log_prob: float = DEFAULT_ZERO_LOG_PROB,
+                 preorder_traversal: bool = True, pad: int = 0, n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
+                 sections: typing.Sequence[str] = ast_parser.SECTION_KEYS):
 
         self.n = n
         self.ignore_rules = ignore_rules
+        self.sections = sections
+        for section in sections:
+            if section not in n_by_section:
+                n_by_section[section] = n
+        self.n_by_sections = n_by_section
 
         self.ngram_ast_parser = NGramASTParser(n, ignore_rules, preorder_traversal, pad)
         self.model = NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False)
+        self.model_by_section = {section: NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
 
     def fit(self, asts: typing.Sequence[typing.Union[tuple,tatsu.ast.AST]]):
         for ast in asts:
             self.ngram_ast_parser(ast, update_model_counts=True)
 
         self.model.fit(ngram_counts=self.ngram_ast_parser.ngram_counts, n_games=len(asts))
+        for section, model in self.model_by_section.items():
+            model.fit(ngram_counts=self.ngram_ast_parser.ngram_counts_by_section[section], n_games=self.ngram_ast_parser.ast_counts_by_section[section])
 
     def score(self, ast: typing.Union[tuple,tatsu.ast.AST], k: typing.Optional[int] = None,
               stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
+              top_k_max_n: typing.Optional[int] = None, k_for_sections: typing.Optional[int] = None,
+              score_all: bool = False, debug: bool = False):
+
+        if k_for_sections is None:
+            k_for_sections = k
 
         n_values = None
         if top_k_min_n is not None:
@@ -621,12 +709,25 @@ class ASTNGramTrieModel:
 
             n_values = list(range(top_k_min_n, top_k_max_n + 1))
 
-        current_input_ngrams = self.ngram_ast_parser.parse_test_input(ast, n_values=n_values)
-        return self.model.score(input_ngrams=current_input_ngrams, k=k,
+        current_input_ngrams, current_input_ngrams_by_section = self.ngram_ast_parser.parse_test_input(ast, n_values=n_values)
+
+        if debug: print(current_input_ngrams[2])
+
+        outputs = {'full': self.model.score(input_ngrams=current_input_ngrams, k=k,
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,
                                 top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
-                                score_all=score_all)
+                                score_all=score_all)}
+
+        for section in self.sections:
+            outputs[section.replace('(:', '')] = self.model_by_section[section].score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,
+                                                                    stupid_backoff=stupid_backoff, log=log,
+                                                                    filter_padding_top_k=filter_padding_top_k,
+                                                                    top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
+                                                                    score_all=score_all)
+
+
+        return {f'{section}_{key}': value for section, output in outputs.items() for key, value in output.items()}
 
 
 def main(args: argparse.Namespace):

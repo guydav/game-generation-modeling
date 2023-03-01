@@ -20,6 +20,7 @@ SECTION_KEYS = (SETUP, PREFERENCES, TERMINAL, SCORING)
 SECTION_CONTEXT_KEY = 'section'
 VARIABLES_CONTEXT_KEY = 'variables'
 QUANTIFICATIONS_CONTEXT_KEY = 'quantifications'
+MODAL_CONTEXT_KEY = 'modal'
 
 
 import ast_printer
@@ -97,21 +98,29 @@ class ASTParentMapper(ASTParser):
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'parent', ast)
         self._default_kwarg(kwargs, 'selector', [])
+        self._default_kwarg(kwargs, 'depth', 0)
+        self._default_kwarg(kwargs, SECTION_CONTEXT_KEY, None)
         return super().__call__(ast, **kwargs)
 
+    def _handle_tuple(self, ast: tuple, **kwargs):
+        if isinstance(ast[0], str) and ast[0].startswith('(:'):
+            kwargs[SECTION_CONTEXT_KEY] = ast[0]
+
+        return self._handle_iterable(ast, **kwargs)
+
     def _handle_iterable(self, ast, **kwargs):
-        [self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i])
+        [self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i], depth=kwargs['depth'] + 1, section=kwargs[SECTION_CONTEXT_KEY])
         for i, element in enumerate(ast)]
 
     def _build_mapping_value(self, ast, **kwargs):
-        return (ast, kwargs['parent'], kwargs['selector'])
+        return (ast, kwargs['parent'], kwargs['selector'], kwargs['depth'], kwargs[SECTION_CONTEXT_KEY])
 
     def _handle_ast(self, ast, **kwargs):
         self._add_ast_to_mapping(ast, **kwargs)
 
         for key in ast:
             if key != 'parseinfo':
-                self(ast[key], parent=ast, selector=[key])
+                self(ast[key], parent=ast, selector=[key], depth=kwargs['depth'] + 1, section=kwargs[SECTION_CONTEXT_KEY])
 
     def _ast_key(self, ast):
         return ast.parseinfo._replace(alerts=None)

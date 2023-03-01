@@ -815,11 +815,11 @@ def extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
     arg_index = 1
     arg_key = f'arg_{arg_index}'
     while arg_key in inner and inner[arg_key] is not None:
-        args.append(inner[arg_key].term)
+        args.append(str(inner[arg_key].term))
         arg_index += 1
         arg_key = f'arg_{arg_index}'
 
-    return [str(arg) for arg in args]
+    return args
 
 
 def extract_predicate_function_name(ast: tatsu.ast.AST, remove_digits: bool = True):

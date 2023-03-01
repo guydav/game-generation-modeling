@@ -483,7 +483,6 @@ class NGramASTParser(ast_parser.ASTParser):
             self(test_ast, update_model_counts=False, n_values=n_values, **kwargs)
         else:
             self.current_input_ngrams = {self.n: []}
-            self.current_input_ngrams_by_section = {section: {self.n: []} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, **kwargs)
         return self.current_input_ngrams, self.current_input_ngrams_by_section
 
@@ -493,7 +492,12 @@ class NGramASTParser(ast_parser.ASTParser):
         if initial_call:
             kwargs['inner_call'] = True
             self.preorder_ast_tokens = []
-            self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
+
+        ast_tokens = kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
+
+        if self.pad > 0 and initial_call:
+            for _ in range(self.pad):
+                ast_tokens.append(START_PAD)
 
         if initial_call:
             if self.skip_game_and_domain:
@@ -714,17 +718,7 @@ class ASTNGramTrieModel:
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,
                                 top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
-                                score_all=score_all)}
-
-        for section, model in self.model_by_section.items():
-            # if any(len(ngrams) == 0 for ngrams in current_input_ngrams_by_section[section].values()):
-            #     continue
-            outputs[section.replace('(:', '')] = model.score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,
-                                           stupid_backoff=stupid_backoff, log=log,
-                                           filter_padding_top_k=filter_padding_top_k,
-                                           top_k_min_n=top_k_min_n,
-                                           top_k_max_n=min(top_k_max_n, self.n_by_sections[section]) if top_k_max_n is not None else None,
-                                           score_all=score_all)
+                                score_all=score_all)
 
 
         return {f'{section}_{key}': value for section, output in outputs.items() for key, value in output.items()}

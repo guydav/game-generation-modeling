@@ -161,36 +161,37 @@ pref_forall_prefs = '(and' {preferences:preference}+ ')' |  # to allow multiple 
 
 pref_body = body:(
     pref_body_exists |
-    # pref_body_forall |
     then |
-    at_end)
-    ;
+    at_end
+    );
+# pref_body_forall |
 
 pref_body_exists = '(exists' exists_vars:variable_list exists_args:(then | at_end) ')';
-# pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
+pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
 at_end = '(at-end' at_end_pred:super_predicate')';
-# always = '(always' always_pred:super_predicate')';
+always = '(always' always_pred:super_predicate')';
 then = '(then' {then_funcs:seq_func}+ ')';
 
 seq_func = seq_func:(
-    any |
     once |
     once_measure |
     hold |
-    while_hold |
-    hold_for |
-    hold_to_end |
-    forall_seq
+    while_hold # |
     );
 
-any = '(any)';
+# any |
+# hold_for |
+# hold_to_end |
+# forall_seq
+
+# any = '(any)';
 once = '(once ' once_pred:super_predicate ')';
 once_measure = '(once-measure' once_measure_pred:super_predicate measurement:function_eval ')';
 hold = '(hold' hold_pred:super_predicate ')';
 while_hold = '(hold-while' hold_pred:super_predicate {while_preds:super_predicate}+ ')';
-hold_for = '(hold-for' num_to_hold:number hold_pred:super_predicate ')';
-hold_to_end = '(hold-to-end' hold_pred:super_predicate ')';
-forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')';
+# hold_for = '(hold-for' num_to_hold:number hold_pred:super_predicate ')';
+# hold_to_end = '(hold-to-end' hold_pred:super_predicate ')';
+# forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')';
 
 # super_predicate =
 #     super_predicate_and |
@@ -224,7 +225,7 @@ terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')'
 
 # alternatively, if we don't want scoring to be able to refer to '(total-score)''
 # we recreate the definition from above, and add '(total-score)' as a separate literal option
-terminal_expr = expr:scoring_expr;
+terminal_expr = expr:(scoring_expr_or_number | total_time | total_score);
 
 scoring_expr = expr:(
     scoring_external_maximize |
@@ -232,28 +233,26 @@ scoring_expr = expr:(
     scoring_multi_expr |
     scoring_binary_expr |
     scoring_neg_expr |
-    scoring_and |
-    scoring_or |
-    scoring_not |
-    total_time |
-    total_score |
-    number |
+    # scoring_and |
+    # scoring_or |
+    # scoring_not |
     preference_eval |
     scoring_comparison
     );
     # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
 
+scoring_expr_or_number = expr:(scoring_expr | number);
 
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
 
-scoring_multi_expr = '(' op:multi_op {expr:scoring_expr}+ ')';  # TODO: do we want to enforce more than one?
-scoring_binary_expr = '(' op:binary_op expr_1:scoring_expr expr_2:scoring_expr ')';
-scoring_neg_expr = '(-' expr:scoring_expr ')';
+scoring_multi_expr = '(' op:multi_op {expr:scoring_expr_or_number}+ ')';  # TODO: do we want to enforce more than one?
+scoring_binary_expr = '(' op:binary_op expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
+scoring_neg_expr = '(-' expr:scoring_expr_or_number ')';
 
-scoring_and = '(and' {and_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
-scoring_or = '(or' {or_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
-scoring_not = '(not' not_args:scoring_expr ')';
+# scoring_and = '(and' {and_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
+# scoring_or = '(or' {or_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
+# scoring_not = '(not' not_args:scoring_expr ')';
 
 
 total_time = '(total-time)';
@@ -266,8 +265,8 @@ scoring_comparison = comp:(
     scoring_comp |
     scoring_equals_comp);
 
-scoring_comp = '(' op:binary_comp expr_1:scoring_expr expr_2:scoring_expr ')';
-scoring_equals_comp = '(=' {expr:scoring_expr}+ ')';
+scoring_comp = '(' op:binary_comp expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
+scoring_equals_comp = '(=' {expr:scoring_expr_or_number}+ ')';
 
 
 preference_eval = count_method:(

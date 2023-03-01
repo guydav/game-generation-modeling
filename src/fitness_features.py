@@ -321,7 +321,7 @@ class ASTFitnessFeaturizer:
                 if isinstance(seq_func, str):
                     context[MODAL_CONTEXT_KEY] = seq_func
                 else:
-                    context[MODAL_CONTEXT_KEY] = seq_func.parseinfo.rule
+                    context[MODAL_CONTEXT_KEY] = seq_func.parseinfo.rule  # type: ignore
             elif rule == 'at_end':
                 context[MODAL_CONTEXT_KEY] = 'at_end'
 
@@ -1344,84 +1344,103 @@ class PredicateUnderModal(FitnessTerm):
 
 
 class PredicateFunctionArgumentTypes(FitnessTerm):
-    argument_type_categories: typing.Sequence[str]
-    matching_argument_types_count: int = 0
+    # argument_type_categories: typing.Sequence[str]
+    # matching_argument_types_count: int = 0
+    argument_types_to_count: typing.Dict[typing.Tuple[str, ...], int]
+    argument_types_to_count_by_section: typing.Dict[str, typing.Dict[typing.Tuple[str, ...], int]]
     predicate_or_function: str
-    name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
+    # name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
 
-    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
-        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
+    def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
+        # name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
         super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
-            f'{predicate_or_function}_arg_types_{"_".join(argument_type_categories)}')
+            # f'{predicate_or_function}_arg_types_{"_".join(argument_type_categories)}'
+            f'{predicate_or_function}_arg_types'
+            )
         self.predicate_or_function = predicate_or_function
-        self.argument_type_categories = argument_type_categories
-        self.name_to_arity_map = name_to_arity_map
+        # self.argument_type_categories = argument_type_categories
+        # self.name_to_arity_map = name_to_arity_map
         self.known_missing_types = known_missing_types
+        self.argument_types_to_count = defaultdict(int)
+        self.argument_types_to_count_by_section = {ast_parser.SETUP: defaultdict(int), ast_parser.PREFERENCES: defaultdict(int)}
 
-        if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
-            raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
+        # if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
+        #     raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
 
     def game_start(self) -> None:
-        self.matching_argument_types_count = 0
+        # self.matching_argument_types_count = 0
+        self.argument_types_to_count = defaultdict(int)
+        self.argument_types_to_count_by_section = {ast_parser.SETUP: defaultdict(int), ast_parser.PREFERENCES: defaultdict(int)}
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             name = extract_predicate_function_name(ast, remove_digits=False)
 
-            if name not in self.name_to_arity_map:
-                raise ValueError(f'Predicate {ast.name} not in predicate arity map')
-
             if name != self.predicate_or_function:
                 return
 
-            n_args = extract_n_args(ast)
-            arity = self.name_to_arity_map[name]  # type: ignore
+            # if name not in self.name_to_arity_map:
+            #     raise ValueError(f'Predicate {ast.name} not in predicate arity map')
 
-            if isinstance(arity, int):
-                if n_args != arity:
-                    return
+            # n_args = extract_n_args(ast)
+            # arity = self.name_to_arity_map[name]  # type: ignore
 
-            elif n_args not in arity:
-                return
+            # if isinstance(arity, int):
+            #     if n_args != arity:
+            #         return
+
+            # elif n_args not in arity:
+            #     return
 
             terms = extract_predicate_function_args(ast)
-            term_type_lists = []
-
             context_variables = typing.cast(typing.Dict[str, VariableDefinition], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
+            if any(term_category is None for term_category in term_categories):
+                return
 
-            if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):  # type: ignore
-                self._count(context)
+            for category_product in itertools.product(*term_categories):  # type: ignore
+                self.argument_types_to_count[category_product] += 1
+                self.argument_types_to_count_by_section[context[SECTION_CONTEXT_KEY]][category_product] += 1  # type: ignore
 
-    def _count(self, context: ContextDict):
-        self.matching_argument_types_count += 1
+    #         if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):  # type: ignore
+    #             self._count(context)
+
+    # def _count(self, context: ContextDict):
+    #     self.matching_argument_types_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return self.matching_argument_types_count
+        # output = {'_'.join(argument_types): count for argument_types, count in self.argument_types_to_count.items()}
+        output = {}
+        for section, section_results in self.argument_types_to_count_by_section.items():
+            s = section.replace('(:', '')
+            output.update({f'{"_".join(argument_types)}_{s}': count for argument_types, count in section_results.items()})
+
+        return output  # type: ignore
+        # return self.matching_argument_types_count
 
 
 PREDICATE_SECTIONS = [ast_parser.SETUP, ast_parser.PREFERENCES]
 
 
-class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
-    matching_argument_types_count_by_section: typing.Dict[str, Number]
+# class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
+#     matching_argument_types_count_by_section: typing.Dict[str, Number]
 
-    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
-        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
-        known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
+#     def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
+#         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
+#         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
-        super().__init__(predicate_or_function, argument_type_categories, name_to_arity_map, known_missing_types)
+#         super().__init__(predicate_or_function, argument_type_categories, name_to_arity_map, known_missing_types)
 
-    def game_start(self) -> None:
-        self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
+#     def game_start(self) -> None:
+#         self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
 
-    def _count(self, context: ContextDict):
-        self.matching_argument_types_count_by_section[context[SECTION_CONTEXT_KEY]] += 1  # type: ignore
+#     def _count(self, context: ContextDict):
+#         self.matching_argument_types_count_by_section[context[SECTION_CONTEXT_KEY]] += 1  # type: ignore
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return {k.replace('(:', ''): v for k, v in self.matching_argument_types_count_by_section.items()}
+#     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+#         return {k.replace('(:', ''): v for k, v in self.matching_argument_types_count_by_section.items()}
 
 
 def build_argument_types_fitness_terms(
@@ -1430,11 +1449,12 @@ def build_argument_types_fitness_terms(
     predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
     fitness_terms = []
 
-    sorted_type_categories = list(sorted(type_categories))
+    # sorted_type_categories = list(sorted(type_categories))
 
     for predicate in predicates:
-        for type_combinations in itertools.product(*([sorted_type_categories] * predicate_arity_map[predicate])):  # type: ignore
-            fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
+        fitness_terms.append(PredicateFunctionArgumentTypes(predicate))
+        # for type_combinations in itertools.product(*([sorted_type_categories] * predicate_arity_map[predicate])):  # type: ignore
+            # fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
             # fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
 
     return fitness_terms

@@ -78,11 +78,11 @@ START_PAD = '<start>'
 END_PAD = '<end>'
 UNKNOWN_CATEGORY = '<unknown>'
 
-def _ngrams(text: str, n: int, pad: int = 0, start_pad: str = START_PAD, end_pad: str = END_PAD) -> typing.Iterable[typing.Tuple[str, ...]]:
+def _ngrams(text: str, n: int, pad: int = 0, start_pad: str = START_PAD, end_pad: str = END_PAD) -> typing.Sequence[typing.Tuple[str, ...]]:
     tokens = ngram_preprocess(text)
     if pad > 0:
         tokens = [start_pad] * pad + tokens + [end_pad] * pad
-    return nltk_ngrams(tokens, n)
+    return list(nltk_ngrams(tokens, n))
 
 
 @dataclass
@@ -139,7 +139,7 @@ class NGramTrieModel:
         for ngram in ngrams:
             self._add(ngram, count)
 
-    def _text_to_ngrams(self, text: str, n: typing.Optional[int] = None) -> typing.Iterable[typing.Tuple[str, ...]]:
+    def _text_to_ngrams(self, text: str, n: typing.Optional[int] = None) -> typing.Sequence[typing.Tuple[str, ...]]:
         if n is None:
             n = self.n
         return _ngrams(text, n, pad=n - 1 if self.should_pad else 0)
@@ -212,7 +212,7 @@ class NGramTrieModel:
         else:
             return self.get(ngram) / self.get(ngram[:-1])
 
-    def _transform_ngrams(self, ngrams: typing.Iterable[typing.Tuple[str, ...]],
+    def _transform_ngrams(self, ngrams: typing.Sequence[typing.Tuple[str, ...]],
                   stupid_backoff: bool = True, log: bool = False,
                   reduction: str = 'mean'):
 
@@ -265,7 +265,7 @@ class NGramTrieModel:
         return item[1]
 
     def score(self, input_text: typing.Optional[str] = None,
-              input_ngrams: typing.Optional[typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]]] = None,
+              input_ngrams: typing.Optional[typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]]] = None,
               k: typing.Optional[int] = None, stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
               top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
@@ -291,7 +291,7 @@ class NGramTrieModel:
             else:
                 input_ngrams = {self.n: list(self._text_to_ngrams(input_text))}
 
-        input_ngrams = typing.cast(typing.Dict[int, typing.Iterable[typing.Tuple[str, ...]]], input_ngrams)
+        input_ngrams = typing.cast(typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]], input_ngrams)
 
         if use_top_k and score_all:
             output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
@@ -465,6 +465,7 @@ class NGramASTParser(ast_parser.ASTParser):
             self.preorder_ast_tokens.insert(0, token)
         else:
             self.preorder_ast_tokens.append(token)
+
         if ast_parser.SECTION_CONTEXT_KEY in kwargs:
             if at_start:
                 self.preorder_ast_tokens_by_section[kwargs[ast_parser.SECTION_CONTEXT_KEY]].insert(0, token)
@@ -473,7 +474,7 @@ class NGramASTParser(ast_parser.ASTParser):
 
     def _add_tokens(self, tokens: typing.Sequence[str], at_start: bool = False, **kwargs):
         for token in tokens:
-            self._add_token(token, **kwargs)
+            self._add_token(token, at_start=at_start, **kwargs)
 
     def parse_test_input(self, test_ast: typing.Union[tatsu.ast.AST, tuple],
                          n_values: typing.Optional[typing.Sequence[int]] = None, **kwargs):
@@ -481,9 +482,12 @@ class NGramASTParser(ast_parser.ASTParser):
             self.current_input_ngrams = {n: [] for n in n_values}
             self.current_input_ngrams_by_section = {section: {n: [] for n in n_values} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, n_values=n_values, **kwargs)
+
         else:
             self.current_input_ngrams = {self.n: []}
+            self.current_input_ngrams_by_section = {section: {self.n: []} for section in ast_parser.SECTION_KEYS}
             self(test_ast, update_model_counts=False, **kwargs)
+
         return self.current_input_ngrams, self.current_input_ngrams_by_section
 
     def __call__(self, ast, **kwargs):
@@ -492,12 +496,7 @@ class NGramASTParser(ast_parser.ASTParser):
         if initial_call:
             kwargs['inner_call'] = True
             self.preorder_ast_tokens = []
-
-        ast_tokens = kwargs['ast_tokens'] if not self.preorder_traversal else self.preorder_ast_tokens
-
-        if self.pad > 0 and initial_call:
-            for _ in range(self.pad):
-                ast_tokens.append(START_PAD)
+            self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 
         if initial_call:
             if self.skip_game_and_domain:
@@ -718,7 +717,14 @@ class ASTNGramTrieModel:
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,
                                 top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
-                                score_all=score_all)
+                                score_all=score_all)}
+
+        for section in self.sections:
+            outputs[section.replace('(:', '')] = self.model_by_section[section].score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,
+                                                                    stupid_backoff=stupid_backoff, log=log,
+                                                                    filter_padding_top_k=filter_padding_top_k,
+                                                                    top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
+                                                                    score_all=score_all)
 
 
         return {f'{section}_{key}': value for section, output in outputs.items() for key, value in output.items()}

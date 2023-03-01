@@ -47,23 +47,68 @@ BINARIZE_NON_ONE = [
     'tautological_expression_found', 'redundant_expression_found',
 ]
 
+NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
+NGRAM_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+
 SCALE_ZERO_ONE_PATTERNS = [
-    re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score'),
+    NGRAM_SCORE_PATTERN,
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [
     re.compile(r'[\w\d+_]+_arg_types_[\w_]+'),
     re.compile(r'compositionality_structure_\d+'),
-    re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+    NGRAM_PATTERN,
 ]
 
+
+DEFAULT_MISSING_VALUE_EPSILON = 1e-4
+
+
+def set_missing_value_zero(series: typing.Optional[pd.Series], **kwargs):
+    if series is None:
+        return 0
+
+    return series.fillna(0)
+
+
+def set_missing_value_one(series: typing.Optional[pd.Series], **kwargs):
+    if series is None:
+        return 1
+
+    return series.fillna(1)
+
+
+def set_missing_value_min_epsilon(series: typing.Optional[pd.Series], min_value: typing.Optional[float] = None, epsilon: float = DEFAULT_MISSING_VALUE_EPSILON, **kwargs):
+    if series is None:
+        if min_value is None:
+            raise ValueError('min_value must be provided if series is None')
+        return min_value - epsilon
+
+    if min_value is None:
+        min_value = np.nanmean(series.values)  # type: ignore
+
+    return series.fillna(min_value - epsilon), min_value  # type: ignore
+
+
+COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION = {
+    NGRAM_SCORE_PATTERN: set_missing_value_min_epsilon,
+    NGRAM_PATTERN: set_missing_value_zero,
+}
+
+
 class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
+    columns: typing.List[str]
     ignore_columns: typing.Iterable[str]
+    missing_value_epsilon: float
+    missing_value_series_min_values: typing.Dict[str, float]
     scale_series_min_max_values: typing.Dict[str, typing.Tuple[float, float]]
 
-    def __init__(self, ignore_columns: typing.Iterable[str] = NON_FEATURE_COLUMNS):
+    def __init__(self, ignore_columns: typing.Iterable[str] = NON_FEATURE_COLUMNS, missing_value_epsilon: float = DEFAULT_MISSING_VALUE_EPSILON):
         self.ignore_columns = ignore_columns
+        self.missing_value_epsilon = missing_value_epsilon
+        self.missing_value_series_min_values = {}
         self.scale_series_min_max_values = {}
+        self.columns = []
 
     def _binarize_series(self, series: pd.Series, ignore_columns: typing.Iterable[str] = NON_FEATURE_COLUMNS, use_prior_values: bool = False):
         c = str(series.name)
@@ -94,20 +139,87 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
         raise ValueError(f'No binarization rule for column {c}')
 
+    def _fill_series_missing_values(self, series: pd.Series, use_prior_values: bool = False):
+        if not series.isna().any():
+            return series
+
+        c = str(series.name)
+        missing_value_function = None
+        if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
+            missing_value_function = COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION[c]
+
+        else:
+            for p, f in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION.items():
+                if isinstance(p, re.Pattern) and p.match(c):
+                    missing_value_function = f
+                    break
+
+        if missing_value_function is None:
+            raise ValueError(f'No missing value function for column {c}')
+
+        if use_prior_values and c in self.missing_value_series_min_values:
+            result = missing_value_function(series, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
+        else:
+            result = missing_value_function(series, epsilon=self.missing_value_epsilon)
+
+        if isinstance(result, tuple):
+            series, min_value = result
+            self.missing_value_series_min_values[c] = min_value
+            return series
+
+        else:
+            return result
+
+    def _preprocess_series(self, series: pd.Series, use_prior_values: bool = False):
+        series = self._binarize_series(series, use_prior_values=use_prior_values, ignore_columns=self.ignore_columns)
+        series = self._fill_series_missing_values(series, use_prior_values=use_prior_values)
+        return series
+
     def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
-        return df.apply(self._binarize_series, axis=0, ignore_columns=self.ignore_columns, use_prior_values=use_prior_values)
+        if not use_prior_values:
+            self.columns = [str(c) for c in df.columns]
+
+        if use_prior_values and not self.columns:
+            raise ValueError('Must call preprocess_df without use_prior_values before preprocess_df with use_prior_values')
+
+        return df.apply(self._preprocess_series, axis=0, use_prior_values=use_prior_values)
 
     def preprocess_row(self, row: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
-        for k, v in row.items():
-            if k in BINARIZE_NON_ONE:
-                row[k] = 1 if v == 1 else 0
+        if not self.columns:
+            raise ValueError('Must call preprocess_df before preprocess_row')
 
-            if k in self.scale_series_min_max_values:
-                min_val, max_val = self.scale_series_min_max_values[k]
-                row[k] = (v - min_val) / (max_val - min_val)
+        for c in self.columns:
+            if c in row:
+                v = row[c]
 
-            if any([p.match(k) for p in BINRARIZE_NONZERO_PATTERNS]):
-                row[k] = 1 if v != 0 else 0
+                if c in BINARIZE_NON_ONE:
+                    row[c] = 1 if v == 1 else 0
+
+                if c in self.scale_series_min_max_values:
+                    min_val, max_val = self.scale_series_min_max_values[c]
+                    row[c] = (v - min_val) / (max_val - min_val)
+
+                if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
+                    row[c] = 1 if v != 0 else 0
+
+            else:
+                missing_value_function = None
+                if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
+                    missing_value_function = COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION[c]
+
+                else:
+                    for p, f in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION.items():
+                        if isinstance(p, re.Pattern) and p.match(c):
+                            missing_value_function = f
+                            break
+
+                if missing_value_function is None:
+                    raise ValueError(f'No missing value function for column {c} with no value in the row')
+
+                if self.missing_value_series_min_values:
+                    row[c] = missing_value_function(None, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
+                else:
+                    row[c] = missing_value_function(None, epsilon=self.missing_value_epsilon)
 
         return row
 

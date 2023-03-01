@@ -1,5 +1,6 @@
 import argparse
 from collections import namedtuple, defaultdict, Counter
+from dataclasses import dataclass
 from functools import reduce
 import tatsu
 import tatsu.ast
@@ -17,10 +18,10 @@ import typing
 import string
 import sys
 
-from parse_dsl import load_games_from_file
-from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser
-from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash
 import ast_printer
+from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file
+from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES
+
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -45,9 +46,15 @@ parser.add_argument('-v', '--validate-samples', action='store_true')
 parser.add_argument('--sample-tqdm', action='store_true')
 DEFAULT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
-DEFAULT_RECURSION_LIMIT = 2000
+DEFAULT_RECURSION_LIMIT = 3000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--verbose', action='store_true')
+parser.add_argument('--file-open-mode', default='w')
+parser.add_argument('--regrowth-start-index', type=int, default=0)
+parser.add_argument('--regrowth-end-index', type=int, default=-1)
+parser.add_argument('--section-sample-weights-key', type=str, default=None)
+parser.add_argument('--depth-weight-function-key', type=str, default=None)
+parser.add_argument('--prior-count', action='append', type=int, default=[])
 
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
@@ -310,7 +317,8 @@ SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('predicate_or_function_term', 'term'): ('type_name', 'variable',),
     # ('function_term', 'term'): ('type_name', 'variable',),
     # ('predicate_term', 'term'): ('type_name', 'variable'),
-    ('scoring_expr', 'expr'): ('number', 'total_time', 'total_score'),
+    ('terminal_expr', 'expr'): ('total_time', 'total_score'),
+    ('scoring_expr_or_number', 'expr'): 'number',
 }
 
 PATTERN_TYPE_MAPPINGS = {
@@ -865,13 +873,45 @@ def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[
     return context_new
 
 
-ASTNodeInfo = typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, typing.List, ContextDict, ContextDict]
+class ASTNodeInfo(typing.NamedTuple):
+    ast: tatsu.ast.AST
+    parent: tatsu.ast.AST
+    selector: typing.List[typing.Union[str, int]]
+    depth: int
+    section: typing.Optional[str]
+    global_context: ContextDict
+    local_context: ContextDict
+
 ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
+
+
+SECTION_SAMPLE_WEIGHTS = {
+    'uniform': {key: 1.0 for key in SECTION_KEYS},
+    '2_to_1': {key: 2.0 if key == PREFERENCES else 1.0 for key in SECTION_KEYS},
+}
+
+
+def uniform_depth_weight(depths: np.ndarray) -> np.ndarray:
+    return np.ones_like(depths)
+
+
+def quadratic_depth_weight(depths: np.ndarray) -> np.ndarray:
+    min_depth, max_depth = np.min(depths), np.max(depths)
+    return - (depths - min_depth) * (depths - max_depth) + 1
+
+
+DEPTH_WEIGHT_FUNCTIONS = {
+    'uniform': uniform_depth_weight,
+    'quadratic': quadratic_depth_weight,
+}
+
 
 # TODO: move this class to a separate module?
 class RegrowthSampler(ASTParentMapper):
     depth_parser: ASTDepthParser
+    depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]]
     node_keys: typing.List[tatsu.infos.ParseInfo]
+    node_keys_by_section: typing.Dict[str, typing.List[tatsu.infos.ParseInfo]]
     original_game_id: str
     parent_mapping: ASTParentMapping
     rng: np.random.Generator
@@ -888,16 +928,25 @@ class RegrowthSampler(ASTParentMapper):
         self.depth_parser = ASTDepthParser()
         self.searcher = ASTParseinfoSearcher()
         self.source_ast = None  # type: ignore
+        self.sampler_keys = list(self.samplers.keys())
+        self.example_sampler = self.samplers[self.sampler_keys[0]]
 
     def set_source_ast(self, source_ast: typing.Union[tuple, tatsu.ast.AST]):
         self.source_ast = source_ast
         self.parent_mapping = {}
         self(source_ast)
         self.node_keys = list(
-            key for key, parent_tuple
+            key for key, node_info
             in self.parent_mapping.items()
-            if isinstance(parent_tuple[1], tatsu.ast.AST)
+            if isinstance(node_info.parent, tatsu.ast.AST)
         )
+
+        if self.section_sample_weights is not None:
+            self.node_keys_by_section = defaultdict(list)
+            for key, node_info in self.parent_mapping.items():
+                if isinstance(node_info.parent, tatsu.ast.AST) and node_info.section is not None:
+                    self.node_keys_by_section[node_info.section].append(key)
+
 
     def _update_contexts(self, kwargs: typing.Dict[str, typing.Any], retval: typing.Any):
         if retval is not None and isinstance(retval, tuple) and len(retval) == 2:
@@ -916,7 +965,7 @@ class RegrowthSampler(ASTParentMapper):
         return retval
 
     def _build_mapping_value(self, ast, **kwargs):
-        return(*super()._build_mapping_value(ast, **kwargs),
+        return ASTNodeInfo(*super()._build_mapping_value(ast, **kwargs),
             simplified_context_deepcopy(kwargs['global_context']),
             simplified_context_deepcopy(kwargs['local_context']))
 
@@ -1004,7 +1053,9 @@ class RegrowthSampler(ASTParentMapper):
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
         external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True):
 
-        node, parent, selector, global_context, local_context = self._sample_node_to_update()
+        node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update()  # type: ignore
+        if section is None: section = ''
+
         if external_global_context is not None:
             global_context.update(external_global_context)
 
@@ -1013,9 +1064,12 @@ class RegrowthSampler(ASTParentMapper):
 
         global_context['original_game_id'] = self.original_game_id
 
-        new_node = self.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
+        sampler_key = self.rng.choice(self.sampler_keys)
+        sampler = self.samplers[sampler_key]
+
+        new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
-        node_depth = self._find_node_depth(node)
+
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)
             new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd{regrwoth_depth}')
@@ -1046,7 +1100,7 @@ def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optio
     return counter
 
 
-def test_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar):
+def test_and_stringify_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammars.Grammar):
     first_print_out = ''
 
     try:
@@ -1073,46 +1127,52 @@ def test_ast_sample(ast, args: argparse.Namespace, grammar_parser: tatsu.grammar
     return first_print_out
 
 
-def _generate_mle_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
-    samples = []
-    text_samples = []
-
+def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, ASTSampler], grammar_parser: tatsu.grammars.Grammar):
     sample_iter = range(args.num_samples)
     if args.sample_tqdm:
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
 
+    rng = np.random.default_rng(args.random_seed)
+
     for sample_id in sample_iter:
+        sampler_key = rng.choice(list(samplers.keys()))
+        sampler = samplers[sampler_key]
         generated_sample = False
         while not generated_sample:
             try:
-                ast = sampler.sample(global_context=dict(sample_id=sample_id))
-                sample_text = test_ast_sample(ast, args, grammar_parser)
-                samples.append(ast)
-                text_samples.append(sample_text)
+                sample_ast = sampler.sample(global_context=dict(sample_id=sample_id))
+                sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
                 generated_sample = True
+                yield sample_ast, sample_str + '\n\n'
+
             except ValueError as e:
                 print(f'ValueError while sampling, repeating: {e}')
             except SamplingException as e:
                 print(f'SamplingException while sampling, repeating: {e}')
 
-    return samples, text_samples
+
+def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[str, ASTSampler], grammar_parser: tatsu.grammars.Grammar):
+    section_sample_weights = None
+    if args.section_sample_weights_key is not None:
+        section_sample_weights = SECTION_SAMPLE_WEIGHTS[args.section_sample_weights_key]
+
+    depth_weight_function = None
+    if args.depth_weight_function_key is not None:
+        depth_weight_function = DEPTH_WEIGHT_FUNCTIONS[args.depth_weight_function_key]
+
+    regrowth_sampler = RegrowthSampler(samplers, section_sample_weights, depth_weight_function, args.random_seed)
+
+    real_games = [sample_ast for test_file in args.test_files for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm)]
+    if args.regrowth_end_index == -1:
+        args.regrowth_end_index = len(real_games)
+
+    else:
+        args.regrowth_end_index = min(args.regrowth_end_index, len(real_games))
 
 
-def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, grammar_parser: tatsu.grammars.Grammar):
-    samples = []
-    text_samples = []
-
-    regrowth_sampler = RegrowthSampler(sampler, args.random_seed)
-
-    real_games = []
-
-    for test_file in args.test_files:
-        for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-            real_games.append(sample_ast)
-
-    game_iter = enumerate(real_games)
+    game_iter = enumerate(real_games[args.regrowth_start_index:args.regrowth_end_index])
     if args.sample_tqdm:
-        game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=len(real_games))
+        game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=args.regrowth_end_index - args.regrowth_start_index)
 
     for game_index, real_game in game_iter:
         regrowth_sampler.set_source_ast(real_game)
@@ -1125,24 +1185,21 @@ def _generate_regrowth_samples(args: argparse.Namespace, sampler: ASTSampler, gr
             while not sample_generated:
                 try:
                     sample_ast = regrowth_sampler.sample(sample_index)
-                    sample_str = test_ast_sample(sample_ast, args, grammar_parser)
+                    sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
                     sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
 
                     if sample_hash in sample_hashes:
                         if args.verbose: print('Regrowth generated identical games, repeating')
                     else:
                         sample_generated = True
-                        samples.append(sample_ast)
-                        text_samples.append(sample_str + '\n\n')
                         sample_hashes.add(sample_hash)
+                        yield sample_ast, sample_str + '\n\n'
 
                 except RecursionError:
                     if args.verbose: print('Recursion error, skipping sample')
 
                 except SamplingException:
                     if args.verbose: print('Sampling exception, skipping sample')
-
-    return samples, text_samples
 
 
 def main(args):
@@ -1153,13 +1210,18 @@ def main(args):
     grammar_parser = tatsu.compile(grammar)
     counter = parse_or_load_counter(args, grammar_parser)
 
-    sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)
-    samples, text_samples = None, None
+
+    samplers = {}
+    for pc in args.prior_count:
+        length_prior = {n: pc for n in LENGTH_PRIOR}
+        samplers[f'prior{pc}'] = ASTSampler(grammar_parser, counter, seed=args.random_seed,
+                                            prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)
+
 
     if args.sampling_method == MLE_SAMPLING:
-        samples, text_samples = _generate_mle_samples(args, sampler, grammar_parser)
+        sample_iter = _generate_mle_samples(args, samplers, grammar_parser)
     elif args.sampling_method == REGROWTH_SAMPLING:
-        samples, text_samples = _generate_regrowth_samples(args, sampler, grammar_parser)
+        sample_iter = _generate_regrowth_samples(args, samplers, grammar_parser)
     else:
         raise ValueError(f'Unknown sampling method: {args.sampling_method}')
 
@@ -1173,12 +1235,13 @@ def main(args):
     sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
-        if text_samples is None:
-            raise ValueError('No samples to save')
+        with open(args.samples_output_path, args.file_open_mode) as out_file:
+            for _, sample in sample_iter:
+                out_file.write(sample + '\n\n')
 
-        with open(args.samples_output_path, 'w') as out_file:
-            text_samples = [sample + '\n\n' for sample in text_samples]
-            out_file.writelines(text_samples)
+    else:
+        for ast, sample in sample_iter:
+            continue
 
     return
 
@@ -1187,5 +1250,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
+
+    if len(args.prior_count) == 0:
+        args.prior_count.append(PRIOR_COUNT)
 
     main(args)

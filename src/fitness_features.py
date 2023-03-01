@@ -1658,15 +1658,7 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 #         return self.game_output
 
 
-DEFAULT_TOP_K_NGRAMS = 10
-DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
-DEFAULT_N_BY_SECTION = {
-    ast_parser.SETUP: 5,
-    ast_parser.PREFERENCES: 7,
-    ast_parser.TERMINAL: 5,
-    ast_parser.SCORING: 5,
-}
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_27.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_16.pkl')
 
 
 class ASTNGramTerm(FitnessTerm):
@@ -1679,15 +1671,12 @@ class ASTNGramTerm(FitnessTerm):
     stupid_backoff: bool
     top_k_max_n: typing.Optional[int]
     top_k_min_n: typing.Optional[int]
-    top_k_ngrams: typing.Optional[int]
-    top_k_ngrams_for_sections: typing.Optional[int]
+    top_k_ngrams: int
 
     def __init__(self, top_k_ngrams: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS,
                  stupid_backoff: bool = True, log: bool = True,
                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
-                 top_k_ngrams_for_sections: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
-                 n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
                  n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
         self.top_k_ngrams = top_k_ngrams

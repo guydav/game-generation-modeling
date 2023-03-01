@@ -915,20 +915,13 @@ class RegrowthSampler(ASTParentMapper):
     original_game_id: str
     parent_mapping: ASTParentMapping
     rng: np.random.Generator
-    samplers: typing.Dict[str, ASTSampler]
-    section_sample_weights: typing.Optional[typing.Dict[str, float]]
+    sampler: ASTSampler
     seed: int
     source_ast: typing.Union[tuple, tatsu.ast.AST]
 
-    def __init__(self, samplers: typing.Union[ASTSampler, typing.Dict[str, ASTSampler]],
-                 section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
-                 depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
-                 seed: int = 0):
+    def __init__(self, sampler: ASTSampler, seed: int = 0):
         super().__init__()
-        self.samplers = {'default': samplers} if isinstance(samplers, ASTSampler) else samplers
-        self.section_sample_weights = section_sample_weights
-        self.depth_weight_function = depth_weight_function
-
+        self.sampler = sampler
         self.seed = seed
         self.rng = np.random.RandomState(seed)  # type: ignore
         self.parent_mapping = dict()
@@ -1030,7 +1023,7 @@ class RegrowthSampler(ASTParentMapper):
                 retval = self(ast[key], **kwargs)
                 self._update_contexts(kwargs, retval)
 
-        if rule in self.example_sampler.local_context_propagating_rules:
+        if rule in self.sampler.local_context_propagating_rules:
             return kwargs['global_context'], kwargs['local_context']
 
         return kwargs['global_context'], None
@@ -1038,49 +1031,14 @@ class RegrowthSampler(ASTParentMapper):
     def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None):
         new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'
         game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
-        game_node, _, game_selector, depth, _, _, _ = self.parent_mapping[game_key]  # type: ignore
+        game_node, _, game_selector, _, _ = self.parent_mapping[game_key]
 
         new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
         return replace_child(ast, game_selector, new_game_node)
 
     def _sample_node_to_update(self):
-        node_key = None
-        if self.section_sample_weights is not None:
-            sections = list(self.node_keys_by_section.keys())
-            weights = np.array([self.section_sample_weights[section] for section in sections])
-            weights /= weights.sum()
-            section = self.rng.choice(sections, p=weights)
-            section_node_keys = self.node_keys_by_section[section]
-
-            if self.depth_weight_function is not None:
-                depths = np.array(list(set([self.parent_mapping[node_key].depth for node_key in section_node_keys])), float)
-                depth_weights = self.depth_weight_function(depths)
-                depth_weights /= depth_weights.sum()
-                depth = self.rng.choice(depths, p=depth_weights)
-
-                depth_nodes = [node_key for node_key in section_node_keys if self.parent_mapping[node_key].depth == depth]
-                node_index = self.rng.choice(len(depth_nodes))
-                node_key = depth_nodes[node_index]
-
-            else:
-                node_index = self.rng.choice(len(section_node_keys))
-                node_key = section_node_keys[node_index]
-
-        else:
-            if self.depth_weight_function is not None:
-                depths = np.array(set([self.parent_mapping[node_key].depth for node_key in self.node_keys]))
-                depth_weights = self.depth_weight_function(depths)
-                depth_weights /= depth_weights.sum()
-                depth = self.rng.choice(depths, p=depth_weights)
-
-                depth_nodes = [node_key for node_key in self.node_keys if self.parent_mapping[node_key].depth == depth]
-                node_index = self.rng.choice(len(depth_nodes))
-                node_key = depth_nodes[node_index]
-
-            else:
-                node_index = self.rng.choice(len(self.node_keys))
-                node_key = self.node_keys[node_index]
-
+        node_index = self.rng.choice(len(self.node_keys))
+        node_key = self.node_keys[node_index]
         return self.parent_mapping[node_key]
 
     def _find_node_depth(self, node: tatsu.ast.AST):
@@ -1114,7 +1072,7 @@ class RegrowthSampler(ASTParentMapper):
 
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)
-            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
+            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd{regrwoth_depth}')
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 

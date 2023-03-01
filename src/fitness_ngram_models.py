@@ -477,7 +477,8 @@ class NGramASTParser(ast_parser.ASTParser):
             self._add_token(token, at_start=at_start, **kwargs)
 
     def parse_test_input(self, test_ast: typing.Union[tatsu.ast.AST, tuple],
-                         n_values: typing.Optional[typing.Sequence[int]] = None, **kwargs):
+                         n_values: typing.Optional[typing.Sequence[int]] = None, **kwargs) -> typing.Tuple[typing.Dict[int, typing.List[typing.Tuple[str, ...]]],
+                                                                                                           typing.Dict[str, typing.Dict[int, typing.List[typing.Tuple[str, ...]]]]]:
         if n_values is not None:
             self.current_input_ngrams = {n: [] for n in n_values}
             self.current_input_ngrams_by_section = {section: {n: [] for n in n_values} for section in ast_parser.SECTION_KEYS}
@@ -713,14 +714,14 @@ class ASTNGramTrieModel:
 
         if debug: print(current_input_ngrams[2])
 
-        outputs = {'full': self.model.score(input_ngrams=current_input_ngrams, k=k,
+        outputs = {'full': self.model.score(input_ngrams=current_input_ngrams, k=k,  # type: ignore
                                 stupid_backoff=stupid_backoff, log=log,
                                 filter_padding_top_k=filter_padding_top_k,
                                 top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
                                 score_all=score_all)}
 
         for section in self.sections:
-            outputs[section.replace('(:', '')] = self.model_by_section[section].score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,
+            outputs[section.replace('(:', '')] = self.model_by_section[section].score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,  # type: ignore
                                                                     stupid_backoff=stupid_backoff, log=log,
                                                                     filter_padding_top_k=filter_padding_top_k,
                                                                     top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,

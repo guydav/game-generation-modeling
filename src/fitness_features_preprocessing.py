@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from bisect import bisect
 from functools import reduce
+import logging
 import re
 import typing
 
@@ -283,6 +284,7 @@ DEFAULT_MERGE_COLUMN_SUFFIX = 'other'
 
 
 class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
+    df_key_to_index: typing.Dict[str, int]
     dropped_keys: typing.Set[str]
     feature_suffixes: typing.Sequence[str]
     keys_to_drop: typing.List[str]
@@ -314,18 +316,31 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         merged_column_key = f'{feature_prefix}_{self.merged_column_suffix}{"_" + feature_suffix if feature_suffix else ""}'
         prefix_feature_names = [str(c) for c in df.columns if str(c).startswith(feature_prefix) and str(c).endswith(feature_suffix)]
         if len(prefix_feature_names) == 0:
-            raise ValueError(f'No features found for prefix {feature_prefix} and suffix {feature_suffix}')
-        merged_column_insert_index = bisect(prefix_feature_names, merged_column_key)
-        merge_insert_feature_name = prefix_feature_names[merged_column_insert_index]
-        insert_index = list(df.columns).index(merge_insert_feature_name)
+            logging.info(f'No features found for prefix {feature_prefix} and suffix {feature_suffix}')
+            last_prefix_feature = [c for c in df.columns if str(c).startswith(feature_prefix)][-1]
+            insert_index = df.columns.get_loc(last_prefix_feature) + 1
+            new_series_values = pd.Series(np.ones(df.shape[0]) * self.default_value, name=merged_column_key)
+            keys_to_merge = []
 
-        counts = df[prefix_feature_names].sum()
-        keys_to_merge = counts.index[counts < self.threshold_proportion * df.shape[0]]  # type: ignore
-        if len(keys_to_merge) == 0:
-            print(feature_prefix)
-            return
+        else:
+            merged_column_insert_index = bisect(prefix_feature_names, merged_column_key)
+            if merged_column_insert_index >= len(prefix_feature_names):
+                merge_insert_feature_name = prefix_feature_names[-1]
+                insert_index = df.columns.get_loc(merge_insert_feature_name) + 1
 
-        new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
+            else:
+                merge_insert_feature_name = prefix_feature_names[merged_column_insert_index]
+                insert_index = df.columns.get_loc(merge_insert_feature_name)
+
+            counts = df[prefix_feature_names].sum()
+            keys_to_merge = counts.index[counts < self.threshold_proportion * df.shape[0]]  # type: ignore
+            if len(keys_to_merge) == 0:
+                logging.info(f'No features to merge for prefix {feature_prefix} and suffix {feature_suffix}')
+                return
+
+            new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
+
+
         df.insert(insert_index, merged_column_key, new_series_values)
         self.keys_to_drop.extend(keys_to_merge)  # type: ignore
 
@@ -367,10 +382,15 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         for merged_key in self.merged_key_to_original_keys:
             insert_index = self.merged_key_indices[merged_key]
             keys.insert(insert_index, merged_key)
-            first_key = self.merged_key_to_original_keys[merged_key][0]
-            merged_key_values[merged_key] = int(reduce(self.merge_function,
-                [row[k] if k in row else self.default_value for k in self.merged_key_to_original_keys[merged_key]],
-                row[first_key] if first_key in row else self.default_value))
+            merged_keys = self.merged_key_to_original_keys[merged_key]
+            if len(merged_keys) == 0:
+                merged_key_values[merged_key] = self.default_value
+
+            else:
+                first_key = merged_keys[0]
+                merged_key_values[merged_key] = int(reduce(self.merge_function,
+                    [row[k] if k in row else self.default_value for k in self.merged_key_to_original_keys[merged_key]],
+                    row[first_key] if first_key in row else self.default_value))
 
         new_row = {}
         for k in keys:

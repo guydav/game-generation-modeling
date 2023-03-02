@@ -11,7 +11,9 @@ import tatsu.ast
 import torch
 import tqdm
 
+# from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
 import ast_printer
+import ast_parser
 from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
@@ -57,6 +59,9 @@ class EvolutionarySampler():
     
     def _best_individual(self):
         return self.population[np.argmax(self.fitness_values)]
+    
+    def _print_game(self, game):
+        print(ast_printer.ast_to_string(game, "\n"))
 
     def _gen_init_sample(self, idx):
         '''
@@ -128,6 +133,44 @@ class EvolutionarySampler():
         self.population = [samples[i] for i in top_indices]
         self.fitness_values = [scores[i] for i in top_indices]
 
+    def insert_delete_step(self):
+        '''
+        Perform an evolutionary step by mutating each member of the population. Each mutation consists of
+        an independent probability of:
+        - inserting a new node inside of an existing node with multiple children (e.g. an [and] node)
+        - deleting an existing node if it is one of multiple children of its parent
+        As with the beam step, the top n samples are selected to form the next generation
+        '''
+
+        for game in self.population:
+            self.regrowth_sampler.set_source_ast(game)
+
+            # After processing the game with the regrowth sampler, we can use its parent mapping to
+            # determine which nodes are eligible for insertion and deletion. This relies on the fact
+            # that:
+            # - if a node is an element of a list, then the last entry of its selector will be an integer (since
+            #   we need to index into that list to get the node)
+            # - similarly, the first entry of the selector will yield a list when applied to the parent
+            valid_nodes = [(parent, selector[0]) for _, parent, selector, _, _, _, _ in self.regrowth_sampler.parent_mapping.values() 
+                           if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)]
+
+            for parent, selector in valid_nodes:
+                print(selector)
+                print(f"Parent of list: {ast_printer.ast_to_string(parent)}")
+                exit()
+
+            # game_nodes = [self.regrowth_sampler.parent_mapping[idx][0] for idx in self.regrowth_sampler.]
+
+            # if a node is an element of a list, then the last entry of its selector will be an integer (since
+            # we need to index into that list to get the node)
+
+            # To sampler a child we need to know the rule. In the context of sampling a new entry of the list, the
+            # global and local context should be the same. 
+            # new_node = regrowth_sampler.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]
+
+            # 
+
+
 if __name__ == '__main__':
 
     DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -155,6 +198,12 @@ if __name__ == '__main__':
 
     evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
 
+    evosampler.insert_delete_step()
+    exit()
+
     for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
-        evosampler.beam_step(k=10)
+        evosampler.beam_step(k=25)
         print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
+
+    print('Best individual:')
+    evosampler._print_game(evosampler._best_individual())

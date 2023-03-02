@@ -35,7 +35,7 @@ def _find_nth(text, target, n):
 
 def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
-    fitness_df = fitness_df.assign(real=fitness_df.src_file == 'interactive-beta.pddl', original_game_name=fitness_df.game_name)
+    fitness_df = fitness_df.assign(original_game_name=fitness_df.game_name)  # real=fitness_df.src_file == 'interactive-beta.pddl',
     fitness_df.original_game_name.where(
         fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
         fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
@@ -43,7 +43,7 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
 
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
     fitness_df = fitness_df.assign(real=fitness_df.real.astype('int'))
-    fitness_df = fitness_df[list(fitness_df.columns[:4]) + list(fitness_df.columns[-2:]) + list(fitness_df.columns[4:-2])]
+    fitness_df = fitness_df[list(fitness_df.columns[:4]) + list(fitness_df.columns[-1:]) + list(fitness_df.columns[4:-1])]
     return fitness_df
 
 

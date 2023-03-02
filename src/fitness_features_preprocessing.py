@@ -12,7 +12,8 @@ import pandas as pd
 
 class FitnessFeaturesPreprocessor(ABC):
     @abstractmethod
-    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False,
+                      min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None) -> pd.DataFrame:
         pass
 
 
@@ -50,19 +51,20 @@ BINARIZE_NON_ONE = [
 
 NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
 NGRAM_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [
-    re.compile(r'[\w\d+_]+_arg_types_[\w_]+'),
+    ARG_TYPES_PATTERN,
     re.compile(r'compositionality_structure_\d+'),
     NGRAM_PATTERN,
 ]
 
 
-DEFAULT_MISSING_VALUE_EPSILON = 1e-4
+DEFAULT_MISSING_VALUE_EPSILON = 1e-1
 
 
 def set_missing_value_zero(series: typing.Optional[pd.Series], **kwargs):
@@ -92,6 +94,7 @@ def set_missing_value_min_epsilon(series: typing.Optional[pd.Series], min_value:
 
 
 COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION = {
+    ARG_TYPES_PATTERN: set_missing_value_zero,
     NGRAM_SCORE_PATTERN: set_missing_value_min_epsilon,
     NGRAM_PATTERN: set_missing_value_zero,
 }
@@ -140,10 +143,12 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
         raise ValueError(f'No binarization rule for column {c}')
 
-    def _fill_series_missing_values(self, series: pd.Series, use_prior_values: bool = False):
+    def _fill_series_missing_values(self, series: pd.Series, use_prior_values: bool = False,
+                                    min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None):
         if not series.isna().any():
             return series
 
+        logging.info(f'Filling missing values for column {series.name}')
         c = str(series.name)
         missing_value_function = None
         if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
@@ -161,7 +166,12 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         if use_prior_values and c in self.missing_value_series_min_values:
             result = missing_value_function(series, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
         else:
-            result = missing_value_function(series, epsilon=self.missing_value_epsilon)
+            if min_max_values is not None and c in min_max_values:
+                result = missing_value_function(series, epsilon=self.missing_value_epsilon,
+                                                min_value=min_max_values[c][0],
+                                                max_value=min_max_values[c][1])
+            else:
+                result = missing_value_function(series, epsilon=self.missing_value_epsilon)
 
         if isinstance(result, tuple):
             series, min_value = result
@@ -171,19 +181,21 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         else:
             return result
 
-    def _preprocess_series(self, series: pd.Series, use_prior_values: bool = False):
+    def _preprocess_series(self, series: pd.Series, use_prior_values: bool = False,
+                           min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None):
+        series = self._fill_series_missing_values(series, use_prior_values=use_prior_values, min_max_values=min_max_values)
         series = self._binarize_series(series, use_prior_values=use_prior_values, ignore_columns=self.ignore_columns)
-        series = self._fill_series_missing_values(series, use_prior_values=use_prior_values)
         return series
 
-    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False,
+                      min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None) -> pd.DataFrame:
         if not use_prior_values:
             self.columns = [str(c) for c in df.columns]
 
         if use_prior_values and not self.columns:
             raise ValueError('Must call preprocess_df without use_prior_values before preprocess_df with use_prior_values')
 
-        return df.apply(self._preprocess_series, axis=0, use_prior_values=use_prior_values)
+        return df.apply(self._preprocess_series, axis=0, use_prior_values=use_prior_values, min_max_values=min_max_values)
 
     def preprocess_row(self, row: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
         if not self.columns:
@@ -355,7 +367,8 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
             df.insert(insert_index, merged_column_key, new_series_values)
 
-    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False) -> pd.DataFrame:
+    def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False,
+                      min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None) -> pd.DataFrame:
         if not use_prior_values:
             self.keys_to_drop = []
 

@@ -915,14 +915,27 @@ class RegrowthSampler(ASTParentMapper):
     original_game_id: str
     parent_mapping: ASTParentMapping
     rng: np.random.Generator
-    sampler: ASTSampler
+    samplers: typing.Dict[str, ASTSampler]
+    section_sample_weights: typing.Optional[typing.Dict[str, float]]
     seed: int
     source_ast: typing.Union[tuple, tatsu.ast.AST]
 
-    def __init__(self, sampler: ASTSampler, seed: int = 0):
+    def __init__(self, sampler: typing.Union[ASTSampler, typing.Dict[str, ASTSampler]],
+                 section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
+                 depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
+                 seed: int = 0):
         super().__init__()
-        self.sampler = sampler
+        if isinstance(sampler, ASTSampler):
+            sampler = dict(default=sampler)
+
+        self.samplers = sampler
+        self.section_sample_weights = section_sample_weights
+        if self.section_sample_weights is not None:
+            section_sample_weights_sum = sum(self.section_sample_weights.values())
+            self.section_sample_weights = {key: value / section_sample_weights_sum for key, value in self.section_sample_weights.items()}
+        self.depth_weight_function = depth_weight_function
         self.seed = seed
+
         self.rng = np.random.RandomState(seed)  # type: ignore
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()
@@ -1023,7 +1036,7 @@ class RegrowthSampler(ASTParentMapper):
                 retval = self(ast[key], **kwargs)
                 self._update_contexts(kwargs, retval)
 
-        if rule in self.sampler.local_context_propagating_rules:
+        if rule in self.example_sampler.local_context_propagating_rules:
             return kwargs['global_context'], kwargs['local_context']
 
         return kwargs['global_context'], None
@@ -1031,13 +1044,31 @@ class RegrowthSampler(ASTParentMapper):
     def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None):
         new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'
         game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
-        game_node, _, game_selector, _, _ = self.parent_mapping[game_key]
+        game_node, _, game_selector, _, _, _, _ = self.parent_mapping[game_key]
 
         new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
         return replace_child(ast, game_selector, new_game_node)
 
     def _sample_node_to_update(self):
-        node_index = self.rng.choice(len(self.node_keys))
+        if self.section_sample_weights is not None:
+            game_sections = [section for section in self.section_sample_weights.keys() if len(self.node_keys_by_section[section]) > 0]
+            game_section_weights = np.array([self.section_sample_weights[section] for section in game_sections])
+            game_section_weights = game_section_weights / np.sum(game_section_weights)
+            section = self.rng.choice(game_sections, p=game_section_weights)
+            node_key_list = self.node_keys_by_section[section]
+
+        else:
+            node_key_list = self.node_keys
+
+        if self.depth_weight_function is not None:
+            node_depths = [self.parent_mapping[node_key].depth for node_key in node_key_list]
+            node_weights_by_depth = self.depth_weight_function(np.array(node_depths))
+            node_weights = node_weights_by_depth / np.sum(node_weights_by_depth)
+            node_index = self.rng.choice(len(node_key_list), p=node_weights)
+
+        else:
+            node_index = self.rng.choice(len(node_key_list))
+
         node_key = self.node_keys[node_index]
         return self.parent_mapping[node_key]
 
@@ -1072,7 +1103,7 @@ class RegrowthSampler(ASTParentMapper):
 
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)
-            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd{regrwoth_depth}')
+            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section}-sk-{sampler_key}')
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 

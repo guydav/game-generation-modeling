@@ -5,7 +5,7 @@ import tatsu.exceptions
 import tqdm
 
 import ast_printer
-from ast_utils import load_games_from_file
+from ast_utils import cached_load_and_parse_games_from_file
 
 
 parser = argparse.ArgumentParser()
@@ -27,14 +27,13 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = load_games_from_file(args.test_file, stop_tokens=args.stop_tokens)
+    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, not args.dont_tqdm)
     if not args.dont_tqdm:
         test_cases = tqdm.tqdm(test_cases)
 
-    for test_case in test_cases:
+    for ast in test_cases:
         ast_printer.BUFFER = None
         try:
-            ast = grammar_parser.parse(test_case)
             if args.pretty_print:
                 ast_printer.pretty_print_ast(ast)
             if args.validate:
@@ -52,10 +51,11 @@ def main(args):
 
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
-            print(test_case[:test_case.find('(:domain')])
-            print(f'Parse failed: at position {e.pos} expected {e.item}')
-            print(test_case[e.pos:])
-            break
+            raise e
+            # print(test_case[:test_case.find('(:domain')])
+            # print(f'Parse failed: at position {e.pos} expected {e.item}')
+            # print(test_case[e.pos:])
+            # break
 
         finally:
             pass

@@ -237,29 +237,34 @@ class NGramTrieModel:
         if max_length is None:
             max_length = self.n
 
+        # counts = {n: dict() for n in range(min_length, max_length + 1)}
+        # self._find_ngram_counts(self.root, [], counts, min_length=min_length, max_length=max_length)
         counts = {n: dict() for n in range(min_length, max_length + 1)}
-        self._find_ngram_counts(self.root, [], counts, min_length=min_length, max_length=max_length)
-
-        if filter_padding:
-            counts = {n: {k: v for k, v in n_counts.items() if START_PAD not in k and END_PAD not in k}
-                      for n, n_counts in counts.items()}
+        for ngram, count in self.tree.items():
+            n = len(ngram)
+            if (min_length <= n <= max_length) and (not filter_padding or (START_PAD not in ngram and END_PAD not in ngram)):
+                counts[n][ngram] = count
 
         return counts
 
-    def _find_ngram_counts(self, node: NGramTrieNode, ngram: typing.List[str],
-                           ngram_counts_by_length: typing.Dict[int, typing.Dict[typing.Tuple[str, ...], int]],
-                           min_length: int = 2, max_length: typing.Optional[int] = None):
+    # def _find_ngram_counts(self,
+    #                     #    node: NGramTrieNode, ngram: typing.List[str],
+    #                     #    ngram_counts_by_length: typing.Dict[int, typing.Dict[typing.Tuple[str, ...], int]],
+    #                        filter_padding: bool = False,
+    #                        min_length: int = 2,
+    #                        max_length: typing.Optional[int] = None,
+    #                        ):
 
-        if max_length is None:
-            max_length = self.n
+    #     if max_length is None:
+    #         max_length = self.n
 
-        current_length = len(ngram)
-        if min_length <= current_length <= max_length:
-            ngram_counts_by_length[current_length][tuple(ngram)] = node.count
+        # current_length = len(ngram)
+        # if min_length <= current_length <= max_length:
+        #     ngram_counts_by_length[current_length][tuple(ngram)] = node.count
 
-        if current_length < max_length:
-            for child, child_node in node.children.items():
-                self._find_ngram_counts(child_node, ngram + [child], ngram_counts_by_length)
+        # if current_length < max_length:
+        #     for child, child_node in node.children.items():
+        #         self._find_ngram_counts(child_node, ngram + [child], ngram_counts_by_length)
 
     def _get_dict_item_value(self, item: typing.Tuple[typing.Tuple[str, ...], int]):
         return item[1]
@@ -684,7 +689,7 @@ class ASTNGramTrieModel:
 
         self.ngram_ast_parser = NGramASTParser(n, ignore_rules, preorder_traversal, pad)
         self.model = NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False)
-        self.model_by_section = {section: NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
+        self.model_by_section = {section: NGramTrieModel(self.n_by_sections[section], stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
 
     def fit(self, asts: typing.Sequence[typing.Union[tuple,tatsu.ast.AST]]):
         for ast in asts:
@@ -724,7 +729,7 @@ class ASTNGramTrieModel:
             outputs[section.replace('(:', '')] = self.model_by_section[section].score(input_ngrams=current_input_ngrams_by_section[section], k=k_for_sections,  # type: ignore
                                                                     stupid_backoff=stupid_backoff, log=log,
                                                                     filter_padding_top_k=filter_padding_top_k,
-                                                                    top_k_min_n=top_k_min_n, top_k_max_n=top_k_max_n,
+                                                                    top_k_min_n=top_k_min_n, top_k_max_n=None if top_k_max_n is None else min(top_k_max_n, self.n_by_sections[section]),
                                                                     score_all=score_all)
 
 

@@ -22,9 +22,9 @@
                 // "-g", "./dsl/dsl.ebnf",
                 "-t", "./dsl/interactive-beta.pddl",
                 // "./dsl/interactive-beta.pddl",
-                "-o", "/tmp/test.csv.gz",
+                // "-o", "/tmp/test.csv.gz",
                 // "-p",
-                // "-v",
+                "-v",
             //    "-c",
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],

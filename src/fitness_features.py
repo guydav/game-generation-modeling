@@ -56,7 +56,7 @@ DEFAULT_TEST_FILES = (
 )
 parser.add_argument('-t', '--test-files', action='append', default=[])
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
-# DEFAULT_OUTPUT_PATH ='./data/fitness_features_with_text_ngrams.csv.gz'
+# DEFAULT_OUTPUT_PATH ='./data/fitness_features.csv.gz'
 DEFAULT_OUTPUT_PATH ='./data/fitness_features_1024_regrowths.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
@@ -80,7 +80,7 @@ ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
 
 
-TEMP_DIR = '/scratch/gd1279/fitness_features'
+TEMP_DIR = '/tmp/gd1279/fitness_features'
 
 
 class FitnessTerm(ABC):
@@ -153,16 +153,20 @@ class ASTFitnessFeaturizer:
 
         self.rows = []
         self.rows_df = None
+        self.df_keys_set = set()
+        self.df_keys = []
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
         state = self.__dict__.copy()
         del state['rows']
+        del state['rows_df']
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
         self.rows = []
+        self.rows_df = None
 
     def _register(self, term: FitnessTerm, rule: str, tuple_rule: bool = False) -> None:
         if tuple_rule:
@@ -207,13 +211,25 @@ class ASTFitnessFeaturizer:
         if self.rows_df is not None:
             df = self.rows_df
         else:
-            df = pd.DataFrame.from_records(self.rows, columns=list(self.rows[0].keys()))
+            df = pd.DataFrame.from_records(self.rows, columns=self.df_keys)
 
         if preprocess and self.preprocessors is not None:
             for preprocessor in self.preprocessors:
                 df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values)
 
         return df
+
+    def _add_df_key(self, key: str, previous_key: typing.Optional[str]):
+        if key in self.df_keys_set:
+            return
+
+        self.df_keys_set.add(key)
+        if previous_key is None:
+            self.df_keys.append(key)
+
+        else:
+            previous_index = self.df_keys.index(previous_key)
+            self.df_keys.insert(previous_index + 1, key)
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -238,15 +254,24 @@ class ASTFitnessFeaturizer:
         for term in self.full_text_registry:
             term.parse_full_text(ast_full_text)
 
+        previous_key = None
+
         for header, term in self.header_registry.items():
             term_result = term.game_end()
             if isinstance(term_result, (int, float)):
                 row[header] = term_result
+                self._add_df_key(header, previous_key)
+                previous_key = header
             elif isinstance(term_result, dict):
                 for key, val in term_result.items():
-                    row[f'{header}_{key}'] = val
+                    header_key = f'{header}_{key}'
+                    row[header_key] = val
+                    self._add_df_key(header_key, previous_key)
+                    previous_key = header_key
             else:
                 row[header] = self.list_reduce(row[header])
+                self._add_df_key(header, previous_key)
+                previous_key = header
 
         if return_row:
             if preprocess_row:
@@ -292,7 +317,11 @@ class ASTFitnessFeaturizer:
             rule = ast.parseinfo.rule
 
             if rule == 'seq_func':
-                context[MODAL_CONTEXT_KEY] = ast.seq_func.parseinfo.rule
+                seq_func = ast.seq_func
+                if isinstance(seq_func, str):
+                    context[MODAL_CONTEXT_KEY] = seq_func
+                else:
+                    context[MODAL_CONTEXT_KEY] = seq_func.parseinfo.rule  # type: ignore
             elif rule == 'at_end':
                 context[MODAL_CONTEXT_KEY] = 'at_end'
 
@@ -338,41 +367,6 @@ class ASTNodeCounter(ast_parser.ASTParser):
     def _handle_ast(self, ast, **kwargs):
         self.count += 1
         super()._handle_ast(ast, **kwargs)
-
-
-class NoVariablesRepeatedFitnessTerm(FitnessTerm):
-    variable_repeated: bool = False
-
-    def __init__(self):
-        super().__init__('variable_list', 'variable_not_repeated')
-        self.variable_repeated = False
-
-    def game_start(self) -> None:
-        self.variable_repeated = False
-
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            variables = ast.variables
-            if not isinstance(variables, list):
-                variables = [variables]
-
-            if VARIABLES_CONTEXT_KEY in context:
-                context_vars = context[VARIABLES_CONTEXT_KEY]
-                for var in variables:  # type: ignore
-                    var_names = var.var_names
-                    if not isinstance(var_names, list):
-                        var_names = [var_names]
-
-                    if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
-                        self.variable_repeated = True
-                        return
-
-            all_variable_names = list(itertools.chain.from_iterable(var.var_names if isinstance(var.var_names, list) else [var.var_names] for var in variables))  # type: ignore
-            if len(set(all_variable_names)) != len(all_variable_names):
-                self.variable_repeated = True
-
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return 0 if self.variable_repeated else 1
 
 
 class VariableBasedFitnessTerm(FitnessTerm):
@@ -697,25 +691,47 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
 PREDICATE_AND_FUNCTION_RULES = ('predicate', 'function_eval')
 
 
-class VariableNotRepeatedInPredicateFunction(FitnessTerm):
-    total_count: int = 0
+class NoVariablesRepeated(FitnessTerm):
     count_with_repeats: int = 0
+    total_count: int = 0
+    variable_definition_repeated: bool = False
 
     def __init__(self):
-        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'variable_not_repeated_in_predicate')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES + ('variable_list',), 'no_variables_repeated')
 
     def game_start(self) -> None:
         self.total_count = 0
         self.count_with_repeats = 0
+        self.variable_definition_repeated = False
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            self.total_count += 1
-            args = list(extract_predicate_function_args(ast))
-            self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
+            if rule == 'variable_list':
+                variables = ast.variables
+                if not isinstance(variables, list):
+                    variables = [variables]
+
+                if VARIABLES_CONTEXT_KEY in context:
+                    context_vars = context[VARIABLES_CONTEXT_KEY]
+                    for var in variables:  # type: ignore
+                        var_names = var.var_names  # type: ignore
+                        if not isinstance(var_names, list):
+                            var_names = [var_names]
+
+                        if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
+                            self.variable_definition_repeated = True
+                            return
+
+                all_variable_names = list(itertools.chain.from_iterable(var.var_names if isinstance(var.var_names, list) else [var.var_names] for var in variables))  # type: ignore
+                if len(set(all_variable_names)) != len(all_variable_names):
+                    self.variable_definition_repeated = True
+            else:
+                self.total_count += 1
+                args = list(extract_predicate_function_args(ast))
+                self.count_with_repeats += 1 if len(args) != len(set(args)) else 0
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if self.total_count == 0:
+        if self.total_count == 0 or self.variable_definition_repeated:
             return 0
 
         return 1 - (self.count_with_repeats / self.total_count)
@@ -1310,10 +1326,10 @@ class PredicateUnderModal(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             if rule == 'predicate':
-                pred = ast.pred.parseinfo.rule.replace('predicate_', '')
+                pred = ast.pred.parseinfo.rule.replace('predicate_', '')  # type: ignore
 
             else:
-                pred = ast.func.parseinfo.rule.replace('function_', '')
+                pred = ast.func.parseinfo.rule.replace('function_', '')  # type: ignore
 
             if MODAL_CONTEXT_KEY not in context:
                 return
@@ -1328,84 +1344,103 @@ class PredicateUnderModal(FitnessTerm):
 
 
 class PredicateFunctionArgumentTypes(FitnessTerm):
-    argument_type_categories: typing.Sequence[str]
-    matching_argument_types_count: int = 0
+    # argument_type_categories: typing.Sequence[str]
+    # matching_argument_types_count: int = 0
+    argument_types_to_count: typing.Dict[typing.Tuple[str, ...], int]
+    argument_types_to_count_by_section: typing.Dict[str, typing.Dict[typing.Tuple[str, ...], int]]
     predicate_or_function: str
-    name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
+    # name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
 
-    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
-        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
+    def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
+        # name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
         super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
-            f'{predicate_or_function}_arg_types_{"_".join(argument_type_categories)}')
+            # f'{predicate_or_function}_arg_types_{"_".join(argument_type_categories)}'
+            f'{predicate_or_function}_arg_types'
+            )
         self.predicate_or_function = predicate_or_function
-        self.argument_type_categories = argument_type_categories
-        self.name_to_arity_map = name_to_arity_map
+        # self.argument_type_categories = argument_type_categories
+        # self.name_to_arity_map = name_to_arity_map
         self.known_missing_types = known_missing_types
+        self.argument_types_to_count = defaultdict(int)
+        self.argument_types_to_count_by_section = {ast_parser.SETUP: defaultdict(int), ast_parser.PREFERENCES: defaultdict(int)}
 
-        if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
-            raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
+        # if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
+        #     raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
 
     def game_start(self) -> None:
-        self.matching_argument_types_count = 0
+        # self.matching_argument_types_count = 0
+        self.argument_types_to_count = defaultdict(int)
+        self.argument_types_to_count_by_section = {ast_parser.SETUP: defaultdict(int), ast_parser.PREFERENCES: defaultdict(int)}
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             name = extract_predicate_function_name(ast, remove_digits=False)
 
-            if name not in self.name_to_arity_map:
-                raise ValueError(f'Predicate {ast.name} not in predicate arity map')
-
             if name != self.predicate_or_function:
                 return
 
-            n_args = extract_n_args(ast)
-            arity = self.name_to_arity_map[name]  # type: ignore
+            # if name not in self.name_to_arity_map:
+            #     raise ValueError(f'Predicate {ast.name} not in predicate arity map')
 
-            if isinstance(arity, int):
-                if n_args != arity:
-                    return
+            # n_args = extract_n_args(ast)
+            # arity = self.name_to_arity_map[name]  # type: ignore
 
-            elif n_args not in arity:
-                return
+            # if isinstance(arity, int):
+            #     if n_args != arity:
+            #         return
+
+            # elif n_args not in arity:
+            #     return
 
             terms = extract_predicate_function_args(ast)
-            term_type_lists = []
-
             context_variables = typing.cast(typing.Dict[str, VariableDefinition], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
+            if any(term_category is None for term_category in term_categories):
+                return
 
-            if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):  # type: ignore
-                self._count(context)
+            for category_product in itertools.product(*term_categories):  # type: ignore
+                self.argument_types_to_count[category_product] += 1
+                self.argument_types_to_count_by_section[context[SECTION_CONTEXT_KEY]][category_product] += 1  # type: ignore
 
-    def _count(self, context: ContextDict):
-        self.matching_argument_types_count += 1
+    #         if all(term_categories[i] is not None and self.argument_type_categories[i] in term_categories[i] for i in range(len(term_categories))):  # type: ignore
+    #             self._count(context)
+
+    # def _count(self, context: ContextDict):
+    #     self.matching_argument_types_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return self.matching_argument_types_count
+        # output = {'_'.join(argument_types): count for argument_types, count in self.argument_types_to_count.items()}
+        output = {}
+        for section, section_results in self.argument_types_to_count_by_section.items():
+            s = section.replace('(:', '')
+            output.update({f'{"_".join(argument_types)}_{s}': count for argument_types, count in section_results.items()})
+
+        return output  # type: ignore
+        # return self.matching_argument_types_count
 
 
 PREDICATE_SECTIONS = [ast_parser.SETUP, ast_parser.PREFERENCES]
 
 
-class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
-    matching_argument_types_count_by_section: typing.Dict[str, Number]
+# class PredicateFunctionArgumentTypesBySection(PredicateFunctionArgumentTypes):
+#     matching_argument_types_count_by_section: typing.Dict[str, Number]
 
-    def __init__(self, predicate_or_function: str, argument_type_categories: typing.Sequence[str],
-        name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
-        known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
+#     def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
+#         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
+#         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES):
 
-        super().__init__(predicate_or_function, argument_type_categories, name_to_arity_map, known_missing_types)
+#         super().__init__(predicate_or_function, argument_type_categories, name_to_arity_map, known_missing_types)
 
-    def game_start(self) -> None:
-        self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
+#     def game_start(self) -> None:
+#         self.matching_argument_types_count_by_section = {section: 0 for section in PREDICATE_SECTIONS}
 
-    def _count(self, context: ContextDict):
-        self.matching_argument_types_count_by_section[context[SECTION_CONTEXT_KEY]] += 1  # type: ignore
+#     def _count(self, context: ContextDict):
+#         self.matching_argument_types_count_by_section[context[SECTION_CONTEXT_KEY]] += 1  # type: ignore
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return {k.replace('(:', ''): v for k, v in self.matching_argument_types_count_by_section.items()}
+#     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+#         return {k.replace('(:', ''): v for k, v in self.matching_argument_types_count_by_section.items()}
 
 
 def build_argument_types_fitness_terms(
@@ -1414,11 +1449,12 @@ def build_argument_types_fitness_terms(
     predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
     fitness_terms = []
 
-    sorted_type_categories = list(sorted(type_categories))
+    # sorted_type_categories = list(sorted(type_categories))
 
     for predicate in predicates:
-        for type_combinations in itertools.product(*([sorted_type_categories] * predicate_arity_map[predicate])):  # type: ignore
-            fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
+        fitness_terms.append(PredicateFunctionArgumentTypes(predicate))
+        # for type_combinations in itertools.product(*([sorted_type_categories] * predicate_arity_map[predicate])):  # type: ignore
+            # fitness_terms.append(PredicateFunctionArgumentTypesBySection(predicate, type_combinations, predicate_arity_map))
             # fitness_terms.append(PredicateFunctionArgumentTypes(predicate, type_combinations, predicate_arity_map))
 
     return fitness_terms
@@ -1594,73 +1630,83 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
         return [term_class(section) for term_class in term_classes for section in sections]
 
 
+# TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
+
+
+# class TextNGramTerm(FitnessTerm):
+#     game_output: typing.Optional[dict] = None
+#     n_gram_model: NGramTrieModel
+#     n_gram_model_path: str
+#     stupid_backoff: bool
+#     top_k_max_n: typing.Optional[int]
+#     top_k_min_n: typing.Optional[int]
+#     top_k_ngrams: int
+
+#     def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
+#                  stupid_backoff: bool = True, log: bool = True,
+#                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
+#                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+#                  n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
+#         super().__init__('', 'text_ngram')
+#         self.top_k_ngrams = top_k_ngrams
+#         self.stupid_backoff = stupid_backoff
+#         self.log = log
+#         self.filter_padding_top_k = filter_padding_top_k
+#         self.top_k_min_n = top_k_min_n
+#         self.top_k_max_n = top_k_max_n
+#         self.score_all = score_all
+#         self.n_gram_model_path = n_gram_model_path
+
+#         with open(self.n_gram_model_path, 'rb') as f:
+#             self.n_gram_model = pickle.load(f)
+
+#     def game_start(self) -> None:
+#         self.game_output = None
+
+#     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+#         pass
+
+#     def parse_full_text(self, full_text: str) -> None:
+#         self.game_output = self.n_gram_model.score(
+#             full_text, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
+#             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
+#             top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
+#             score_all=self.score_all
+#         )
+
+#     def game_end(self):
+#         return self.game_output
+
+
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_27.pkl')
 DEFAULT_TOP_K_NGRAMS = 10
-TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
-
-
-class TextNGramTerm(FitnessTerm):
-    game_output: typing.Optional[dict] = None
-    n_gram_model: NGramTrieModel
-    n_gram_model_path: str
-    stupid_backoff: bool
-    top_k_max_n: typing.Optional[int]
-    top_k_min_n: typing.Optional[int]
-    top_k_ngrams: int
-
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
-                 stupid_backoff: bool = True, log: bool = True,
-                 filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
-                 top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
-                 n_gram_model_path: str = TEXT_N_GRAM_MODEL_PATH):
-        super().__init__('', 'text_ngram')
-        self.top_k_ngrams = top_k_ngrams
-        self.stupid_backoff = stupid_backoff
-        self.log = log
-        self.filter_padding_top_k = filter_padding_top_k
-        self.top_k_min_n = top_k_min_n
-        self.top_k_max_n = top_k_max_n
-        self.score_all = score_all
-        self.n_gram_model_path = n_gram_model_path
-
-        with open(self.n_gram_model_path, 'rb') as f:
-            self.n_gram_model = pickle.load(f)
-
-    def game_start(self) -> None:
-        self.game_output = None
-
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        pass
-
-    def parse_full_text(self, full_text: str) -> None:
-        self.game_output = self.n_gram_model.score(
-            full_text, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
-            log=self.log, filter_padding_top_k=self.filter_padding_top_k,
-            top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
-            score_all=self.score_all
-        )
-
-    def game_end(self):
-        return self.game_output
-
-
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_02_16.pkl')
+DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
+DEFAULT_N_BY_SECTION = {
+    ast_parser.SETUP: 5,
+    ast_parser.PREFERENCES: 7,
+    ast_parser.TERMINAL: 5,
+    ast_parser.SCORING: 5,
+}
 
 
 class ASTNGramTerm(FitnessTerm):
     filter_padding_top_k: bool
     game_output: typing.Optional[dict] = None
     log: bool
+    n_by_section: typing.Dict[str, int]
     n_gram_model: ASTNGramTrieModel
     n_gram_model_path: str
     stupid_backoff: bool
     top_k_max_n: typing.Optional[int]
     top_k_min_n: typing.Optional[int]
-    top_k_ngrams: int
+    top_k_ngrams: typing.Optional[int]
 
-    def __init__(self, top_k_ngrams: int = DEFAULT_TOP_K_NGRAMS,
+    def __init__(self, top_k_ngrams: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS,
                  stupid_backoff: bool = True, log: bool = True,
                  filter_padding_top_k: bool = False, top_k_min_n: typing.Optional[int] = None,
                  top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+                 top_k_ngrams_for_sections: int = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
+                 n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
                  n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
         self.top_k_ngrams = top_k_ngrams
@@ -1670,6 +1716,8 @@ class ASTNGramTerm(FitnessTerm):
         self.top_k_min_n = top_k_min_n
         self.top_k_max_n = top_k_max_n
         self.score_all = score_all
+        self.top_k_ngrams_for_sections = top_k_ngrams_for_sections
+        self.n_by_section = n_by_section
         self.n_gram_model_path = n_gram_model_path
 
         with open(self.n_gram_model_path, 'rb') as f:
@@ -1683,7 +1731,7 @@ class ASTNGramTerm(FitnessTerm):
             ast, k=self.top_k_ngrams, stupid_backoff=self.stupid_backoff,  # type: ignore
             log=self.log, filter_padding_top_k=self.filter_padding_top_k,
             top_k_min_n=self.top_k_min_n, top_k_max_n=self.top_k_max_n,
-            score_all=self.score_all,
+            score_all=self.score_all, k_for_sections=self.top_k_ngrams_for_sections,
         )
 
     def game_end(self):
@@ -1706,9 +1754,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     all_variables_used = AllVariablesUsed()
     fitness.register(all_variables_used)
-
-    no_variables_repeated = NoVariablesRepeatedFitnessTerm()
-    fitness.register(no_variables_repeated)
 
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
@@ -1734,7 +1779,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     max_number_variables_types = MaxNumberVariablesTypesQuantified()
     fitness.register(max_number_variables_types)
 
-    no_repeated_variables_in_predicate = VariableNotRepeatedInPredicateFunction()
+    no_repeated_variables_in_predicate = NoVariablesRepeated()
     fitness.register(no_repeated_variables_in_predicate)
 
     no_nested_logicals = NoNestedLogicals()
@@ -1871,6 +1916,9 @@ if __name__ == '__main__':
     if args.n_workers > 1:
         featurizers = [build_or_load_featurizer(args) for _ in range(args.n_workers)]
         headers = get_headers(args, featurizers[0])
+
+        if not os.path.exists(TEMP_DIR):
+            os.makedirs(TEMP_DIR, exist_ok=True)
 
         # rows = []
         for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):

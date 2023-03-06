@@ -45,7 +45,7 @@ class EvolutionarySampler():
         self.initial_sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
         
         # Used as the mutation operator to modify existing games
-        self.regrowth_sampler = RegrowthSampler(self.initial_sampler, args.random_seed)
+        self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed)
 
         # Generate the initial population
         self.population = [self._gen_init_sample(idx) for idx in range(self.population_size)]
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
     DEFUALT_RANDOM_SEED = 0
     # DEFAULT_NGRAM_MODEL_PATH = '../models/text_5_ngram_model_2023_02_17.pkl'
-    DEFAULT_NGRAM_MODEL_PATH = '../models/ast_7_ngram_model_2023_02_16.pkl'
+    DEFAULT_NGRAM_MODEL_PATH = '../models/ast_7_ngram_model_2023_03_01.pkl'
 
     DEFAULT_ARGS = argparse.Namespace(
         grammar_file=os.path.join('..', DEFAULT_GRAMMAR_FILE),
@@ -194,7 +194,7 @@ if __name__ == '__main__':
         A simple wrapper around the ASTNGramTrieModel.score function, allowing it
         to run on just a single game and returning the score as float
         '''
-        return ngram_model.score(game, k=None, score_all=False)['score']
+        return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
 
     evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
 

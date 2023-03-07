@@ -31,6 +31,25 @@
             "console": "integratedTerminal",
         },
         {
+            "name": "Python: Fitness features",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--n-workers", "4",
+                "--chunksize", "512",
+                // "-g", "./dsl/dsl.ebnf",
+                // "-t", "./dsl/interactive-beta.pddl",
+                // "./dsl/interactive-beta.pddl",
+                // "-o", "/tmp/test.csv.gz",
+                // "-p",
+                // "-v",
+            //    "-c",
+               // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
+            ],
+            "console": "integratedTerminal",
+        },
+        {
             "name": "Python: schema validation",
             "type": "python",
             "request": "launch",

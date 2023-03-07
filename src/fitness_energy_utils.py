@@ -1,8 +1,12 @@
+from datetime import datetime
 from collections import defaultdict
 import copy
 from dataclasses import dataclass
 from difflib import HtmlDiff
+import gzip
 from itertools import zip_longest
+import os
+import pickle
 import typing
 
 from IPython.display import display, Markdown, HTML
@@ -33,18 +37,58 @@ def _find_nth(text, target, n):
     return start
 
 
-def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
-    fitness_df = pd.read_csv(path)
-    fitness_df = fitness_df.assign(original_game_name=fitness_df.game_name)  # real=fitness_df.src_file == 'interactive-beta.pddl',
-    fitness_df.original_game_name.where(
-        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
-        fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
+def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.assign(original_game_name=df.game_name)  # real=fitness_df.src_file == 'interactive-beta.pddl',
+    df.original_game_name.where(
+        df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
+        df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
         inplace=True)
 
+    return df
+
+
+def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
+    fitness_df = pd.read_csv(path)
+    fitness_df = _add_original_game_name_column(fitness_df)
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
-    fitness_df = fitness_df.assign(real=fitness_df.real.astype('int'))
+    fitness_df = fitness_df.assign(**{c: fitness_df[c].astype('int') for c in fitness_df.columns if fitness_df.dtypes[c] == bool})
     fitness_df = fitness_df[list(fitness_df.columns[:4]) + list(fitness_df.columns[-1:]) + list(fitness_df.columns[4:-1])]
     return fitness_df
+
+
+DEFAULT_SAVE_MODEL_NAME = 'cv_fitness_model'
+SAVE_MODEL_KEY = 'moodel'
+SAVE_FEATURE_COLUMNS_KEY = 'feature_columns'
+
+
+def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.List[str], name: str = DEFAULT_SAVE_MODEL_NAME):
+    output_path = f'../models/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
+
+    i = 0
+    while os.path.exists(output_path):
+        folder, filename = os.path.split(output_path)
+        filename, period, extensions = filename.partition('.')
+        if filename.endswith(f'_{i}'):
+            filename = filename[:-2]
+
+        i += 1
+        filename = filename + f'_{i}'
+        output_path = os.path.join(folder, filename + period + extensions)
+
+    with gzip.open(output_path, 'wb') as f:
+        pickle.dump({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns},
+                    f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MODEL_NAME) -> typing.Tuple[GridSearchCV, typing.List[str]]:
+    output_path = f'../models/{name}_{date_and_id}.pkl.gz'
+    if not os.path.exists(output_path):
+        raise FileNotFoundError(f'No model found at {output_path}')
+
+    with gzip.open(output_path, 'rb') as f:
+        data = pickle.load(f)
+
+    return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
 
 
 DEFAULT_RANDOM_SEED = 33
@@ -285,7 +329,7 @@ def fitness_square_square_loss_positive_negative_split(positive_scores: torch.Te
     return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
 
 
-def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, reduction: str = 'mean'):
+def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, negative_score_reduction: str = 'none', reduction: str = 'mean'):
     return nn.functional.cross_entropy(
         - beta * scores,
         torch.zeros((scores.shape[0], 1), dtype=torch.long, device=scores.device),
@@ -302,12 +346,13 @@ def fitness_softmin_hybrid_loss(scores: torch.Tensor, margin: float = 1.0, beta:
 
 
 
-DEFAULT_MODEL_PARAMS = {
+DEFAULT_MODEL_KWARGS = {
     'n_features': None,
     'hidden_size': None,
     'hidden_activation': torch.relu,
     'n_outputs': 1,
     'output_activation': torch.sigmoid,
+
 }
 
 DEFAULT_TRAIN_KWARGS = {
@@ -329,18 +374,22 @@ DEFAULT_TRAIN_KWARGS = {
     'random_seed': 33,
 }
 
+
 LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction')
 DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
+FITNESS_WRAPPER_KWARG_KEYS = ('bias_init_margin_ratio',)
+DEFAULT_TRAIN_KWARGS.update({k: None for k in FITNESS_WRAPPER_KWARG_KEYS})
 
 class SklearnFitnessWrapper:
     def __init__(self,
         model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
         train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
         loss_function_kwarg_keys: typing.Sequence[str] = LOSS_FUNCTION_KAWRG_KEYS,
+        fitness_wrapper_kwarg_keys: typing.Sequence[str] = FITNESS_WRAPPER_KWARG_KEYS,
         **params):
 
-        self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_PARAMS)
+        self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_KWARGS)
         if model_kwargs is not None:
             self.model_kwargs.update(model_kwargs)
 
@@ -350,6 +399,9 @@ class SklearnFitnessWrapper:
 
         self.loss_function_kwargs = {}
         self.loss_function_kwarg_keys = loss_function_kwarg_keys
+
+        self.fitness_wrapper_kwargs = {}
+        self.fitness_wrapper_kwarg_keys = fitness_wrapper_kwarg_keys
 
         self.set_params(**params)
 
@@ -371,18 +423,27 @@ class SklearnFitnessWrapper:
         return self
 
     def _init_model_and_train_kwargs(self):
-        self.model = FitnessEnergyModel(**self.model_kwargs)
-        # if 'margin' in self.train_kwargs:
-        #     init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
-        # else:
-        init_weights = make_init_weight_function()
-        self.model.apply(init_weights)
+        torch.manual_seed(self.train_kwargs['random_seed'])
         train_kwarg_keys = list(self.train_kwargs.keys())
         for key in train_kwarg_keys:
             if key in self.loss_function_kwarg_keys:
                 value = self.train_kwargs.pop(key)
                 if value is not None:
                     self.loss_function_kwargs[key] = value
+
+            elif key in self.fitness_wrapper_kwargs:
+                value = self.train_kwargs.pop(key)
+                if value is not None:
+                    self.fitness_wrapper_kwargs[key] = value
+
+        self.model = FitnessEnergyModel(**self.model_kwargs)
+        if 'margin' in self.train_kwargs:
+            bias_init_margin_ratio = self.fitness_wrapper_kwargs.get('bias_init_margin_ratio', 0)
+            init_weights = make_init_weight_function(self.train_kwargs['margin'] * bias_init_margin_ratio)
+        else:
+            init_weights = make_init_weight_function()
+
+        self.model.apply(init_weights)
 
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
 
@@ -718,9 +779,6 @@ class NegativeShuffleDataset(IterableDataset):
         return iter(self.dataset)
 
 
-
-
-
 def train_and_validate_model(model: nn.Module,
     train_data: torch.Tensor,
     val_data: typing.Optional[torch.Tensor] = None,
@@ -740,16 +798,16 @@ def train_and_validate_model(model: nn.Module,
 
     model.to(device)
     if shuffle_negatives:
-        train_dataset = NegativeShuffleDataset(train_data.to(device))
+        train_dataset = NegativeShuffleDataset(train_data)  # .to(device)
         shuffle = None
     else:
-        train_dataset = TensorDataset(train_data.to(device))
+        train_dataset = TensorDataset(train_data)  # .to(device)
         shuffle = True
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
     validate = val_data is not None
     if validate:
-        val_dataset = TensorDataset(val_data.to(device))
+        val_dataset = TensorDataset(val_data)  # .to(device)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     torch.manual_seed(random_seed)
@@ -772,6 +830,7 @@ def train_and_validate_model(model: nn.Module,
             negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
             indices = torch.cat((torch.tensor([0]), negative_indices))
             X = X[:, indices].to(device)
+
             scores = model(X)
             loss = loss_function(scores, **loss_function_kwargs)
             if regularizer is not None:
@@ -846,7 +905,7 @@ def cross_validate(train: torch.Tensor,
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    n_folds: int = 5, energy_weighted_resampling: bool = True, verbose: int = 0) -> GridSearchCV:
+    n_folds: int = 5, energy_weighted_resampling: bool = False, verbose: int = 0) -> GridSearchCV:
 
     if scaler_kwargs is None:
         scaler_kwargs = {}
@@ -898,7 +957,7 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    n_folds: int = 5, energy_weighted_resampling: bool = True, verbose: int = 0,
+    n_folds: int = 5, energy_weighted_resampling: bool = False, verbose: int = 0,
     ) -> typing.Tuple[GridSearchCV, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]], typing.Optional[typing.Dict[str, float]]]:
 
     if scaler_kwargs is None:
@@ -1075,7 +1134,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     if dispaly_weights_histogram:
         weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().numpy().squeeze()  # type: ignore
         bias = cv.best_estimator_.named_steps['fitness'].model.fc1.bias.data.detach().numpy().squeeze()  # type: ignore
-        print(weights.mean(), weights.std(), bias)
+        print(f'Weights mean: {weights.mean():.3f} +/- {weights.std():.3f} with bias {bias:.3f}')
 
         plt.hist(weights, bins=100)
 

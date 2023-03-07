@@ -38,6 +38,8 @@ parser.add_argument('--stupid-backoff-discount', type=float, default=DEFAULT_STU
 DEFAULT_ZERO_LOG_PROB = -7
 parser.add_argument('--zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB)
 parser.add_argument('--from-asts', action='store_true')
+parser.add_argument('--no-pad', action='store_true')
+parser.add_argument('--padding', default=None, type=int)
 
 
 WHITESPACE_PATTERN = re.compile(r'\s+')
@@ -537,6 +539,9 @@ class NGramASTParser(ast_parser.ASTParser):
     def _count_ngrams_from_tokens(self, tokens: typing.List[str], n: int, update_model_counts: bool = True, section: typing.Optional[str] = None):
         for start_index in range(len(tokens) - n + 1):
             ngram = tuple(tokens[start_index:start_index + n])
+            if all(t == START_PAD or t == END_PAD for t in ngram):
+                continue
+
             if update_model_counts:
                 if section is None:
                     self.ngram_counts[ngram] += 1
@@ -738,7 +743,8 @@ class ASTNGramTrieModel:
 
 def main(args: argparse.Namespace):
     if args.from_asts:
-        model = ASTNGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
+        model = ASTNGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount,
+                                  zero_log_prob=args.zero_log_prob, pad=0 if args.no_pad else args.padding)
     else:
         model = NGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
 
@@ -769,5 +775,8 @@ if __name__ == '__main__':
     if args.output_path is None:
         args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
             n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
+
+    if args.padding is None:
+        args.padding = args.n - 1
 
     main(args)

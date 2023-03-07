@@ -984,8 +984,10 @@ class RegrowthSampler(ASTParentMapper):
 
     def _handle_iterable(self, ast, **kwargs):
         base_selector = kwargs['selector']
+        current_depth = kwargs['depth']
         for i, element in enumerate(ast):
             kwargs['selector'] = base_selector + [i]
+            kwargs['depth'] = current_depth + 1
             retval = self(element, **kwargs)
             self._update_contexts(kwargs, retval)
 
@@ -1029,10 +1031,12 @@ class RegrowthSampler(ASTParentMapper):
 
         self._add_ast_to_mapping(ast, **kwargs)
 
+        current_depth = kwargs['depth']
         for key in ast:
             if key != 'parseinfo':
                 kwargs['parent'] = ast
                 kwargs['selector'] = [key]
+                kwargs['depth'] = current_depth + 1
                 retval = self(ast[key], **kwargs)
                 self._update_contexts(kwargs, retval)
 
@@ -1103,7 +1107,7 @@ class RegrowthSampler(ASTParentMapper):
 
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)
-            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section}-sk-{sampler_key}')
+            new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
         new_parent = self.searcher(new_source, parseinfo=parent.parseinfo)  # type: ignore
         replace_child(new_parent, selector, new_node)  # type: ignore
 

@@ -68,7 +68,7 @@ parser.add_argument('--no-merge', action='store_true')
 parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD_PROPORTION)
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
-parser.add_argument('--chunksize', type=int, default=128)
+parser.add_argument('--chunksize', type=int, default=1024)
 parser.add_argument('--maxtasksperchild', default=None)
 
 logging.basicConfig(
@@ -147,7 +147,7 @@ class ASTFitnessFeaturizer:
         list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
         section_keys: typing.Sequence[str] = ast_parser.SECTION_KEYS,
         real_games_src_file: str = REAL_GAMES_SRC_FILE,
-        compute_real_min_max_feature_patterns: typing.Sequence[typing.Union[str, re.Pattern]] = COMPUTE_REAL_MIN_MAX_FEATURE_PATTERNS):
+        compute_real_min_max_feature_patterns: typing.Sequence[typing.Union[str, re.Pattern]] = tuple()):
 
         self.preprocessors = preprocessors
         self.default_headers = default_headers
@@ -169,6 +169,7 @@ class ASTFitnessFeaturizer:
         self.rows_df = None
         self.df_keys_set = set()
         self.df_keys = []
+        self.all_column_keys = None
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -199,11 +200,12 @@ class ASTFitnessFeaturizer:
 
         else:
             if section_rule:
-                section = typing.cast(str, term.rules[0])
-                if section not in self.section_keys:
-                    raise ValueError(f'Invalid section key: {section}')
+                for section in term.rules:
+                    section = typing.cast(str, section)
+                    if section not in self.section_keys:
+                        raise ValueError(f'Invalid section key: {section}')
 
-                self.section_registry[section].append(term)
+                    self.section_registry[section].append(term)
 
             for rule in term.rules:
                 if isinstance(rule, re.Pattern):
@@ -225,7 +227,7 @@ class ASTFitnessFeaturizer:
         if self.rows_df is not None:
             df = self.rows_df
         else:
-            df = pd.DataFrame.from_records(self.rows, columns=self.df_keys)
+            df = pd.DataFrame.from_records(self.rows, columns=list(self.default_headers) + self.df_keys)
 
         real_min_max_values = {}
         if len(self.compute_real_min_max_feature_patterns) > 0:
@@ -257,11 +259,14 @@ class ASTFitnessFeaturizer:
             self.df_keys.insert(previous_index + 1, key)
 
     def get_all_column_keys(self):
-        keys = list(self.default_headers)
-        for _, term in self.header_registry.items():
-            keys.extend(term.get_all_keys())
+        if self.all_column_keys is not None:
+            return self.all_column_keys
 
-        return keys
+        self.all_column_keys = list(self.default_headers)
+        for _, term in self.header_registry.items():
+            self.all_column_keys.extend(term.get_all_keys())
+
+        return self.all_column_keys
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -291,6 +296,9 @@ class ASTFitnessFeaturizer:
 
         for header, term in self.header_registry.items():
             term_result = term.game_end()
+            if isinstance(term_result, bool):
+                term_result = int(term_result)
+
             if isinstance(term_result, (int, float)):
                 row[header] = term_result
                 self._add_df_key(header, previous_key)
@@ -434,7 +442,7 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
         self.defined_count = 0
         self.undefined_count = 0
 
-    def _inner_update(self, term: str, variables: typing.Dict[str, VariableDefinition]):
+    def _inner_update(self, term: str, variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]]):
         if term is None:
             return
         elif term in variables:
@@ -446,12 +454,15 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
         if self.defined_count == 0:
             return 0
 
-        return self.defined_count / (self.defined_count + self.undefined_count)
+        return self.undefined_count == 0
+
+        # return self.defined_count / (self.defined_count + self.undefined_count)
 
 
 class AllVariablesUsed(VariableBasedFitnessTerm):
     defined_variables: typing.Set[typing.Tuple[str, str, int]]
     used_variables: typing.Set[typing.Tuple[str, str, int]]
+    variable_definition_repeated: bool
 
     def __init__(self):
         super().__init__('all_variables_used')
@@ -459,17 +470,29 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
     def game_start(self) -> None:
         self.defined_variables = set()
         self.used_variables = set()
+        self.variable_definition_repeated = False
 
-    def _inner_update(self, term: str, variables: typing.Dict[str, VariableDefinition]):
-        self.defined_variables.update([(v, var_def.parseinfo.rule, var_def.parseinfo.pos) for v, var_def in variables.items()])
+    def _inner_update(self, term: str, variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]]):
+        for v, var_def_or_list in variables.items():
+            if isinstance(var_def_or_list, list):
+                self.variable_definition_repeated = True
+                return
+            else:
+                self.defined_variables.add((v, var_def_or_list.parseinfo.rule, var_def_or_list.parseinfo.pos))
+
         if term is not None and term in variables:
-            self.used_variables.add((term, variables[term].parseinfo.rule, variables[term].parseinfo.pos))
+            var_def = variables[term]
+            if isinstance(var_def, list):
+                self.variable_definition_repeated = True
+                return
+
+            self.used_variables.add((term, var_def.parseinfo.rule, var_def.parseinfo.pos))
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if len(self.defined_variables) == 0:
+        if len(self.defined_variables) == 0 or self.variable_definition_repeated:
             return 0
 
-        return len(self.defined_variables.intersection(self.used_variables)) / len(self.defined_variables)
+        return len(self.defined_variables.intersection(self.used_variables)) == len(self.defined_variables)
 
 
 class AllPreferencesUsed(FitnessTerm):
@@ -494,7 +517,7 @@ class AllPreferencesUsed(FitnessTerm):
         if len(self.defined_preferences) == 0:
             return 0
 
-        return len(self.defined_preferences.intersection(self.used_preferences)) / len(self.defined_preferences.union(self.used_preferences))
+        return len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))
 
 
 class SetupObjectsUsed(FitnessTerm):
@@ -538,7 +561,7 @@ class NoAdjacentOnce(FitnessTerm):
     prefs_with_adjacent_once: int = 0
 
     def __init__(self):
-        super().__init__('then', 'no_adjacent_once')
+        super().__init__('then', 'adjacent_once_found')
 
     def game_start(self) -> None:
         self.total_prefs = 0
@@ -739,7 +762,7 @@ class NoVariablesRepeated(FitnessTerm):
     variable_definition_repeated: bool = False
 
     def __init__(self):
-        super().__init__(PREDICATE_AND_FUNCTION_RULES + ('variable_list',), 'no_variables_repeated')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES + ('variable_list',), 'repeated_variables_found')
 
     def game_start(self) -> None:
         self.total_count = 0
@@ -760,7 +783,7 @@ class NoVariablesRepeated(FitnessTerm):
                         if not isinstance(var_names, list):
                             var_names = [var_names]
 
-                        if any(var_name in context_vars and context_vars[var_name].parseinfo.pos != var.parseinfo.pos for var_name in var_names):  # type: ignore
+                        if any(var_name in context_vars and isinstance(context_vars[var_name], list) for var_name in var_names):  # type: ignore
                             self.variable_definition_repeated = True
                             return
 
@@ -774,9 +797,9 @@ class NoVariablesRepeated(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_count == 0 or self.variable_definition_repeated:
-            return 0
+            return 1
 
-        return 1 - (self.count_with_repeats / self.total_count)
+        return self.count_with_repeats != 0
 
 
 ALL_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or|_not)$')
@@ -788,7 +811,7 @@ class NoNestedLogicals(FitnessTerm):
     nested_logicals: int = 0
 
     def __init__(self):
-        super().__init__(ALL_BOOLEAN_RULE_PATTERN, 'no_nested_logicals')
+        super().__init__(ALL_BOOLEAN_RULE_PATTERN, 'nested_logicals_found')
 
     def game_start(self) -> None:
         self.total_logicals = 0
@@ -813,10 +836,11 @@ class NoNestedLogicals(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_logicals == 0:
-            # TODO: should this return a NaN? If so, we should thin kabout how to handle them
-            return 1
+            # TODO: should this return a NaN? If so, we should think about how to handle them
+            # currently assuming that games without logicals are rare enough that this is fine
+            return 0
 
-        return 1 - (self.nested_logicals / self.total_logicals)
+        return self.nested_logicals != 0
 
 
 class NoIdenticalChildrenInLogicals(FitnessTerm):
@@ -834,7 +858,7 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
             'scoring_and': ast_parser.SCORING,
             'scoring_or': ast_parser.SCORING,
         }
-        super().__init__(tuple(self.rule_to_section.keys()), 'no_identical_logical_children')
+        super().__init__(tuple(self.rule_to_section.keys()), 'identical_logical_children_found')
 
     def game_start(self) -> None:
         self.total_logicals = 0
@@ -856,9 +880,10 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_logicals == 0:
             # TODO: should this return a NaN? If so, we should think about how to handle them
-            return 1
+            # assuming that games with no logicals are rare enough that this is fine
+            return 0
 
-        return 1 - (self.identical_children / self.total_logicals)
+        return self.identical_children != 0
 
 
 BOOLEAN_PARSER = ast_parser.ASTBooleanParser()
@@ -902,7 +927,7 @@ class TautologicalBooleanExpression(BooleanLogicTerm):
             self.tautalogy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return int(self.tautalogy_found)
+        return self.tautalogy_found
 
 
 class RedundantBooleanExpression(BooleanLogicTerm):
@@ -919,7 +944,7 @@ class RedundantBooleanExpression(BooleanLogicTerm):
             self.redundancy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return int(self.redundancy_found)
+        return self.redundancy_found
 
 
 class PrefForallTerm(FitnessTerm):
@@ -1211,7 +1236,7 @@ class SectionWithoutPrefOrTotalCounts(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST) and COUNT_RULE_PATTERN.match(rule):
             self.preference_count_found = True
 
-        if rule == 'scoring_expr' and isinstance(ast.expr, str) and ast.expr in TOTAL_TERMINALS:  # type:ignore
+        if rule in ('terminal_expr', 'scoring_expr') and isinstance(ast.expr, str) and ast.expr in TOTAL_TERMINALS:  # type:ignore
             self.total_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -1341,7 +1366,7 @@ class NoTwoNumberOperations(FitnessTerm):
         if self.total_operations == 0:
             return 1
 
-        return 1 - (self.two_number_operations / self.total_operations)
+        return self.two_number_operations == 0
 
 
 # COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
@@ -1448,7 +1473,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             #     return
 
             terms = extract_predicate_function_args(ast)
-            context_variables = typing.cast(typing.Dict[str, VariableDefinition], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
+            context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
             if any(term_category is None for term_category in term_categories):
                 return
@@ -1696,6 +1721,34 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
         return [term_class(section) for term_class in term_classes for section in sections]
 
 
+SECTION_EXISTS_SECTIONS = (ast_parser.SETUP, ast_parser.TERMINAL)
+
+
+class SectionExistsFitnessTerm(FitnessTerm):
+    relevant_sections: typing.Sequence[str]
+    sections_found: typing.Dict[str, bool] = {}
+
+    def __init__(self, relevant_sections: typing.Sequence[str] = SECTION_EXISTS_SECTIONS):
+        super().__init__(relevant_sections, 'section_exists')
+        self.relevant_sections = relevant_sections
+        self.sections_found = {section: False for section in self.relevant_sections}
+
+    def game_start(self) -> None:
+        self.sections_found = {section: False for section in self.relevant_sections}
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            section = typing.cast(str, context[SECTION_CONTEXT_KEY])
+            if section in self.relevant_sections:
+                self.sections_found[section] = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return {f'{section.replace("(:", "")}': found for section, found in self.sections_found.items()}
+
+    def _get_all_inner_keys(self):
+        return [f'{section.replace("(:", "")}' for section in self.relevant_sections]
+
+
 # TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
 
 
@@ -1744,7 +1797,7 @@ def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parse
 #         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_03_01.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_03_06.pkl')
 DEFAULT_TOP_K_NGRAMS = 10
 DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
 DEFAULT_TOP_K_MIN_N = 2
@@ -1936,7 +1989,6 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
-    # TODO: consider if I should merge these, too
     predicate_under_modal = PredicateUnderModal(MODALS, COMMON_SENSE_PREDICATES_FUNCTIONS)
     fitness.register(predicate_under_modal)
 
@@ -1948,6 +2000,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
+
+    section_exists_fitness_term = SectionExistsFitnessTerm()
+    fitness.register(section_exists_fitness_term, section_rule=True)
 
     # text_ngram_term = TextNGramTerm(top_k_min_n=2, score_all=True)
     # fitness.register(text_ngram_term, full_text_rule=True)
@@ -2040,7 +2095,7 @@ if __name__ == '__main__':
             os.remove(file)
 
         temp_output_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{i}.temp.csv') for i in range(args.n_workers)]
-        temp_files = [open(temp_output_path, 'a', newline='') for temp_output_path in temp_output_paths]
+        temp_files = [open(temp_output_path, 'w', newline='') for temp_output_path in temp_output_paths]
         temp_csv_writers = [csv.DictWriter(temp_file, headers) for temp_file in temp_files]
 
         # TODO: consider rewriting with asyncio instead of multiprocessing
@@ -2070,8 +2125,8 @@ if __name__ == '__main__':
         rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
 
         featurizer.rows_df = rows_df.reset_index(drop=True)
-        for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
-            os.remove(file)
+        # for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
+        #     os.remove(file)
 
     else:
         featurizer = build_or_load_featurizer(args)

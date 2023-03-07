@@ -24,11 +24,15 @@ class FitnessFeaturesPreprocessor(ABC):
 
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
-BINARIZE_IGNORE_FEATURES = [
+BINARIZE_IGNORE_FEATURES = set([
+    'all_variables_defined', 'all_variables_used',
     'setup_objects_used', 'starts_and_ends_once',
+    'all_preferences_used',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
-]
+    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
+    'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
+    'no_two_number_operations', 'tautological_expression_found', 'redundant_expression_found',
+])
 
 BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_depth_[\w\d_]+'),
@@ -39,14 +43,10 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     re.compile(r'predicate_under_modal_[\w\d_]+'),
+    re.compile(r'section_exists_[\w\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [
-    'all_variables_defined', 'all_variables_used',
-    'all_preferences_used', 'no_adjacent_once',
-    'no_variables_repeated', 'no_nested_logicals',
-    'no_identical_logical_children', 'no_two_number_operations',
-    'tautological_expression_found', 'redundant_expression_found',
 ]
 
 NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
@@ -87,8 +87,13 @@ def set_missing_value_min_epsilon(series: typing.Optional[pd.Series], min_value:
             raise ValueError('min_value must be provided if series is None')
         return min_value - epsilon
 
+    # if series.name == 'ast_ngram_scoring_n_5_score':
+    #     logging.debug(f'For series {series.name}, min_value is {min_value}, epsilon is {epsilon}')
+
     if min_value is None:
-        min_value = np.nanmean(series.values)  # type: ignore
+        min_value = np.nanmin(series.values)  # type: ignore
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'For series {series.name}, computed min_value {min_value}, min after subtracting epsilon {min_value - epsilon}')
 
     return series.fillna(min_value - epsilon), min_value  # type: ignore
 
@@ -148,7 +153,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         if not series.isna().any():
             return series
 
-        logging.info(f'Filling missing values for column {series.name}')
+        # logging.info(f'Filling missing values for column {series.name}')
         c = str(series.name)
         missing_value_function = None
         if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
@@ -159,6 +164,9 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if isinstance(p, re.Pattern) and p.match(c):
                     missing_value_function = f
                     break
+
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score: {series.isna().sum()} missing values, {series.isna().sum() / 1025}, found {missing_value_function}')
 
         if missing_value_function is None:
             raise ValueError(f'No missing value function for column {c}')
@@ -183,8 +191,14 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
     def _preprocess_series(self, series: pd.Series, use_prior_values: bool = False,
                            min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None):
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score: {series.isna().sum()} missing values, {series.isna().sum() / 1025}')
         series = self._fill_series_missing_values(series, use_prior_values=use_prior_values, min_max_values=min_max_values)
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score, min after fill: {series.min()} ({(series == series.min()).sum() / 1025:.2f}%)')
         series = self._binarize_series(series, use_prior_values=use_prior_values, ignore_columns=self.ignore_columns)
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score, after binarizing: {series.min()} ({(series == series.min()).sum() / 1025:.2f}%)')
         return series
 
     def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False,

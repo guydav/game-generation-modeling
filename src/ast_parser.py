@@ -195,7 +195,7 @@ class ASTDepthParser(ASTParser):
 VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
 
 
-def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, VariableDefinition]) -> None:
+def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]]) -> None:
     variables = ast[vars_key].variables  # type: ignore
     if isinstance(variables, tatsu.ast.AST):
         variables = [variables]
@@ -212,8 +212,16 @@ def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: 
         if isinstance(var_type, str):
             var_type = [var_type]
 
+        variable_definition = VariableDefinition(var_names, var_type, var_def.parseinfo)
+
         for var_name in var_names:  # type: ignore
-            context_vars[var_name] = VariableDefinition(var_names, var_type, var_def.parseinfo)
+            if var_name in context_vars:
+                if isinstance(context_vars[var_name], list):
+                    context_vars[var_name].append(variable_definition)  # type: ignore
+                else:
+                    context_vars[var_name] = [context_vars[var_name], variable_definition]  # type: ignore
+
+            context_vars[var_name] = variable_definition
 
 
 def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typing.Any]) -> dict:
@@ -236,11 +244,15 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
 
 
 def predicate_function_term_to_type_category(term: str,
-    context_variables: typing.Dict[str, VariableDefinition],
+    context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
     known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.Set[str]]:
     if term.startswith('?'):
         if term in context_variables:
-            term_type_list = context_variables[term].var_types
+            var_def = context_variables[term]
+            if isinstance(var_def, list):
+                term_type_list = var_def[0].var_types
+            else:
+                term_type_list = var_def.var_types
         else:
             return None
     else:
@@ -333,7 +345,11 @@ class ASTBooleanParser(ASTParser):
 
             for var in variables_in_key:
                 if var in kwargs[VARIABLES_CONTEXT_KEY]:
-                    var_types = kwargs[VARIABLES_CONTEXT_KEY][var].var_types
+                    var_def = kwargs[VARIABLES_CONTEXT_KEY][var]
+                    if isinstance(var_def, list):
+                        var_def = var_def[0]
+
+                    var_types = var_def.var_types
                     var_types_str = '_. '.join(var_types)
                     key = key.replace(var, f'{var}__{var_types_str}')
 

@@ -143,6 +143,7 @@ def make_init_weight_function(bias: float = 0.01):
         if isinstance(m, nn.Linear):
             torch.nn.init.xavier_uniform_(m.weight)
             m.bias.data.fill_(bias)
+
     return init_weights
 
 
@@ -375,10 +376,10 @@ DEFAULT_TRAIN_KWARGS = {
 }
 
 
-LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction')
+LOSS_FUNCTION_KAWRG_KEYS = ['margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction']
 DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
-FITNESS_WRAPPER_KWARG_KEYS = ('bias_init_margin_ratio',)
+FITNESS_WRAPPER_KWARG_KEYS = ['bias_init_margin_ratio',]
 DEFAULT_TRAIN_KWARGS.update({k: None for k in FITNESS_WRAPPER_KWARG_KEYS})
 
 class SklearnFitnessWrapper:
@@ -431,17 +432,17 @@ class SklearnFitnessWrapper:
                 if value is not None:
                     self.loss_function_kwargs[key] = value
 
-            elif key in self.fitness_wrapper_kwargs:
+            elif key in self.fitness_wrapper_kwarg_keys:
                 value = self.train_kwargs.pop(key)
                 if value is not None:
                     self.fitness_wrapper_kwargs[key] = value
 
         self.model = FitnessEnergyModel(**self.model_kwargs)
+        bias_init_margin_ratio = self.fitness_wrapper_kwargs.get('bias_init_margin_ratio', 0)
         if 'margin' in self.train_kwargs:
-            bias_init_margin_ratio = self.fitness_wrapper_kwargs.get('bias_init_margin_ratio', 0)
             init_weights = make_init_weight_function(self.train_kwargs['margin'] * bias_init_margin_ratio)
         else:
-            init_weights = make_init_weight_function()
+            init_weights = make_init_weight_function(bias_init_margin_ratio)
 
         self.model.apply(init_weights)
 
@@ -1136,7 +1137,8 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         bias = cv.best_estimator_.named_steps['fitness'].model.fc1.bias.data.detach().numpy().squeeze()  # type: ignore
         print(f'Weights mean: {weights.mean():.3f} +/- {weights.std():.3f} with bias {bias:.3f}')
 
-        plt.hist(weights, bins=100)
+        bins = max(min(50, len(weights) // 10), 10)
+        plt.hist(weights, bins=bins)
 
         if histogram_title_note is not None:
             plt.title(f'{weights_histogram_title_base} ({histogram_title_note})')

@@ -1729,7 +1729,7 @@ class SectionExistsFitnessTerm(FitnessTerm):
     sections_found: typing.Dict[str, bool] = {}
 
     def __init__(self, relevant_sections: typing.Sequence[str] = SECTION_EXISTS_SECTIONS):
-        super().__init__(relevant_sections, 'section_exists')
+        super().__init__(relevant_sections, 'section_doesnt_exist')
         self.relevant_sections = relevant_sections
         self.sections_found = {section: False for section in self.relevant_sections}
 
@@ -1743,7 +1743,7 @@ class SectionExistsFitnessTerm(FitnessTerm):
                 self.sections_found[section] = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return {f'{section.replace("(:", "")}': found for section, found in self.sections_found.items()}
+        return {f'{section.replace("(:", "")}': not found for section, found in self.sections_found.items()}
 
     def _get_all_inner_keys(self):
         return [f'{section.replace("(:", "")}' for section in self.relevant_sections]

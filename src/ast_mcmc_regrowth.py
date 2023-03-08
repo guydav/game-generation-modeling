@@ -16,13 +16,13 @@ from ast_crossover_sampler import CrossoverSampler, CrossoverType
 from ast_parser import ASTSamplePostprocessor
 import ast_printer
 from fitness_features import build_fitness_featurizer
-from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions, evaluate_comparison_energy_contributions
+from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions, evaluate_comparison_energy_contributions, load_model_and_feature_columns, DEFAULT_SAVE_MODEL_NAME
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
 
 DEFUALT_RANDOM_SEED = 33
-DEFAULT_FITNESS_FUNCTION_PATH = './models/cv_fitness_model_2023_01_31.pkl.gz'
+DEFAULT_FITNESS_FUNCTION_DATE_ID = '2023_03_07_2'
 DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_02_02.pkl.gz'
 
 
@@ -39,28 +39,29 @@ DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 class MCMCRegrowthSampler:
     def __init__(self,
         args: argparse.Namespace,
-        feature_names: typing.List[str],
-        fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH,
+        fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
         max_steps: int = DEFAULT_MAX_STEPS,
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
+        fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
+        fitness_function_relative_path: str = '.',
     ):
         self.args = args
-        self.feature_names = feature_names
 
         self.grammar = open(args.grammar_file).read()
         self.grammar_parser = tatsu.compile(self.grammar)
         self.counter = parse_or_load_counter(args, self.grammar_parser)
         self.sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
-        self.regrowth_sampler = RegrowthSampler(self.sampler, args.random_seed)
+        self.regrowth_sampler = RegrowthSampler(self.sampler, seed=args.random_seed)
         self.rng = np.random.default_rng(args.random_seed)
 
         self.fitness_featurizer_path = fitness_featurizer_path
         self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
-        self.fitness_function_path = fitness_function_path
-        self.fitness_function = _load_pickle_gzip(fitness_function_path)
+        self.fitness_function_date_id = fitness_function_date_id
+        self.fitness_function_model_name = fitness_function_model_name
+        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=fitness_function_relative_path)
         self.plateau_patience_steps = plateau_patience_steps
         self.max_steps = max_steps
         self.greedy_acceptance = greedy_acceptance
@@ -213,21 +214,23 @@ class MCMCRegrowthSampler:
 class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
     def __init__(self,
         args: argparse.Namespace,
-        feature_names: typing.List[str],
         crossover_type: CrossoverType,
         crossover_population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
         p_crossover: float,
-        fitness_function_path: str = DEFAULT_FITNESS_FUNCTION_PATH,
+        fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
         max_steps: int = DEFAULT_MAX_STEPS,
         greedy_acceptance: bool = False,
-        acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE
+        acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
+        fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
+        fitness_function_relative_path: str = '.',
         ):
-        super().__init__(args=args, feature_names=feature_names,
-            fitness_function_path=fitness_function_path, fitness_featurizer_path=fitness_featurizer_path,
+        super().__init__(args=args,
+            fitness_function_date_id=fitness_function_date_id, fitness_featurizer_path=fitness_featurizer_path,
             plateau_patience_steps=plateau_patience_steps, max_steps=max_steps,
-            greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature
+            greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature,
+            fitness_function_model_name=fitness_function_model_name, fitness_function_relative_path=fitness_function_relative_path,
         )
         self.crossover_sampler = CrossoverSampler(crossover_type, crossover_population, self.sampler, args.random_seed)
         self.p_crossover = p_crossover

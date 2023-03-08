@@ -43,7 +43,7 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     re.compile(r'predicate_under_modal_[\w\d_]+'),
-    re.compile(r'section_exists_[\w\d_]+'),
+    re.compile(r'section_doesnt_exist_[\w\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [
@@ -216,7 +216,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
             raise ValueError('Must call preprocess_df before preprocess_row')
 
         for c in self.columns:
-            if c in row:
+            if c in row and row[c] is not None:
                 v = row[c]
 
                 if c in BINARIZE_NON_ONE:
@@ -243,7 +243,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if missing_value_function is None:
                     raise ValueError(f'No missing value function for column {c} with no value in the row')
 
-                if self.missing_value_series_min_values:
+                if self.missing_value_series_min_values and c in self.missing_value_series_min_values:
                     row[c] = missing_value_function(None, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
                 else:
                     row[c] = missing_value_function(None, epsilon=self.missing_value_epsilon)

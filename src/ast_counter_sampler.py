@@ -21,7 +21,7 @@ import sys
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES
-
+import room_and_object_types
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -289,12 +289,21 @@ VARIABLE_DEFAULTS = defaultdict(lambda: sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
+COLORS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.COLORS]
+ORIENTATIONS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.ORIENTATIONS]
+SIDES = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.SIDES]
+
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     binary_comp=defaultdict(lambda: COMPARISON_OPERATORS),
     binary_op=defaultdict(lambda: BINARY_OPERATORS),
     multi_op=defaultdict(lambda: MULTI_OPERATORS),
     func_name=defaultdict(lambda: FUNCTION_NAMES),
-    type_name=defaultdict(lambda: TYPE_NAMES),
+    object_type=defaultdict(list),  # TODO: decide if there's a prior here
+    object_name=defaultdict(list),  # TODO: decide if there's a prior here
+    location=defaultdict(list),  # TODO: decide if there's a prior here
+    color=defaultdict(list),  # (lambda: COLORS),  # TODO: decide if there's a prior here
+    orientation=defaultdict(list),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
+    side=defaultdict(list),  # (lambda: SIDES), # TODO: decide if there's a prior here
     predicate_name=defaultdict(lambda: PREDICATE_NAMES),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
@@ -312,13 +321,17 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
-    ('type_definition', 'type'): 'type_name',
+    ('type_definition', 'type'): 'object_type',
     ('comparison_arg', 'arg'): 'number',
-    ('predicate_or_function_term', 'term'): ('type_name', 'variable',),
-    # ('function_term', 'term'): ('type_name', 'variable',),
-    # ('predicate_term', 'term'): ('type_name', 'variable'),
+    ('predicate_or_function_term', 'term'): ('object_name', 'variable',),
+    ('predicate_or_function_color_term', 'term'): ('color', 'variable',),
+    ('predicate_or_function_location_term', 'term'): ('location', 'variable',),
+    ('predicate_or_function_orientation_term', 'term'): ('orientation', 'variable',),
+    ('predicate_or_function_side_term', 'term'): ('side', 'variable',),
+    ('predicate_or_function_type_term', 'term'): ('object_type', 'variable',),
     ('terminal_expr', 'expr'): ('total_time', 'total_score'),
     ('scoring_expr_or_number', 'expr'): 'number',
+    ('pref_object_type', 'type_name'): ('object_name', 'object_type'),
 }
 
 PATTERN_TYPE_MAPPINGS = {

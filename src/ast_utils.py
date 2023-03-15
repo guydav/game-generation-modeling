@@ -2,6 +2,7 @@ import argparse
 from collections import namedtuple
 import gzip
 import hashlib
+import logging
 import os
 import pickle
 import tatsu
@@ -138,6 +139,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     cache_updated = False
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
+        logging.debug('Grammar changed, clearing cache')
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
 
@@ -146,6 +148,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         game_hash = fixed_hash(game)
 
         if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
+            if not grammar_changed: logging.debug(f'Game {game_id} changed or not in cache, parsing')
             cache_updated = True
             ast = grammar_parser.parse(game)
             cache[CACHE_HASHES_KEY][game_id] = game_hash

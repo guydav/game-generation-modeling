@@ -42,7 +42,7 @@
     (forall (?b - (either dodgeball golfball) ?t - (either top_drawer hexagonal_bin))
         (preference throwToDrawerOrBin
             (then
-                (once (and (agent_holds ?b) (adjacent agent door)))
+                (once (and (agent_holds ?b) (adjacent door agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (not (in_motion ?b)) (in ?t ?b)))
             )
@@ -108,7 +108,7 @@
         (preference throwBallToBin
             (exists (?h - hexagonal_bin)
                 (then
-                    (once (and (agent_holds ?b) (adjacent agent desk)))
+                    (once (and (agent_holds ?b) (adjacent desk agent)))
                     (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                     (once (and (not (in_motion ?b)) (in ?h ?b)))
                 )
@@ -118,7 +118,7 @@
     (preference failedThrowToBin
         (exists (?b - ball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?b) (adjacent agent desk)))
+                (once (and (agent_holds ?b) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (not (in_motion ?b)) (not (in ?h ?b))))
             )
@@ -310,7 +310,7 @@
     (preference throwToRampToBin
         (exists (?r - triangular_ramp ?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
+                (once (and (agent_holds ?d) (adjacent door agent) (agent_crouches))) ; ball starts in hand
                 (hold-while
                     (and (not (agent_holds ?d)) (in_motion ?d))
                     (touch ?r ?d)
@@ -340,7 +340,7 @@
         (preference throwToRampToBin
             (exists (?r - triangular_ramp ?h - hexagonal_bin)
                 (then
-                    (once (and (agent_holds ?d) (adjacent agent door) (agent_crouches))) ; ball starts in hand
+                    (once (and (agent_holds ?d) (adjacent door agent) (agent_crouches))) ; ball starts in hand
                     (hold-while
                         (and (not (agent_holds ?d)) (in_motion ?d))
                         (touch ?r ?d)
@@ -409,7 +409,7 @@
         (then
             (once (and
                 (agent_holds ?d)
-                (adjacent agent ?r)
+                (adjacent ?r agent)
                 (on ?h ?b)
                 (in ?b ?c)
             ))
@@ -638,7 +638,7 @@
     (preference ballThrownToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
@@ -647,7 +647,7 @@
     (preference ballThrownToBed
         (exists (?d - dodgeball)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (on bed ?d)))
             )
@@ -656,7 +656,7 @@
     (preference ballThrownToChair
         (exists (?d - dodgeball ?c - chair)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (on ?c ?d) (is_setup_object ?c)))
             )
@@ -665,7 +665,7 @@
     (preference ballThrownMissesEverything
         (exists (?d - dodgeball)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and
                     (not (in_motion ?d))
@@ -1109,7 +1109,7 @@
     (preference throwToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
                 ; TODO: do we do anything about "whenever you get a point you put one of the blocks on the shelf. (on any of the two, it doesn't matter)"?
@@ -1176,7 +1176,7 @@
     (preference throwToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent desk)))
+                (once (and (agent_holds ?d) (adjacent desk agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
@@ -1300,7 +1300,7 @@
     (preference throwBallFromOtherBallToBin
         (exists (?d1 ?d2 - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d1) (adjacent agent ?d2)))
+                (once (and (agent_holds ?d1) (adjacent ?d2 agent)))
                 (hold (and (not (agent_holds ?d1)) (in_motion ?d1)))
                 (once (and (not (in_motion ?d1)) (in ?h ?d1)))
             )
@@ -1381,8 +1381,8 @@
             (then
                 (once (and
                     (agent_holds ?b)
-                    (adjacent agent desk)
-                    (adjacent agent ?s)
+                    (adjacent desk agent)
+                    (adjacent ?s agent)
                     (equal_z_position bed ?t)
                     ; (= (z_position ?t) (z_position bed))
                 ))
@@ -1395,7 +1395,7 @@
         ))
         (preference throwAttempt (exists (?s - sliding_door)
             (then
-                (once (and (agent_holds ?b) (adjacent agent desk) (adjacent agent ?s)))
+                (once (and (agent_holds ?b) (adjacent desk agent) (adjacent ?s agent)))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
                 (once (not (in_motion ?b)))
             )
@@ -1541,7 +1541,7 @@
         (preference dodgeballThrownToBin (exists (?h - hexagonal_bin)
             (then
                 (once (and
-                    (adjacent agent green_golfball)
+                    (adjacent green_golfball agent)
                     (adjacent door agent)
                     (agent_holds ?d)
                 ))
@@ -1552,8 +1552,8 @@
         (preference throwAttemptFromDoor
             (then
                 (once (and
-                    (adjacent agent green_golfball)
-                    (adjacent agent door)
+                    (adjacent green_golfball agent)
+                    (adjacent door agent)
                     (agent_holds ?d)
                 ))
                 (hold (and (in_motion ?d) (not (agent_holds ?d))))
@@ -1714,7 +1714,7 @@
     ; "you have 3 tries to make it. the less tries the more points. the cleaner you sink it the more points""
     (preference throwFromDoorToBin (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
-            (once (and (agent_holds ?d) (adjacent agent door)))
+            (once (and (agent_holds ?d) (adjacent door agent)))
             (hold (and (not (agent_holds ?d)) (in_motion ?d)))
             (once (and (not (in_motion ?d)) (in ?h ?d)))
         )
@@ -1881,7 +1881,7 @@
     (forall (?p - pyramid_block)
         (preference dodgeballFromBlockToBin (exists (?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent ?p)))
+                (once (and (agent_holds ?d) (adjacent ?p agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
@@ -1909,7 +1909,7 @@
 (:constraints (and
     (preference bigObjectThrownToBed (exists (?o - (either chair laptop doggie_bed))
         (then
-            (once (and (agent_holds ?o) (adjacent agent desk)))
+            (once (and (agent_holds ?o) (adjacent desk agent)))
             (hold (and (not (agent_holds ?o)) (in_motion ?o)))
             (once (and (not (in_motion ?o)) (on bed ?o)))
         )
@@ -1918,7 +1918,7 @@
         (then
             (once (and
                 (agent_holds ?o)
-                (adjacent agent desk)
+                (adjacent desk agent)
                 (not (exists (?o2 - (either chair laptop doggie_bed)) (same_object ?o ?o2)))
             ))
             (hold (and (not (agent_holds ?o)) (in_motion ?o)))
@@ -1927,7 +1927,7 @@
     ))
     (preference failedThrowAttempt (exists (?o - game_object)
         (then
-            (once (and (agent_holds ?o) (adjacent agent desk)))
+            (once (and (agent_holds ?o) (adjacent desk agent)))
             (hold (and (not (agent_holds ?o)) (in_motion ?o)))
             (once (and (not (in_motion ?o)) (not (on bed ?o))))
         )
@@ -1999,7 +1999,7 @@
     (forall (?o - (either hexagonal_bin rug wall))
         (preference ballThrownFromObjectToBin (exists (?d - dodgeball ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?d) (adjacent agent ?o)))
+                (once (and (agent_holds ?d) (adjacent ?o agent)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
@@ -2044,7 +2044,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on agent ?o)
+                    (on ?o agent)
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2065,7 +2065,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on agent ?o)
+                    (on ?o agent)
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2177,14 +2177,14 @@
     (forall (?o - (either golfball dodgeball triangle_block pyramid_block)) (and
         (preference objectLandsInBin (exists (?h - hexagonal_bin)
             (then
-                (once (and (adjacent agent bed) (agent_holds ?o)))
+                (once (and (adjacent bed agent) (agent_holds ?o)))
                 (hold (and (in_motion ?o) (not (agent_holds ?o))))
                 (once (and (not (in_motion ?o)) (in ?h ?o)))
             )
         ))
         (preference thrownObjectHitsComputer (exists (?c - (either desktop laptop))
             (then
-                (once (and (adjacent agent bed) (agent_holds ?o)))
+                (once (and (adjacent bed agent) (agent_holds ?o)))
                 (hold (and (in_motion ?o) (not (agent_holds ?o))))
                 (once (touch ?o ?c))
             )
@@ -2192,7 +2192,7 @@
     ))
     (preference golfballLandsInBinThroughRamp (exists (?g - golfball ?c - curved_wooden_ramp ?h - hexagonal_bin)
         (then
-            (once (and (adjacent agent bed) (agent_holds ?g)))
+            (once (and (adjacent bed agent) (agent_holds ?g)))
             (hold-while
                 (and (in_motion ?g) (not (agent_holds ?g)))
                 (touch ?c ?g)
@@ -2219,7 +2219,7 @@
 (:constraints (and
     (preference dodgeballHitsPillowWithoutTouchingBlock (exists (?d - dodgeball ?p - pillow ?r - triangular_ramp)
         (then
-            (once (and (adjacent agent ?r) (< (distance desk ?r) 1) (agent_holds ?d)))
+            (once (and (adjacent ?r agent) (< (distance desk ?r) 1) (agent_holds ?d)))
             (hold-while
                 (and (in_motion ?d) (not (agent_holds ?d)) (not (exists (?c - cylindrical_block) (touch ?c ?d) )) )
                 (touch ?d ?p)
@@ -2229,7 +2229,7 @@
     ))
     (preference golfballUnderBridgeWithoutTouchingBlock (exists (?g - golfball ?b - bridge_block ?r - triangular_ramp)
         (then
-            (once (and (adjacent agent ?r) (< (distance desk ?r) 1) (agent_holds ?g)))
+            (once (and (adjacent ?r agent) (< (distance desk ?r) 1) (agent_holds ?g)))
             (hold-while
                 (and (in_motion ?g) (not (agent_holds ?g)) (not (exists (?c - cylindrical_block) (touch ?c ?g) )) )
                 (above ?g ?b)
@@ -2280,7 +2280,7 @@
 (:constraints (and
     (preference dodgeballThrownToBinFromDesk (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
-            (once (and (adjacent agent desk) (agent_holds ?d)))
+            (once (and (adjacent desk agent) (agent_holds ?d)))
             (hold (and (in_motion ?d) (not (agent_holds ?d))))
             (once (and (not (in_motion ?d)) (in ?h ?d)))
         )
@@ -2297,7 +2297,7 @@
 (:constraints (and
     (preference golfballInBinFromPillow (exists (?g - golfball ?h - hexagonal_bin ?p - pillow)
         (then
-            (once (and (adjacent agent ?p) (agent_holds ?g) (is_setup_object ?p) ))
+            (once (and (adjacent ?p agent) (agent_holds ?g) (is_setup_object ?p) ))
             (hold (and (in_motion ?g) (not (agent_holds ?g))))
             (once (and (not (in_motion ?g)) (in ?h ?g)))
         )
@@ -2322,14 +2322,14 @@
 (:constraints (and
     (preference ballDroppedInBin (exists (?b - ball ?h - hexagonal_bin)
         (then
-            (once (and (adjacent agent ?h) (agent_holds ?b)))
+            (once (and (adjacent ?h agent) (agent_holds ?b)))
             (hold (and (in_motion ?b) (not (agent_holds ?b))))
             (once (and (not (in_motion ?b)) (in ?h ?b)))
         )
     ))
     (preference dropAttempt (exists (?b - ball ?h - hexagonal_bin)
         (then
-            (once (and (adjacent agent ?h) (agent_holds ?b)))
+            (once (and (adjacent ?h agent) (agent_holds ?b)))
             (hold (and (in_motion ?b) (not (agent_holds ?b))))
             (once (not (in_motion ?b)))
         )
@@ -2440,7 +2440,7 @@
 (:constraints (and
     (preference throwMovesBeachballWithoutKnockingTeddy (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggie_bed)
         (then
-            (once (and (agent_holds ?d) (< (distance agent ?db) 1) (object_orientation ?t upright)))
+            (once (and (agent_holds ?d) (< (distance ?db agent) 1) (object_orientation ?t upright)))
             (hold-while
                 (and (in_motion ?d) (not (agent_holds ?d)) (not (agent_holds ?t)))
                 (touch ?d ?b)
@@ -2451,7 +2451,7 @@
     ))
     (preference throwKnocksOverBear (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggie_bed)
         (then
-            (once (and (agent_holds ?d) (< (distance agent ?db) 1) (object_orientation ?t upright)))
+            (once (and (agent_holds ?d) (< (distance ?db agent) 1) (object_orientation ?t upright)))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (agent_holds ?t))))
             (once (and (not (in_motion ?d)) (not (in_motion ?b)) (not (object_orientation ?t upright))))
         )
@@ -2975,7 +2975,7 @@
                 (once (and
                     (agent_holds ?b)
                     (is_setup_object ?c)
-                    (>= (distance agent ?h) (distance ?c ?h))
+                    (>= (distance ?h agent) (distance ?c ?h))
                 ))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
                 (once (and (not (in_motion ?b)) (in ?h ?b)))
@@ -2986,7 +2986,7 @@
                 (once (and
                     (agent_holds ?b)
                     (is_setup_object ?c)
-                    (>= (distance agent ?h) (distance ?c ?h))
+                    (>= (distance ?h agent) (distance ?c ?h))
                 ))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
                 (once (and (not (in_motion ?b))))
@@ -3174,7 +3174,7 @@
                 (> (distance ?d agent) 1)
                 (forall (?b - ball) (and
                     (not (in_motion ?b))
-                    (> (distance agent ?b) 1))
+                    (> (distance ?b agent) 1))
                 )
             ))
         )

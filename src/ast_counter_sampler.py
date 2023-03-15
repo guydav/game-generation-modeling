@@ -44,6 +44,7 @@ parser.add_argument('-n', '--num-samples', type=int, default=10)
 parser.add_argument('-p', '--print-samples', action='store_true')
 parser.add_argument('-v', '--validate-samples', action='store_true')
 parser.add_argument('--sample-tqdm', action='store_true')
+parser.add_argument('--inner-sample-tqdm', action='store_true')
 DEFAULT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 DEFAULT_RECURSION_LIMIT = 3000
@@ -198,16 +199,21 @@ def generate_domain_name(global_context: ContextDict, local_context: typing.Opti
 
 
 def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
-    total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
-    value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
+    value_posterior = {k: v + prior_token_count for k, v in field_counter.value_counts.items()}
 
     def sample_new_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
         if 'preference_names' not in global_context:
             global_context['preference_names'] = set()
 
-        pref_name = None
-        while (pref_name is None) or (pref_name in global_context['preference_names']):
-            pref_name = posterior_dict_sample(global_context['rng'], value_posterior)
+        filtered_posteior = {k: v for k, v in value_posterior.items() if k not in global_context['preference_names']}
+
+        if len(filtered_posteior) == 0:
+            raise SamplingException('Attempted to sample a preference name with no available names')
+
+        filtered_posterior_normalization = sum(filtered_posteior.values())
+        filtered_posteior = {k: v / filtered_posterior_normalization for k, v in filtered_posteior.items()}
+
+        pref_name = posterior_dict_sample(global_context['rng'], filtered_posteior)
 
         global_context['preference_names'].add(pref_name)
         return pref_name
@@ -220,8 +226,8 @@ sample_new_preference_name_factory.factory = True
 
 
 def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
-    if 'preference_names' not in global_context:
-        raise SamplingException('Attempted to sample a preference name with no sampled preference')
+    if 'preference_names' not in global_context or len(global_context['preference_names']) == 0:
+        raise SamplingException('Attempted to sample a preference name with no sampled preferences')
 
     if 'rng' not in global_context:
         rng = np.random.default_rng()
@@ -1191,7 +1197,7 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, A
                 sample_ast = sampler.sample(global_context=dict(sample_id=sample_id))
                 sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
                 generated_sample = True
-                yield sample_ast, sample_str + '\n\n'
+                yield sample_str + '\n\n'
 
             except ValueError as e:
                 print(f'ValueError while sampling, repeating: {e}')
@@ -1218,16 +1224,20 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[s
         args.regrowth_end_index = min(args.regrowth_end_index, len(real_games))
 
 
-    game_iter = enumerate(real_games[args.regrowth_start_index:args.regrowth_end_index])
+    game_iter = iter(real_games[args.regrowth_start_index:args.regrowth_end_index])
     if args.sample_tqdm:
         game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=args.regrowth_end_index - args.regrowth_start_index)
 
-    for game_index, real_game in game_iter:
+    for real_game in game_iter:
         regrowth_sampler.set_source_ast(real_game)
         real_game_str = ast_printer.ast_to_string(real_game, line_delimiter='\n')
         sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
 
-        for sample_index in range(args.num_samples):
+        sample_iter = range(args.num_samples)
+        if args.inner_sample_tqdm:
+            sample_iter = tqdm.tqdm(sample_iter, total=args.num_samples, desc='Samples')
+
+        for sample_index in sample_iter:
             sample_generated = False
 
             while not sample_generated:
@@ -1241,7 +1251,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[s
                     else:
                         sample_generated = True
                         sample_hashes.add(sample_hash)
-                        yield sample_ast, sample_str + '\n\n'
+                        yield sample_str + '\n\n'
 
                 except RecursionError:
                     if args.verbose: print('Recursion error, skipping sample')
@@ -1251,8 +1261,8 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[s
 
 
 def main(args):
-    original_recursion_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(args.recursion_limit)
+    # original_recursion_limit = sys.getrecursionlimit()
+    # sys.setrecursionlimit(args.recursion_limit)
 
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
@@ -1280,12 +1290,19 @@ def main(args):
     # or `then` for preferences) are overrepreesnted, and more likely
     # to be sampled at the root of this expression than they are in the corpus
 
-    sys.setrecursionlimit(original_recursion_limit)
+    # sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
         with open(args.samples_output_path, args.file_open_mode) as out_file:
-            for _, sample in sample_iter:
-                out_file.write(sample + '\n\n')
+            buffer = []
+            i = 0
+            for sample in sample_iter:
+                buffer.append(sample)
+                i += 1
+                if i % args.num_samples == 0:
+                    out_file.write('\n\n'.join(buffer))
+                    out_file.flush()
+                    buffer = []
 
     else:
         for ast, sample in sample_iter:

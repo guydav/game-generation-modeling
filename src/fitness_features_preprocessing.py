@@ -31,7 +31,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
-    'no_two_number_operations', 'tautological_expression_found', 'redundant_expression_found',
+    'two_number_operation_found', 'tautological_expression_found', 'redundant_expression_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [
@@ -251,7 +251,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         return row
 
 
-DEFAULT_MERGE_THRESHOLD_PROPORTION = 0.001
+DEFAULT_MERGE_THRESHOLD_PROPORTION = 0.01   # ~ 1000 games out of the 98 * 1025
 DEFAULT_FEATURE_SUFFIXES = ('setup', 'constraints')
 DEFAULT_MERGE_COLUMN_SUFFIX = 'other'
 

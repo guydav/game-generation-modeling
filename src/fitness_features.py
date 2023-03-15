@@ -333,6 +333,9 @@ class ASTFitnessFeaturizer:
         if DEPTH_CONTEXT_KEY not in context:
             context[DEPTH_CONTEXT_KEY] = 0
 
+        if VARIABLES_CONTEXT_KEY not in context:
+            context[VARIABLES_CONTEXT_KEY] = {}  # type: ignore
+
         if not ast or isinstance(ast, (str, int, np.int32, np.int64, tatsu.buffering.Buffer)):  # type: ignore
             return
 
@@ -410,21 +413,23 @@ class ASTNodeCounter(ast_parser.ASTParser):
         super()._handle_ast(ast, **kwargs)
 
 
+PREDICATE_OR_FUNCTION_TERM_PATTERN = re.compile(r'predicate_or_function[\w\d_]+term')
+
+
 class VariableBasedFitnessTerm(FitnessTerm):
     def __init__(self, header: str):
-        super().__init__(('setup_statement', 'predicate', 'function', 'predicate_term', 'function_term', 'predicate_or_function_term'), header)
+        super().__init__(('setup_statement', 'predicate', 'function', PREDICATE_OR_FUNCTION_TERM_PATTERN), header)
         self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if VARIABLES_CONTEXT_KEY not in context:
-            return
+        context_variables = context.get(VARIABLES_CONTEXT_KEY, {})
 
         if 'term' in ast:
             if isinstance(ast.term, str) and ast.term.startswith('?'):  # type: ignore
-                self._inner_update(ast.term, context[VARIABLES_CONTEXT_KEY])  # type: ignore
+                self._inner_update(ast.term, context_variables)  # type: ignore
 
         else:
-            self._inner_update(None, context[VARIABLES_CONTEXT_KEY])  # type: ignore
+            self._inner_update(None, context_variables)  # type: ignore
 
     @abstractmethod
     def _inner_update(self, term: str, variables: typing.Dict[str, VariableDefinition]):
@@ -451,6 +456,7 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
             self.undefined_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        print(self.defined_count, self.undefined_count)
         if self.defined_count == 0:
             return 0
 
@@ -489,6 +495,7 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
             self.used_variables.add((term, var_def.parseinfo.rule, var_def.parseinfo.pos))
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        print(self.defined_variables, self.used_variables, self.variable_definition_repeated)
         if len(self.defined_variables) == 0 or self.variable_definition_repeated:
             return 0
 
@@ -1314,7 +1321,17 @@ TWO_NUMBER_RULES = (
 
 
 def _is_number(s: typing.Any) -> bool:
-    return isinstance(s, str) and s.replace('.', '', 1).isdigit()
+    if isinstance(s, str):
+        return s.replace('.', '', 1).isdigit()
+
+    elif isinstance(s, tatsu.ast.AST):
+        if s.parseinfo.rule in ('scoring_expr', 'scoring_neg_expr'):  # type: ignore
+            return _is_number(s.expr)
+
+    elif isinstance(s, (int, float)):
+        return True
+
+    return False
 
 
 class NoTwoNumberOperations(FitnessTerm):
@@ -1322,7 +1339,7 @@ class NoTwoNumberOperations(FitnessTerm):
     two_number_operations: int = 0
 
     def __init__(self):
-        super().__init__(TWO_NUMBER_RULES, 'no_two_number_operations')
+        super().__init__(TWO_NUMBER_RULES, 'two_number_operation_found')
 
     def game_start(self) -> None:
         self.total_operations = 0
@@ -1366,7 +1383,7 @@ class NoTwoNumberOperations(FitnessTerm):
         if self.total_operations == 0:
             return 1
 
-        return self.two_number_operations == 0
+        return self.two_number_operations > 0
 
 
 # COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
@@ -1797,7 +1814,7 @@ class SectionExistsFitnessTerm(FitnessTerm):
 #         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_03_06.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_03_09.pkl')
 DEFAULT_TOP_K_NGRAMS = 10
 DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
 DEFAULT_TOP_K_MIN_N = 2

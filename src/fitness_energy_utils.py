@@ -1393,7 +1393,8 @@ def plot_energy_histogram(energy_model: typing.Union[GridSearchCV, Pipeline],
 
 def plot_loss_curves(losses: typing.Dict[str, typing.List[float]],
     title: str = 'Loss curve', xlabel: str = 'Epoch', ylabel: str = 'Loss',
-    title_note: typing.Optional[str] = None, cmap: str = 'Dark2'):
+    title_note: typing.Optional[str] = None, cmap: str = 'Dark2',
+    legend_loc: str = 'best'):
 
     cm = plt.get_cmap(cmap)  # type: ignore
 
@@ -1408,7 +1409,7 @@ def plot_loss_curves(losses: typing.Dict[str, typing.List[float]],
     else:
         plt.title(title)
 
-    plt.legend(loc='best')
+    plt.legend(loc=legend_loc)
     plt.show()
 
 

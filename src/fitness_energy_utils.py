@@ -10,7 +10,7 @@ import os
 import pickle
 import typing
 
-from IPython.display import display, Markdown, HTML
+from IPython.display import display, Markdown, HTML  # type: ignore
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -445,8 +445,8 @@ class SklearnFitnessWrapper:
         self.fitness_wrapper_kwargs = {}
         self.fitness_wrapper_kwarg_keys = fitness_wrapper_kwarg_keys
 
-        self.train_losses = []
-        self.val_losses = []
+        self.losses = {}
+        self.init_model = True
 
         self.set_params(**params)
 
@@ -493,20 +493,29 @@ class SklearnFitnessWrapper:
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
 
     def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
-        self._init_model_and_train_kwargs()
+        if self.init_model:
+            self._init_model_and_train_kwargs()
         if isinstance(X, ConstrativeTrainingData):
-            self.model, self.train_losses, self.val_losses = train_and_validate_model_weighted_sampling(self.model, X, **self.train_kwargs)
+            self.model, losses = train_and_validate_model_weighted_sampling(self.model, X, **self.train_kwargs)
         else:
-            self.model, self.train_losses, self.val_losses = train_and_validate_model(self.model, X, **self.train_kwargs)
+            self.model, losses = train_and_validate_model(self.model, X, **self.train_kwargs)
+
+        for key, value in losses.items():
+            if key not in self.losses:
+                self.losses[key] = []
+            self.losses[key].extend(value)
+
         return self
 
-    def fit_with_weighted_negative_sampling(
-        self, train_data: ConstrativeTrainingData,
-        val_data: typing.Optional[ConstrativeTrainingData] = None,) -> 'SklearnFitnessWrapper':
+    # def fit_with_weighted_negative_sampling(
+    #     self, train_data: ConstrativeTrainingData,
+    #     val_data: typing.Optional[ConstrativeTrainingData] = None,
+    #     init_model: bool = True) -> 'SklearnFitnessWrapper':
 
-        self._init_model_and_train_kwargs()
-        self.model, self.train_losses, self.val_losses = train_and_validate_model_weighted_sampling(self.model, train_data, val_data, **self.train_kwargs)
-        return self
+    #     if init_model:
+    #         self._init_model_and_train_kwargs()
+    #     self.model, self.train_losses, self.val_losses = train_and_validate_model_weighted_sampling(self.model, train_data, val_data, **self.train_kwargs)
+    #     return self
 
     def transform(self, X, y=None) -> torch.Tensor:
         return self.model(X)
@@ -618,7 +627,7 @@ def evaluate_fitness_single_game_min_rank(model: ModelClasses, X: torch.Tensor, 
 
 
 @contrastive_data_wrapper_to_tensor
-def wrap_loss_function_to_metric(loss_function: typing.Union[typing.Callable[[torch.Tensor, torch.Tensor], torch.Tensor], typing.Callable[[torch.Tensor], torch.Tensor]],
+def wrap_loss_function_to_metric(loss_function: typing.Callable[..., torch.Tensor],
                                  kwargs: typing.Optional[dict] = None, positive_negative_split: bool = False,
                                  flip_sign: bool = True) -> typing.Callable[[ModelClasses, torch.Tensor, typing.Optional[torch.Tensor]], float]:
     if kwargs is None:
@@ -760,7 +769,7 @@ def train_and_validate_model_weighted_sampling(
     lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
     lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
     num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
-    ) -> typing.Tuple[nn.Module, typing.List[float], typing.List[float]]:
+    ) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
@@ -865,7 +874,7 @@ def train_and_validate_model_weighted_sampling(
 
     model = best_model.to(device)
 
-    return model, train_losses, val_losses
+    return model, dict(train=train_losses, val=val_losses)
 
 
 class NegativeShuffleDataset(IterableDataset):
@@ -876,8 +885,8 @@ class NegativeShuffleDataset(IterableDataset):
     shuffled: bool
 
     def __init__(self, tensor, shuffle_only_once: bool = False):
-        self.positives = tensor[:, 0, :]
-        self.negatives = tensor[:, 1:, :]
+        self.positives = torch.clone(tensor[:, 0, :])
+        self.negatives = torch.clone(tensor[:, 1:, :])
         self.shuffle_only_once = shuffle_only_once
         self.shuffled = False
 
@@ -908,12 +917,14 @@ def train_and_validate_model(model: nn.Module,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
-    shuffle_negatives: bool = False, shuffle_validation_negatives: typing.Optional[bool] = None, split_validation_from_train: bool = False,
+    shuffle_negatives: bool = False, shuffle_validation_negatives: typing.Optional[bool] = None,
+    evaluate_opposite_shuffle_mode: bool = True, split_validation_from_train: bool = False,
     regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
     use_lr_scheduler: bool = False, lr_scheduler_class: typing.Callable = torch.optim.lr_scheduler.ReduceLROnPlateau,
     lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
     lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33, **kwargs) -> typing.Tuple[nn.Module, typing.List[float], typing.List[float]]:
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33,
+    **kwargs) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
@@ -952,7 +963,26 @@ def train_and_validate_model(model: nn.Module,
         else:
             val_dataset = TensorDataset(val_data)
 
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        val_dataloader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
+
+    extra_evaluation_sets = {}
+    if evaluate_opposite_shuffle_mode:
+        if shuffle_negatives:
+            opposite_train_dataset = TensorDataset(train_data)  # .to(device)
+        else:
+            opposite_train_dataset = NegativeShuffleDataset(train_data, shuffle_only_once=True)
+
+        opposite_train_dataloader = DataLoader(opposite_train_dataset, batch_size=len(opposite_train_dataset), shuffle=False)
+        extra_evaluation_sets[f'{"no_shuffle" if shuffle_negatives else "shuffle"}_train'] = opposite_train_dataloader
+
+        if validate:
+            if shuffle_validation_negatives:
+                opposite_val_dataset = TensorDataset(val_data)
+            else:
+                opposite_val_dataset = NegativeShuffleDataset(val_data, shuffle_only_once=True)
+
+            opposite_val_dataloader = DataLoader(opposite_val_dataset, batch_size=len(opposite_val_dataset), shuffle=False)
+            extra_evaluation_sets[f'{"no_shuffle" if shuffle_validation_negatives else "shuffle"}_val'] = opposite_val_dataloader
 
     torch.manual_seed(random_seed)
 
@@ -960,27 +990,15 @@ def train_and_validate_model(model: nn.Module,
     patience_loss = np.Inf
     patience_update_epoch = 0
     best_model = model
-    train_losses = []
-    val_losses = []
+    losses = defaultdict(list)
 
     epoch = 0
     for epoch in range(n_epochs):
         model.train()
         epoch_train_losses = []
         for batch in train_dataloader:
-            if shuffle_negatives:
-                X = batch
-            else:
-                X = batch[0]
             optimizer.zero_grad()
-
-            if k != X.shape[1] - 1:
-                negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
-                indices = torch.cat((torch.tensor([0]), negative_indices))
-                X = X[:, indices].to(device)
-
-            scores = model(X)
-            loss = loss_function(scores, **loss_function_kwargs)
+            loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
             if regularizer is not None:
                 loss += regularization_weight * regularizer(model)
             epoch_train_losses.append(loss.item())
@@ -993,38 +1011,31 @@ def train_and_validate_model(model: nn.Module,
             model.eval()
             with torch.no_grad():
                 for batch in val_dataloader:    # type: ignore
-                    if shuffle_validation_negatives:
-                        X = batch
-                    else:
-                        X = batch[0]
-                    if k != X.shape[1] - 1:
-                        negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
-                        indices = torch.cat((torch.tensor([0]), negative_indices))
-                        X = X[:, indices].to(device)
-
-                    scores = model(X)
-                    loss = loss_function(scores, **loss_function_kwargs)
+                    loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
                     if regularizer is not None:
                         loss += regularization_weight * regularizer(model)
                     epoch_val_losses.append(loss.item())
 
-        if should_print and epoch % print_interval == 0:
-            if validate:
-                if should_print_weights:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
-                else:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f}')
-            else:
-                if should_print_weights:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
-                else:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f}')
+
+        if len(extra_evaluation_sets) > 0:
+            model.eval()
+            with torch.no_grad():
+                for name, dataloader in extra_evaluation_sets.items():
+                    epoch_eval_losses = []
+                    for batch in dataloader:
+                        loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
+                        if regularizer is not None:
+                            loss += regularization_weight * regularizer(model)
+                        epoch_eval_losses.append(loss.item())
+
+                    losses[name].append(np.mean(epoch_eval_losses))
 
         epoch_train_loss = np.mean(epoch_train_losses)
-        train_losses.append(epoch_train_loss)
+
+        losses['train'].append(epoch_train_loss)
         if validate:
             epoch_loss = np.mean(epoch_val_losses)
-            val_losses.append(epoch_loss)
+            losses['val'].append(epoch_loss)
         else:
             epoch_loss = epoch_train_loss
 
@@ -1053,7 +1064,23 @@ def train_and_validate_model(model: nn.Module,
 
     model = best_model.to(device)
 
-    return model, train_losses, val_losses
+    return model, {k: v for k, v in losses.items()}
+
+
+def _get_batch_loss(model: torch.nn.Module, loss_function: typing.Callable,
+                    loss_function_kwargs: typing.Dict[str, typing.Any],
+                    k: int, device: str, X: torch.Tensor) -> torch.Tensor:
+    if not isinstance(X, torch.Tensor):
+        X = X[0]
+
+    if k != X.shape[1] - 1:
+        negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
+        indices = torch.cat((torch.tensor([0]), negative_indices))
+        X = X[:, indices].to(device)
+
+    scores = model(X)
+    loss = loss_function(scores, **loss_function_kwargs)
+    return loss
 
 
 def initialize_and_fit_model(
@@ -1066,8 +1093,9 @@ def initialize_and_fit_model(
         train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
         energy_weighted_resampling: bool = False,
         train_prop: float = DEFAULT_TRAINING_PROP,
+        pipeline: typing.Optional[Pipeline] = None,
         scoring_function: typing.Optional[typing.Callable] = None,
-    ):
+    ) -> typing.Tuple[Pipeline, typing.Tuple[torch.Tensor, torch.Tensor], typing.Dict[str, typing.Dict[str, typing.Any]]]:
 
     if scaler_kwargs is None:
         scaler_kwargs = {}
@@ -1083,11 +1111,12 @@ def initialize_and_fit_model(
 
     model_kwargs['n_features'] = train_tensor.shape[-1]
 
-    if energy_weighted_resampling:
-        pipeline = Pipeline(steps=[('wrapper', SklearnContrastiveTrainingDataWrapper()), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs)),])
+    if pipeline is None:
+        if energy_weighted_resampling:
+            pipeline = Pipeline(steps=[('wrapper', SklearnContrastiveTrainingDataWrapper()), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs)),])
 
-    else:
-        pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler(**scaler_kwargs)), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
+        else:
+            pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler(**scaler_kwargs)), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
 
     pipeline.fit(train_tensor)
 
@@ -1276,8 +1305,16 @@ def evaluate_trained_model(model: SklearnFitnessWrapper, data_tensor: torch.Tens
     if scoring_function is not None:
         output = scoring_function(model, data_tensor)
         if not isinstance(output, dict):
-            return dict(score=output)
+            output = dict(score=output)
 
+        shuffled_dataset = NegativeShuffleDataset(data_tensor)
+        shuffled_dataset._new_epoch()
+        shuffled_output = scoring_function(model, shuffled_dataset.dataset)
+
+        if not isinstance(shuffled_output, dict):
+            shuffled_output = dict(score=shuffled_output)
+
+        output.update({'shuffled_' + k: v for k, v in shuffled_output.items()})
         return output
 
     else:
@@ -1344,16 +1381,15 @@ def plot_energy_histogram(energy_model: typing.Union[GridSearchCV, Pipeline],
         energy_model.named_steps['wrapper'].train()
 
 
-def plot_loss_curves(train_losses: typing.List[float], val_losses: typing.List[float],
+def plot_loss_curves(losses: typing.Dict[str, typing.List[float]],
     title: str = 'Loss curve', xlabel: str = 'Epoch', ylabel: str = 'Loss',
     title_note: typing.Optional[str] = None, cmap: str = 'Dark2'):
 
     cm = plt.get_cmap(cmap)  # type: ignore
 
-    if train_losses:
-        plt.plot(train_losses, label='Train', color=cm(0))
-    if val_losses:
-        plt.plot(val_losses, label='Val', color=cm(1))
+    for i, (key, loss_list) in enumerate(losses.items()):
+        plt.plot(loss_list, label=key, color=cm(i))
+
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
@@ -1364,6 +1400,13 @@ def plot_loss_curves(train_losses: typing.List[float], val_losses: typing.List[f
 
     plt.legend(loc='best')
     plt.show()
+
+
+def print_results_dict(results: typing.Dict[str, typing.Dict[str, typing.Any]]):
+    for results_key, results_dict in results.items():
+            if results_dict is not None:
+                display(Markdown(f'### {results_key.capitalize()} results:'))
+                display(results_dict)
 
 
 CV_RESULTS_KEY_PATTERNS = ['mean_test_{name}', 'std_test_{name}', 'rank_test_{name}']
@@ -1407,10 +1450,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     cv_df = pd.concat(cv_series_or_dfs, axis=1)
 
     if results is not None:
-        for results_key, results_dict in results.items():
-            if results_dict is not None:
-                display(Markdown(f'### {results_key.capitalize()} results:'))
-                display(results_dict)
+        print_results_dict(results)
 
     if scoring_names:
         n_score_funcs = len(scoring_names)
@@ -1450,8 +1490,8 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
     fitness_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_.named_steps['fitness'])  # type: ignore
 
-    if fitness_model.train_losses or fitness_model.val_losses:
-        plot_loss_curves(fitness_model.train_losses, fitness_model.val_losses, 'Fitness model loss curve', title_note=title_note)
+    if fitness_model.losses:
+        plot_loss_curves(fitness_model.losses, 'Fitness model loss curve', title_note=title_note)
 
     if dispaly_weights_histogram:
         fc1 = typing.cast(torch.nn.Linear, fitness_model.model.fc1)

@@ -413,6 +413,8 @@ DEFAULT_TRAIN_KWARGS = {
     'lr_scheduler_factor': 0.5,
     'lr_scheduler_patience': None,
     'lr_scheduler_threshold': None,
+    'lr_scheduler_threshold_mode': 'abs',
+    'lr_scheduler_verbose': False,
     'random_seed': 33,
 }
 
@@ -445,7 +447,7 @@ class SklearnFitnessWrapper:
         self.fitness_wrapper_kwargs = {}
         self.fitness_wrapper_kwarg_keys = fitness_wrapper_kwarg_keys
 
-        self.losses = {}
+        self.losses = defaultdict(list)  # type: ignore
         self.init_model = True
 
         self.set_params(**params)
@@ -501,9 +503,7 @@ class SklearnFitnessWrapper:
             self.model, losses = train_and_validate_model(self.model, X, **self.train_kwargs)
 
         for key, value in losses.items():
-            if key not in self.losses:
-                self.losses[key] = []
-            self.losses[key].extend(value)
+            self.losses[key].extend(value) # type: ignore
 
         return self
 
@@ -768,6 +768,7 @@ def train_and_validate_model_weighted_sampling(
     use_lr_scheduler: bool = False, lr_scheduler_class: typing.Callable = torch.optim.lr_scheduler.ReduceLROnPlateau,
     lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
     lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
+    lr_scheduler_threshold_mode: str = 'abs', lr_scheduler_verbose: bool = False,
     num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
     ) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
@@ -784,7 +785,11 @@ def train_and_validate_model_weighted_sampling(
             lr_scheduler_patience = patience_epochs // 2
         if lr_scheduler_threshold is None:
             lr_scheduler_threshold = patience_threshold
-        scheduler = lr_scheduler_class(optimizer, lr_scheduler_mode, factor=lr_scheduler_factor, patience=lr_scheduler_patience, threshold=lr_scheduler_threshold)
+        scheduler = lr_scheduler_class(
+            optimizer, lr_scheduler_mode,
+            factor=lr_scheduler_factor, patience=lr_scheduler_patience,
+            threshold=lr_scheduler_threshold, threshold_mode=lr_scheduler_threshold_mode,
+            verbose=lr_scheduler_verbose)
 
     if split_validation_from_train and val_data is None:
         train_data, val_data = train_data.split_train_test(training_prop=DEFAULT_TRAINING_PROP, random_seed=random_seed)  # type: ignore
@@ -923,6 +928,7 @@ def train_and_validate_model(model: nn.Module,
     use_lr_scheduler: bool = False, lr_scheduler_class: typing.Callable = torch.optim.lr_scheduler.ReduceLROnPlateau,
     lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
     lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
+    lr_scheduler_threshold_mode: str = 'abs', lr_scheduler_verbose: bool = False,
     batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33,
     **kwargs) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
@@ -939,7 +945,11 @@ def train_and_validate_model(model: nn.Module,
             lr_scheduler_patience = patience_epochs // 2
         if lr_scheduler_threshold is None:
             lr_scheduler_threshold = patience_threshold
-        scheduler = lr_scheduler_class(optimizer, lr_scheduler_mode, factor=lr_scheduler_factor, patience=lr_scheduler_patience, threshold=lr_scheduler_threshold)
+        scheduler = lr_scheduler_class(
+            optimizer, lr_scheduler_mode,
+            factor=lr_scheduler_factor, patience=lr_scheduler_patience,
+            threshold=lr_scheduler_threshold, threshold_mode=lr_scheduler_threshold_mode,
+            verbose=lr_scheduler_verbose)
 
     if split_validation_from_train and val_data is None:
         train_data, val_data = train_test_split(train_data, random_state=random_seed, train_size=DEFAULT_TRAINING_PROP)  # type: ignore
@@ -1064,7 +1074,7 @@ def train_and_validate_model(model: nn.Module,
 
     model = best_model.to(device)
 
-    return model, {k: v for k, v in losses.items()}
+    return model, losses
 
 
 def _get_batch_loss(model: torch.nn.Module, loss_function: typing.Callable,
@@ -1076,9 +1086,9 @@ def _get_batch_loss(model: torch.nn.Module, loss_function: typing.Callable,
     if k != X.shape[1] - 1:
         negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
         indices = torch.cat((torch.tensor([0]), negative_indices))
-        X = X[:, indices].to(device)
+        X = X[:, indices]
 
-    scores = model(X)
+    scores = model(X.to(device))
     loss = loss_function(scores, **loss_function_kwargs)
     return loss
 
@@ -1402,11 +1412,16 @@ def plot_loss_curves(losses: typing.Dict[str, typing.List[float]],
     plt.show()
 
 
-def print_results_dict(results: typing.Dict[str, typing.Dict[str, typing.Any]]):
-    for results_key, results_dict in results.items():
-            if results_dict is not None:
-                display(Markdown(f'### {results_key.capitalize()} results:'))
-                display(results_dict)
+def print_results_dict(results: typing.Dict[str, typing.Dict[str, typing.Any]],
+                       results_keys: typing.Optional[typing.List[str]] = None):
+    if results_keys is None:
+        results_keys = list(results.keys())
+
+    for results_key in results_keys:
+        results_dict = results[results_key]
+        if results_dict is not None:
+            display(Markdown(f'### {results_key.capitalize()} results:'))
+            display(results_dict)
 
 
 CV_RESULTS_KEY_PATTERNS = ['mean_test_{name}', 'std_test_{name}', 'rank_test_{name}']

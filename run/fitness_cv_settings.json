@@ -1,0 +1,23 @@
+{
+    "param_grid": {
+        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__lr": [4e-3, 1e-3, 3e-4],
+        "fitness__k": [256, 512, 1024],
+        "fitness__batch_size": [1, 2, 4, 8, 16]
+    },
+    "train_kwargs": {
+        "n_epochs": 20000,
+        "patience_epochs": 200,
+        "use_lr_scheduler": false,
+        "shuffle_negatives": true,
+        "split_validation_from_train": true,
+        "evaluate_opposite_shuffle_mode": false,
+        "full_dataset_on_device": true,
+        "bias_init_margin_ratio": 0.01,
+        "negative_score_reduction": "none"
+    },
+    "cv_kwargs": {
+        "refit": "loss",
+        "error_score": "raise"
+    }
+}

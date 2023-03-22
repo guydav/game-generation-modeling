@@ -456,7 +456,7 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
             self.undefined_count += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        print(self.defined_count, self.undefined_count)
+        # print(self.defined_count, self.undefined_count)
         if self.defined_count == 0:
             return 0
 
@@ -495,7 +495,7 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
             self.used_variables.add((term, var_def.parseinfo.rule, var_def.parseinfo.pos))
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        print(self.defined_variables, self.used_variables, self.variable_definition_repeated)
+        # print(self.defined_variables, self.used_variables, self.variable_definition_repeated)
         if len(self.defined_variables) == 0 or self.variable_definition_repeated:
             return 0
 
@@ -1381,7 +1381,7 @@ class NoTwoNumberOperations(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_operations == 0:
-            return 1
+            return 0
 
         return self.two_number_operations > 0
 
@@ -2164,6 +2164,29 @@ if __name__ == '__main__':
     global_zero_std = df.std(numeric_only=True) == 0
     global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore
     logging.debug(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
+
+
+    zero_sum_features = []
+    positive_sum_features = []
+
+    for feature in df.columns:
+        if not pd.api.types.is_numeric_dtype(df[feature]):
+            continue
+
+        if any(x in feature for x in ('arg_types', 'predicate_under_modal', 'max_number', 'max_quantification',
+                                      'compositionality_structure', 'depth', 'node_count', 'length_of_then')):
+            continue
+
+        if df.loc[df.real == True, feature].sum() == 0:
+            zero_sum_features.append(feature)
+        else:
+            positive_sum_features.append(feature)
+
+    zero_sum_features_str = '\n'.join([f'    - {feature}' for feature in zero_sum_features])
+    logging.debug(f'The following features have zero sum over the real games:\n{zero_sum_features_str}\n')
+
+    positive_sum_features_str = '\n'.join([f'    - {feature}' for feature in positive_sum_features])
+    logging.debug(f'The following features have positive sum over the real games:\n{positive_sum_features_str}\n')
 
     logging.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')

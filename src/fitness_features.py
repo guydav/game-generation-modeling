@@ -2174,7 +2174,7 @@ if __name__ == '__main__':
             continue
 
         if any(x in feature for x in ('arg_types', 'predicate_under_modal', 'max_number', 'max_quantification',
-                                      'compositionality_structure', 'depth', 'node_count', 'length_of_then')):
+                                      'compositionality_structure', 'depth', 'node_count', 'length_of_then', 'ast_ngram')):
             continue
 
         if df.loc[df.real == True, feature].sum() == 0:

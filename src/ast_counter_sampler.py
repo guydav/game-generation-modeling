@@ -19,7 +19,7 @@ import string
 import sys
 
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file
+from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES
 import room_and_object_types
 
@@ -874,22 +874,6 @@ class ASTSampler:
             return output
 
         return output, None
-
-
-def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[typing.Dict, typing.Set, int]]:
-    context_new = {}
-
-    for k, v in context.items():
-        if isinstance(v, dict):
-            context_new[k] = dict(v)
-        elif isinstance(v, set):
-            context_new[k] = set(v)
-        elif isinstance(v, int):
-            context_new[k] = v
-        else:
-            raise ValueError('Unexpected value')
-
-    return context_new
 
 
 class ASTNodeInfo(typing.NamedTuple):

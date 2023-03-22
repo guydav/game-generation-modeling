@@ -234,3 +234,19 @@ def find_selectors_from_root(parent_mapping: typing.Dict[tatsu.infos.ParseInfo, 
         selectors = selector + selectors
 
     return selectors
+
+
+def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[typing.Dict, typing.Set, int]]:
+    context_new = {}
+
+    for k, v in context.items():
+        if isinstance(v, dict):
+            context_new[k] = dict(v)
+        elif isinstance(v, set):
+            context_new[k] = set(v)
+        elif isinstance(v, (int, float, str, tuple)):
+            context_new[k] = v
+        else:
+            raise ValueError(f'Unexpected value type: {v}, {type(v)}')
+
+    return context_new

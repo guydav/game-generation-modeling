@@ -28,7 +28,7 @@ from ast_parser import VariableDefinition, extract_variables_from_ast, update_co
     VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY
 import ast_parser
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file
+from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures, NGRAM_SCORE_PATTERN
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser, DEFAULT_N_BY_SECTION
 import room_and_object_types
@@ -383,7 +383,7 @@ class ASTFitnessFeaturizer:
                     regex_term.update(ast, rule, context)
 
             # Perform other context updates for children
-            child_context = context.copy()
+            child_context = simplified_context_deepcopy(context)  # .copy()
             child_context[DEPTH_CONTEXT_KEY] += 1  # type: ignore
 
             if ast.parseinfo.rule in ('scoring_external_maximize', 'scoring_external_minimize'):

@@ -31,7 +31,8 @@ BINARIZE_IGNORE_FEATURES = set([
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
-    'two_number_operation_found', 'tautological_expression_found', 'redundant_expression_found',
+    'two_number_operation_found', 'tautological_expression_found',
+    'redundant_expression_found', 'identical_consecutive_seq_func_predicates_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [
@@ -49,8 +50,8 @@ BINARIZE_IGNORE_PATTERNS = [
 BINARIZE_NON_ONE = [
 ]
 
-NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
-NGRAM_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+NGRAM_SCORE_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_score$')
+NGRAM_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+$')
 ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
@@ -222,11 +223,11 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if c in BINARIZE_NON_ONE:
                     row[c] = 1 if v == 1 else 0
 
-                if c in self.scale_series_min_max_values:
+                elif c in self.scale_series_min_max_values:
                     min_val, max_val = self.scale_series_min_max_values[c]
                     row[c] = (v - min_val) / (max_val - min_val)
 
-                if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
+                elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
                     row[c] = 1 if v != 0 else 0
 
             else:

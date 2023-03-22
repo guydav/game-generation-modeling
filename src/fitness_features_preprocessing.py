@@ -49,8 +49,8 @@ BINARIZE_IGNORE_PATTERNS = [
 BINARIZE_NON_ONE = [
 ]
 
-NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
-NGRAM_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+NGRAM_SCORE_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_score$')
+NGRAM_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+$')
 ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
@@ -222,11 +222,11 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if c in BINARIZE_NON_ONE:
                     row[c] = 1 if v == 1 else 0
 
-                if c in self.scale_series_min_max_values:
+                elif c in self.scale_series_min_max_values:
                     min_val, max_val = self.scale_series_min_max_values[c]
                     row[c] = (v - min_val) / (max_val - min_val)
 
-                if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
+                elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
                     row[c] = 1 if v != 0 else 0
 
             else:

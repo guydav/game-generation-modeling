@@ -151,13 +151,39 @@ class EvolutionarySampler():
             # - if a node is an element of a list, then the last entry of its selector will be an integer (since
             #   we need to index into that list to get the node)
             # - similarly, the first entry of the selector will yield a list when applied to the parent
-            valid_nodes = [(parent, selector[0]) for _, parent, selector, _, _, _, _ in self.regrowth_sampler.parent_mapping.values() 
-                           if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)]
+            valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context 
+                                    in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
 
-            for parent, selector in valid_nodes:
-                print(selector)
-                print(f"Parent of list: {ast_printer.ast_to_string(parent)}")
-                exit()
+            for parent, selector, section, global_context, local_context in valid_nodes:
+                print(f"\nParent of list: {ast_printer.ast_section_to_string(parent, str(section))}")
+
+                parent_rule = parent.parseinfo.rule # type: ignore
+                parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+                assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
+                
+                # Determine whether we're sampling a rule or a token (for this case, it'll always be one or the other 100% of the time)
+                if parent_rule_posterior_dict['type_posterior']['rule'] == 1:
+                    new_rule = self.initial_sampler.sample(parent_rule, global_context, local_context)[0]
+                    print(f"\tNew rule: {ast_printer.ast_section_to_string(new_rule, section)}")
+
+                elif parent_rule_posterior_dict['type_posterior']['token'] == 1:
+                    pass
+
+                else:
+                    raise Exception("Invalid type posterior")
+
+            print(f"\n\n\n" + ast_printer.ast_to_string(game, '\n'))
+            exit()
+
+            valid_nodes = []
+            used_parents = set()
+
+            for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
+                # Check to make sure that the parent of the node is a list (so the last selector will be an int to index into the list)
+                if isinstance(parent[selector[0]], list) and isinstance(selector[-1], int):
+
+                    parent_rule = parent.parseinfo.rule
+                    parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
 
             # game_nodes = [self.regrowth_sampler.parent_mapping[idx][0] for idx in self.regrowth_sampler.]
 

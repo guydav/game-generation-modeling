@@ -954,6 +954,30 @@ class RedundantBooleanExpression(BooleanLogicTerm):
         return self.redundancy_found
 
 
+class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
+    def __init__(self):
+        super().__init__(('then',), 'identical_consecutive_seq_func_predicates_found')
+        self.boolean_parser = BOOLEAN_PARSER
+
+    def game_start(self) -> None:
+        self.boolean_parser.game_start()
+        self.identical_predicates_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            preds = []
+            for seq_func in ast.then_funcs:  # type: ignore
+                s = seq_func.seq_func
+                pred_key = [k for k in s.keys() if k.endswith('_pred')][0]
+                preds.append(str(self.boolean_parser(s[pred_key], **context)))  # type: ignore
+
+            if any(preds[i] == preds[i + 1] for i in range(len(preds) - 1)):
+                self.identical_predicates_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.identical_predicates_found
+
+
 class PrefForallTerm(FitnessTerm):
     pref_forall_found: bool = False
     pref_forall_prefs: typing.Set[str] = set()
@@ -1977,6 +2001,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     redundant_boolean_expression = RedundantBooleanExpression()
     fitness.register(redundant_boolean_expression)
+
+    identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
+    fitness.register(identical_consecutive_predicates)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used)

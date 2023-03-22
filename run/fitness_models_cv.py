@@ -34,6 +34,8 @@ parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
 parser.add_argument('--cv-settings-json', type=str, default=os.path.join(os.path.dirname(__file__), 'fitness_cv_settings.json'))
+parser.add_argument('--no-save-full-model', action='store_true')
+parser.add_argument('--full-model-without-test', action='store_true')
 
 
 def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float) -> typing.List[str]:
@@ -115,12 +117,25 @@ def main(args: argparse.Namespace):
         random_seed=args.random_seed,
         )
 
-    utils.print_results_dict(results, notebook=False)
+    logging.info(f'Best params: {cv.best_params_}')
+
+    utils.visualize_cv_outputs(cv, train_tensor, test_tensor, results, notebook=False)
     cv.scorer_ = None
     cv.scoring = None
 
     output_data = dict(cv=cv, train_tensor=train_tensor, test_tensor=test_tensor, results=results, feature_columns=feature_columns)
     utils.save_data(output_data, folder=args.output_folder, name=args.output_name, relative_path=args.output_relative_path)
+
+    if not args.no_save_full_model:
+        logging.debug('Saving full model')
+        if not args.full_model_without_test:
+            logging.debug('Fitting full model with entire dataset (including test data)')
+            full_tensor = utils.df_to_tensor(fitness_df, feature_columns)
+            cv.best_estimator_['fitness'].train_kwargs['split_validation_from_train'] = False  # type: ignore
+            cv.best_estimator_.fit(full_tensor)  # type: ignore
+            print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
+
+        utils.save_model_and_feature_columns(cv, feature_columns)
 
 
 if __name__ == '__main__':

@@ -217,20 +217,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
             raise ValueError('Must call preprocess_df before preprocess_row')
 
         for c in self.columns:
-            if c in row and row[c] is not None:
-                v = row[c]
-
-                if c in BINARIZE_NON_ONE:
-                    row[c] = 1 if v == 1 else 0
-
-                elif c in self.scale_series_min_max_values:
-                    min_val, max_val = self.scale_series_min_max_values[c]
-                    row[c] = (v - min_val) / (max_val - min_val)
-
-                elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
-                    row[c] = 1 if v != 0 else 0
-
-            else:
+            if c not in row or row[c] is None:
                 missing_value_function = None
                 if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
                     missing_value_function = COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION[c]
@@ -248,6 +235,18 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                     row[c] = missing_value_function(None, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
                 else:
                     row[c] = missing_value_function(None, epsilon=self.missing_value_epsilon)
+
+            v = row[c]
+
+            if c in BINARIZE_NON_ONE:
+                row[c] = 1 if v == 1 else 0
+
+            elif c in self.scale_series_min_max_values:
+                min_val, max_val = self.scale_series_min_max_values[c]
+                row[c] = (v - min_val) / (max_val - min_val)
+
+            elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
+                row[c] = 1 if v != 0 else 0
 
         return row
 

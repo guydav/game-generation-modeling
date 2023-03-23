@@ -1,9 +1,9 @@
 {
     "param_grid": {
         "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
-        "fitness__lr": [4e-3, 1e-3, 3e-4],
+        "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
-        "fitness__batch_size": [1, 2, 4, 8, 16]
+        "fitness__batch_size": [1, 2, 4]
     },
     "train_kwargs": {
         "n_epochs": 20000,
@@ -17,7 +17,21 @@
         "negative_score_reduction": "none"
     },
     "cv_kwargs": {
-        "refit": "loss",
+        "refit": "overall_ecdf",
         "error_score": "raise"
+    },
+
+    "param_grid_minimal": {
+        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__lr": [4e-3],
+        "fitness__k": [1024],
+        "fitness__batch_size": [4]
+    },
+
+    "param_grid_full": {
+        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__lr": [4e-3, 1e-3, 3e-4],
+        "fitness__k": [256, 512, 1024],
+        "fitness__batch_size": [1, 2, 4, 8, 16]
     }
 }

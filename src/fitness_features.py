@@ -967,6 +967,10 @@ class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST):
             preds = []
             for seq_func in ast.then_funcs:  # type: ignore
+                if isinstance(seq_func, str):
+                    preds.append(seq_func)
+                    continue
+
                 s = seq_func.seq_func
                 pred_key = [k for k in s.keys() if k.endswith('_pred')][0]
                 preds.append(str(self.boolean_parser(s[pred_key], **context)))  # type: ignore
@@ -2201,7 +2205,7 @@ if __name__ == '__main__':
             continue
 
         if any(x in feature for x in ('arg_types', 'predicate_under_modal', 'max_number', 'max_quantification',
-                                      'compositionality_structure', 'depth', 'node_count', 'length_of_then')):
+                                      'compositionality_structure', 'depth', 'node_count', 'length_of_then', 'ast_ngram')):
             continue
 
         if df.loc[df.real == True, feature].sum() == 0:

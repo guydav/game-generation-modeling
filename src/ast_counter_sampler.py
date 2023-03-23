@@ -248,7 +248,8 @@ def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_
         else:
             rng = global_context['rng']
 
-        valid_vars = set(value_posterior.keys()) - set(local_context['variables'].keys())
+        # This is a bit of a hack, but it's the easiest way to make sure we don't sample a variable that's already been used
+        valid_vars = set(value_posterior.keys()) - set([v if v.startswith('?') else '?' + v for v in local_context['variables'].keys()])
 
         if len(valid_vars) == 0:
             raise SamplingException('No valid variables left to sample')

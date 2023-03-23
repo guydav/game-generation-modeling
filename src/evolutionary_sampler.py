@@ -133,7 +133,7 @@ class EvolutionarySampler():
         self.population = [samples[i] for i in top_indices]
         self.fitness_values = [scores[i] for i in top_indices]
 
-    def insert_delete_step(self):
+    def insert_delete_step(self, insert_prob=0.5, delete_prob=0.5):
         '''
         Perform an evolutionary step by mutating each member of the population. Each mutation consists of
         an independent probability of:
@@ -141,6 +141,8 @@ class EvolutionarySampler():
         - deleting an existing node if it is one of multiple children of its parent
         As with the beam step, the top n samples are selected to form the next generation
         '''
+
+        samples = self.population.copy()
 
         for game in self.population:
             self.regrowth_sampler.set_source_ast(game)
@@ -154,8 +156,14 @@ class EvolutionarySampler():
             valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context 
                                     in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
 
+            # Dedupe valid nodes based on their parent and selector
+            valid_node_dict = {}
             for parent, selector, section, global_context, local_context in valid_nodes:
-                print(f"\nParent of list: {ast_printer.ast_section_to_string(parent, str(section))}")
+                key = (*self.regrowth_sampler._ast_key(parent), selector)
+                if key not in valid_node_dict:
+                    valid_node_dict[key] = (parent, selector, section, global_context, local_context)
+            
+            for parent, selector, section, global_context, local_context in valid_node_dict.values():
 
                 parent_rule = parent.parseinfo.rule # type: ignore
                 parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
@@ -163,38 +171,60 @@ class EvolutionarySampler():
                 
                 # Determine whether we're sampling a rule or a token (for this case, it'll always be one or the other 100% of the time)
                 if parent_rule_posterior_dict['type_posterior']['rule'] == 1:
-                    new_rule = self.initial_sampler.sample(parent_rule, global_context, local_context)[0]
-                    print(f"\tNew rule: {ast_printer.ast_section_to_string(new_rule, section)}")
+
+                    # Check whether we're doing an insertion
+                    if self.regrowth_sampler.rng.random() < insert_prob:
+
+                        # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
+                        new_rule = posterior_dict_sample(self.regrowth_sampler.rng, parent_rule_posterior_dict['rule_posterior'])
+
+                        new_node = None
+                        while new_node is None:
+                            try:
+                                new_node = self.initial_sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
+
+                            except RecursionError:
+                                if self.verbose >= 2: print('Recursion error, skipping sample')
+
+                            except SamplingException:
+                                if self.verbose >= 2: print('Sampling exception, skipping sample')
+
+                        if isinstance(new_node, tuple):
+                            new_node = new_node[0]
+
+                        # Make a copy of the game
+                        new_game = copy.deepcopy(game)
+                        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+                        
+                        # Insert the new node into the parent at a random index
+                        new_parent[selector].insert(self.regrowth_sampler.rng.randint(len(new_parent[selector])+1), new_node) # type: ignore
+                        samples.append(new_game)
+
+                    # Check whether we're doing a deletion
+                    if self.regrowth_sampler.rng.random() < delete_prob:
+                        # Make a copy of the game
+                        new_game = copy.deepcopy(game)
+                        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+
+                        # Delete a random node from the parent
+                        del new_parent[selector][self.regrowth_sampler.rng.randint(len(new_parent[selector]))] # type: ignore
+                        samples.append(new_game)
 
                 elif parent_rule_posterior_dict['type_posterior']['token'] == 1:
-                    pass
+                    raise Exception("Encountered unexpected rule: parent of multiple children of type token")
 
                 else:
                     raise Exception("Invalid type posterior")
+                
+        # Score the new samples
+        scores = [self.fitness_function(sample) for sample in samples]
 
-            print(f"\n\n\n" + ast_printer.ast_to_string(game, '\n'))
-            exit()
+        # Select the top n samples
+        top_indices = np.argsort(scores)[-self.population_size:]
+        self.population = [samples[i] for i in top_indices]
+        self.fitness_values = [scores[i] for i in top_indices]
 
-            valid_nodes = []
-            used_parents = set()
 
-            for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
-                # Check to make sure that the parent of the node is a list (so the last selector will be an int to index into the list)
-                if isinstance(parent[selector[0]], list) and isinstance(selector[-1], int):
-
-                    parent_rule = parent.parseinfo.rule
-                    parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
-
-            # game_nodes = [self.regrowth_sampler.parent_mapping[idx][0] for idx in self.regrowth_sampler.]
-
-            # if a node is an element of a list, then the last entry of its selector will be an integer (since
-            # we need to index into that list to get the node)
-
-            # To sampler a child we need to know the rule. In the context of sampling a new entry of the list, the
-            # global and local context should be the same. 
-            # new_node = regrowth_sampler.sampler.sample(node.parseinfo.rule, global_context, local_context)[0]
-
-            # 
 
 
 if __name__ == '__main__':
@@ -203,12 +233,12 @@ if __name__ == '__main__':
     DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
     DEFUALT_RANDOM_SEED = 0
     # DEFAULT_NGRAM_MODEL_PATH = '../models/text_5_ngram_model_2023_02_17.pkl'
-    DEFAULT_NGRAM_MODEL_PATH = '../models/ast_7_ngram_model_2023_03_01.pkl'
+    DEFAULT_NGRAM_MODEL_PATH = './models/ast_7_ngram_model_2023_03_01.pkl'
 
     DEFAULT_ARGS = argparse.Namespace(
-        grammar_file=os.path.join('..', DEFAULT_GRAMMAR_FILE),
+        grammar_file=os.path.join('.', DEFAULT_GRAMMAR_FILE),
         parse_counter=False,
-        counter_output_path=os.path.join('..', DEFAULT_COUNTER_OUTPUT_PATH),
+        counter_output_path=os.path.join('.', DEFAULT_COUNTER_OUTPUT_PATH),
         random_seed=DEFUALT_RANDOM_SEED,
     )
 

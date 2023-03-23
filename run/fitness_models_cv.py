@@ -135,7 +135,7 @@ def main(args: argparse.Namespace):
             cv.best_estimator_.fit(full_tensor)  # type: ignore
             print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
 
-        utils.save_model_and_feature_columns(cv, feature_columns)
+        utils.save_model_and_feature_columns(cv, feature_columns, relative_path=args.output_relative_path)
 
 
 if __name__ == '__main__':

@@ -1075,7 +1075,7 @@ def train_and_validate_model(model: nn.Module,
 
         if validate:
             if shuffle_validation_negatives:
-                opposite_val_dataset = TensorDataset(val_data)
+                opposite_val_dataset = TensorDataset(val_data)  # type: ignore
             else:
                 opposite_val_dataset = NegativeShuffleDataset(val_data, shuffle_only_once=True)
 
@@ -1552,45 +1552,53 @@ CV_RESULTS_COLUMN_PATTERNS = ['{name}_mean', '{name}_std', '{name}_rank']
 def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     test_tensor: typing.Optional[torch.Tensor] = None,
     results: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = None,
+    display_metric_correlation_table: bool = True,
     display_by_ecdf: bool = True, display_by_game_rank: bool = True,
     display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
     title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
     dispaly_weights_histogram: bool = True, weights_histogram_title_base: str = 'Energy model weights',
     cv_key_patterns: typing.List[str] = CV_RESULTS_KEY_PATTERNS,
     cv_column_patterns: typing.List[str] = CV_RESULTS_COLUMN_PATTERNS,
+    cv_column_prefix: str = 'mean_test_', notebook: bool = True,
     ) -> None:
 
     if len(cv_key_patterns) != len(cv_column_patterns):
         raise ValueError(f'cv_key_patterns and cv_column_patterns must have the same length, but got {len(cv_key_patterns)} and {len(cv_column_patterns)} respectively.')
 
     scoring_names = cv.scorer_.names if hasattr(cv.scorer_, 'names') else []  # type: ignore
-    if scoring_names:
-        cv_series_or_dfs = [
-            pd.Series(cv.cv_results_[key_pattern.format(name=name)], name=column_pattern.format(name=name))
-            for (key_pattern, column_pattern) in zip(cv_key_patterns, cv_column_patterns)
-            for name in scoring_names
-        ]
-        cv_series_or_dfs.insert(0, pd.DataFrame(cv.cv_results_["params"]))  # type: ignore
 
-    else:
-        cv_series_or_dfs = [
-            pd.DataFrame(cv.cv_results_["params"]),
-            pd.Series(cv.cv_results_["mean_test_overall_ecdf"], name='ecdf_mean'),
-            pd.Series(cv.cv_results_["std_test_overall_ecdf"], name='ecdf_std'),
-            pd.Series(cv.cv_results_["rank_test_overall_ecdf"], name='ecdf_rank'),
-            pd.Series(cv.cv_results_["mean_test_single_game_rank"], name='game_rank_mean'),
-            pd.Series(cv.cv_results_["std_test_single_game_rank"], name='game_rank_std'),
-            pd.Series(cv.cv_results_["rank_test_single_game_rank"], name='game_rank_rank'),
-        ]
+    if not scoring_names:
+        scoring_names = [column.replace(cv_column_prefix, '') for column in cv.cv_results_.keys() if column.startswith(cv_column_prefix)]
+
+    cv_series_or_dfs = [
+        pd.Series(cv.cv_results_[key_pattern.format(name=name)], name=column_pattern.format(name=name))
+        for (key_pattern, column_pattern) in zip(cv_key_patterns, cv_column_patterns)
+        for name in scoring_names
+    ]
+    cv_series_or_dfs.insert(0, pd.DataFrame(cv.cv_results_["params"]))  # type: ignore
+
+    # cv_series_or_dfs = [
+    #     pd.DataFrame(cv.cv_results_["params"]),
+    #     pd.Series(cv.cv_results_["mean_test_overall_ecdf"], name='ecdf_mean'),
+    #     pd.Series(cv.cv_results_["std_test_overall_ecdf"], name='ecdf_std'),
+    #     pd.Series(cv.cv_results_["rank_test_overall_ecdf"], name='ecdf_rank'),
+    #     pd.Series(cv.cv_results_["mean_test_single_game_rank"], name='game_rank_mean'),
+    #     pd.Series(cv.cv_results_["std_test_single_game_rank"], name='game_rank_std'),
+    #     pd.Series(cv.cv_results_["rank_test_single_game_rank"], name='game_rank_rank'),
+    # ]
 
     cv_df = pd.concat(cv_series_or_dfs, axis=1)
 
     if results is not None:
-        print_results_dict(results)
+        print_results_dict(results, notebook=notebook)
 
-    if scoring_names:
+    if display_metric_correlation_table:
         n_score_funcs = len(scoring_names)
-        display(Markdown('### Rank (Spearman) correlations between metrics:'))
+        if notebook:
+            display(Markdown('### Rank (Spearman) correlations between metrics:'))
+        else:
+            logging.info('Rank (Spearman) correlations between metrics:')
+
         metrics_table = [[''] * n_score_funcs for _ in range(n_score_funcs)]
 
         for first_index, second_index in combinations(range(n_score_funcs), 2):
@@ -1606,30 +1614,37 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         for index, name in enumerate(scoring_names):
             metrics_table[index].insert(0, f'**{name}**')
 
-        display(Markdown(tabulate(metrics_table, headers=[''] + scoring_names, tablefmt='github')))
+        table = tabulate(metrics_table, headers=[''] + scoring_names, tablefmt='github')
+        if notebook:
+            display(Markdown(table))
+        else:
+            logging.info(f'Metric correlation table:\n{table}')
 
-        for name in scoring_names:
+    for name in scoring_names:
+        if notebook:
             display(Markdown(f'### CV results by {name}:'))
             display(cv_df.sort_values(by=f'{name}_rank').head(10))
+        else:
+            logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
 
-    else:
-        if display_by_ecdf:
-            display(Markdown('### CV results by overall ECDF:'))
-            display(cv_df.sort_values(by='ecdf_rank').head(10))
+    # else:
+    #     if display_by_ecdf:
+    #         display(Markdown('### CV results by overall ECDF:'))
+    #         display(cv_df.sort_values(by='ecdf_rank').head(10))
 
-        if display_by_game_rank:
-            display(Markdown('### CV results by mean single game rank:'))
-            display(cv_df.sort_values(by='game_rank_rank').head(10))
+    #     if display_by_game_rank:
+    #         display(Markdown('### CV results by mean single game rank:'))
+    #         display(cv_df.sort_values(by='game_rank_rank').head(10))
 
-    if display_energy_histogram:
+    if notebook and display_energy_histogram:
         plot_energy_histogram(cv, train_tensor, test_tensor, histogram_title_base, title_note, histogram_log_y)
 
     fitness_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_.named_steps['fitness'])  # type: ignore
 
-    if fitness_model.losses:
+    if notebook and fitness_model.losses:
         plot_loss_curves(fitness_model.losses, 'Fitness model loss curve', title_note=title_note)
 
-    if dispaly_weights_histogram:
+    if notebook and dispaly_weights_histogram:
         fc1 = typing.cast(torch.nn.Linear, fitness_model.model.fc1)
         weights = fc1.weight.data.detach().numpy().squeeze()
         bias = fc1.bias.data.detach().numpy().squeeze()

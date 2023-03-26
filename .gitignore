@@ -14,5 +14,6 @@ data/ast-real-regrowth-samples-mmarco-minilm-embeddings.pt
 data/interactive-beta-gtr-t5-xl-embeddings.pt
 data/interactive-beta-mmarco-minilm-embeddings.pt
 dsl/ast-real-regrowth-samples-1024-old.pddl
+dsl/cache/ast-real-regrowth-samples-1024-cache.pkl.gz
 
 tmp/**/*

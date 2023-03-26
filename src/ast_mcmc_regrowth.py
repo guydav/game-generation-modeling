@@ -102,7 +102,7 @@ class MCMCRegrowthSampler:
                          initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None, postprocess: bool = True):
         sample_iter = tqdm.notebook.trange(n_samples) if should_tqdm else range(n_samples)
         for _ in sample_iter:
-            self.sample(verbose, initial_proposal, postprocess)
+            self.sample(verbose=verbose, initial_proposal=initial_proposal, postprocess=postprocess)
 
     def sample(self, verbose: int = 0, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None, postprocess: bool = True):
         initial_proposal_provided = initial_proposal is not None

@@ -3095,6 +3095,7 @@
                 (on rug ?c)
                 (agent_holds ?c)
                 (in_motion ?c)
+                (< (distance desk ?c) 1)
                 (exists (?c2 - (either blue_cube_block yellow_cube_block)) (and
                     (not (same_object ?c ?c2))
                     (< (distance ?c ?c2) 0.5)

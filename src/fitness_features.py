@@ -418,7 +418,7 @@ PREDICATE_OR_FUNCTION_TERM_PATTERN = re.compile(r'predicate_or_function[\w\d_]+t
 
 class VariableBasedFitnessTerm(FitnessTerm):
     def __init__(self, header: str):
-        super().__init__(('setup_statement', 'predicate', 'function', PREDICATE_OR_FUNCTION_TERM_PATTERN), header)
+        super().__init__(('setup_statement', 'predicate', 'function_eval', PREDICATE_OR_FUNCTION_TERM_PATTERN), header)
         self.variables = set()
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
@@ -912,7 +912,7 @@ class BooleanLogicTerm(FitnessTerm):
             return
 
         if isinstance(ast, tatsu.ast.AST):
-            expr = self.boolean_parser(ast, **context)
+            expr = self.boolean_parser(ast, **simplified_context_deepcopy(context))
             self._inner_update(expr, rule, context)  # type: ignore
 
     @abstractmethod
@@ -973,13 +973,52 @@ class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
 
                 s = seq_func.seq_func
                 pred_key = [k for k in s.keys() if k.endswith('_pred')][0]
-                preds.append(str(self.boolean_parser(s[pred_key], **context)))  # type: ignore
+                preds.append(str(self.boolean_parser(s[pred_key], **simplified_context_deepcopy(context))))  # type: ignore
 
             if any(preds[i] == preds[i + 1] for i in range(len(preds) - 1)):
                 self.identical_predicates_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.identical_predicates_found
+
+
+class ASTPredicateTermTracker(ast_parser.ASTParser):
+    def __call__(self, ast, **kwargs) -> typing.Set[str]:
+        self._default_kwarg(kwargs, 'terms', set())
+        super().__call__(ast, **kwargs)
+        return kwargs['terms']
+
+    def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
+        if ast.parseinfo.rule in ('predicate', 'function_eval'):  # type: ignore
+            kwargs['terms'].update(extract_predicate_function_args(ast))
+
+        return super()._handle_ast(ast, **kwargs)
+
+
+class DisjointSeqFuncPredicateTerm(FitnessTerm):
+    disjoint_found: bool
+    term_tracker: ASTPredicateTermTracker
+
+    def __init__(self):
+        super().__init__(('then',), 'disjoint_seq_funcs_found')
+        self.disjoint_found = False
+        self.term_tracker = ASTPredicateTermTracker()
+
+    def game_start(self) -> None:
+        self.disjoint_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        seq_func_terms = [self.term_tracker(seq_func) for seq_func in ast.then_funcs if not isinstance(seq_func, str)]  # type: ignore
+        seq_func_terms = [terms for terms in seq_func_terms if len(terms) > 0]
+
+        if len(seq_func_terms) > 1:
+            for i, j in itertools.combinations(range(len(seq_func_terms)), 2):
+                if len(seq_func_terms[i].intersection(seq_func_terms[j])) == 0:
+                    self.disjoint_found = True
+                    return
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.disjoint_found
 
 
 class PrefForallTerm(FitnessTerm):
@@ -1430,7 +1469,7 @@ class PredicateUnderModal(FitnessTerm):
     modal_to_predicate_map: typing.Dict[str, typing.Dict[str, bool]]
 
     def __init__(self, modals: typing.Sequence[str], predicates_or_functions: typing.Sequence[str],):
-        super().__init__(('predicate', 'function'), 'predicate_under_modal')
+        super().__init__(('predicate', 'function_eval'), 'predicate_under_modal')
         self.modals = set(modals)
         self.predicates_or_functions = set(predicates_or_functions)
         self.modal_to_predicate_map = {modal: {predicate_or_function: False for predicate_or_function in predicates_or_functions} for modal in modals}
@@ -2008,6 +2047,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)
+
+    disjoint_seq_funcs = DisjointSeqFuncPredicateTerm()
+    fitness.register(disjoint_seq_funcs)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used)

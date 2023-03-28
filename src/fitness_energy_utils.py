@@ -60,7 +60,8 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
 
 
 DEFAULT_SAVE_MODEL_NAME = 'cv_fitness_model'
-SAVE_MODEL_KEY = 'moodel'
+SAVE_MODEL_KEY = 'model'
+BUG_SAVE_MODEL_KEY = 'moodel'
 SAVE_FEATURE_COLUMNS_KEY = 'feature_columns'
 
 
@@ -94,6 +95,9 @@ def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MO
 
     with gzip.open(output_path, 'rb') as f:
         data = pickle.load(f)
+
+    if BUG_SAVE_MODEL_KEY in data:
+        return data[BUG_SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
 
     return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
 

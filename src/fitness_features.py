@@ -3,6 +3,7 @@ import argparse
 from datetime import datetime
 from collections import namedtuple, defaultdict
 import csv
+from enum import Enum
 import itertools
 import glob
 import gzip
@@ -1327,10 +1328,32 @@ PREDICATE_FUNCTION_ARITY_MAP = {
     'agent_crouches': 0, 'agent_holds': 1, 'between': 3, 'broken': 1,
     'building_size': 1, 'distance': 2, 'distance_side_3': 3, 'distance_side_4': 4,
     'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
-    'game_over': 0, 'game_start': 0, 'in':2, 'in_motion': 1, 'is_setup_object': 1,
+    'game_over': 0, 'game_start': 0, 'in': 2, 'in_motion': 1, 'is_setup_object': 1,
     'object_orientation': 2, 'on': 2, 'open': 1, 'opposite': 2, 'rug_color_under': 2,
     'same_color': 2, 'same_object': 2, 'same_type': 2, 'toggled_on': 1, 'touch': 2,
     'x_position': 1,
+}
+
+
+class PredicateArgumentSymmetryType(Enum):
+    ALL_ARGUMENTS = 0
+    FIRST_AND_THIRD_ARGUMENTS = 1
+
+
+SYMMETRIC_PREDICATE_ARG_INDICES = {
+    'adjacent': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'adjacent_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
+    'between': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
+    'distance': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'distance_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
+    'equal_x_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'equal_z_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'faces': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'opposite': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'same_color': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'same_object': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'same_type': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'touch': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
 }
 
 
@@ -1505,14 +1528,16 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
     # matching_argument_types_count: int = 0
     argument_types_to_count: typing.Dict[typing.Tuple[str, ...], int]
     argument_types_to_count_by_section: typing.Dict[str, typing.Dict[typing.Tuple[str, ...], int]]
-    predicate_or_function: str
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
+    predicate_or_function: str
+    symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType]
     type_categories: typing.Sequence[str]
 
     def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES,
         type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
+        symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType] = SYMMETRIC_PREDICATE_ARG_INDICES,
         ):
 
         super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
@@ -1524,12 +1549,10 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
         self.name_to_arity_map = name_to_arity_map
         self.known_missing_types = known_missing_types
         self.type_categories = list(sorted(type_categories))
+        self.symmetric_predicate_symmetry_types = symmetric_predicate_symmetry_types
 
         self.argument_types_to_count = defaultdict(int)
         self.argument_types_to_count_by_section = {ast_parser.SETUP: defaultdict(int), ast_parser.PREFERENCES: defaultdict(int)}
-
-        # if len(argument_type_categories) != self.name_to_arity_map[predicate_or_function]:
-        #     raise ValueError(f'Predicate {predicate_or_function} has arity {self.name_to_arity_map[predicate_or_function]} but {len(argument_type_categories)} argument types were provided')
 
     def game_start(self) -> None:
         # self.matching_argument_types_count = 0
@@ -1563,6 +1586,18 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
                 return
 
             for category_product in itertools.product(*term_categories):  # type: ignore
+                if name in self.symmetric_predicate_symmetry_types:
+                    symmetry_type = self.symmetric_predicate_symmetry_types[name]
+                    if symmetry_type == PredicateArgumentSymmetryType.ALL_ARGUMENTS:
+                        category_product = tuple(sorted(category_product))
+
+                    elif symmetry_type == PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS:
+                        if category_product[0] > category_product[2]:
+                            category_product = (category_product[2], category_product[1], category_product[0], *category_product[3:])
+
+                    else:
+                        raise ValueError(f'Unknown symmetry type {symmetry_type}')
+
                 self.argument_types_to_count[category_product] += 1
                 self.argument_types_to_count_by_section[context[SECTION_CONTEXT_KEY]][category_product] += 1  # type: ignore
 
@@ -1617,8 +1652,9 @@ PREDICATE_SECTIONS = [ast_parser.SETUP, ast_parser.PREFERENCES]
 
 def build_argument_types_fitness_terms(
     predicates: typing.Sequence[str] = COMMON_SENSE_PREDICATES_FUNCTIONS,
-    type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
-    predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP) -> typing.Sequence[FitnessTerm]:  # type: ignore
+    # type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
+    # predicate_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP
+    ) -> typing.Sequence[FitnessTerm]:
     fitness_terms = []
 
     # sorted_type_categories = list(sorted(type_categories))

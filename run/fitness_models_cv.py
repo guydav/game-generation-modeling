@@ -135,7 +135,12 @@ def main(args: argparse.Namespace):
             cv.best_estimator_.fit(full_tensor)  # type: ignore
             print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
 
-        utils.save_model_and_feature_columns(cv, feature_columns, relative_path=args.output_relative_path)
+        model_name = args.output_name
+        if 'fitness_sweep_' in model_name:
+            model_name = model_name.replace('fitness_sweep_', '')
+
+        model_name = f'{utils.DEFAULT_SAVE_MODEL_NAME}_{model_name}'
+        utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path)
 
 
 if __name__ == '__main__':

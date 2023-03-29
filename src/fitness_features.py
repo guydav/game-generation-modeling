@@ -900,8 +900,9 @@ BOOLEAN_LOGIC_IGNORE_PREFIXES = ('terminal_', 'scoring_')
 
 class BooleanLogicTerm(FitnessTerm):
     boolean_parser: ast_parser.ASTBooleanParser
-    def __init__(self, name: str, ignore_prefixes: typing.Sequence[str] = BOOLEAN_LOGIC_IGNORE_PREFIXES):
-        super().__init__(MULTI_BOOLEAN_RULE_PATTERN, name)
+    def __init__(self, name: str, ignore_prefixes: typing.Sequence[str] = BOOLEAN_LOGIC_IGNORE_PREFIXES,
+                 rules_or_pattern: typing.Union[typing.Sequence[str], typing.Pattern] = MULTI_BOOLEAN_RULE_PATTERN):
+        super().__init__(rules_or_pattern, name)
         self.boolean_parser = BOOLEAN_PARSER
         self.ignore_prefixes = ignore_prefixes
 
@@ -941,6 +942,24 @@ class TautologicalBooleanExpression(BooleanLogicTerm):
 class RedundantBooleanExpression(BooleanLogicTerm):
     def __init__(self):
         super().__init__('redundant_expression_found')
+        self.redundancy_found = False
+
+    def game_start(self) -> None:
+        super().game_start()
+        self.redundancy_found = False
+
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        if self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
+            self.redundancy_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.redundancy_found
+
+
+class RedundantBooleanScoringTerminalExpression(BooleanLogicTerm):
+    def __init__(self):
+        super().__init__('redundant_scoring_terminal_expression_found', rules_or_pattern=('terminal_and', 'terminal_or', 'terminal_comp', 'scoring_comparison'),
+                         ignore_prefixes=[])
         self.redundancy_found = False
 
     def game_start(self) -> None:
@@ -2080,6 +2099,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     redundant_boolean_expression = RedundantBooleanExpression()
     fitness.register(redundant_boolean_expression)
+
+    redundant_boolean_scoring_terminal_expression = RedundantBooleanScoringTerminalExpression()
+    fitness.register(redundant_boolean_scoring_terminal_expression)
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)

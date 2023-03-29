@@ -286,6 +286,7 @@ class ASTBooleanParser(ASTParser):
         self.false = self.algebra.parse('FALSE')
         self.whitespace_pattern = re.compile(r'\s+')
         self.variable_pattern = re.compile(r'\?[\w\d]+')
+        self.number_pattern = re.compile(r'-?\d*\.?\d+')
         # self.valid_symbol_names = list(''.join((l, d)) for d, l in itertools.product([''] + [str(x) for x in range(5)], string.ascii_lowercase,))
         self.game_start()
 
@@ -338,7 +339,7 @@ class ASTBooleanParser(ASTParser):
 
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs) -> boolean.Expression:
         rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
-        key = self.whitespace_pattern.sub(' ', ast_printer.ast_section_to_string(ast, f'(:{kwargs[SECTION_CONTEXT_KEY]}' if not kwargs[SECTION_CONTEXT_KEY].startswith('(:') else kwargs[SECTION_CONTEXT_KEY]))
+        key = self._ast_to_string_key(ast, **kwargs)
 
         if VARIABLES_CONTEXT_KEY in kwargs:
             variables_in_key = set(self.variable_pattern.findall(key))
@@ -411,11 +412,45 @@ class ASTBooleanParser(ASTParser):
         elif rule == 'super_predicate':
             expr = self(ast.pred, **kwargs)  # type: ignore
 
-        elif rule in ('function_comparison', 'predicate'):
-            # symbol_name = self.valid_symbol_names[self.next_symbol_name_index]
-            # self.next_symbol_name_index += 1
+        elif rule == 'predicate':
             symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '_')
             expr = boolean.Symbol(symbol_name)
+
+        elif rule in ('two_arg_comparison', 'multiple_args_equal_comparison', 'terminal_comp', 'scoring_comp', 'scoring_equals_comp'):
+            if 'comp_op' in ast:
+                op = ast.comp_op
+            elif 'op' in ast:
+                op = ast.op
+            else:
+                op = '='
+
+            if 'arg_1' in ast:
+                args = [ast.arg_1, ast.arg_2]
+            elif 'equal_comp_args' in ast:
+                args = ast.equal_comp_args
+            elif 'expr_1' in ast:
+                args = [ast.expr_1, ast.expr_2]
+            elif 'expr' in ast:
+                args = ast.expr
+                if not isinstance(args, list):
+                    args = [args]
+            else:
+                raise ValueError(f'No arguments found for comparison rule {rule}')
+
+            arg_strings = [self._ast_to_string_key(arg, **kwargs) for arg in args]  # type: ignore
+            if all(arg_string == arg_strings[0] for arg_string in arg_strings):
+                expr = self.algebra.TRUE if '=' in op else self.algebra.FALSE  # type: ignore
+
+            elif all(self.number_pattern.match(arg_string) for arg_string in arg_strings):
+                arg_numbers = [float(arg_string) for arg_string in arg_strings]
+                if op == '=':
+                    expr = self.algebra.TRUE if all(arg_number == arg_numbers[0] for arg_number in arg_numbers) else self.algebra.FALSE
+                else:
+                    expr = self.algebra.TRUE if eval(f'{arg_numbers[0]} {op} {arg_numbers[1]}') else self.algebra.FALSE
+
+            else:
+                symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '_')
+                expr = boolean.Symbol(symbol_name)
 
         else:
             keys = set(ast.keys())
@@ -431,6 +466,9 @@ class ASTBooleanParser(ASTParser):
         expr = typing.cast(boolean.Expression, expr)
         self.str_to_expression_mapping[key] = expr
         return expr
+
+    def _ast_to_string_key(self, ast, **kwargs):
+        return self.whitespace_pattern.sub(' ', ast_printer.ast_section_to_string(ast, f'(:{kwargs[SECTION_CONTEXT_KEY]}' if not kwargs[SECTION_CONTEXT_KEY].startswith('(:') else kwargs[SECTION_CONTEXT_KEY]))
 
 
 PREFERENCE_REPLACEMENT_PATTERN = 'preference{index}'

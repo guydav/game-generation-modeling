@@ -16,7 +16,7 @@ import ast_printer
 import ast_parser
 from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
-from ast_crossover_sampler import CrossoverSampler, CrossoverType
+from ast_crossover_sampler import ASTContextFixer, CrossoverType, node_info_to_key
 from ast_utils import *
 
 from fitness_ngram_models import NGramTrieModel, NGramTrieNode, NGramASTParser, ASTNGramTrieModel
@@ -43,9 +43,15 @@ class EvolutionarySampler():
 
         # Used to generate the initial population of complete games
         self.initial_sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
+        self.rng = self.initial_sampler.rng
         
         # Used as the mutation operator to modify existing games
-        self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed)
+        self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed, rng=self.rng)
+
+        # Used to fix the AST context after crossover / mutation
+        self.context_fixer = ASTContextFixer(self.initial_sampler.rules['variable_type_def']['var_names']['samplers']['variable'],
+                                             self.initial_sampler.local_context_propagating_rules,
+                                             self.rng)
 
         # Generate the initial population
         self.population = [self._gen_init_sample(idx) for idx in range(self.population_size)]
@@ -62,6 +68,13 @@ class EvolutionarySampler():
     
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
+
+    def _choice(self, iterable):
+        '''
+        Small hack to get around the rng invalid __array_struct__ error
+        '''
+        idx = self.rng.integers(len(iterable))
+        return iterable[idx]
 
     def _gen_init_sample(self, idx):
         '''
@@ -173,10 +186,10 @@ class EvolutionarySampler():
                 if parent_rule_posterior_dict['type_posterior']['rule'] == 1:
 
                     # Check whether we're doing an insertion
-                    if self.regrowth_sampler.rng.random() < insert_prob:
+                    if self.rng.random() < insert_prob:
 
                         # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
-                        new_rule = posterior_dict_sample(self.regrowth_sampler.rng, parent_rule_posterior_dict['rule_posterior'])
+                        new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
 
                         new_node = None
                         while new_node is None:
@@ -197,17 +210,17 @@ class EvolutionarySampler():
                         new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
                         
                         # Insert the new node into the parent at a random index
-                        new_parent[selector].insert(self.regrowth_sampler.rng.randint(len(new_parent[selector])+1), new_node) # type: ignore
+                        new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
                         samples.append(new_game)
 
                     # Check whether we're doing a deletion
-                    if self.regrowth_sampler.rng.random() < delete_prob:
+                    if self.rng.random() < delete_prob:
                         # Make a copy of the game
                         new_game = copy.deepcopy(game)
                         new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
 
                         # Delete a random node from the parent
-                        del new_parent[selector][self.regrowth_sampler.rng.randint(len(new_parent[selector]))] # type: ignore
+                        del new_parent[selector][self.rng.integers(len(new_parent[selector]))] # type: ignore
                         samples.append(new_game)
 
                 elif parent_rule_posterior_dict['type_posterior']['token'] == 1:
@@ -215,7 +228,9 @@ class EvolutionarySampler():
 
                 else:
                     raise Exception("Invalid type posterior")
-                
+        
+        # TODO: add cleanup step to add / remove predicates or variables in order to ensure agreement
+
         # Score the new samples
         scores = [self.fitness_function(sample) for sample in samples]
 
@@ -225,7 +240,63 @@ class EvolutionarySampler():
         self.fitness_values = [scores[i] for i in top_indices]
 
 
+    # TODO: add crossover step
+    def _crossover(self, game_1, game_2, crossover_type):
+        '''
+        Attempts to perform a crossover between the two given games. The crossover type determines
+        how nodes in the game are categorized (i.e. by rule, by parent rule, etc.). The crossover
+        is performed by finding the set of 'categories' that are present in both games, and then
+        selecting a random category from which to sample the nodes that will be exchanged. If no
+        categories are shared between the two games, then no crossover is performed
+        '''
 
+        # Create a map from crossover_type keys to lists of nodeinfos for each game
+        self.regrowth_sampler.set_source_ast(game_1)
+        game_1_crossover_map = defaultdict(list)
+        for node_info in self.regrowth_sampler.parent_mapping.values():
+            game_1_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
+
+        self.regrowth_sampler.set_source_ast(game_2)
+        game_2_crossover_map = defaultdict(list)
+        for node_info in self.regrowth_sampler.parent_mapping.values():
+            game_2_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
+
+        # Find the set of crossover_type keys that are shared between the two games
+        shared_crossover_keys = set(game_1_crossover_map.keys()).intersection(set(game_2_crossover_map.keys()))
+
+        # If there are no shared crossover keys, then throw an exception
+        if len(shared_crossover_keys) == 0:
+            raise SamplingException("No crossover keys shared between the two games")
+        
+        # Select a random crossover key and a nodeinfo for each game with that key
+        crossover_key = self.rng.choice(list(shared_crossover_keys))
+        game_1_selected_node_info = self._choice(game_1_crossover_map[crossover_key])
+        game_2_selected_node_info = self._choice(game_2_crossover_map[crossover_key])
+
+        # Apply the context fixer to both nodes
+        g1_node, g1_parent, g1_selector, _, _, g1_global_context, g1_local_context = game_1_selected_node_info
+        g2_node, g2_parent, g2_selector, _, _, g2_global_context, g2_local_context = game_2_selected_node_info
+
+        game_1_crossover_node = copy.deepcopy(g1_node)
+        self.context_fixer(game_1_crossover_node, global_context=g2_global_context, local_context=g2_local_context)
+
+        game_2_crossover_node = copy.deepcopy(g2_node)
+        self.context_fixer(game_2_crossover_node, global_context=g1_global_context, local_context=g1_local_context)
+
+        # Perform the crossover
+        game_1_copy = copy.deepcopy(game_1)
+        game_1_parent = self.regrowth_sampler.searcher(game_1_copy, parseinfo=g1_parent.parseinfo) # type: ignore
+        replace_child(game_1_parent, g1_selector, game_2_crossover_node) # type: ignore
+
+        game_2_copy = copy.deepcopy(game_2)
+        game_2_parent = self.regrowth_sampler.searcher(game_2_copy, parseinfo=g2_parent.parseinfo) # type: ignore
+        replace_child(game_2_parent, g2_selector, game_1_crossover_node) # type: ignore
+
+        return game_1_copy, game_2_copy
+
+
+
+    # TODO: add general step which can be used to combine the above steps
 
 if __name__ == '__main__':
 
@@ -255,6 +326,7 @@ if __name__ == '__main__':
     evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
 
     evosampler.insert_delete_step()
+    evosampler._crossover(evosampler.population[0], evosampler.population[1], CrossoverType.SAME_RULE)
     exit()
 
     for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):

@@ -924,7 +924,8 @@ class RegrowthSampler(ASTParentMapper):
     def __init__(self, sampler: typing.Union[ASTSampler, typing.Dict[str, ASTSampler]],
                  section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
                  depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
-                 seed: int = 0):
+                 seed: int = 0,
+                 rng: typing.Optional[np.random.Generator] = None):
         super().__init__()
         if isinstance(sampler, ASTSampler):
             sampler = dict(default=sampler)
@@ -937,7 +938,10 @@ class RegrowthSampler(ASTParentMapper):
         self.depth_weight_function = depth_weight_function
         self.seed = seed
 
-        self.rng = np.random.RandomState(seed)  # type: ignore
+        if rng is None:
+            rng = np.random.default_rng(seed)
+        self.rng = rng  # type: ignore
+        
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()
         self.searcher = ASTParseinfoSearcher()

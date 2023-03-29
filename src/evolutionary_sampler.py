@@ -239,8 +239,34 @@ class EvolutionarySampler():
         self.population = [samples[i] for i in top_indices]
         self.fitness_values = [scores[i] for i in top_indices]
 
+    def crossover_step(self, crossover_type):
+        '''
+        Performs crossover between members of the population. Currently, we'll generate crossover
+        pairs for every valid pair of games in the population and then select the top n samples.
 
-    # TODO: add crossover step
+        But we should probably make a more efficient selection scheme (i.e. fitness-proportional or
+        rank-based)
+        '''
+
+        samples = self.population.copy()
+        for i in range(len(self.population)):
+            for j in range(i+1, len(self.population)):
+                try:
+                    new_game_1, new_game_2 = self._crossover(self.population[i], self.population[j], crossover_type)
+                    samples.append(new_game_1)
+                    samples.append(new_game_2)
+
+                except SamplingException:
+                    if self.verbose >= 2: print('Sampling exception, skipping crossover')
+
+        # Score the new samples
+        scores = [self.fitness_function(sample) for sample in samples]
+
+        # Select the top n samples
+        top_indices = np.argsort(scores)[-self.population_size:]
+        self.population = [samples[i] for i in top_indices]
+        self.fitness_values = [scores[i] for i in top_indices]
+
     def _crossover(self, game_1, game_2, crossover_type):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
@@ -253,12 +279,14 @@ class EvolutionarySampler():
         # Create a map from crossover_type keys to lists of nodeinfos for each game
         self.regrowth_sampler.set_source_ast(game_1)
         game_1_crossover_map = defaultdict(list)
-        for node_info in self.regrowth_sampler.parent_mapping.values():
+        for node_key in self.regrowth_sampler.node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
             game_1_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
 
         self.regrowth_sampler.set_source_ast(game_2)
         game_2_crossover_map = defaultdict(list)
-        for node_info in self.regrowth_sampler.parent_mapping.values():
+        for node_key in self.regrowth_sampler.node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
             game_2_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
 
         # Find the set of crossover_type keys that are shared between the two games
@@ -325,7 +353,7 @@ if __name__ == '__main__':
 
     evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
 
-    evosampler.insert_delete_step()
+    evosampler.crossover_step(CrossoverType.SAME_RULE)
     evosampler._crossover(evosampler.population[0], evosampler.population[1], CrossoverType.SAME_RULE)
     exit()
 

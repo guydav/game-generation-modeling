@@ -32,8 +32,8 @@ BINARIZE_IGNORE_FEATURES = set([
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
     'two_number_operation_found', 'tautological_expression_found',
-    'redundant_expression_found', 'identical_consecutive_seq_func_predicates_found',
-    'disjoint_seq_funcs_found',
+    'redundant_expression_found', 'redundant_scoring_terminal_expression_found',
+    'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [
@@ -143,7 +143,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 min_val, max_val = series.min(), series.max()
                 self.scale_series_min_max_values[c] = (min_val, max_val)
 
-            return (series - min_val) / (max_val - min_val)
+            return np.clip((series - min_val) / (max_val - min_val), 0, 1)
 
         if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
             return (series != 0).astype(int)
@@ -244,7 +244,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
             elif c in self.scale_series_min_max_values:
                 min_val, max_val = self.scale_series_min_max_values[c]
-                row[c] = (v - min_val) / (max_val - min_val)
+                row[c] = np.clip((v - min_val) / (max_val - min_val), 0, 1)
 
             elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
                 row[c] = 1 if v != 0 else 0

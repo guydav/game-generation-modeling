@@ -59,17 +59,19 @@ def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
     return fitness_df
 
 
+MODELS_FOLDER = 'models'
 DEFAULT_SAVE_MODEL_NAME = 'cv_fitness_model'
 SAVE_MODEL_KEY = 'model'
 BUG_SAVE_MODEL_KEY = 'moodel'
 SAVE_FEATURE_COLUMNS_KEY = 'feature_columns'
 
 
-def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.List[str], name: str = DEFAULT_SAVE_MODEL_NAME, relative_path: str = '..'):
-    save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder='models', name=name, relative_path=relative_path)
+def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.List[str], name: str = DEFAULT_SAVE_MODEL_NAME,
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER):
+    save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder=folder, name=name, relative_path=relative_path)
 
 
-def save_data(data_dict: typing.Dict[str, typing.Any], folder: str, name: str, relative_path: str = '..'):
+def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..'):
     output_path = f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
 
     i = 0
@@ -85,21 +87,28 @@ def save_data(data_dict: typing.Dict[str, typing.Any], folder: str, name: str, r
 
     logging.debug(f'Saving data to {output_path} ...')
     with gzip.open(output_path, 'wb') as f:
-        pickle.dump(data_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MODEL_NAME, relative_path: str = '..') -> typing.Tuple[GridSearchCV, typing.List[str]]:
-    output_path = f'{relative_path}/models/{name}_{date_and_id}.pkl.gz'
+def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MODEL_NAME,
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER) -> typing.Tuple[GridSearchCV, typing.List[str]]:
+    data = load_data(date_and_id, folder, name, relative_path)
+
+    if BUG_SAVE_MODEL_KEY in data:
+        return data[BUG_SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
+
+    return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
+
+
+def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
+    output_path = f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz'
     if not os.path.exists(output_path):
         raise FileNotFoundError(f'No model found at {output_path}')
 
     with gzip.open(output_path, 'rb') as f:
         data = pickle.load(f)
 
-    if BUG_SAVE_MODEL_KEY in data:
-        return data[BUG_SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
-
-    return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
+    return data
 
 
 DEFAULT_RANDOM_SEED = 33

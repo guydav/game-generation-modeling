@@ -1,6 +1,7 @@
 import argparse
 import gzip
-import multiprocessing
+import logging
+from multiprocessing import pool as mpp
 import os
 import pickle
 import typing
@@ -23,6 +24,36 @@ from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energ
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
+
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.DEBUG,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+
+def istarmap(self, func, iterable, chunksize=1):
+    """starmap-version of imap
+    """
+    self._check_running()
+    if chunksize < 1:
+        raise ValueError(
+            "Chunksize must be 1+, not {0:n}".format(
+                chunksize))
+
+    task_batches = mpp.Pool._get_tasks(func, iterable, chunksize)  # type: ignore
+    result = mpp.IMapIterator(self)
+    self._taskqueue.put(
+        (
+            self._guarded_task_generation(result._job,  # type: ignore
+                                          mpp.starmapstar,  # type: ignore
+                                          task_batches),
+            result._set_length  # type: ignore
+        ))
+    return (item for chunk in result for item in chunk)
+
+
+mpp.Pool.istarmap = istarmap  # type: ignore
 
 
 parser = argparse.ArgumentParser(description='MCMC Regrowth Sampler')
@@ -159,25 +190,26 @@ class MCMCRegrowthSampler:
                                   postprocess: typing.Optional[bool] = None, n_workers: int = 8,
                                   chunksize: int = 1, notebook_tqdm: bool = False):
 
-        with multiprocessing.Pool(n_workers) as pool:
+        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        with mpp.Pool(n_workers) as pool:
             if initial_proposals is None:
                 initial_proposals = [None] * n_samples_per_initial_proposal  # type: ignore
             else:
                 initial_proposals = [proposal for proposal in initial_proposals for _ in range(n_samples_per_initial_proposal)]
 
             sample_param_iter = zip(range(len(initial_proposals)), initial_proposals, [verbose] * len(initial_proposals), [postprocess] * len(initial_proposals))  # type: ignore
-            progress_bar = None
+            samples = {}
+
+            pool_iter = pool.istarmap(self._generate_sample_parallel, sample_param_iter, chunksize=chunksize)  # type: ignore
+
             if should_tqdm:
                 if notebook_tqdm:
-                    progress_bar = notebook.tqdm(total=len(initial_proposals))  # type: ignore
+                    pool_iter = notebook.tqdm(pool_iter, total=len(initial_proposals))  # type: ignore
                 else:
-                    progress_bar = tqdm(total=len(initial_proposals))  # type: ignore
+                    pool_iter = tqdm(pool_iter, total=len(initial_proposals))  # type: ignore
 
-            samples = {}
-            for index, sample in pool.starmap(self._generate_sample_parallel, sample_param_iter, chunksize=chunksize):
+            for index, sample in pool_iter:
                 samples[index] = sample
-                if progress_bar is not None:
-                    progress_bar.update(1)
 
         for index in sorted(samples.keys()):
             self.samples.append(samples[index])
@@ -398,5 +430,8 @@ if __name__ == '__main__':
 
     args.grammar_file = os.path.join(args.relative_path, args.grammar_file)
     args.counter_output_path = os.path.join(args.relative_path, args.counter_output_path)
+
+    args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
+    logging.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

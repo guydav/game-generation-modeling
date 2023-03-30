@@ -180,6 +180,14 @@ def posterior_dict_sample(rng: np.random.Generator, posterior_dict: typing.Dict[
     return rng.choice(values, size=size, p=probs)
 
 
+def _merge_dicts(d1: typing.Dict[typing.Any, typing.Any], d2: typing.Dict[typing.Any, typing.Any]):
+    return {**d1, **d2}
+
+
+def _combine_context_updates(context_updates: typing.List[typing.Optional[ContextDict]]):
+    return reduce(_merge_dicts, [d for d in context_updates if d is not None and isinstance(d, dict)], {})
+
+
 def generate_game_id(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     game_id = global_context['original_game_id'] if 'original_game_id' in global_context else 'game-id'
     if 'sample_id' in global_context:
@@ -198,14 +206,17 @@ def generate_domain_name(global_context: ContextDict, local_context: typing.Opti
     return rng.choice(DOMAINS)
 
 
-def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
-    value_posterior = {k: v + prior_token_count for k, v in field_counter.value_counts.items()}
+class NewPreferenceNameSampler:
+    value_posterior: typing.Dict[str, int]
 
-    def sample_new_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
+    def __init__(self, value_posterior: typing.Dict[str, int]):
+        self.value_posterior = value_posterior
+
+    def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
         if 'preference_names' not in global_context:
             global_context['preference_names'] = set()
 
-        filtered_posteior = {k: v for k, v in value_posterior.items() if k not in global_context['preference_names']}
+        filtered_posteior = {k: v for k, v in self.value_posterior.items() if k not in global_context['preference_names']}
 
         if len(filtered_posteior) == 0:
             raise SamplingException('Attempted to sample a preference name with no available names')
@@ -218,7 +229,10 @@ def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior
         global_context['preference_names'].add(pref_name)
         return pref_name
 
-    return sample_new_preference_name
+
+def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
+    value_posterior = {k: v + prior_token_count for k, v in field_counter.value_counts.items()}
+    return NewPreferenceNameSampler(value_posterior)
 
 
 sample_new_preference_name_factory.factory = True
@@ -238,11 +252,15 @@ def sample_existing_preference_name(global_context: ContextDict, local_context: 
     return rng.choice(pref_names)
 
 
-def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
-    total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
-    value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
+class NewVariableSampler:
+    total_count: int
+    value_posterior: typing.Dict[str, float]
 
-    def sample_new_variable(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
+    def __init__(self, total_count: int, value_posterior: typing.Dict[str, float]):
+        self.total_count = total_count
+        self.value_posterior = value_posterior
+
+    def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
         if local_context is None:
             local_context = {}
 
@@ -254,19 +272,23 @@ def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_
         else:
             rng = global_context['rng']
 
-        valid_vars = set(value_posterior.keys()) - set(local_context['variables'].keys())
+        valid_vars = set(self.value_posterior.keys()) - set(local_context['variables'].keys())
 
         if len(valid_vars) == 0:
             raise SamplingException('No valid variables left to sample')
 
-        filtered_posterior_normalization = sum(value_posterior[k] for k in valid_vars)
-        filtered_posterior = {k: v / filtered_posterior_normalization for k, v in value_posterior.items() if k in valid_vars}
+        filtered_posterior_normalization = sum(self.value_posterior[k] for k in valid_vars)
+        filtered_posterior = {k: v / filtered_posterior_normalization for k, v in self.value_posterior.items() if k in valid_vars}
 
         new_var = posterior_dict_sample(rng, filtered_posterior)[1:]
         local_context['variables'][new_var] = None
         return f'?{new_var}'
 
-    return sample_new_variable
+
+def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
+    total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
+    value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
+    return NewVariableSampler(total_count, value_posterior)
 
 
 sample_new_variable_factory.factory = True
@@ -291,7 +313,11 @@ def sample_empty_list(global_context: ContextDict, local_context: typing.Optiona
     return list()
 
 
-VARIABLE_DEFAULTS = defaultdict(lambda: sample_existing_variable)
+def no_arg_sample_existing_variable():
+    return sample_existing_variable
+
+
+VARIABLE_DEFAULTS = defaultdict(no_arg_sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
@@ -299,18 +325,42 @@ COLORS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.COLORS]
 ORIENTATIONS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.ORIENTATIONS]
 SIDES = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.SIDES]
 
+def _comparison_operators():
+    return COMPARISON_OPERATORS
+
+def _binary_operators():
+    return BINARY_OPERATORS
+
+def _multi_operators():
+    return MULTI_OPERATORS
+
+def _function_names():
+    return FUNCTION_NAMES
+
+def _predicate_names():
+    return PREDICATE_NAMES
+
+def _number_defaults():
+    return NUMBER_DEFAULTS
+
+def _total_time_defaults():
+    return  ['(total-time)']
+
+def _total_score_defaults():
+    return  ['(total-score)']
+
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
-    binary_comp=defaultdict(lambda: COMPARISON_OPERATORS),
-    binary_op=defaultdict(lambda: BINARY_OPERATORS),
-    multi_op=defaultdict(lambda: MULTI_OPERATORS),
-    func_name=defaultdict(lambda: FUNCTION_NAMES),
+    binary_comp=defaultdict(_comparison_operators),
+    binary_op=defaultdict(_binary_operators),
+    multi_op=defaultdict(_multi_operators),
+    func_name=defaultdict(_function_names),
     object_type=defaultdict(list),  # TODO: decide if there's a prior here
     object_name=defaultdict(list),  # TODO: decide if there's a prior here
     location=defaultdict(list),  # TODO: decide if there's a prior here
     color=defaultdict(list),  # (lambda: COLORS),  # TODO: decide if there's a prior here
     orientation=defaultdict(list),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
     side=defaultdict(list),  # (lambda: SIDES), # TODO: decide if there's a prior here
-    predicate_name=defaultdict(lambda: PREDICATE_NAMES),
+    predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
         ('pref_name_and_types', 'pref_name'): sample_existing_preference_name,
@@ -319,10 +369,10 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
         ('game_def', 'game_name'): generate_game_id,
         ('domain_def', 'domain_name'): generate_domain_name,
     },
-    number=defaultdict(lambda: NUMBER_DEFAULTS),
+    number=defaultdict(_number_defaults),
     variable=VARIABLE_DEFAULTS,
-    total_time=defaultdict(lambda: ['(total-time)']),
-    total_score=defaultdict(lambda: ['(total-score)']),
+    total_time=defaultdict(_total_time_defaults),
+    total_score=defaultdict(_total_score_defaults),
 )
 
 # TODO: consider if we want to try to remove some of these extra steps
@@ -543,7 +593,7 @@ class ASTSampler:
             count = self.prior_token_count
 
             if value_pattern is not None and field_counter is not None:
-                valid_values = filter(lambda v: value_pattern.match(v) is not None, field_counter.value_counts)
+                valid_values = [v for v in field_counter.value_counts if value_pattern.match(v) is not None]
                 count += sum(field_counter.value_counts[value] for value in valid_values)
 
             field_prior[TOKEN_POSTERIOR][value_type] = count  # type: ignore
@@ -648,7 +698,7 @@ class ASTSampler:
                         raise ValueError(f'{rule_name} has no section counts')
 
                     section_prob = self.ast_counter.section_counts[section_name] / max(self.ast_counter.section_counts.values())
-                    child = list(filter(lambda x: x is not None, rule_prior))[0]
+                    child = [x for x in rule_prior if x is not None][0]
                     child[PRODUCTION_PROBABILITY] = section_prob
                     rule_prior = child
 
@@ -775,7 +825,7 @@ class ASTSampler:
             if length == 0:
                 return None, None
             values, context_updates = zip(*[self._sample_single_named_value(sample_dict, global_context, local_context) for _ in range(length)])
-            context_update = reduce(lambda x, y: {**x, **y}, filter(lambda d: d is not None, context_updates), {})
+            context_update = _combine_context_updates(context_updates)
             return list(values), context_update
 
         else:
@@ -856,7 +906,7 @@ class ASTSampler:
             return None, None
 
         if return_ast:
-            out_dict = reduce(lambda x, y: {**x, **y}, filter(lambda x: isinstance(x, dict), output))
+            out_dict = _combine_context_updates(output)
             out_dict['parseinfo'] = tatsu.infos.ParseInfo(None, rule, self.sample_parseinfo_index, self.sample_parseinfo_index, self.sample_parseinfo_index, self.sample_parseinfo_index)
             self.sample_parseinfo_index += 1
             output = tatsu.ast.AST(out_dict)
@@ -926,7 +976,7 @@ class RegrowthSampler(ASTParentMapper):
     def __init__(self, sampler: typing.Union[ASTSampler, typing.Dict[str, ASTSampler]],
                  section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
                  depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
-                 seed: int = 0):
+                 seed: int = 0, rng: typing.Optional[np.random.Generator] = None):
         super().__init__()
         if isinstance(sampler, ASTSampler):
             sampler = dict(default=sampler)
@@ -939,7 +989,9 @@ class RegrowthSampler(ASTParentMapper):
         self.depth_weight_function = depth_weight_function
         self.seed = seed
 
-        self.rng = np.random.RandomState(seed)  # type: ignore
+        if rng is None:
+            rng = np.random.default_rng(seed)
+        self.rng = rng
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()
         self.searcher = ASTParseinfoSearcher()
@@ -1048,13 +1100,13 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], None
 
-    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None):
+    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None) -> tuple:
         new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'
-        game_key = next(filter(lambda p: p.rule == 'game_def', self.parent_mapping.keys()))
+        game_key = [p for p in self.parent_mapping.keys() if p.rule == 'game_def'][0]
         game_node, _, game_selector, _, _, _, _ = self.parent_mapping[game_key]
 
         new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
-        return replace_child(ast, game_selector, new_game_node)
+        return replace_child(ast, game_selector, new_game_node)  # type: ignore
 
     def _sample_node_to_update(self):
         if self.section_sample_weights is not None:
@@ -1089,7 +1141,7 @@ class RegrowthSampler(ASTParentMapper):
         return depth
 
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
-        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True):
+        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True) -> typing.Union[tatsu.ast.AST, tuple]:
 
         node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update()  # type: ignore
         if section is None: section = ''
@@ -1107,6 +1159,7 @@ class RegrowthSampler(ASTParentMapper):
 
         new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
         new_source = copy.deepcopy(self.source_ast)
+        new_source = typing.cast(tuple, new_source)
 
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)

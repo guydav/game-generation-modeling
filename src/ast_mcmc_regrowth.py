@@ -137,7 +137,7 @@ class MCMCRegrowthSampler:
         self.counter = parse_or_load_counter(args, self.grammar_parser)
         self.sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
         self.regrowth_sampler = RegrowthSampler(self.sampler, seed=args.random_seed)
-        self.rng = self.sampler.rng
+        self.random_seed = args.random_seed
 
         self.fitness_featurizer_path = fitness_featurizer_path
         self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
@@ -180,9 +180,9 @@ class MCMCRegrowthSampler:
 
     def _generate_sample_parallel(self, sample_index: int, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None,
                                   verbose: int = 0, postprocess: typing.Optional[bool] = None):
-
+        rng = np.random.default_rng(self.random_seed + sample_index)
         return (sample_index, self.sample(verbose=verbose, initial_proposal=initial_proposal, postprocess=postprocess,
-                                          return_sample=True, sample_index=sample_index))
+                                          return_sample=True, sample_index=sample_index, rng=rng))
 
 
     def multiple_samples_parallel(self, n_samples_per_initial_proposal: int, verbose: int = 0, should_tqdm: bool = False,
@@ -222,7 +222,8 @@ class MCMCRegrowthSampler:
             self.sample(verbose=verbose, initial_proposal=initial_proposal, postprocess=postprocess)
 
     def sample(self, verbose: int = 0, initial_proposal: typing.Optional[typing.Union[tatsu.ast.AST, tuple]] = None,
-               postprocess: typing.Optional[bool] = None, return_sample: bool = False, sample_index: typing.Optional[int] = None):
+               postprocess: typing.Optional[bool] = None, return_sample: bool = False, sample_index: typing.Optional[int] = None,
+               rng: typing.Optional[np.random.Generator] = None):
         initial_proposal_provided = initial_proposal is not None
         if postprocess is None:
             postprocess = not initial_proposal_provided
@@ -230,9 +231,12 @@ class MCMCRegrowthSampler:
         if sample_index is None:
             sample_index = len(self.samples)
 
+        if rng is None:
+            rng = np.random.default_rng()
+
         while initial_proposal is None:
             try:
-                initial_proposal = typing.cast(tuple, self.sampler.sample(global_context=dict(original_game_id=f'mcmc-{sample_index}')))
+                initial_proposal = typing.cast(tuple, self.sampler.sample(global_context=dict(rng=rng, original_game_id=f'mcmc-{sample_index}')))
             except RecursionError:
                 if verbose >= 2: print('Recursion error, skipping sample')
             except SamplingException:
@@ -245,7 +249,7 @@ class MCMCRegrowthSampler:
         last_accepted_step = 0
         for step in range(self.max_steps):
             current_proposal, current_proposal_features, current_proposal_fitness, accepted = self.mcmc_step(
-                current_proposal, current_proposal_features, current_proposal_fitness, step, verbose
+                current_proposal, current_proposal_features, current_proposal_fitness, step, verbose, rng
             )
 
             if accepted:
@@ -275,8 +279,8 @@ class MCMCRegrowthSampler:
 
         self.samples.append(sample_tuple)
 
-    def _generate_step_proposal(self, step_index: int) -> typing.Union[tatsu.ast.AST, tuple]:
-        return self.regrowth_sampler.sample(step_index, update_game_id=False)
+    def _generate_step_proposal(self, step_index: int, rng: typing.Optional[np.random.Generator] = None) -> typing.Union[tatsu.ast.AST, tuple]:
+        return self.regrowth_sampler.sample(step_index, update_game_id=False, rng=rng)
 
     def _pre_mcmc_step(self, current_proposal: typing.Union[tatsu.ast.AST, tuple]):
         if self.regrowth_sampler.source_ast != current_proposal:
@@ -287,7 +291,8 @@ class MCMCRegrowthSampler:
         current_proposal_features: typing.Dict[str, float],
         current_proposal_fitness: float,
         step_index: int,
-        verbose: int,
+        verbose: int = 0,
+        rng: typing.Optional[np.random.Generator] = None,
         ) -> typing.Tuple[typing.Union[tatsu.ast.AST, tuple], typing.Dict[str, float], float, bool] :
 
         self._pre_mcmc_step(current_proposal)
@@ -297,7 +302,7 @@ class MCMCRegrowthSampler:
 
         while not sample_generated:
             try:
-                new_proposal = self._generate_step_proposal(step_index)
+                new_proposal = self._generate_step_proposal(step_index, rng)
                 # _test_ast_sample(ast, args, text_samples, grammar_parser)
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(current_proposal):  # type: ignore
                     if verbose >= 2: print('Regrowth generated identical games, repeating')
@@ -317,6 +322,8 @@ class MCMCRegrowthSampler:
             accept = new_proposal_fitness < current_proposal_fitness
         else:
             acceptance_probability = np.exp(-self.acceptance_temperature * (new_proposal_fitness - current_proposal_fitness))
+            if rng is None:
+                rng = self.rng
             accept = self.rng.uniform() < acceptance_probability
 
         if accept:

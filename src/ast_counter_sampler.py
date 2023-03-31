@@ -821,7 +821,7 @@ class ASTSampler:
             raise ValueError(f'Missing type_posterior in sample: {sample_dict}')
 
         if LENGTH_POSTERIOR in sample_dict:
-            length = posterior_dict_sample(self.rng, sample_dict[LENGTH_POSTERIOR])  # type: ignore
+            length = posterior_dict_sample(global_context['rng'], sample_dict[LENGTH_POSTERIOR])  # type: ignore
             if length == 0:
                 return None, None
             values, context_updates = zip(*[self._sample_single_named_value(sample_dict, global_context, local_context) for _ in range(length)])
@@ -835,20 +835,20 @@ class ASTSampler:
         global_context: ContextDict,
         local_context: ContextDict):
 
-        sample_type = posterior_dict_sample(self.rng, sample_dict[TYPE_POSTERIOR])  # type: ignore
+        sample_type = posterior_dict_sample(global_context['rng'], sample_dict[TYPE_POSTERIOR])  # type: ignore
 
         if sample_type == RULE:
             if RULE_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
-            rule = typing.cast(str, posterior_dict_sample(self.rng, sample_dict[RULE_POSTERIOR]))  # type: ignore
+            rule = typing.cast(str, posterior_dict_sample(global_context['rng'], sample_dict[RULE_POSTERIOR]))  # type: ignore
             return self.sample(rule, global_context, local_context)
 
         elif sample_type == TOKEN:
             if TOKEN_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing token_posterior in sample: {sample_dict}')
 
-            token = posterior_dict_sample(self.rng, sample_dict[TOKEN_POSTERIOR])  # type: ignore
+            token = posterior_dict_sample(global_context['rng'], sample_dict[TOKEN_POSTERIOR])  # type: ignore
             if SAMPLERS in sample_dict and token in sample_dict[SAMPLERS]:  # type: ignore
                 token = sample_dict[SAMPLERS][token](global_context, local_context)     # type: ignore
 
@@ -884,7 +884,7 @@ class ASTSampler:
                 if prod_value == EOF:
                     pass
                 elif prod_value == SAMPLE:
-                    output.append(posterior_dict_sample(self.rng, rule_dict[TOKEN_POSTERIOR]))
+                    output.append(posterior_dict_sample(global_context['rng'], rule_dict[TOKEN_POSTERIOR]))
                 else:
                     output.append(prod_value)
 
@@ -1108,12 +1108,12 @@ class RegrowthSampler(ASTParentMapper):
         new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
         return replace_child(ast, game_selector, new_game_node)  # type: ignore
 
-    def _sample_node_to_update(self):
+    def _sample_node_to_update(self, rng: np.random.Generator):
         if self.section_sample_weights is not None:
             game_sections = [section for section in self.section_sample_weights.keys() if len(self.node_keys_by_section[section]) > 0]
             game_section_weights = np.array([self.section_sample_weights[section] for section in game_sections])
             game_section_weights = game_section_weights / np.sum(game_section_weights)
-            section = self.rng.choice(game_sections, p=game_section_weights)
+            section = rng.choice(game_sections, p=game_section_weights)
             node_key_list = self.node_keys_by_section[section]
 
         else:
@@ -1123,10 +1123,10 @@ class RegrowthSampler(ASTParentMapper):
             node_depths = [self.parent_mapping[node_key].depth for node_key in node_key_list]
             node_weights_by_depth = self.depth_weight_function(np.array(node_depths))
             node_weights = node_weights_by_depth / np.sum(node_weights_by_depth)
-            node_index = self.rng.choice(len(node_key_list), p=node_weights)
+            node_index = rng.choice(len(node_key_list), p=node_weights)
 
         else:
-            node_index = self.rng.choice(len(node_key_list))
+            node_index = rng.choice(len(node_key_list))
 
         node_key = self.node_keys[node_index]
         return self.parent_mapping[node_key]
@@ -1141,9 +1141,13 @@ class RegrowthSampler(ASTParentMapper):
         return depth
 
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
-        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True) -> typing.Union[tatsu.ast.AST, tuple]:
+        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True,
+        rng: typing.Optional[np.random.Generator] = None) -> typing.Union[tatsu.ast.AST, tuple]:
 
-        node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update()  # type: ignore
+        if rng is None:
+            rng = self.rng
+
+        node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
         if section is None: section = ''
 
         if external_global_context is not None:
@@ -1153,8 +1157,9 @@ class RegrowthSampler(ASTParentMapper):
             local_context.update(external_local_context)
 
         global_context['original_game_id'] = self.original_game_id
+        global_context['rng'] = rng
 
-        sampler_key = self.rng.choice(self.sampler_keys)
+        sampler_key = rng.choice(self.sampler_keys)
         sampler = self.samplers[sampler_key]
 
         new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore

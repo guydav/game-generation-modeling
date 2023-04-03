@@ -275,7 +275,7 @@ def _parse_type_definition(var_type_def, context):
     if isinstance(var_type, str):
         var_type_str = var_type
 
-    elif var_type.parseinfo.rule == 'either_types':
+    elif var_type.parseinfo.rule.startswith('either'):
         var_type_str = _parse_either_types(var_type, context)
 
         inner_prev_mutation = None
@@ -612,10 +612,11 @@ def build_setup_printer():
         _handle_setup, _handle_statement, _handle_super_predicate,
         _handle_function_comparison, _handle_function_eval, _handle_predicate,
         _handle_two_arg_comparison, _handle_comparison_arg,
-        _handle_multiple_args_equal_comparison,
-        _handle_variable_list, _handle_type_definition,
-        _handle_variable_type_def, _handle_either_types)
+        _handle_multiple_args_equal_comparison, _handle_variable_list, )
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
+    printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
+    printer.register_keyword_match('type_definition', _handle_type_definition)
+    printer.register_keyword_match('either_types', _handle_either_types)
     printer.register_keyword_match(('predicate_or_function',), _handle_predicate_or_function_term)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('game',), _handle_game)
@@ -777,12 +778,14 @@ def build_constraints_printer():
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end,
         _handle_forall_seq, _handle_function_eval, _handle_two_arg_comparison,
         _handle_multiple_args_equal_comparison, _handle_comparison_arg,
-        _handle_variable_list, _handle_type_definition,
-        _handle_variable_type_def, _handle_either_types
+        _handle_variable_list,
     )
     printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
-    printer.register_keyword_match(('predicate_or_function',), _handle_predicate_or_function_term)
+    printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
+    printer.register_keyword_match('type_definition', _handle_type_definition)
+    printer.register_keyword_match('either_types', _handle_either_types)
+    printer.register_keyword_match('predicate_or_function', _handle_predicate_or_function_term)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
 

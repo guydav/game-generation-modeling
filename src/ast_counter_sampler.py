@@ -2,6 +2,7 @@ import argparse
 from collections import namedtuple, defaultdict, Counter
 from dataclasses import dataclass
 from functools import reduce
+import logging
 import tatsu
 import tatsu.ast
 import tatsu.exceptions
@@ -22,6 +23,11 @@ import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
 from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES
 import room_and_object_types
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.DEBUG,
+    datefmt='%Y-%m-%d %H:%M:%S')
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -238,7 +244,6 @@ def sample_new_preference_name_factory(field_counter: RuleKeyValueCounter, prior
 sample_new_preference_name_factory.factory = True
 
 
-
 def sample_existing_preference_name(global_context: ContextDict, local_context: typing.Optional[ContextDict]=None):
     if 'preference_names' not in global_context or len(global_context['preference_names']) == 0:
         raise SamplingException('Attempted to sample a preference name with no sampled preferences')
@@ -285,6 +290,57 @@ class NewVariableSampler:
         return f'?{new_var}'
 
 
+class SingleLetterNewVariableSampler:
+    letter: str
+
+    def __init__(self, letter: str):
+        self.letter = letter
+
+    def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
+        if local_context is None:
+            local_context = {}
+
+        if 'variables' not in local_context:
+            local_context['variables'] = dict()
+
+        if self.letter not in local_context['variables']:
+            local_context['variables'][self.letter] = None
+            return f'?{self.letter}'
+
+        number = 0
+        while f'{self.letter}{number}' in local_context['variables']:
+            number += 1
+
+        local_context['variables'][f'{self.letter}{number}'] = None
+        return f'?{self.letter}{number}'
+
+
+class SingleLetterExistingVariableSampler:
+    letter: str
+
+    def __init__(self, letter: str):
+        self.letter = letter
+
+    def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
+        if local_context is None:
+            local_context = {}
+
+        if 'variables' not in local_context:
+            raise SamplingException('Attempted to sample an existing variable with no variables in scope')
+
+        valid_variables = [k for k in local_context['variables'].keys() if k[0] == self.letter]
+
+        if not valid_variables:
+            raise SamplingException(f'Attempted to sample an existing variable with no {self.letter} variables in scope')
+
+        if 'rng' not in global_context:
+            rng = np.random.default_rng()
+        else:
+            rng = global_context['rng']
+
+        return f'?{rng.choice(valid_variables)}'
+
+
 def sample_new_variable_factory(field_counter: RuleKeyValueCounter, prior_token_count: int=0):
     total_count = sum(field_counter.value_counts.values()) + (prior_token_count * len(field_counter.value_counts))
     value_posterior = {k: (v + prior_token_count) / total_count for k, v in field_counter.value_counts.items()}
@@ -313,13 +369,40 @@ def sample_empty_list(global_context: ContextDict, local_context: typing.Optiona
     return list()
 
 
-def no_arg_sample_existing_variable():
+def create_sample_existing_variable():
     return sample_existing_variable
 
 
-VARIABLE_DEFAULTS = defaultdict(no_arg_sample_existing_variable)
+VARIABLE_DEFAULTS = defaultdict(create_sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
+
+COLOR_VARIABLE_LETTER = 'x'
+ORIENTATION_VARIABLE_LETTER = 'y'
+SIDE_VARIABLE_LETTER = 'z'
+
+def create_color_variable_sampler():
+    return SingleLetterExistingVariableSampler(COLOR_VARIABLE_LETTER)
+
+def create_orientation_variable_sampler():
+    return SingleLetterExistingVariableSampler(ORIENTATION_VARIABLE_LETTER)
+
+def create_side_variable_sampler():
+    return SingleLetterExistingVariableSampler(SIDE_VARIABLE_LETTER)
+
+
+COLOR_VARIABLE_DEFAULTS = defaultdict(create_color_variable_sampler)
+COLOR_VARIABLE_DEFAULTS[('color_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(COLOR_VARIABLE_LETTER)   # type: ignore
+
+ORIENTATION_VARIABLE_DEFAULTS = defaultdict(create_orientation_variable_sampler)
+ORIENTATION_VARIABLE_DEFAULTS[('orientation_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(ORIENTATION_VARIABLE_LETTER)   # type: ignore
+
+SIDE_VARIABLE_DEFAULTS = defaultdict(create_side_variable_sampler)
+SIDE_VARIABLE_DEFAULTS[('side_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(SIDE_VARIABLE_LETTER)   # type: ignore
+
+COLOR = 'color'
+ORIENTATION = 'orientation'
+SIDE = 'side'
 
 COLORS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.COLORS]
 ORIENTATIONS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.ORIENTATIONS]
@@ -336,6 +419,15 @@ def _multi_operators():
 
 def _function_names():
     return FUNCTION_NAMES
+
+def _colors():
+    return list(COLORS)
+
+def _orientations():
+    return list(ORIENTATIONS)
+
+def _sides():
+    return list(SIDES)
 
 def _predicate_names():
     return PREDICATE_NAMES
@@ -357,9 +449,9 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     object_type=defaultdict(list),  # TODO: decide if there's a prior here
     object_name=defaultdict(list),  # TODO: decide if there's a prior here
     location=defaultdict(list),  # TODO: decide if there's a prior here
-    color=defaultdict(list),  # (lambda: COLORS),  # TODO: decide if there's a prior here
-    orientation=defaultdict(list),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
-    side=defaultdict(list),  # (lambda: SIDES), # TODO: decide if there's a prior here
+    color=defaultdict(_colors),  # TODO: decide if there's a prior here
+    orientation=defaultdict(_orientations),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
+    side=defaultdict(_sides),  # TODO: decide if there's a prior here
     predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
@@ -371,6 +463,9 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     },
     number=defaultdict(_number_defaults),
     variable=VARIABLE_DEFAULTS,
+    color_variable=COLOR_VARIABLE_DEFAULTS,
+    orientation_variable=ORIENTATION_VARIABLE_DEFAULTS,
+    side_variable=SIDE_VARIABLE_DEFAULTS,
     total_time=defaultdict(_total_time_defaults),
     total_score=defaultdict(_total_score_defaults),
 )
@@ -378,20 +473,29 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'object_type',
+    ('color_type_definition', 'type'): 'color',
+    ('orientation_type_definition', 'type'): 'orientation',
+    ('side_type_definition', 'type'): 'side',
     ('comparison_arg', 'arg'): 'number',
     ('predicate_or_function_term', 'term'): ('object_name', 'variable',),
-    ('predicate_or_function_color_term', 'term'): ('color', 'variable',),
+    ('predicate_or_function_color_term', 'term'): ('color', 'color_variable',),
     ('predicate_or_function_location_term', 'term'): ('location', 'variable',),
-    ('predicate_or_function_orientation_term', 'term'): ('orientation', 'variable',),
-    ('predicate_or_function_side_term', 'term'): ('side', 'variable',),
+    ('predicate_or_function_orientation_term', 'term'): ('orientation', 'orientation_variable',),
+    ('predicate_or_function_side_term', 'term'): ('side', 'side_variable',),
     ('predicate_or_function_type_term', 'term'): ('object_type', 'variable',),
     ('terminal_expr', 'expr'): ('total_time', 'total_score'),
     ('scoring_expr_or_number', 'expr'): 'number',
     ('pref_object_type', 'type_name'): ('object_name', 'object_type'),
 }
 
+
 PATTERN_TYPE_MAPPINGS = {
-    'type_name': 'name',
+    'object_name': 'name',
+    'object_type': 'name',
+    'color': 'name',
+    'location': 'name',
+    'orientation': 'name',
+    'side': 'name',
     'func_name': 'name',
     'preference_name': 'name',
 }
@@ -427,7 +531,22 @@ HARDCODED_RULES = {
         TOKEN_POSTERIOR: {EMPTY_LIST: 1.0},
         SAMPLERS: {EMPTY_LIST: sample_empty_list},
         PRODUCTION: ((TOKEN, []),)
-    }
+    },
+    COLOR: {
+        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+        TOKEN_POSTERIOR: {c: 1.0 / len(COLORS) for c in COLORS},
+        PRODUCTION: ((TOKEN, SAMPLE),),
+    },
+    ORIENTATION: {
+        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+        TOKEN_POSTERIOR: {c: 1.0 / len(ORIENTATIONS) for c in ORIENTATIONS},
+        PRODUCTION: ((TOKEN, SAMPLE),),
+    },
+    SIDE: {
+        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+        TOKEN_POSTERIOR: {c: 1.0 / len(SIDES) for c in SIDES},
+        PRODUCTION: ((TOKEN, SAMPLE),),
+    },
 }
 
 class ASTSampler:
@@ -547,7 +666,7 @@ class ASTSampler:
 
         if field_counter is not None:
             if len(field_counter.length_counts) == 0:
-                raise ValueError(f'No length counts for {rule_name}.{field_name} which has a min length')
+                logging.warning(f'No length counts for {rule_name}.{field_name} which has a min length, filling in with 1')
 
             length_posterior.update(field_counter.length_counts)
             total_lengths = sum(field_counter.length_counts)
@@ -654,6 +773,10 @@ class ASTSampler:
             child = children[0]
             rule_name = rule.name
             rule_prior = self.parse_rule_prior(child)
+
+            # In case it's one of the hard-coded rules
+            if rule_name in self.rules:
+                continue
 
             # Special cases
             if rule_name in ('preferences', 'pref_forall_prefs'):
@@ -841,7 +964,7 @@ class ASTSampler:
             if RULE_POSTERIOR not in sample_dict:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
-            rule = typing.cast(str, posterior_dict_sample(global_context['rng'], sample_dict[RULE_POSTERIOR]))  # type: ignore
+            rule = str(posterior_dict_sample(global_context['rng'], sample_dict[RULE_POSTERIOR]))  # type: ignore
             return self.sample(rule, global_context, local_context)
 
         elif sample_type == TOKEN:
@@ -1241,8 +1364,8 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, A
                 generated_sample = True
                 yield sample_str + '\n\n'
 
-            except ValueError as e:
-                print(f'ValueError while sampling, repeating: {e}')
+            # except ValueError as e:
+            #     print(f'ValueError while sampling, repeating: {e}')
             except SamplingException as e:
                 print(f'SamplingException while sampling, repeating: {e}')
 

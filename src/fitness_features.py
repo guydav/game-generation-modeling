@@ -535,7 +535,7 @@ class SetupObjectsUsed(FitnessTerm):
     setup_objects: typing.Set[str] = set()
     used_objects: typing.Set[str] = set()
 
-    def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS, rules: typing.Optional[typing.Sequence[str]] = None,
+    def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS, rules: typing.Optional[typing.Sequence[typing.Union[str, re.Pattern]]] = None,
                  header: str = 'setup_objects_used'):
         if rules is None:
             rules = list(TYPE_RULES.keys())
@@ -565,9 +565,12 @@ class SetupObjectsUsed(FitnessTerm):
         return len(self.setup_objects.intersection(self.used_objects)) / len(self.setup_objects)
 
 
+VARIABLE_TYPE_DEF_RULES_PATTERN = re.compile(r'[\w_]*variable_type_def')
+EITHER_TYPES_RULES_PATTERN = re.compile(r'either[\w_]+types')
+
 class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
-    def __init(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
-        super().__init__(skip_objects, ('variable_type_def', 'either_types', 'pref_name_and_types'), 'setup_quantified_objects_used')
+    def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
+        super().__init__(skip_objects, (VARIABLE_TYPE_DEF_RULES_PATTERN, EITHER_TYPES_RULES_PATTERN, 'pref_name_and_types'), 'setup_quantified_objects_used')
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -730,7 +733,7 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
     min_count: int = 1
 
     def __init__(self, max_count: int = DEFAULT_MAX_VARIABLES_TYPES, min_count: int = 1):
-        super().__init__('variable_type_def', 'max_number_variables_types_quantified')
+        super().__init__(VARIABLE_TYPE_DEF_RULES_PATTERN, 'max_number_variables_types_quantified')
         self.max_count = max_count
         self.min_count = min_count
 

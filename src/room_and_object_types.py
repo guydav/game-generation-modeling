@@ -143,6 +143,7 @@ LEFT = 'left'
 RIGHT = 'right'
 
 #  ORIENTATIONS
+DIAGONAL = 'diagonal'
 SIDEWAYS = 'sideways'
 UPRIGHT = 'upright'
 UPSIDE_DOWN = 'upside_down'
@@ -185,7 +186,7 @@ CATEGORIES_TO_TYPES = {
     ),
     FURNITURE: (
         BED, BLINDS, CHAIR, DESK, DESK_SHELF,  # TODO: does chair qualify as funiture? since it's movable
-        DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, TOP_DRAWER, SIDE_TABLE,
+        DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, SIDE_TABLE,
     ),
     BUILDING: (
         BUILDING,
@@ -194,13 +195,13 @@ CATEGORIES_TO_TYPES = {
         BOOK, LAPTOP, PILLOW, TEDDY_BEAR,
     ),
     ORIENTATIONS: (
-        SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
+        DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
     ),
     RAMPS: (
         CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, GREEN_TRIANGULAR_RAMP,
     ),
     RECEPTACLES: (
-        DOGGIE_BED, HEXAGONAL_BIN,
+        DOGGIE_BED, HEXAGONAL_BIN, TOP_DRAWER,
     ),
     ROOM_FEATURES: (
         DOOR, FLOOR, RUG, ROOM_CENTER, SHELF, BOTTOM_SHELF,
@@ -269,7 +270,6 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -281,6 +281,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
         RECEPTACLES: {
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,
@@ -353,7 +354,6 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
 
         },
         LARGE_OBJECTS: {
@@ -368,6 +368,7 @@ FULL_ROOMS_TO_OBJECTS = {
         RECEPTACLES: {
             DOGGIE_BED: 1,
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,
@@ -442,7 +443,7 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
+
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -456,6 +457,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
         RECEPTACLES: {
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,

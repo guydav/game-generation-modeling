@@ -793,6 +793,7 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('front'),
     TypeDesc('left'),
     TypeDesc('right'),
+    TypeDesc('diagonal'),
     TypeDesc('sideways'),
     TypeDesc('upright'),
     TypeDesc('upside_down'),

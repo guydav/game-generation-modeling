@@ -17,3 +17,4 @@ dsl/ast-real-regrowth-samples-1024-old.pddl
 dsl/cache/ast-real-regrowth-samples-1024-cache.pkl.gz
 
 tmp/**/*
+notes.md

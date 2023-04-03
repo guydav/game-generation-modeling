@@ -528,40 +528,46 @@ class AllPreferencesUsed(FitnessTerm):
         return len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))
 
 
+SETUP_OBJECTS_SKIP_OBJECTS = set(['agent'])
+
+
 class SetupObjectsUsed(FitnessTerm):
     setup_objects: typing.Set[str] = set()
     used_objects: typing.Set[str] = set()
 
-    def __init__(self):
-        super().__init__(list(TYPE_RULES.keys()), 'setup_objects_used')
+    def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS, rules: typing.Optional[typing.Sequence[str]] = None,
+                 header: str = 'setup_objects_used'):
+        if rules is None:
+            rules = list(TYPE_RULES.keys())
+        super().__init__(rules, header)
+        self.skip_objects = skip_objects
 
     def game_start(self) -> None:
         self.setup_objects = set()
         self.used_objects = set()
 
+    def _add_result(self, result_set: typing.Set[str], result: typing.Union[None, str, typing.List[str], tuple]):
+        if isinstance(result, (list, tuple)):
+            result_set.update([r for r in result if r not in self.skip_objects])
+        elif result is not None and result not in self.skip_objects:
+            result_set.add(result)
+
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if SECTION_CONTEXT_KEY not in context:
             raise ValueError('Section not found in context', context)
 
-        if context[SECTION_CONTEXT_KEY] == ast_parser.SETUP:
-            result = TYPE_RULES[rule][0](ast)
-            if isinstance(result, (list, tuple)):
-                self.setup_objects.update(result)
-            elif result is not None:
-                self.setup_objects.add(result)
-
-        else:
-            result = TYPE_RULES[rule][0](ast)
-            if isinstance(result, (list, tuple)):
-                self.used_objects.update(result)
-            elif result is not None:
-                self.used_objects.add(result)
+        self._add_result(self.setup_objects if context[SECTION_CONTEXT_KEY] == ast_parser.SETUP else self.used_objects, TYPE_RULES[rule][0](ast))
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.setup_objects) == 0:
             return 0
 
         return len(self.setup_objects.intersection(self.used_objects)) / len(self.setup_objects)
+
+
+class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
+    def __init(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
+        super().__init__(skip_objects, ('variable_type_def', 'either_types', 'pref_name_and_types'), 'setup_quantified_objects_used')
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2066,6 +2072,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     all_setup_objects_used = SetupObjectsUsed()
     fitness.register(all_setup_objects_used)
+
+    setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
+    fitness.register(setup_quantified_objects_used)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)

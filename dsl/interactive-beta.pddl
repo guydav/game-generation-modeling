@@ -413,14 +413,11 @@
                 (on ?h ?b)
                 (in ?b ?c)
             ))
-            (hold-while (and (not (agent_holds ?d)) (in_motion ?d))
-                (or
-                    (touch ?c ?d)
-                    (exists (?c2 - cube_block) (touch ?c2 ?c))
-                )
+            (hold-while
+                (and (not (agent_holds ?d)) (in_motion ?d) (not (or (agent_holds ?c) (touch agent ?c))))
                 (in_motion ?c)
             )
-            (once (not (in_motion ?c)))
+            (once (not (or (in_motion ?c) (in_motion ?d))))
         )
     ))
     (preference throwAttempt
@@ -985,11 +982,7 @@
                     (in ?bl ?c)
                 ))
                 (hold-while
-                    (and (not (agent_holds ?b)) (in_motion ?b))
-                    (or
-                        (touch ?c ?b)
-                        (exists (?c2 - (either cube_block cylindrical_block pyramid_block)) (touch ?c2 ?c))
-                    )
+                    (and (not (agent_holds ?b)) (in_motion ?b) (not (or (agent_holds ?c) (touch agent ?c))))
                     (in_motion ?c)
                 )
                 (once (not (in_motion ?c)))
@@ -1418,24 +1411,24 @@
     ))
 ))
 (:constraints (and
-    (preference ballThrownToRampToBed (exists (?c - curved_wooden_ramp)
+    (preference ballThrownToRampToBed (exists (?d - pink_dodgeball ?c - curved_wooden_ramp)
         (then
-            (once (and (agent_holds pink_dodgeball) (faces agent ?c)))
+            (once (and (agent_holds ?d) (faces agent ?c)))
             (hold-while
-                (and (in_motion pink_dodgeball) (not (agent_holds pink_dodgeball)))
-                (touch pink_dodgeball ?c)
+                (and (in_motion ?d) (not (agent_holds ?d?)))
+                (touch ?d ?c)
             )
-            (once (and (not (in_motion pink_dodgeball)) (on bed pink_dodgeball)))
+            (once (and (not (in_motion ?d)) (on bed ?d)))
         )
     ))
-    (preference ballThrownHitsAgent (exists (?c - curved_wooden_ramp)
+    (preference ballThrownHitsAgent (exists (?d - pink_dodgeball ?c - curved_wooden_ramp)
         (then
-            (once (and (agent_holds pink_dodgeball) (faces agent ?c)))
+            (once (and (agent_holds ?d) (faces agent ?c)))
             (hold-while
-                (and (in_motion pink_dodgeball) (not (agent_holds pink_dodgeball)))
-                (touch pink_dodgeball ?c)
+                (and (in_motion ?d) (not (agent_holds ?d)))
+                (touch ?d ?c)
             )
-            (once (and (touch pink_dodgeball agent) (not (agent_holds pink_dodgeball))))
+            (once (and (touch ?d agent) (not (agent_holds ?d))))
         )
     ))
 ))
@@ -2701,9 +2694,7 @@
     (exists (?h - hexagonal_bin ?p - pillow ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
         (game-conserved (and
             (on bed ?h)
-            (not (object_orientation ?p sideways))
-            (not (object_orientation ?p upright))
-            (not (object_orientation ?p upside_down))
+            (object_orientation ?p diagonal)
             (adjacent_side ?h left ?b1)
             (on bed ?b1)
             (on ?b1 ?b2)

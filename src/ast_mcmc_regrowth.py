@@ -85,6 +85,8 @@ parser.add_argument('--n-samples', type=int, default=10)
 parser.add_argument('--real-game-start-index', type=int, default=0)
 parser.add_argument('--real-game-end-index', type=int, default=10)
 parser.add_argument('--sample-parallel', action='store_true')
+parser.add_argument('--parallel-n-workers', type=int, default=8)
+parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--postprocess', action='store_true')
@@ -407,10 +409,14 @@ def main(args: argparse.Namespace):
                 os.path.join(args.relative_path, args.real_games_path), mcmc.grammar_parser,
                 False, relative_path=args.relative_path))
 
-            initial_proposals = game_asts[args.real_game_start_index:args.real_game_end_index]
+            if args.real_game_end_index == -1:
+                args.real_game_end_index = len(game_asts)
+
+            initial_proposals = game_asts[args.real_game_start_index:min(args.real_game_end_index, len(game_asts))]
 
         mcmc.multiple_samples_parallel(args.n_samples, verbose=args.verbose, should_tqdm=args.should_tqdm,
-                                       initial_proposals=initial_proposals, postprocess=args.postprocess)
+                                       initial_proposals=initial_proposals, postprocess=args.postprocess,
+                                       n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize)
 
     else:
         if args.start_from_real_games:

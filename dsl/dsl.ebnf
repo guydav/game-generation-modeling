@@ -18,15 +18,30 @@ id = /[a-z0-9][a-z0-9\-]+/;
 name = /[A-Za-z][A-Za-z0-9_]*/;
 number = /-?\d*\.?\d+/;
 
-variable = /\?[a-z][a-z0-9]*/;
-variable_list = '(' {variables:variable_type_def}+ ')';
-variable_type_def = {var_names:variable}+ '-' var_type:type_definition;
-type_definition = type:(object_type | either_types);  # TODO: see if I need to add a name for this
-either_types = '(either' {type_names:object_type}+ ')'; # TODO: do we want to enforce more than one?
+variable = /\?[a-w][a-z0-9]*/;
+color_variable = /\?x[0-9]*/;
+orientation_variable = /\?y[0-9]*/;
+side_variable = /\?z[0-9]*/;
+
+variable_list = '(' {variables+:(variable_type_def |  color_variable_type_def | orientation_variable_type_def | side_variable_type_def)}+ ')';
+
+variable_type_def = {var_names+:variable}+ '-' var_type:type_definition;
+color_variable_type_def = {var_names+:color_variable}+ '-' var_type:color_type_definition;
+orientation_variable_type_def = {var_names+:orientation_variable}+ '-' var_type:orientation_type_definition;
+side_variable_type_def = {var_names+:side_variable}+ '-' var_type:side_type_definition;
+
+type_definition = type:(object_type | either_types);
+color_type_definition = type:(color | either_color_types);
+orientation_type_definition = type:(orientation | either_orientation_types);
+side_type_definition = type:(side | either_side_types);
+
+either_types = '(either' {type_names+:object_type}+ ')';
+either_color_types = '(either' {type_names+:color}+ ')';
+either_orientation_types = '(either' {type_names+:orientation}+ ')';
+either_side_types = '(either' {type_names+:side}+ ')';
 
 object_name = name;
 object_type = name;
-
 color = name;
 location = name;
 orientation = name;
@@ -34,13 +49,13 @@ side = name;
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
-multiple_args_equal_comparison = '(=' {equal_comp_args:comparison_arg}+ ')';
+multiple_args_equal_comparison = '(=' {equal_comp_args+:comparison_arg}+ ')';
 
 predicate_or_function_term = term:(object_name | variable);
-predicate_or_function_color_term = term:(color | variable);
+predicate_or_function_color_term = term:(color | color_variable);
 predicate_or_function_location_term = term:(location | variable);
-predicate_or_function_orientation_term = term:(orientation | variable);
-predicate_or_function_side_term = term:(side | variable);
+predicate_or_function_orientation_term = term:(orientation | orientation_variable);
+predicate_or_function_side_term = term:(side | side_variable);
 predicate_or_function_type_term = term:(object_type | variable);
 
 
@@ -111,7 +126,7 @@ predicate_on = '(on' arg_1:predicate_or_function_term arg_2:predicate_or_functio
 predicate_open = '(open' arg_1:predicate_or_function_term ')';
 predicate_opposite = '(opposite' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_rug_color_under = '(rug_color_under' arg_1:predicate_or_function_term arg_2:predicate_or_function_color_term ')';
-predicate_same_color = '(same_color' arg_1:predicate_or_function_term arg_2:predicate_or_function_color_term ')';
+predicate_same_color = '(same_color' arg_1:predicate_or_function_term arg_2:(predicate_or_function_term | predicate_or_function_color_term) ')';
 predicate_same_object = '(same_object' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_same_type = '(same_type' arg_1:predicate_or_function_term arg_2:predicate_or_function_type_term ')';
 predicate_toggled_on = '(toggled_on' arg_1:predicate_or_function_term ')';
@@ -129,8 +144,8 @@ setup = setup:(setup_and |
     )
     ;
 
-setup_and = '(and' {and_args:setup}+ ')';  # TODO: do we want to enforce more than one?
-setup_or = '(or' {or_args:setup}+ ')';  # TODO: do we want to enforce more than one?
+setup_and = '(and' {and_args+:setup}+ ')';  # TODO: do we want to enforce more than one?
+setup_or = '(or' {or_args+:setup}+ ')';  # TODO: do we want to enforce more than one?
 setup_not = '(not' not_args:setup ')';
 setup_exists = '(exists' exists_vars:variable_list exists_args:setup ')';
 setup_forall = '(forall' forall_vars:variable_list forall_args:setup ')';
@@ -151,15 +166,15 @@ super_predicate = pred:(
     )
     ;
 
-super_predicate_and = '(and' {and_args:super_predicate}+ ')'; # TODO: do we want to enforce more than one?
-super_predicate_or = '(or' {or_args:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
+super_predicate_and = '(and' {and_args+:super_predicate}+ ')'; # TODO: do we want to enforce more than one?
+super_predicate_or = '(or' {or_args+:super_predicate}+ ')';  # TODO: do we want to enforce more than one?
 super_predicate_not = '(not' not_args:super_predicate ')';
 super_predicate_exists = '(exists' exists_vars:variable_list exists_args:super_predicate ')';
 super_predicate_forall = '(forall' forall_vars:variable_list forall_args:super_predicate ')';
 
 # Constraints/Preferences
 preferences =
-    '(and' {preferences:pref_def}+ ')' | # TODO: do we want to enforce more than one?
+    '(and' {preferences+:pref_def}+ ')' | # TODO: do we want to enforce more than one?
     preferences:pref_def
     ;
 
@@ -169,7 +184,7 @@ preference = '(preference' pref_name:preference_name pref_body:pref_body ')';
 preference_name = name;
 pref_forall = '(forall' forall_vars:variable_list forall_pref:pref_forall_prefs ')';
 
-pref_forall_prefs = '(and' {preferences:preference}+ ')' |  # to allow multiple preferences in a forall
+pref_forall_prefs = '(and' {preferences+:preference}+ ')' |  # to allow multiple preferences in a forall
     {preferences:preference};
 
 pref_body = body:(
@@ -183,7 +198,7 @@ pref_body_exists = '(exists' exists_vars:variable_list exists_args:(then | at_en
 pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
 at_end = '(at-end' at_end_pred:super_predicate')';
 always = '(always' always_pred:super_predicate')';
-then = '(then' {then_funcs:seq_func}+ ')';
+then = '(then' {then_funcs+:seq_func}+ ')';
 
 seq_func = seq_func:(
     once |
@@ -201,7 +216,7 @@ seq_func = seq_func:(
 once = '(once ' once_pred:super_predicate ')';
 once_measure = '(once-measure' once_measure_pred:super_predicate measurement:function_eval ')';
 hold = '(hold' hold_pred:super_predicate ')';
-while_hold = '(hold-while' hold_pred:super_predicate {while_preds:super_predicate}+ ')';
+while_hold = '(hold-while' hold_pred:super_predicate {while_preds+:super_predicate}+ ')';
 # hold_for = '(hold-for' num_to_hold:number hold_pred:super_predicate ')';
 # hold_to_end = '(hold-to-end' hold_pred:super_predicate ')';
 # forall_seq = '(forall-sequence' forall_seq_vars:variable_list forall_seq_then:then ')';
@@ -231,8 +246,8 @@ terminal = terminal:(
     terminal_comp
     );
 
-terminal_and = '(and' {and_args:terminal}+ ')'; # TODO: do we want to enforce more than one?
-terminal_or = '(or' {or_args:terminal}+ ')'; # TODO: do we want to enforce more than one?
+terminal_and = '(and' {and_args+:terminal}+ ')'; # TODO: do we want to enforce more than one?
+terminal_or = '(or' {or_args+:terminal}+ ')'; # TODO: do we want to enforce more than one?
 terminal_not = '(not' not_args:terminal ')';
 terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')';
 
@@ -259,7 +274,7 @@ scoring_expr_or_number = expr:(scoring_expr | number);
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
 
-scoring_multi_expr = '(' op:multi_op {expr:scoring_expr_or_number}+ ')';  # TODO: do we want to enforce more than one?
+scoring_multi_expr = '(' op:multi_op {expr+:scoring_expr_or_number}+ ')';  # TODO: do we want to enforce more than one?
 scoring_binary_expr = '(' op:binary_op expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
 scoring_neg_expr = '(-' expr:scoring_expr_or_number ')';
 
@@ -279,7 +294,7 @@ scoring_comparison = comp:(
     scoring_equals_comp);
 
 scoring_comp = '(' op:binary_comp expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
-scoring_equals_comp = '(=' {expr:scoring_expr_or_number}+ ')';
+scoring_equals_comp = '(=' {expr+:scoring_expr_or_number}+ ')';
 
 
 preference_eval = count_method:(
@@ -318,7 +333,7 @@ count_same_positions = '(count-same-positions' name_and_types:pref_name_and_type
 count_once_per_external_objects = '(count-once-per-external-objects' name_and_types:pref_name_and_types ')';
 count_measure = '(count-measure' name_and_types:pref_name_and_types ')';
 
-pref_name_and_types = pref_name:preference_name {object_types:pref_object_type}*;
+pref_name_and_types = pref_name:preference_name {object_types+:pref_object_type}*;
 
 pref_object_type = ':' type_name:(object_type | object_name);
 

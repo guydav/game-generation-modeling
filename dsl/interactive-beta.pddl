@@ -101,7 +101,7 @@
 (define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)  ; 6
 (:setup (and
     (exists (?h - hexagonal_bin) (game-conserved (adjacent ?h bed)))
-    (forall (?x - (either teddy_bear pillow)) (game-conserved (not (on bed ?x))))
+    (forall (?o - (either teddy_bear pillow)) (game-conserved (not (on bed ?o))))
 ))
 (:constraints (and
     (forall (?b - ball)
@@ -691,11 +691,11 @@
     (game-optional (not (exists (?g - game_object) (on desk ?g))))
 ))
 (:constraints (and
-    (forall (?b - ball ?c - (either red yellow pink))
+    (forall (?b - ball ?x - (either red yellow pink))
         (preference throwBallToBin
             (exists (?h - hexagonal_bin)
                 (then
-                    (once (and (agent_holds ?b) (on rug agent) (rug_color_under agent ?c)))
+                    (once (and (agent_holds ?b) (on rug agent) (rug_color_under agent ?x)))
                     (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                     (once (and (not (in_motion ?b)) (in ?h ?b)))
                 )
@@ -763,11 +763,11 @@
     (exists (?c - chair ?h - hexagonal_bin) (game-conserved (on ?c ?h)))
 ))
 (:constraints (and
-    (forall (?d - dodgeball ?c - color)
+    (forall (?d - dodgeball ?x - color)
         (preference throwBallToBin
             (exists (?h - hexagonal_bin)
                 (then
-                    (once (and (agent_holds ?d) (on rug agent) (rug_color_under agent ?c)))
+                    (once (and (agent_holds ?d) (on rug agent) (rug_color_under agent ?x)))
                     (hold (and (not (agent_holds ?d)) (in_motion ?d)))
                     (once (and (not (in_motion ?d)) (in ?h ?d)))
                 )
@@ -854,13 +854,13 @@
     (forall (?c - cube_block) (game-conserved (on rug ?c)))
 ))
 (:constraints (and
-    (forall (?c - color)
+    (forall (?x - color)
         (preference thrownBallHitsBlock
             (exists (?d - dodgeball ?b - cube_block)
                 (then
                     (once (and (agent_holds ?d) (not (on rug agent))))
                     (hold (and (not (agent_holds ?d)) (in_motion ?d)))
-                    (once (and (on rug ?b) (touch ?b ?d) (rug_color_under ?b ?c)))
+                    (once (and (on rug ?b) (touch ?b ?d) (rug_color_under ?b ?x)))
                 )
             )
         )
@@ -1207,7 +1207,7 @@
     (exists (?r - curved_wooden_ramp) (game-conserved (adjacent ?r rug)))
 ))
 (:constraints (and
-    (forall (?c - color)
+    (forall (?x - color)
         (preference ballRolledOnRampToRug
             (exists (?b - beachball ?r - curved_wooden_ramp)
                 (then
@@ -1216,7 +1216,7 @@
                         (and (not (agent_holds ?b)) (in_motion ?b))
                         (on ?r ?b)
                     )
-                    (once (and (not (in_motion ?b)) (on rug ?b) (rug_color_under ?b ?c)))
+                    (once (and (not (in_motion ?b)) (on rug ?b) (rug_color_under ?b ?x)))
                 )
             )
         )
@@ -1415,7 +1415,7 @@
         (then
             (once (and (agent_holds ?d) (faces agent ?c)))
             (hold-while
-                (and (in_motion ?d) (not (agent_holds ?d?)))
+                (and (in_motion ?d) (not (agent_holds ?d)))
                 (touch ?d ?c)
             )
             (once (and (not (in_motion ?d)) (on bed ?d)))
@@ -1441,7 +1441,7 @@
 (define (game 5d470786da637a00014ba26f-47) (:domain many-objects-room-v1)  ; 47
 
 (:constraints (and
-    (forall (?c - color)
+    (forall (?x - color)
         (preference beachballBouncedOffRamp
             (exists (?b - beachball ?r - green_triangular_ramp)
                 (then
@@ -1450,7 +1450,7 @@
                         (and (in_motion ?b) (not (agent_holds ?b)))
                         (touch ?b ?r)
                     )
-                    (once (and (not (in_motion ?b)) (on rug ?b) (rug_color_under ?b ?c)))
+                    (once (and (not (in_motion ?b)) (on rug ?b) (rug_color_under ?b ?x)))
                 )
             )
         )
@@ -2339,10 +2339,10 @@
 
 (define (game 5d0ba121619661001a7f4fe6-76) (:domain few-objects-room-v1)  ; 76
 (:constraints (and
-    (forall (?c - (either pink yellow)) (and
+    (forall (?x - (either pink yellow)) (and
         (preference blockToBinFromRug (exists (?b - cube_block ?h - hexagonal_bin)
             (then
-                (once (and (agent_holds ?b) (rug_color_under agent ?c)))
+                (once (and (agent_holds ?b) (rug_color_under agent ?x)))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
                 (once (and
                     (not (in_motion ?b))
@@ -2358,7 +2358,7 @@
         ))
         (preference blockThrowAttempt (exists (?b - cube_block)
             (then
-                (once (and (agent_holds ?b) (rug_color_under agent ?c)))
+                (once (and (agent_holds ?b) (rug_color_under agent ?x)))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
                 (once (not (in_motion ?b)))
             )
@@ -2625,13 +2625,13 @@
 
 (define (game 61272733b6c8fe076880e02c-85) (:domain few-objects-room-v1)  ; 85
 (:constraints (and
-    (forall (?c - color)
+    (forall (?x - color)
         (preference cubeThrownToBin (exists (?h - hexagonal_bin ?b - cube_block)
             (then
                 (once (and
                     (agent_holds ?b)
                     (rug_color_under agent pink)
-                    (same_color ?b ?c)
+                    (same_color ?b ?x)
                     (not (exists (?ob - cube_block) (in ?h ?ob)))
                 ))
                 (hold (and (in_motion ?b) (not (agent_holds ?b))))
@@ -3456,11 +3456,11 @@
 
 (define (game 5e73ded1027e893642055f86-118) (:domain medium-objects-room-v1)  ; 118
 (:constraints (and
-    (forall (?c - color)
+    (forall (?x - color)
         (preference objectWithMatchingColor (exists (?o1 ?o2 - game_object)
             (at-end (and
                 (same_color ?o1 ?o2)
-                (same_color ?o1 ?c)
+                (same_color ?o1 ?x)
                 (or
                     (on ?o1 ?o2)
                     (adjacent ?o1 ?o2)

@@ -26,8 +26,8 @@ NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'rea
 
 BINARIZE_IGNORE_FEATURES = set([
     'all_variables_defined', 'all_variables_used',
-    'setup_objects_used', 'starts_and_ends_once',
-    'all_preferences_used',
+    'setup_objects_used', 'setup_quantified_objects_used',
+    'starts_and_ends_once', 'all_preferences_used',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',

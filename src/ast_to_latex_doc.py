@@ -909,7 +909,13 @@ def extract_co_ocurring_types(ast, key):
 
 TYPE_RULES = {
     'variable_type_def': (extract_single_variable_type, None),
+    'color_variable_type_def': (extract_single_variable_type, None),
+    'orientation_variable_type_def': (extract_single_variable_type, None),
+    'side_variable_type_def': (extract_single_variable_type, None),
     'either_types': (extract_either_variable_types, None),
+    'either_color_types': (extract_either_variable_types, None),
+    'either_orientation_types': (extract_either_variable_types, None),
+    'either_side_types': (extract_either_variable_types, None),
     'pref_name_and_types': (extract_pref_name_and_types, None),
     'predicate': (extract_types_from_predicates_and_functions, None),
     'function': (extract_types_from_predicates_and_functions, None),

@@ -290,48 +290,47 @@ class NewVariableSampler:
         return f'?{new_var}'
 
 
-class SingleLetterNewVariableSampler:
+class SingleLetterVariableSampler:
+    key: str
     letter: str
 
-    def __init__(self, letter: str):
+    def __init__(self, letter: str, key_prefix: str):
         self.letter = letter
+        self.key = f'{key_prefix}_variables'
 
+
+class SingleLetterNewVariableSampler(SingleLetterVariableSampler):
     def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
         if local_context is None:
             local_context = {}
 
-        if 'variables' not in local_context:
-            local_context['variables'] = dict()
+        if self.key not in local_context:
+            local_context[self.key] = dict()
 
-        if self.letter not in local_context['variables']:
-            local_context['variables'][self.letter] = None
+        if self.letter not in local_context[self.key]:
+            local_context[self.key][self.letter] = None
             return f'?{self.letter}'
 
         number = 0
-        while f'{self.letter}{number}' in local_context['variables']:
+        while f'{self.letter}{number}' in local_context[self.key]:
             number += 1
 
-        local_context['variables'][f'{self.letter}{number}'] = None
+        local_context[self.key][f'{self.letter}{number}'] = None
         return f'?{self.letter}{number}'
 
 
-class SingleLetterExistingVariableSampler:
-    letter: str
-
-    def __init__(self, letter: str):
-        self.letter = letter
-
+class SingleLetterExistingVariableSampler(SingleLetterVariableSampler):
     def __call__(self, global_context: ContextDict, local_context: typing.Optional[ContextDict] = None):
         if local_context is None:
             local_context = {}
 
-        if 'variables' not in local_context:
-            raise SamplingException('Attempted to sample an existing variable with no variables in scope')
+        if self.key not in local_context:
+            raise SamplingException(f'Attempted to sample an existing variable with no {self.key} in scope')
 
-        valid_variables = [k for k in local_context['variables'].keys() if k[0] == self.letter]
+        valid_variables = [k for k in local_context[self.key].keys() if k[0] == self.letter]
 
         if not valid_variables:
-            raise SamplingException(f'Attempted to sample an existing variable with no {self.letter} variables in scope')
+            raise SamplingException(f'Attempted to sample an existing variable with no {self.letter} variables (under {self.key}) in scope')
 
         if 'rng' not in global_context:
             rng = np.random.default_rng()
@@ -377,32 +376,35 @@ VARIABLE_DEFAULTS = defaultdict(create_sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
+COLOR = 'color'
+ORIENTATION = 'orientation'
+SIDE = 'side'
+
+
 COLOR_VARIABLE_LETTER = 'x'
 ORIENTATION_VARIABLE_LETTER = 'y'
 SIDE_VARIABLE_LETTER = 'z'
 
 def create_color_variable_sampler():
-    return SingleLetterExistingVariableSampler(COLOR_VARIABLE_LETTER)
+    return SingleLetterExistingVariableSampler(COLOR_VARIABLE_LETTER, COLOR)
 
 def create_orientation_variable_sampler():
-    return SingleLetterExistingVariableSampler(ORIENTATION_VARIABLE_LETTER)
+    return SingleLetterExistingVariableSampler(ORIENTATION_VARIABLE_LETTER, ORIENTATION)
 
 def create_side_variable_sampler():
-    return SingleLetterExistingVariableSampler(SIDE_VARIABLE_LETTER)
+    return SingleLetterExistingVariableSampler(SIDE_VARIABLE_LETTER, SIDE)
 
 
 COLOR_VARIABLE_DEFAULTS = defaultdict(create_color_variable_sampler)
-COLOR_VARIABLE_DEFAULTS[('color_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(COLOR_VARIABLE_LETTER)   # type: ignore
+COLOR_VARIABLE_DEFAULTS[('color_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(COLOR_VARIABLE_LETTER, COLOR)   # type: ignore
 
 ORIENTATION_VARIABLE_DEFAULTS = defaultdict(create_orientation_variable_sampler)
-ORIENTATION_VARIABLE_DEFAULTS[('orientation_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(ORIENTATION_VARIABLE_LETTER)   # type: ignore
+ORIENTATION_VARIABLE_DEFAULTS[('orientation_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(ORIENTATION_VARIABLE_LETTER, ORIENTATION)   # type: ignore
 
 SIDE_VARIABLE_DEFAULTS = defaultdict(create_side_variable_sampler)
-SIDE_VARIABLE_DEFAULTS[('side_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(SIDE_VARIABLE_LETTER)   # type: ignore
+SIDE_VARIABLE_DEFAULTS[('side_variable_type_def', 'var_names')] = SingleLetterNewVariableSampler(SIDE_VARIABLE_LETTER, SIDE)   # type: ignore
 
-COLOR = 'color'
-ORIENTATION = 'orientation'
-SIDE = 'side'
+
 
 COLORS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.COLORS]
 ORIENTATIONS = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.ORIENTATIONS]
@@ -1191,21 +1193,15 @@ class RegrowthSampler(ASTParentMapper):
             kwargs['global_context']['preference_names'].add(ast.pref_name)
 
         elif rule == 'variable_list':
-            if 'variables' not in kwargs['local_context']:
-                kwargs['local_context']['variables'] = dict()
-
             if isinstance(ast.variables, tatsu.ast.AST):
-                kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast.variables))
+                self._update_variable_type_def_kwargs(ast.variables, rule, kwargs)
 
             else:
                 for var_def in ast.variables:
-                    kwargs['local_context']['variables'].update(self._extract_variable_def_variables(var_def))
+                    self._update_variable_type_def_kwargs(var_def, rule, kwargs)
 
-        elif rule == 'variable_type_def':
-            if 'variables' not in kwargs['local_context']:
-                kwargs['local_context']['variables'] = dict()
-
-            kwargs['local_context']['variables'].update(self._extract_variable_def_variables(ast))
+        elif rule.endswith('variable_type_def'):
+            self._update_variable_type_def_kwargs(ast, rule, kwargs)
 
         self._add_ast_to_mapping(ast, **kwargs)
 
@@ -1222,6 +1218,17 @@ class RegrowthSampler(ASTParentMapper):
             return kwargs['global_context'], kwargs['local_context']
 
         return kwargs['global_context'], None
+
+    def _update_variable_type_def_kwargs(self, ast, rule, kwargs):
+        key = 'variables'
+        if not rule.startswith('variable'):
+            variable_type = rule.split('_')[0]
+            key = f'{variable_type}_variables'
+
+        if key not in kwargs['local_context']:
+            kwargs['local_context'][key] = dict()
+
+        kwargs['local_context'][key].update(self._extract_variable_def_variables(ast))
 
     def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None) -> tuple:
         new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'

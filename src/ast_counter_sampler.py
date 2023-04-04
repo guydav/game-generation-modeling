@@ -46,6 +46,7 @@ DEFAULT_SAMPLES_OUTPUT_PATH = './dsl/ast-mle-samples.pddl'
 parser.add_argument('--samples-output-path', default=DEFAULT_SAMPLES_OUTPUT_PATH)
 parser.add_argument('-s', '--save-samples', action='store_true')
 parser.add_argument('-c', '--parse-counter', action='store_true')
+parser.add_argument('--relative-path', type=str, default=None)
 parser.add_argument('-n', '--num-samples', type=int, default=10)
 parser.add_argument('-p', '--print-samples', action='store_true')
 parser.add_argument('-v', '--validate-samples', action='store_true')
@@ -1198,10 +1199,10 @@ class RegrowthSampler(ASTParentMapper):
 
             else:
                 for var_def in ast.variables:
-                    self._update_variable_type_def_kwargs(var_def, rule, kwargs)
+                    self._update_variable_type_def_kwargs(var_def, kwargs)
 
         elif rule.endswith('variable_type_def'):
-            self._update_variable_type_def_kwargs(ast, rule, kwargs)
+            self._update_variable_type_def_kwargs(ast, kwargs)
 
         self._add_ast_to_mapping(ast, **kwargs)
 
@@ -1219,8 +1220,9 @@ class RegrowthSampler(ASTParentMapper):
 
         return kwargs['global_context'], None
 
-    def _update_variable_type_def_kwargs(self, ast, rule, kwargs):
+    def _update_variable_type_def_kwargs(self, ast, kwargs):
         key = 'variables'
+        rule = ast.parseinfo.rule
         if not rule.startswith('variable'):
             variable_type = rule.split('_')[0]
             key = f'{variable_type}_variables'
@@ -1313,7 +1315,7 @@ def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optio
         counter = ASTRuleValueCounter()
 
         for test_file in args.test_files:
-            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
+            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm, args.relative_path):
                 counter(ast)
 
         with open(args.counter_output_path, 'wb') as out_file:

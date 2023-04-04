@@ -96,7 +96,7 @@
                 "--validate-samples",
                 "--parse-counter",
                 "--save-samples",
-                "--num-samples", "16", // "4096",
+                "--num-samples", "1024", // "4096",
                 "--sampling-method", "regrowth",
                 // "--sampling-method", "mle",
                 "--sample-tqdm",

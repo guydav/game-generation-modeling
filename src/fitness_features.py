@@ -570,7 +570,9 @@ EITHER_TYPES_RULES_PATTERN = re.compile(r'either[\w_]+types')
 
 class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
     def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
-        super().__init__(skip_objects, (VARIABLE_TYPE_DEF_RULES_PATTERN, EITHER_TYPES_RULES_PATTERN, 'pref_name_and_types'), 'setup_quantified_objects_used')
+        super().__init__(skip_objects,
+                         (VARIABLE_TYPE_DEF_RULES_PATTERN, EITHER_TYPES_RULES_PATTERN, 'pref_name_and_types'),
+                         'setup_quantified_objects_used')
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -1504,6 +1506,40 @@ class NoTwoNumberOperations(FitnessTerm):
         return self.two_number_operations > 0
 
 
+class NoSingleArgumentMultiOperations(FitnessTerm):
+    total_operations: int = 0
+    single_argument_multi_operations: int = 0
+
+    def __init__(self):
+        super().__init__((MULTIPLE_ARG_COMPARISON_RULE, SCORING_EQUALS_COMP, SCORING_MULTI_EXPR), 'single_argument_multi_operation_found')
+
+    def game_start(self) -> None:
+        self.total_operations = 0
+        self.single_argument_multi_operations = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.total_operations += 1
+
+            if rule == MULTIPLE_ARG_COMPARISON_RULE:
+                args = ast.equal_comp_args
+                if isinstance(args, tatsu.ast.AST) or len(args) == 1:  # type: ignore
+                    self.single_argument_multi_operations += 1
+
+            elif rule == SCORING_EQUALS_COMP or rule == SCORING_MULTI_EXPR:
+                args = ast.expr
+                if isinstance(args, tatsu.ast.AST) or len(args) == 1:  # type: ignore
+                    self.single_argument_multi_operations += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if self.total_operations == 0:
+            return 0
+
+        return self.single_argument_multi_operations > 0
+
+
+
+
 # COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
 COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'adjacent_side_3', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'object_orientation', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
@@ -2140,8 +2176,11 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     # correct_predicate_arity = CorrectPredicateFunctionArity()
     # fitness.register(correct_predicate_arity)
 
-    no_two_number_comparisons = NoTwoNumberOperations()
-    fitness.register(no_two_number_comparisons)
+    no_two_number_operations = NoTwoNumberOperations()
+    fitness.register(no_two_number_operations)
+
+    no_single_argument_multi_operations = NoSingleArgumentMultiOperations()
+    fitness.register(no_single_argument_multi_operations)
 
     no_count_in_terminal = SectionWithoutPrefOrTotalCounts(ast_parser.TERMINAL)
     fitness.register(no_count_in_terminal, section_rule=True)
@@ -2309,8 +2348,9 @@ if __name__ == '__main__':
     logging.debug(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
 
 
-    zero_sum_features = []
-    positive_sum_features = []
+    zero_mean_features = []
+    positive_mean_features = []
+    one_mean_features = []
 
     for feature in df.columns:
         if not pd.api.types.is_numeric_dtype(df[feature]):
@@ -2320,16 +2360,22 @@ if __name__ == '__main__':
                                       'compositionality_structure', 'depth', 'node_count', 'length_of_then', 'ast_ngram')):
             continue
 
-        if df.loc[df.real == True, feature].sum() == 0:
-            zero_sum_features.append(feature)
+        real_game_feature_mean = df.loc[df.real == True, feature].mean()
+        if real_game_feature_mean == 0:
+            zero_mean_features.append(feature)
+        elif real_game_feature_mean == 1:
+            one_mean_features.append(feature)
         else:
-            positive_sum_features.append(feature)
+            positive_mean_features.append(feature)
 
-    zero_sum_features_str = '\n'.join([f'    - {feature}' for feature in zero_sum_features])
-    logging.debug(f'The following features have zero sum over the real games:\n{zero_sum_features_str}\n')
+    zero_mean_features_str = '\n'.join([f'    - {feature}' for feature in zero_mean_features])
+    logging.debug(f'The following features have a mean of zero over the real games:\n{zero_mean_features_str}\n')
 
-    positive_sum_features_str = '\n'.join([f'    - {feature}' for feature in positive_sum_features])
-    logging.debug(f'The following features have positive sum over the real games:\n{positive_sum_features_str}\n')
+    positive_mean_features_str = '\n'.join([f'    - {feature}' for feature in positive_mean_features])
+    logging.debug(f'The following features have a positive mean over the real games:\n{positive_mean_features_str}\n')
+
+    one_mean_features_str = '\n'.join([f'    - {feature}' for feature in one_mean_features])
+    logging.debug(f'The following features have a mean of 1 over the real games:\n{one_mean_features_str}\n')
 
     logging.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')

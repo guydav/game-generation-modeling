@@ -63,7 +63,7 @@ parser.add_argument('--counter-output-path', type=str, default=DEFAULT_COUNTER_O
 
 DEFAULT_FITNESS_FUNCTION_DATE_ID = 'full_features_2023_03_29'
 parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITNESS_FUNCTION_DATE_ID)
-DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_03_29.pkl.gz'
+DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_04_05.pkl.gz'
 parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
 parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
 

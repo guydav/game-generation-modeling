@@ -1195,7 +1195,7 @@ class RegrowthSampler(ASTParentMapper):
 
         elif rule == 'variable_list':
             if isinstance(ast.variables, tatsu.ast.AST):
-                self._update_variable_type_def_kwargs(ast.variables, rule, kwargs)
+                self._update_variable_type_def_kwargs(ast.variables, kwargs)
 
             else:
                 for var_def in ast.variables:

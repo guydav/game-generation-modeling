@@ -485,9 +485,11 @@
         )
     ))
 ))
-(:scoring (+
+(:scoring
     (* 10 (count-once-per-objects castleBuilt))
-    ; (* 4 (or
+))
+
+; (* 4 (or
     ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block) (count-once-per-objects castleBuilt))
     ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
     ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
@@ -517,7 +519,6 @@
     ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
     ; ))
     ; (* 3 (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt)))
-)))
 
 (define (game 60e93f64ec69ecdac3107555-19) (:domain medium-objects-room-v1)  ; 19
 (:setup (and

@@ -1981,12 +1981,11 @@ class SectionExistsFitnessTerm(FitnessTerm):
 #         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_03_09.pkl')
+AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_04_07.pkl')
 DEFAULT_TOP_K_NGRAMS = 10
 DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
 DEFAULT_TOP_K_MIN_N = 2
 DEFAULT_TOP_K_MAX_N = 7
-
 
 
 class ASTNGramTerm(FitnessTerm):

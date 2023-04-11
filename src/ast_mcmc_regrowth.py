@@ -61,9 +61,9 @@ parser.add_argument('--grammar-file', type=str, default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('--parse-counter', action='store_true')
 parser.add_argument('--counter-output-path', type=str, default=DEFAULT_COUNTER_OUTPUT_PATH)
 
-DEFAULT_FITNESS_FUNCTION_DATE_ID = 'full_features_2023_03_29'
+DEFAULT_FITNESS_FUNCTION_DATE_ID = 'full_features_2023_04_07'
 parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITNESS_FUNCTION_DATE_ID)
-DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_04_05.pkl.gz'
+DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_04_07.pkl.gz'
 parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
 parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
 
@@ -159,6 +159,12 @@ class MCMCRegrowthSampler:
         if 'wrapper' in self.fitness_function.named_steps:  # type: ignore
             self.fitness_function.named_steps['wrapper'].eval()  # type: ignore
         return self.fitness_function.transform(features).item()
+
+    def visualize_sample_with_energy_difference(self, sample_index: int, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
+        energy_diff_sample_indices = [i for i, s in enumerate(self.samples) if len(s) > 3 and s[2] < s[5]]
+        original_sample_index = energy_diff_sample_indices[sample_index]
+        print(f'The {sample_index} sample with an energy difference is the {original_sample_index} sample.')
+        self.visualize_sample(original_sample_index, display_overall_features=display_overall_features, display_game=display_game, min_display_threshold=min_display_threshold)
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
         sample_tuple = self.samples[sample_index]

@@ -185,7 +185,7 @@ CATEGORIES_TO_TYPES = {
         EMPTY_OBJECT_OBJ,
     ),
     FURNITURE: (
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF,  # TODO: does chair qualify as funiture? since it's movable
+        BED, BLINDS, CHAIR, DESK, DESK_SHELF,  # TODO: does chair qualify as furniture? since it's movable
         DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, SIDE_TABLE,
     ),
     BUILDING: (

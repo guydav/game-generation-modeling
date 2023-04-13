@@ -163,7 +163,7 @@ class MCMCRegrowthSampler:
     def visualize_sample_with_energy_difference(self, sample_index: int, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
         energy_diff_sample_indices = [i for i, s in enumerate(self.samples) if len(s) > 3 and s[2] < s[5]]
         original_sample_index = energy_diff_sample_indices[sample_index]
-        print(f'The {sample_index} sample with an energy difference is the {original_sample_index} sample.')
+        print(f'Sample #{sample_index} with an energy difference is the the original sample #{original_sample_index}')
         self.visualize_sample(original_sample_index, display_overall_features=display_overall_features, display_game=display_game, min_display_threshold=min_display_threshold)
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):

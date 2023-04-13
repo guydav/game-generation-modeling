@@ -500,6 +500,7 @@ class NGramASTParser(ast_parser.ASTParser):
 
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'update_model_counts', False)
+        self._default_kwarg(kwargs, 'skip_game_and_domain', self.skip_game_and_domain)
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
@@ -507,7 +508,7 @@ class NGramASTParser(ast_parser.ASTParser):
             self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 
         if initial_call:
-            if self.skip_game_and_domain:
+            if kwargs['skip_game_and_domain']:
                 ast = ast[3:]
 
         super().__call__(ast, **kwargs)
@@ -708,7 +709,12 @@ class ASTNGramTrieModel:
               stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
               top_k_max_n: typing.Optional[int] = None, k_for_sections: typing.Optional[int] = None,
-              score_all: bool = False, debug: bool = False):
+              score_all: bool = False, tokenize_entire_ast: bool = False,
+              ngram_ast_parser_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+              debug: bool = False):
+
+        if ngram_ast_parser_kwargs is None:
+            ngram_ast_parser_kwargs = {}
 
         if k_for_sections is None:
             k_for_sections = k
@@ -720,7 +726,11 @@ class ASTNGramTrieModel:
 
             n_values = list(range(top_k_min_n, top_k_max_n + 1))
 
-        current_input_ngrams, current_input_ngrams_by_section = self.ngram_ast_parser.parse_test_input(ast, n_values=n_values)
+        if 'skip_game_and_domain' not in ngram_ast_parser_kwargs:
+            ngram_ast_parser_kwargs['skip_game_and_domain'] = not tokenize_entire_ast
+
+        current_input_ngrams, current_input_ngrams_by_section = self.ngram_ast_parser.parse_test_input(
+            ast, n_values=n_values, **ngram_ast_parser_kwargs)
 
         if debug: print(current_input_ngrams[2])
 

@@ -3,6 +3,7 @@ from collections import namedtuple
 import gzip
 import hashlib
 import logging
+import numpy as np
 import os
 import pickle
 import tatsu
@@ -244,7 +245,7 @@ def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[
             context_new[k] = dict(v)
         elif isinstance(v, set):
             context_new[k] = set(v)
-        elif isinstance(v, (int, float, str, tuple)):
+        elif isinstance(v, (int, float, str, tuple, np.random.Generator)):
             context_new[k] = v
         else:
             raise ValueError(f'Unexpected value type: {v}, {type(v)}')

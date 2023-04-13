@@ -444,6 +444,7 @@ def _total_time_defaults():
 def _total_score_defaults():
     return  ['(total-score)']
 
+
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     binary_comp=defaultdict(_comparison_operators),
     binary_op=defaultdict(_binary_operators),
@@ -570,17 +571,20 @@ class ASTSampler:
     handle this for the terminal productions. I need to figure out how to combine
     the information for the rule-based productions, though.
     """
-    def __init__(self, grammar_parser, ast_counter,
-                 pattern_rule_options=DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE,
-                 rule_field_value_types=SPECIAL_RULE_FIELD_VALUE_TYPES,
-                 pattern_type_mappings=PATTERN_TYPE_MAPPINGS,
-                 local_context_propagating_rules=LOCAL_CONTEXT_PROPAGATING_RULES,
-                 prior_rule_count=PRIOR_COUNT, prior_token_count=PRIOR_COUNT,
-                 length_prior=LENGTH_PRIOR, hardcoded_rules=HARDCODED_RULES,
-                 verbose=False, rng=None, seed=DEFAULT_RANDOM_SEED):
+    def __init__(self, grammar_parser: tatsu.grammars.Grammar,
+                 ast_counter: ASTRuleValueCounter,
+                 max_sample_depth: typing.Optional[int] = None,
+                 pattern_rule_options: typing.Dict[str, typing.Dict[typing.Tuple[str, str], typing.Callable]] = DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE,
+                 rule_field_value_types: typing.Dict[typing.Tuple[str, str], typing.Union[str, typing.Tuple[str]]] = SPECIAL_RULE_FIELD_VALUE_TYPES,
+                 pattern_type_mappings: typing.Dict[str, str] = PATTERN_TYPE_MAPPINGS,
+                 local_context_propagating_rules: typing.Set[str] = LOCAL_CONTEXT_PROPAGATING_RULES,
+                 prior_rule_count: int = PRIOR_COUNT, prior_token_count: int = PRIOR_COUNT,
+                 length_prior: typing.Dict[int, int] = LENGTH_PRIOR, hardcoded_rules: typing.Dict[str, dict]=HARDCODED_RULES,
+                 verbose: bool = False, rng: typing.Optional[np.random.Generator] = None, seed: int = DEFAULT_RANDOM_SEED):
 
         self.grammar_parser = grammar_parser
         self.ast_counter = ast_counter
+        self.max_sample_depth = max_sample_depth
 
         self.pattern_rule_options = pattern_rule_options
         self.rule_field_value_types = rule_field_value_types
@@ -613,7 +617,7 @@ class ASTSampler:
 
         if OPTIONS not in field_prior:
             if field_name in rule_counter:
-                print(f'No options for {rule_name}.{field_name} with counted data: {rule_counter.field_name}')
+                print(f'No options for {rule_name}.{field_name} with counted data: {rule_counter.field_name}')  # type: ignore
             else:
                 print(f'No options for {rule_name}.{field_name} with counted data: {rule_counter}')
 
@@ -999,6 +1003,13 @@ class ASTSampler:
             local_context = dict()
         else:
             local_context = simplified_context_deepcopy(local_context)
+
+        if 'depth' not in local_context:
+            local_context['depth'] = 0
+
+        local_context['depth'] += 1
+        if self.max_sample_depth is not None and local_context['depth'] > self.max_sample_depth:
+            raise SamplingException(f'Exceeded max sample depth: {self.max_sample_depth}')
 
         rule_dict = self.rules[rule]
         production = rule_dict[PRODUCTION]

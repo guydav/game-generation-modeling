@@ -1062,6 +1062,19 @@ class ASTSampler:
 
         return output, None
 
+    def sample_until_success(self, rule: str = START,
+        global_context: typing.Optional[ContextDict] = None,
+        local_context: typing.Optional[ContextDict] = None,
+        max_attempts: int = 1000):
+
+        for _ in range(max_attempts):
+            try:
+                return self.sample(rule, global_context, local_context)
+            except SamplingException:
+                pass
+
+        raise SamplingException(f'Failed to sample {rule} after {max_attempts} attempts')
+
 
 class ASTNodeInfo(typing.NamedTuple):
     ast: tatsu.ast.AST

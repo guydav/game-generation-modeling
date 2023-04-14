@@ -2,11 +2,13 @@ import numpy as np
 import tatsu
 import tatsu.ast
 import tatsu.infos
+from tqdm import trange
 
 import ast_printer
 import ast_parser
 from ast_counter_sampler import *
 from fitness_ngram_models import *
+import fitness_energy_utils as utils
 
 
 # TODO: get an argparse going
@@ -29,6 +31,25 @@ NGRAM_MODEL_KEY_BY_SECTION = {
 }
 
 
+DEFAULT_N_PREFERENCE_WEIGHTS = [0.5, 0.35, 0.15]
+DEFAULT_P_SETUP = 0.5
+DEFAULT_P_TERMINAL = 0.5
+
+DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION = {
+    ast_parser.SETUP: 16,
+    ast_parser.PREFERENCES: 24,
+    ast_parser.TERMINAL: 10,
+    ast_parser.SCORING: 16,
+}
+
+DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
+    ast_parser.SETUP: -3,
+    ast_parser.PREFERENCES: -4.5,
+    ast_parser.TERMINAL: -2,
+    ast_parser.SCORING: -2.75,
+}
+
+
 class SectionBySectionNGramScoreSampler:
     max_depth_by_sample_section: typing.Dict[str, int]
     ngram_model: ASTNGramTrieModel
@@ -44,10 +65,10 @@ class SectionBySectionNGramScoreSampler:
     score_threshold_by_sample_section: typing.Dict[str, float]
 
     def __init__(self, sampler: ASTSampler, ngram_model: ASTNGramTrieModel,
-                 n_preferences_weights: typing.List[float],
-                 p_setup: float, p_terminal: float,
-                 max_depth_by_sample_section: typing.Dict[str, int],
-                 score_threshold_by_sample_section: typing.Dict[str, float],
+                 n_preferences_weights: typing.List[float] = DEFAULT_N_PREFERENCE_WEIGHTS,
+                 p_setup: float = DEFAULT_P_SETUP, p_terminal: float = DEFAULT_P_TERMINAL,
+                 max_depth_by_sample_section: typing.Dict[str, int] = DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION,
+                 score_threshold_by_sample_section: typing.Dict[str, float] = DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION,
                  ngram_model_kwargs: typing.Dict[str, typing.Any] = DEFAULT_NGRAM_MODEL_KWARGS,
                  ngram_model_key_by_section: typing.Dict[str, str] = NGRAM_MODEL_KEY_BY_SECTION,
                  rng: typing.Optional[np.random.Generator] = None,
@@ -107,8 +128,12 @@ class SectionBySectionNGramScoreSampler:
         global_context.update(sample_global_context)
         return sample  # type: ignore
 
-    def sample(self):
-        global_context = dict(sample_id=self.sample_id)
+    def sample(self, global_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        if global_context is None:
+            global_context = {}
+
+        if 'sample_id' not in global_context:
+            global_context['sample_id'] = self.sample_id
 
         setup = None
         if self.rng.uniform() < self.p_setup:
@@ -167,10 +192,30 @@ if __name__ == '__main__':
     with open('./models/ast_7_ngram_model_2023_04_07.pkl', 'rb') as f:
         ngram_model = pickle.load(f)
 
-    section_sampler = SectionBySectionNGramScoreSampler(sampler, ngram_model, [0.5, 0.3, 0.2], 0.5, 0.5,
-                                                    defaultdict(lambda: 20), defaultdict(lambda: -3), verbose=1)
+    section_sampler = SectionBySectionNGramScoreSampler(sampler, ngram_model, verbose=0)
 
-    for _ in range(10):
+    N_SAMPLES = 100
+
+    from ast_mcmc_regrowth import *
+
+    mcmc = utils.load_data('2023_04_11', 'samples', f'mcmc_full_features_0_5', relative_path='.')
+
+    section_sampler_energy_scores = []
+    map_sampler_energy_scores = []
+
+    for _ in trange(N_SAMPLES):
         ast = section_sampler.sample()
-        print(ast_printer.ast_to_string(ast, '\n'))  # type: ignore
-        print()
+        section_sampler_energy_scores.append(mcmc._score_proposal(ast)[1])
+        # print(ast_printer.ast_to_string(ast, '\n'))  # type: ignore
+        # print()
+
+    sampler.max_sample_depth = 30
+
+    for _ in trange(N_SAMPLES):
+        ast = sampler.sample_until_success()
+        map_sampler_energy_scores.append(mcmc._score_proposal(ast)[1])
+        # print(ast_printer.ast_to_string(ast, '\n'))  # type: ignore
+        # print()
+
+    print(f'Average section sampler energy score: {np.mean(section_sampler_energy_scores)} +- {np.std(section_sampler_energy_scores)}')
+    print(f'Average MAP sampler energy score: {np.mean(map_sampler_energy_scores)} +- {np.std(map_sampler_energy_scores)}')

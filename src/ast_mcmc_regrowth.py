@@ -1,4 +1,5 @@
 import argparse
+import enum
 import gzip
 import logging
 from multiprocessing import pool as mpp
@@ -15,6 +16,8 @@ import tatsu.grammars
 import torch
 
 from ast_counter_sampler import *
+from ast_initial_proposal_sampler import *
+from fitness_ngram_models import *
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
 from ast_parser import ASTSamplePostprocessor
 import ast_printer
@@ -76,9 +79,12 @@ DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
+DEFAULT_NGRAM_MODEL_PATH = './models/ast_7_ngram_model_2023_04_07.pkl'
+parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_PATH)
 DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
 
+parser.add_argument('--initial-proposal-type', type=int, default=0)
 parser.add_argument('--start-from-real-games', action='store_true')
 parser.add_argument('--real-games-path', type=str, default='./dsl/interactive-beta.pddl')
 parser.add_argument('--n-samples', type=int, default=10)
@@ -94,6 +100,11 @@ parser.add_argument('--postprocess', action='store_true')
 DEFAULT_OUTPUT_NAME = 'mcmc'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
 parser.add_argument('--output-folder', type=str, default='./samples')
+
+
+class InitialProposalSamplerType(enum.Enum):
+    MAP = 0
+    SECTION_SAMPLER = 1
 
 
 def _load_pickle_gzip(path: str):
@@ -113,6 +124,8 @@ class MCMCRegrowthSampler:
     grammar: str
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
     greedy_acceptance: bool
+    initial_proposal_sampler: typing.Union[ASTSampler, SectionBySectionNGramScoreSampler]
+    initial_proposal_type: InitialProposalSamplerType
     max_steps: int
     plateau_patience_steps: int
     postprocessor: ASTSamplePostprocessor
@@ -125,12 +138,15 @@ class MCMCRegrowthSampler:
         args: argparse.Namespace,
         fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
-        plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
+        initial_proposal_type: InitialProposalSamplerType = InitialProposalSamplerType.MAP,
         max_steps: int = DEFAULT_MAX_STEPS,
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
+        plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
         fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
         relative_path: str = DEFAULT_RELATIVE_PATH,
+        ngram_model_path: str = DEFAULT_NGRAM_MODEL_PATH,
+        section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ):
         self.args = args
 
@@ -150,6 +166,17 @@ class MCMCRegrowthSampler:
         self.max_steps = max_steps
         self.greedy_acceptance = greedy_acceptance
         self.acceptance_temperature = acceptance_temperature
+        self.initial_proposal_type = initial_proposal_type
+
+        if self.initial_proposal_type == InitialProposalSamplerType.MAP:
+            self.initial_proposal_sampler = self.sampler
+        elif self.initial_proposal_type == InitialProposalSamplerType.SECTION_SAMPLER:
+            if section_sampler_kwargs is None:
+                section_sampler_kwargs = {}
+
+            with open(ngram_model_path, 'rb') as f:
+                ngram_model = pickle.load(f)
+            self.initial_proposal_sampler = SectionBySectionNGramScoreSampler(self.sampler, ngram_model, **section_sampler_kwargs)
 
         self.postprocessor = ASTSamplePostprocessor()
 
@@ -244,7 +271,7 @@ class MCMCRegrowthSampler:
 
         while initial_proposal is None:
             try:
-                initial_proposal = typing.cast(tuple, self.sampler.sample(global_context=dict(rng=rng, original_game_id=f'mcmc-{sample_index}')))
+                initial_proposal = typing.cast(tuple, self.initial_proposal_sampler.sample(global_context=dict(rng=rng, original_game_id=f'mcmc-{sample_index}')))
             except RecursionError:
                 if verbose >= 2: print('Recursion error, skipping sample')
             except SamplingException:
@@ -405,7 +432,9 @@ def main(args: argparse.Namespace):
         fitness_featurizer_path=args.fitness_featurizer_path,
         plateau_patience_steps=args.plateau_patience_steps, max_steps=args.max_steps,
         greedy_acceptance=not args.non_greedy, acceptance_temperature=args.acceptance_temperature,
-        fitness_function_model_name=args.fitness_function_model_name, relative_path=args.relative_path,
+        initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+        fitness_function_model_name=args.fitness_function_model_name,
+        relative_path=args.relative_path, ngram_model_path=args.ngram_model_path,
     )
 
     if args.sample_parallel:
@@ -449,6 +478,8 @@ if __name__ == '__main__':
 
     args.grammar_file = os.path.join(args.relative_path, args.grammar_file)
     args.counter_output_path = os.path.join(args.relative_path, args.counter_output_path)
+    args.fitness_featurizer_path = os.path.join(args.relative_path, args.fitness_featurizer_path)
+    args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
     logging.debug(f'Shell arguments:\n{args_str}')

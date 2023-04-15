@@ -129,6 +129,8 @@ class SectionBySectionNGramScoreSampler:
         return sample  # type: ignore
 
     def sample(self, global_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        current_sampler_max_depth = self.sampler.max_sample_depth
+
         if global_context is None:
             global_context = {}
 
@@ -167,7 +169,10 @@ class SectionBySectionNGramScoreSampler:
         if terminal is not None: game_sections.append(terminal)
         game_sections.append(scoring)
         game_sections.append(')')
+
         self.sample_id += 1
+        self.sampler.max_sample_depth = current_sampler_max_depth
+
         return tuple(game_sections)
 
 

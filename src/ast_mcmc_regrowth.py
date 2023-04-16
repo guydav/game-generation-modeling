@@ -16,6 +16,7 @@ import tatsu.grammars
 import torch
 
 from ast_counter_sampler import *
+from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler
 from ast_initial_proposal_sampler import *
 from fitness_ngram_models import *
 from ast_crossover_sampler import CrossoverSampler, CrossoverType
@@ -24,6 +25,7 @@ import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
 from fitness_features import *
 from fitness_energy_utils import NON_FEATURE_COLUMNS, evaluate_single_game_energy_contributions, evaluate_comparison_energy_contributions, load_model_and_feature_columns, DEFAULT_SAVE_MODEL_NAME, save_data
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
@@ -64,9 +66,9 @@ parser.add_argument('--grammar-file', type=str, default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('--parse-counter', action='store_true')
 parser.add_argument('--counter-output-path', type=str, default=DEFAULT_COUNTER_OUTPUT_PATH)
 
-DEFAULT_FITNESS_FUNCTION_DATE_ID = 'full_features_2023_04_07'
+DEFAULT_FITNESS_FUNCTION_DATE_ID = LATEST_FITNESS_FUNCTION_DATE_ID
 parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITNESS_FUNCTION_DATE_ID)
-DEFAULT_FITNESS_FEATURIZER_PATH = './models/fitness_featurizer_2023_04_07.pkl.gz'
+DEFAULT_FITNESS_FEATURIZER_PATH = LATEST_FITNESS_FEATURIZER_PATH
 parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
 parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
 
@@ -79,7 +81,7 @@ DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
-DEFAULT_NGRAM_MODEL_PATH = './models/ast_7_ngram_model_2023_04_07.pkl'
+DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
 parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_PATH)
 DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
@@ -193,7 +195,7 @@ class MCMCRegrowthSampler:
         print(f'Sample #{sample_index} with an energy difference is the the original sample #{original_sample_index}')
         self.visualize_sample(original_sample_index, display_overall_features=display_overall_features, display_game=display_game, min_display_threshold=min_display_threshold)
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005):
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         sample_tuple = self.samples[sample_index]
         sample = sample_tuple[0]
         sample_features_tensor = self._features_to_tensor(sample_tuple[1])
@@ -207,6 +209,9 @@ class MCMCRegrowthSampler:
             )
 
         else:
+            if postprocess_sample:
+                sample = self.postprocessor(sample)
+
             evaluate_single_game_energy_contributions(
                 self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,  # type: ignore
                 top_k=top_k, display_overall_features=display_overall_features,

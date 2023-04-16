@@ -185,14 +185,14 @@ CATEGORIES_TO_TYPES = {
         EMPTY_OBJECT_OBJ,
     ),
     FURNITURE: (
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF,  # TODO: does chair qualify as furniture? since it's movable
+        BED, BLINDS, DESK, DESK_SHELF,
         DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, SIDE_TABLE,
     ),
     BUILDING: (
         BUILDING,
     ),
     LARGE_OBJECTS: (
-        BOOK, LAPTOP, PILLOW, TEDDY_BEAR,
+        BOOK, CHAIR, LAPTOP, PILLOW, TEDDY_BEAR,
     ),
     ORIENTATIONS: (
         DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,

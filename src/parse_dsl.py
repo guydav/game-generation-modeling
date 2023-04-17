@@ -27,7 +27,8 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, not args.dont_tqdm)
+    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, True, # type: ignore
+                                                       '.', 1024, False)
     if not args.dont_tqdm:
         test_cases = tqdm.tqdm(test_cases)
 

@@ -121,7 +121,8 @@ def fixed_hash(str_data: str):
 
 
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
-    use_tqdm: bool, relative_path: typing.Optional[str] = None):
+    use_tqdm: bool, relative_path: typing.Optional[str] = None,
+    save_updates_every: int = -1, log_every_change: bool = True):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
     grammar_hash = fixed_hash(grammar_parser._to_str())
@@ -137,6 +138,10 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
 
+    cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
+            CACHE_DSL_HASH_KEY: grammar_hash}
+    n_cache_updates = 0
+
     cache_updated = False
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
@@ -149,18 +154,31 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         game_hash = fixed_hash(game)
 
         if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
-            if not grammar_changed: logging.debug(f'Game {game_id} changed or not in cache, parsing')
+            if not grammar_changed and log_every_change: logging.debug(f'Game {game_id} changed or not in cache, parsing')
             cache_updated = True
             ast = grammar_parser.parse(game)
-            cache[CACHE_HASHES_KEY][game_id] = game_hash
-            cache[CACHE_ASTS_KEY][game_id] = ast
+            cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
+            cache_updates[CACHE_ASTS_KEY][game_id] = ast
+            n_cache_updates += 1
 
         else:
             ast = cache[CACHE_ASTS_KEY][game_id]
 
         yield ast
 
+        if save_updates_every > 0 and n_cache_updates >= save_updates_every:
+            logging.debug(f'Updating cache with {n_cache_updates} new games')
+            cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
+            cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
+            with gzip.open(cache_path, 'wb') as f:
+                pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
+            cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
+                CACHE_DSL_HASH_KEY: grammar_hash}
+            n_cache_updates = 0
+            logging.debug(f'Done updating cache, returning to parsing')
+
     if cache_updated:
+        logging.debug(f'About to finally update the cache')
         with gzip.open(cache_path, 'wb') as f:
             pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
 

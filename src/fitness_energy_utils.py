@@ -25,11 +25,7 @@ from torch.utils.data import TensorDataset, DataLoader, IterableDataset
 from tqdm import tqdm
 
 from fitness_features_preprocessing import NON_FEATURE_COLUMNS
-
-
-
-FITNESS_DATA_FILE = '../data/fitness_features.csv.gz'
-
+from latest_model_paths import LATEST_FITNESS_FEATURES
 
 
 def _find_nth(text, target, n):
@@ -50,7 +46,7 @@ def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
+def load_fitness_data(path: str = LATEST_FITNESS_FEATURES) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
     fitness_df = _add_original_game_name_column(fitness_df)
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]

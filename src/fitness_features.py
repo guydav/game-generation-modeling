@@ -32,6 +32,7 @@ import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures, NGRAM_SCORE_PATTERN
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser, DEFAULT_N_BY_SECTION
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH
 import room_and_object_types
 
 
@@ -1934,8 +1935,6 @@ class SectionExistsFitnessTerm(FitnessTerm):
 
 
 # TEXT_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/text_7_ngram_model_2023_02_16.pkl')
-
-
 # class TextNGramTerm(FitnessTerm):
 #     game_output: typing.Optional[dict] = None
 #     n_gram_model: NGramTrieModel
@@ -1981,7 +1980,7 @@ class SectionExistsFitnessTerm(FitnessTerm):
 #         return self.game_output
 
 
-AST_N_GRAM_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/ast_7_ngram_model_2023_04_07.pkl')
+
 DEFAULT_TOP_K_NGRAMS = 10
 DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
 DEFAULT_TOP_K_MIN_N = 2
@@ -2008,7 +2007,7 @@ class ASTNGramTerm(FitnessTerm):
                  top_k_max_n: typing.Optional[int] = DEFAULT_TOP_K_MAX_N, score_all: bool = False,
                  top_k_ngrams_for_sections: typing.Optional[int] = DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS,
                  n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
-                 n_gram_model_path: str = AST_N_GRAM_MODEL_PATH):
+                 n_gram_model_path: str = LATEST_AST_N_GRAM_MODEL_PATH):
         super().__init__('', 'ast_ngram')
         self.top_k_ngrams = top_k_ngrams
         self.stupid_backoff = stupid_backoff

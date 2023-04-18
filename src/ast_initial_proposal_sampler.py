@@ -9,6 +9,7 @@ import ast_parser
 from ast_counter_sampler import *
 from fitness_ngram_models import *
 import fitness_energy_utils as utils
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH
 
 
 # TODO: get an argparse going
@@ -129,6 +130,8 @@ class SectionBySectionNGramScoreSampler:
         return sample  # type: ignore
 
     def sample(self, global_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        current_sampler_max_depth = self.sampler.max_sample_depth
+
         if global_context is None:
             global_context = {}
 
@@ -167,7 +170,10 @@ class SectionBySectionNGramScoreSampler:
         if terminal is not None: game_sections.append(terminal)
         game_sections.append(scoring)
         game_sections.append(')')
+
         self.sample_id += 1
+        self.sampler.max_sample_depth = current_sampler_max_depth
+
         return tuple(game_sections)
 
 
@@ -189,7 +195,7 @@ if __name__ == '__main__':
     counter = parse_or_load_counter(DEFAULT_ARGS, grammar_parser=grammar_parser)
     sampler = ASTSampler(grammar_parser, counter, seed=DEFAULT_ARGS.random_seed)  # type: ignore
 
-    with open('./models/ast_7_ngram_model_2023_04_07.pkl', 'rb') as f:
+    with open(LATEST_AST_N_GRAM_MODEL_PATH, 'rb') as f:
         ngram_model = pickle.load(f)
 
     section_sampler = SectionBySectionNGramScoreSampler(sampler, ngram_model, verbose=0)

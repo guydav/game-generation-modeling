@@ -161,8 +161,8 @@ class SectionBySectionNGramScoreSampler:
         scoring = self._sample_rule('scoring_expr', ast_parser.SCORING, global_context)
         scoring = ('(:scoring', scoring, ')')
 
-        game_def = self.sampler.sample('game_def')[0]
-        domain_def = self.sampler.sample('domain_def')[0]
+        game_def = self.sampler.sample('game_def', global_context=global_context)[0]
+        domain_def = self.sampler.sample('domain_def', global_context=global_context)[0]
 
         game_sections = ['(define', game_def, domain_def]
         if setup is not None: game_sections.append(setup)

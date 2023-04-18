@@ -201,8 +201,8 @@ class MCMCRegrowthSampler:
         sample_features_tensor = self._features_to_tensor(sample_tuple[1])
 
         if len(self.samples[sample_index]) > 3:
-            original = sample_tuple[3]
-            original_features_tensor = self._features_to_tensor(sample_tuple[4])
+            original = sample_tuple[-3]
+            original_features_tensor = self._features_to_tensor(sample_tuple[-2])
             evaluate_comparison_energy_contributions(
                 original_features_tensor, sample_features_tensor, ast_printer.ast_to_string(original, '\n'), ast_printer.ast_to_string(sample, '\n'),
                 self.fitness_function, self.feature_names, top_k=top_k, min_display_threshold=min_display_threshold,  # type: ignore
@@ -285,34 +285,46 @@ class MCMCRegrowthSampler:
         initial_proposal_features, initial_proposal_fitness = self._score_proposal(initial_proposal)  # type: ignore
 
         current_proposal, current_proposal_features, current_proposal_fitness = initial_proposal, initial_proposal_features, initial_proposal_fitness
+        best_proposal, best_proposal_features, best_proposal_fitness = initial_proposal, initial_proposal_features, initial_proposal_fitness
 
-        last_accepted_step = 0
+        accepted_steps = []
+        improved_steps = []
+
+        best_proposal_step = 0
+
         for step in range(self.max_steps):
             current_proposal, current_proposal_features, current_proposal_fitness, accepted = self.mcmc_step(
                 current_proposal, current_proposal_features, current_proposal_fitness, step, verbose, rng
             )
 
             if accepted:
-                last_accepted_step = step
+                accepted_steps.append(step)
                 if verbose:
                     print(f'Accepted step {step} with energy {current_proposal_fitness:.5f}', end='\r')
 
-            else:
-                if step - last_accepted_step > self.plateau_patience_steps:
+                if current_proposal_fitness < best_proposal_fitness:  # always when this is greedy, sometimes when not
+                    best_proposal, best_proposal_features, best_proposal_fitness = current_proposal, current_proposal_features, current_proposal_fitness
+                    improved_steps.append(step)
+                    best_proposal_step = step
                     if verbose:
-                        if initial_proposal_provided:
-                            print(f'Plateaued at step {step} with energy {current_proposal_fitness:.5f} (initial proposal energy: {initial_proposal_fitness:.5f})')
-                        else:
-                            print(f'Plateaued at step {step} with energy {current_proposal_fitness:.5f}')
-                    break
+                        print(f'New best proposal at step {step} with energy {current_proposal_fitness:.5f}')
+
+
+            if step - best_proposal_step > self.plateau_patience_steps:
+                if verbose:
+                    if initial_proposal_provided:
+                        print(f'Plateaued at step {step} with energy {best_proposal_fitness:.5f} (initial proposal energy: {initial_proposal_fitness:.5f})')
+                    else:
+                        print(f'Plateaued at step {step} with energy {best_proposal_fitness:.5f}')
+                break
 
         if postprocess:
-            current_proposal = self.postprocessor(current_proposal)
+            best_proposal = self.postprocessor(best_proposal)
 
         if initial_proposal_provided:
-            sample_tuple = (current_proposal, current_proposal_features, current_proposal_fitness, initial_proposal, initial_proposal_features, initial_proposal_fitness)
+            sample_tuple = (best_proposal, best_proposal_features, best_proposal_fitness, best_proposal_step, tuple(accepted_steps), tuple(improved_steps), initial_proposal, initial_proposal_features, initial_proposal_fitness)
         else:
-            sample_tuple = (current_proposal, current_proposal_features, current_proposal_fitness)
+            sample_tuple = (best_proposal, best_proposal_features, best_proposal_fitness, best_proposal_step, tuple(accepted_steps), tuple(improved_steps),)
 
         if return_sample:
             return sample_tuple

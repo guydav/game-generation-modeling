@@ -1673,7 +1673,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
 
 
-HTML_DIFF = HtmlDiff(wrapcolumn=100)
+HTML_DIFF = HtmlDiff(wrapcolumn=80)
 HTML_DIFF_SUBSTITUTIONS = {
     'td.diff_header {text-align:right}': '.diff td {text-align: left !important}\n.diff th {text-align: center!important }\n.diff td.diff_header {text-align:right !important}',
     '.diff_add {background-color:#aaffaa}': '.diff_add {background-color: #6fa66f !important; font-weight: bold !important}',

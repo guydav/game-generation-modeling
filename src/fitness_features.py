@@ -529,7 +529,8 @@ class AllPreferencesUsed(FitnessTerm):
         return len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))
 
 
-SETUP_OBJECTS_SKIP_OBJECTS = set(['agent'])
+SETUP_OBJECTS_SKIP_CATEGORIES = [room_and_object_types.AGENT, room_and_object_types.COLORS, room_and_object_types.ORIENTATIONS, room_and_object_types.SIDES]
+SETUP_OBJECTS_SKIP_OBJECTS = set(sum([list(room_and_object_types.CATEGORIES_TO_TYPES[category]) for category in SETUP_OBJECTS_SKIP_CATEGORIES], []))
 
 
 class SetupObjectsUsed(FitnessTerm):
@@ -824,14 +825,17 @@ class NoVariablesRepeated(FitnessTerm):
 
 ALL_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or|_not)$')
 MULTI_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or)$')
-
+LOGICALS_CHILD_KEY_OPTIONS = ['pred', 'setup', 'terminal']
 
 class NoNestedLogicals(FitnessTerm):
-    total_logicals: int = 0
+    child_key_options: typing.Sequence[str]
     nested_logicals: int = 0
+    total_logicals: int = 0
 
-    def __init__(self):
+
+    def __init__(self, child_key_options: typing.Sequence[str] = LOGICALS_CHILD_KEY_OPTIONS):
         super().__init__(ALL_BOOLEAN_RULE_PATTERN, 'nested_logicals_found')
+        self.child_key_options = child_key_options
 
     def game_start(self) -> None:
         self.total_logicals = 0
@@ -851,7 +855,18 @@ class NoNestedLogicals(FitnessTerm):
                 if isinstance(children, tatsu.ast.AST):
                     children = [children]
 
-                if any((isinstance(child, tatsu.ast.AST) and isinstance(child.pred, tatsu.ast.AST) and child.pred.parseinfo.rule == rule) for child in children):  # type: ignore
+                child_key = None
+                for child in children:  # type: ignore
+                    if isinstance(child, tatsu.ast.AST):
+                        for key in self.child_key_options:
+                            if key in child:
+                                child_key = key
+                                break
+
+                if child_key is None:
+                    raise ValueError(f'No logical child key found for rule {rule} in {ast}')
+
+                if any(isinstance(child, tatsu.ast.AST) and (isinstance(child[child_key], tatsu.ast.AST) and child[child_key].parseinfo.rule == rule) for child in children):  # type: ignore
                     self.nested_logicals += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:

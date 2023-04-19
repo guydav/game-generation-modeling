@@ -199,7 +199,7 @@ class MCMCRegrowthSampler:
         sample = sample_tuple[0]
         sample_features_tensor = self._features_to_tensor(sample_tuple[1])
 
-        if len(self.samples[sample_index]) > 3:
+        if len(self.samples[sample_index]) > 6:
             original = sample_tuple[-3]
             original_features_tensor = self._features_to_tensor(sample_tuple[-2])
             evaluate_comparison_energy_contributions(

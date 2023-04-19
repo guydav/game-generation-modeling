@@ -32,22 +32,34 @@ NGRAM_MODEL_KEY_BY_SECTION = {
 }
 
 
-DEFAULT_N_PREFERENCE_WEIGHTS = [0.5, 0.35, 0.15]
+DEFAULT_N_PREFERENCE_WEIGHTS = [0.4, 0.3, 0.3]  # [0.5, 0.35, 0.15]
 DEFAULT_P_SETUP = 0.5
 DEFAULT_P_TERMINAL = 0.5
 
+# DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION = {
+#     ast_parser.SETUP: 16,
+#     ast_parser.PREFERENCES: 24,
+#     ast_parser.TERMINAL: 10,
+#     ast_parser.SCORING: 16,
+# }
 DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION = {
-    ast_parser.SETUP: 16,
-    ast_parser.PREFERENCES: 24,
-    ast_parser.TERMINAL: 10,
-    ast_parser.SCORING: 16,
+    ast_parser.SETUP: 20,
+    ast_parser.PREFERENCES: 28,
+    ast_parser.TERMINAL: 14,
+    ast_parser.SCORING: 20,
 }
 
+# DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
+#     ast_parser.SETUP: -3,
+#     ast_parser.PREFERENCES: -4.5,
+#     ast_parser.TERMINAL: -2,
+#     ast_parser.SCORING: -2.75,
+# }
 DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
-    ast_parser.SETUP: -3,
-    ast_parser.PREFERENCES: -4.5,
-    ast_parser.TERMINAL: -2,
-    ast_parser.SCORING: -2.75,
+    ast_parser.SETUP: -3.5,
+    ast_parser.PREFERENCES: -5,
+    ast_parser.TERMINAL: -2.5,
+    ast_parser.SCORING: -3.25,
 }
 
 

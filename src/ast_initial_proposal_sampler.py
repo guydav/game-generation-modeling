@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import expon
 import tatsu
 import tatsu.ast
 import tatsu.infos
@@ -43,10 +44,10 @@ DEFAULT_P_TERMINAL = 0.5
 #     ast_parser.SCORING: 16,
 # }
 DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION = {
-    ast_parser.SETUP: 20,
-    ast_parser.PREFERENCES: 28,
-    ast_parser.TERMINAL: 14,
-    ast_parser.SCORING: 20,
+    ast_parser.SETUP: 24,
+    ast_parser.PREFERENCES: 32,
+    ast_parser.TERMINAL: 18,
+    ast_parser.SCORING: 24,
 }
 
 # DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
@@ -120,18 +121,25 @@ class SectionBySectionNGramScoreSampler:
                 sample_global_context = simplified_context_deepcopy(global_context)
                 sample = self.sampler.sample(rule, global_context=sample_global_context)[0]
                 ngram_score_dict = self.ngram_model.score(
-                    sample, **self.ngram_model_kwargs,
+                    sample, **self.ngram_model_kwargs,  # type: ignore
                     ngram_ast_parser_kwargs=ngram_ast_parser_kwargs
                 )
-                ngram_score = ngram_score_dict[self.ngram_model_key_by_section[section]]
+                ngram_score = typing.cast(float, ngram_score_dict[self.ngram_model_key_by_section[section]])
                 if ngram_score is None:
                     raise ValueError(f'No ngram score for section {section} with key {self.ngram_model_key_by_section[section]}')
 
-                if ngram_score > self.score_threshold_by_sample_section[section]:  # type: ignore
+                if ngram_score > self.score_threshold_by_sample_section[section]:
                     if self.verbose: print(f'Sampled sample with ngram score {ngram_score} for section {section}')
                     sampled = True
-                elif self.verbose:
-                    print(f'Skipping sample with ngram score {ngram_score} for section {section}')
+                else:
+                    exp_pdf = expon.pdf(-ngram_score, loc=-self.score_threshold_by_sample_section[section])
+                    if self.rng.uniform() < exp_pdf:
+                        if self.verbose:
+                            print(f'Sampled sample with ngram score {ngram_score} for section {section} with exp_pdf {exp_pdf}')
+                        sampled = True
+
+                    elif self.verbose:
+                        print(f'Skipping sample with ngram score {ngram_score} for section {section}')
 
             except SamplingException as e:
                 if self.verbose:

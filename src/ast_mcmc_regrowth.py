@@ -76,6 +76,8 @@ DEFAULT_PLATEAU_PATIENCE_STEPS = 1000
 parser.add_argument('--plateau-patience-steps', type=int, default=DEFAULT_PLATEAU_PATIENCE_STEPS)
 DEFAULT_MAX_STEPS = 20000
 parser.add_argument('--max-steps', type=int, default=DEFAULT_MAX_STEPS)
+DEFAULT_N_SAMPLES_PER_STEP = 1
+parser.add_argument('--n-samples-per-step', type=int, default=DEFAULT_N_SAMPLES_PER_STEP)
 parser.add_argument('--non-greedy', action='store_true')
 DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
@@ -129,6 +131,7 @@ class MCMCRegrowthSampler:
     initial_proposal_sampler: typing.Union[ASTSampler, SectionBySectionNGramScoreSampler]
     initial_proposal_type: InitialProposalSamplerType
     max_steps: int
+    n_samples_per_step: int
     plateau_patience_steps: int
     postprocessor: ASTSamplePostprocessor
     regrowth_sampler: RegrowthSampler
@@ -141,6 +144,7 @@ class MCMCRegrowthSampler:
         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
         initial_proposal_type: InitialProposalSamplerType = InitialProposalSamplerType.MAP,
         max_steps: int = DEFAULT_MAX_STEPS,
+        n_samples_per_step: int = DEFAULT_N_SAMPLES_PER_STEP,
         greedy_acceptance: bool = False,
         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
@@ -165,6 +169,7 @@ class MCMCRegrowthSampler:
         self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
         self.plateau_patience_steps = plateau_patience_steps
         self.max_steps = max_steps
+        self.n_samples_per_step = n_samples_per_step
         self.greedy_acceptance = greedy_acceptance
         self.acceptance_temperature = acceptance_temperature
         self.initial_proposal_type = initial_proposal_type
@@ -349,16 +354,16 @@ class MCMCRegrowthSampler:
         self._pre_mcmc_step(current_proposal)
 
         new_proposal = None
-        sample_generated = False
+        samples = []
 
-        while not sample_generated:
+        while len(samples) < self.n_samples_per_step:
             try:
                 new_proposal = self._generate_step_proposal(step_index, rng)
                 # _test_ast_sample(ast, args, text_samples, grammar_parser)
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(current_proposal):  # type: ignore
                     if verbose >= 2: print('Regrowth generated identical games, repeating')
                 else:
-                    sample_generated = True
+                    samples.append(new_proposal)
 
             except RecursionError:
                 if verbose >= 2: print('Recursion error, skipping sample')
@@ -366,8 +371,8 @@ class MCMCRegrowthSampler:
             except SamplingException:
                 if verbose >= 2: print('Sampling exception, skipping sample')
 
-        new_proposal = typing.cast(tuple, new_proposal)
-        new_proposal_features, new_proposal_fitness = self._score_proposal(new_proposal)  # type: ignore
+        samples = [(sample, *self._score_proposal(sample)) for sample in samples]
+        new_proposal, new_proposal_features, new_proposal_fitness = min(samples, key=lambda x: x[2])
 
         if self.greedy_acceptance:
             accept = new_proposal_fitness < current_proposal_fitness
@@ -447,7 +452,8 @@ def main(args: argparse.Namespace):
         args, fitness_function_date_id=args.fitness_function_date_id,
         fitness_featurizer_path=args.fitness_featurizer_path,
         plateau_patience_steps=args.plateau_patience_steps, max_steps=args.max_steps,
-        greedy_acceptance=not args.non_greedy, acceptance_temperature=args.acceptance_temperature,
+        n_samples_per_step=args.n_samples_per_step, greedy_acceptance=not args.non_greedy,
+        acceptance_temperature=args.acceptance_temperature,
         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
         fitness_function_model_name=args.fitness_function_model_name,
         relative_path=args.relative_path, ngram_model_path=args.ngram_model_path,

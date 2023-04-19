@@ -21,7 +21,7 @@ from ast_utils import *
 
 from fitness_ngram_models import NGramTrieModel, NGramTrieNode, NGramASTParser, ASTNGramTrieModel
 
-class EvolutionarySampler():
+class PopulationBasedSampler():
     '''
     This is a type of game sampler which uses an evolutionary strategy to climb a
     provided fitness function. It's a population-based alternative to the MCMC samper
@@ -325,6 +325,86 @@ class EvolutionarySampler():
 
 
     # TODO: add general step which can be used to combine the above steps
+    # TODO: break evolutionary step into selection / recombination / mutation steps?
+    # -> can use microbial GA tournament structure?
+    # TODO: add 'fixer' to make sure variables are used / defined
+    # TODO: parallelize
+    # TODO: store statistics about which locations are more likely to receive beneficial mutations?
+    # TODO: keep track of 'lineages'
+
+    def _get_operator(self):
+        '''
+        Returns a function (operator) which takes in a list of games and returns a list of new games.
+        As a default, always return a no_op operator
+        '''
+        
+        def no_op(games):
+            return games
+        
+        return no_op
+
+    
+    def _get_parent_iterator(self, population):
+        '''
+        Returns an iterator which at each step yields one or more parents that will be modified
+        by the operator. As a default, return an iterator which yields the entire population
+        '''
+        return iter(population)
+    
+    def _select_new_population(self, population, candidates, population_scores, candidate_scores):
+        '''
+        Returns the new population given the current population, the candidate games, and the
+        scores for both the population and the candidate games. As a default, return the top P
+        games from the union of the population and the candidates
+        '''
+        all_games = population + candidates
+        all_scores = population_scores + candidate_scores
+
+        top_indices = np.argsort(all_scores)[-self.population_size:]
+        self.population = [all_games[i] for i in top_indices]
+        self.fitness_values = [all_scores[i] for i in top_indices]
+
+
+
+    def evolutionary_step(self):
+        # The core steps are:
+        # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
+        # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
+        # 3. for each parent(s) yielded, apply the operator to produce one or more new games and add them to a "candidates" list
+        # 4. score the candidates
+        # 5. pass the initial population and the candidates to the "selector" which will return the new population
+
+        operator = self._get_operator() # return the number of games expected per call?
+        parent_iterator = self._get_parent_iterator(self.population)
+
+        candidates = []
+        for parents in parent_iterator:
+            children = operator(parents)
+
+            if isinstance(children, list):
+                candidates.extend(children)
+            else:
+                candidates.append(children)
+
+        population_scores = [self.fitness_function(game) for game in self.population]
+        candidate_scores = [self.fitness_function(candidate) for candidate in candidates]
+
+        self._select_new_population(self.population, candidates, population_scores, candidate_scores)
+
+class BeamSearchSampler(PopulationBasedSampler):
+    '''
+    Implements 'beam search' by, at each generation, expanding every game in the population out k times
+    and then restricting the population to the top P games
+    '''
+    def __init__(self, k, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k
+
+    def _get_operator(self):
+        return self._gen_regrowth_sample
+    
+    def _get_parent_iterator(self, population):
+        return iter(population * self.k)
 
 if __name__ == '__main__':
 
@@ -351,14 +431,11 @@ if __name__ == '__main__':
         '''
         return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
 
-    evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
-
-    evosampler.crossover_step(CrossoverType.SAME_RULE)
-    evosampler._crossover(evosampler.population[0], evosampler.population[1], CrossoverType.SAME_RULE)
-    exit()
+    evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
+    evosampler = BeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
 
     for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
-        evosampler.beam_step(k=25)
+        evosampler.evolutionary_step()
         print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
 
     print('Best individual:')

@@ -344,21 +344,21 @@ class PopulationBasedSampler():
         return no_op
 
     
-    def _get_parent_iterator(self, population):
+    def _get_parent_iterator(self):
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
         '''
-        return iter(population)
+        return iter(self.population)
     
-    def _select_new_population(self, population, candidates, population_scores, candidate_scores):
+    def _select_new_population(self, candidates, candidate_scores):
         '''
         Returns the new population given the current population, the candidate games, and the
         scores for both the population and the candidate games. As a default, return the top P
         games from the union of the population and the candidates
         '''
-        all_games = population + candidates
-        all_scores = population_scores + candidate_scores
+        all_games = self.population + candidates
+        all_scores = self.fitness_values + candidate_scores
 
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.population = [all_games[i] for i in top_indices]
@@ -375,7 +375,7 @@ class PopulationBasedSampler():
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
         operator = self._get_operator() # return the number of games expected per call?
-        parent_iterator = self._get_parent_iterator(self.population)
+        parent_iterator = self._get_parent_iterator()
 
         candidates = []
         for parents in parent_iterator:
@@ -386,10 +386,9 @@ class PopulationBasedSampler():
             else:
                 candidates.append(children)
 
-        population_scores = [self.fitness_function(game) for game in self.population]
         candidate_scores = [self.fitness_function(candidate) for candidate in candidates]
 
-        self._select_new_population(self.population, candidates, population_scores, candidate_scores)
+        self._select_new_population(candidates, candidate_scores)
 
 class BeamSearchSampler(PopulationBasedSampler):
     '''
@@ -405,6 +404,40 @@ class BeamSearchSampler(PopulationBasedSampler):
     
     def _get_parent_iterator(self, population):
         return iter(population * self.k)
+    
+class WeightedBeamSearchSampler(PopulationBasedSampler):
+    '''
+    Implements a weighted form of beam search where the number of samples generated for each game
+    is dependent on its fitness rank in the population. The most fit game receives (in expectation) 
+    2k samples, the median game k samples, and the least fit game 0 samples. This is achieved by
+    running 2 * P "tournaments" where two individuals are randomly sampled from the population and
+    the individual with higher fitness produces a child
+    '''
+    def __init__(self, k, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k
+
+    def _get_operator(self):
+
+        def weighted_beam_search_sample(games):
+            p1_idx = self.population.index(games[0])
+            p2_idx = self.population.index(games[1])
+
+            if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
+                return self._gen_regrowth_sample(games[0])
+            else:
+                return self._gen_regrowth_sample(games[1])
+            
+        return weighted_beam_search_sample
+    
+    def _get_parent_iterator(self):
+        parent_iterator = []
+        for _ in range(2 * self.population_size * self.k):
+            parent_1 = self._choice(self.population)
+            parent_2 = self._choice(self.population)
+            parent_iterator.append([parent_1, parent_2])
+
+        return iter(parent_iterator)
 
 if __name__ == '__main__':
 
@@ -432,7 +465,7 @@ if __name__ == '__main__':
         return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
 
     evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = BeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
+    evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
 
     for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
         evosampler.evolutionary_step()

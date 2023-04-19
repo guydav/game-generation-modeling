@@ -132,7 +132,6 @@ class MCMCRegrowthSampler:
     plateau_patience_steps: int
     postprocessor: ASTSamplePostprocessor
     regrowth_sampler: RegrowthSampler
-    rng: np.random.Generator
     sampler: ASTSampler
     samples: typing.List[tuple]
 
@@ -375,8 +374,8 @@ class MCMCRegrowthSampler:
         else:
             acceptance_probability = np.exp(-self.acceptance_temperature * (new_proposal_fitness - current_proposal_fitness))
             if rng is None:
-                rng = self.rng
-            accept = self.rng.uniform() < acceptance_probability
+                rng = np.random.default_rng(self.random_seed + step_index)
+            accept = rng.uniform() < acceptance_probability
 
         if accept:
             return new_proposal, new_proposal_features, new_proposal_fitness, True

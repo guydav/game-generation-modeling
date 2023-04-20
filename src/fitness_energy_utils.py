@@ -1,28 +1,31 @@
+from datetime import datetime
 from collections import defaultdict
 import copy
 from dataclasses import dataclass
 from difflib import HtmlDiff
-from itertools import zip_longest
+import gzip
+from itertools import zip_longest, combinations
+import logging
+import os
+import pickle
 import typing
 
-from IPython.display import display, Markdown, HTML
+from IPython.display import display, Markdown, HTML  # type: ignore
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from scipy.stats import spearmanr
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold, ParameterGrid
 from sklearn.pipeline import Pipeline
 from statsmodels.distributions.empirical_distribution import ECDF
 from tabulate import tabulate
 import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader, IterableDataset
+from tqdm import tqdm
 
 from fitness_features_preprocessing import NON_FEATURE_COLUMNS
-
-
-
-FITNESS_DATA_FILE = '../data/fitness_features.csv.gz'
-
+from latest_model_paths import LATEST_FITNESS_FEATURES
 
 
 def _find_nth(text, target, n):
@@ -33,18 +36,75 @@ def _find_nth(text, target, n):
     return start
 
 
-def load_fitness_data(path: str = FITNESS_DATA_FILE) -> pd.DataFrame:
-    fitness_df = pd.read_csv(path)
-    fitness_df = fitness_df.assign(original_game_name=fitness_df.game_name)  # real=fitness_df.src_file == 'interactive-beta.pddl',
-    fitness_df.original_game_name.where(
-        fitness_df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
-        fitness_df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
+def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.assign(original_game_name=df.game_name)  # real=fitness_df.src_file == 'interactive-beta.pddl',
+    df.original_game_name.where(
+        df.game_name.apply(lambda s: (s.count('-') <= 1) or (s.startswith('game-id') and s.count('-') >= 2)),
+        df.original_game_name.apply(lambda s: s[:_find_nth(s, '-', 2)]),
         inplace=True)
 
+    return df
+
+
+def load_fitness_data(path: str = LATEST_FITNESS_FEATURES) -> pd.DataFrame:
+    fitness_df = pd.read_csv(path)
+    fitness_df = _add_original_game_name_column(fitness_df)
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
-    fitness_df = fitness_df.assign(real=fitness_df.real.astype('int'))
+    fitness_df = fitness_df.assign(**{c: fitness_df[c].astype('int') for c in fitness_df.columns if fitness_df.dtypes[c] == bool})
     fitness_df = fitness_df[list(fitness_df.columns[:4]) + list(fitness_df.columns[-1:]) + list(fitness_df.columns[4:-1])]
     return fitness_df
+
+
+MODELS_FOLDER = 'models'
+DEFAULT_SAVE_MODEL_NAME = 'cv_fitness_model'
+SAVE_MODEL_KEY = 'model'
+BUG_SAVE_MODEL_KEY = 'moodel'
+SAVE_FEATURE_COLUMNS_KEY = 'feature_columns'
+
+
+def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.List[str], name: str = DEFAULT_SAVE_MODEL_NAME,
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER):
+    save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder=folder, name=name, relative_path=relative_path)
+
+
+def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..'):
+    output_path = f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
+
+    i = 0
+    while os.path.exists(output_path):
+        folder, filename = os.path.split(output_path)
+        filename, period, extensions = filename.partition('.')
+        if filename.endswith(f'_{i}'):
+            filename = filename[:-2]
+
+        i += 1
+        filename = filename + f'_{i}'
+        output_path = os.path.join(folder, filename + period + extensions)
+
+    logging.debug(f'Saving data to {output_path} ...')
+    with gzip.open(output_path, 'wb') as f:
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MODEL_NAME,
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER) -> typing.Tuple[GridSearchCV, typing.List[str]]:
+    data = load_data(date_and_id, folder, name, relative_path)
+
+    if BUG_SAVE_MODEL_KEY in data:
+        return data[BUG_SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
+
+    return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
+
+
+def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
+    output_path = f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz'
+    if not os.path.exists(output_path):
+        raise FileNotFoundError(f'No model found at {output_path}')
+
+    with gzip.open(output_path, 'rb') as f:
+        data = pickle.load(f)
+
+    return data
 
 
 DEFAULT_RANDOM_SEED = 33
@@ -93,12 +153,18 @@ class ConstrativeTrainingData:
             negative_samples = torch.cat(negative_samples, dim=0)
         self.negative_samples = negative_samples
 
+    def split_train_test(self, training_prop: float = DEFAULT_TRAINING_PROP, random_seed: int = DEFAULT_RANDOM_SEED):
+        positive_train, positive_test = train_test_split(self.positive_samples, train_size=training_prop, random_state=random_seed)
+        negative_train, negative_test = train_test_split(self.negative_samples, train_size=training_prop, random_state=random_seed)
+        return ConstrativeTrainingData(positive_train, negative_train), ConstrativeTrainingData(positive_test, negative_test)  # type: ignore
+
 
 def make_init_weight_function(bias: float = 0.01):
     def init_weights(m):
         if isinstance(m, nn.Linear):
             torch.nn.init.xavier_uniform_(m.weight)
             m.bias.data.fill_(bias)
+
     return init_weights
 
 
@@ -109,11 +175,11 @@ class CustomSklearnScaler:
         self.std = None
 
     def fit(self, X, y=None):
-        if X.ndim != 3:
-            raise ValueError('X must be 3D')
-
         if self.passthrough:
             return self
+
+        if X.ndim != 3:
+            raise ValueError('X must be 3D')
 
         self.mean = X.mean(axis=(0, 1))
         self.std = X.std(axis=(0, 1))
@@ -285,11 +351,58 @@ def fitness_square_square_loss_positive_negative_split(positive_scores: torch.Te
     return _reduce(positive_scores.pow(2), reduction) + _reduce(torch.relu(margin - negative_scores).pow(2), reduction)
 
 
-def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, reduction: str = 'mean'):
+def fitness_softmin_loss(scores: torch.Tensor, beta: float = 1.0, negative_score_reduction: typing.Optional[str] = None, reduction: str = 'mean'):
     return nn.functional.cross_entropy(
         - beta * scores,
         torch.zeros((scores.shape[0], 1), dtype=torch.long, device=scores.device),
         reduction=reduction)
+
+
+def fitness_softmin_loss_positive_to_all_negatives(scores: torch.Tensor, beta: float = 1.0, negative_score_reduction: typing.Optional[str] = None, reduction: str = 'mean'):
+    positive_scores = scores[:, 0].unsqueeze(1)
+    negative_scores = scores[:, 1:]
+    return _inner_softmin_loss_positive_to_all_negatives(positive_scores, negative_scores, beta, negative_score_reduction, reduction)
+
+
+def _inner_softmin_loss_positive_to_all_negatives(positive_scores: torch.Tensor, negative_scores: torch.Tensor, beta: float = 1.0, negative_score_reduction: typing.Optional[str] = None, reduction: str = 'mean'):
+    loss = 0
+    n_positives = positive_scores.shape[0]
+    for i in range(n_positives):
+        rolled_scores = torch.cat([torch.roll(positive_scores, i, 0), negative_scores], 1)
+        loss += fitness_softmin_loss(rolled_scores, beta, negative_score_reduction, reduction)
+
+    if reduction == 'mean':
+        return loss / n_positives
+
+    return loss
+
+
+def fitness_sofmin_loss_positive_negative_split(positive_scores: torch.Tensor, negative_scores: torch.Tensor,
+                                                beta: float = 1.0, reduction: str = 'mean', negative_score_reduction: typing.Optional[str] = None):
+    positive_scores, negative_scores = _align_positive_and_negative_scores(positive_scores, negative_scores)
+
+    return nn.functional.cross_entropy(
+        - beta * torch.cat([positive_scores, negative_scores], dim=1),
+        torch.zeros((positive_scores.shape[0], 1), dtype=torch.long, device=positive_scores.device),
+        reduction=reduction)
+
+
+def _align_positive_and_negative_scores(positive_scores, negative_scores):
+    n_positive_scores = positive_scores.shape[0]
+    n_negataive_scores = negative_scores.shape[0]
+    if n_positive_scores != n_negataive_scores:
+        negative_scores_per_positive = n_negataive_scores // n_positive_scores
+        negative_scores = negative_scores[:int(n_positive_scores * negative_scores_per_positive)].reshape(n_positive_scores, negative_scores_per_positive, -1)
+
+    if positive_scores.ndim < negative_scores.ndim:
+        positive_scores = positive_scores.unsqueeze(1)
+    return positive_scores,negative_scores
+
+
+def fitness_sofmin_loss_positive_negative_split_positive_to_all_negatives(positive_scores: torch.Tensor, negative_scores: torch.Tensor,
+                                                                         beta: float = 1.0, reduction: str = 'mean', negative_score_reduction: typing.Optional[str] = None):
+    positive_scores, negative_scores = _align_positive_and_negative_scores(positive_scores, negative_scores)
+    return _inner_softmin_loss_positive_to_all_negatives(positive_scores, negative_scores, beta, negative_score_reduction, reduction)
 
 
 def fitness_softmin_hybrid_loss(scores: torch.Tensor, margin: float = 1.0, beta: float = 1.0, reduction: str = 'mean'):
@@ -301,13 +414,21 @@ def fitness_softmin_hybrid_loss(scores: torch.Tensor, margin: float = 1.0, beta:
     # return _reduce(torch.log(1 + torch.exp(positive_scores - negative_scores)) + torch.relu(margin - negative_scores), reduction)
 
 
+def energy_of_negative_at_quantile(positive_scores: torch.Tensor, negative_scores: torch.Tensor, quantile: float = 0.01):
+    n_negatives = torch.numel(negative_scores)
+    n_negatives_to_keep = int(n_negatives * quantile)
+    negative_scores, _ = torch.topk(negative_scores.ravel(), n_negatives_to_keep, largest=False)
+    return negative_scores.max()
 
-DEFAULT_MODEL_PARAMS = {
+
+
+DEFAULT_MODEL_KWARGS = {
     'n_features': None,
     'hidden_size': None,
     'hidden_activation': torch.relu,
     'n_outputs': 1,
-    'output_activation': torch.sigmoid,
+    'output_activation': None,
+
 }
 
 DEFAULT_TRAIN_KWARGS = {
@@ -324,23 +445,39 @@ DEFAULT_TRAIN_KWARGS = {
     'device': 'cpu',
     'dataset_energy_beta': 1.0,
     'shuffle_negatives': False,
+    'shuffle_validation_negatives': None,
+    'split_validation_from_train': False,
+    'evaluate_opposite_shuffle_mode': False,
+    'full_dataset_on_device': False,
     'regularizer': None,
     'regularization_weight': 0.0,
+    'use_lr_scheduler': False,
+    'lr_scheduler_class': torch.optim.lr_scheduler.ReduceLROnPlateau,
+    'lr_scheduler_mode': 'min',
+    'lr_scheduler_factor': 0.5,
+    'lr_scheduler_patience': None,
+    'lr_scheduler_threshold': None,
+    'lr_scheduler_threshold_mode': 'abs',
+    'lr_scheduler_verbose': False,
     'random_seed': 33,
 }
 
-LOSS_FUNCTION_KAWRG_KEYS = ('margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction')
+
+LOSS_FUNCTION_KAWRG_KEYS = ['margin', 'alpha', 'beta', 'negative_score_reduction', 'reduction']
 DEFAULT_TRAIN_KWARGS.update({k: None for k in LOSS_FUNCTION_KAWRG_KEYS})
 
+FITNESS_WRAPPER_KWARG_KEYS = ['bias_init_margin_ratio',]
+DEFAULT_TRAIN_KWARGS.update({k: None for k in FITNESS_WRAPPER_KWARG_KEYS})
 
 class SklearnFitnessWrapper:
     def __init__(self,
         model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
         train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
         loss_function_kwarg_keys: typing.Sequence[str] = LOSS_FUNCTION_KAWRG_KEYS,
+        fitness_wrapper_kwarg_keys: typing.Sequence[str] = FITNESS_WRAPPER_KWARG_KEYS,
         **params):
 
-        self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_PARAMS)
+        self.model_kwargs = copy.deepcopy(DEFAULT_MODEL_KWARGS)
         if model_kwargs is not None:
             self.model_kwargs.update(model_kwargs)
 
@@ -350,6 +487,12 @@ class SklearnFitnessWrapper:
 
         self.loss_function_kwargs = {}
         self.loss_function_kwarg_keys = loss_function_kwarg_keys
+
+        self.fitness_wrapper_kwargs = {}
+        self.fitness_wrapper_kwarg_keys = fitness_wrapper_kwarg_keys
+
+        self.losses = defaultdict(list)  # type: ignore
+        self.init_model = True
 
         self.set_params(**params)
 
@@ -371,12 +514,7 @@ class SklearnFitnessWrapper:
         return self
 
     def _init_model_and_train_kwargs(self):
-        self.model = FitnessEnergyModel(**self.model_kwargs)
-        # if 'margin' in self.train_kwargs:
-        #     init_weights = make_init_weight_function(self.train_kwargs['margin'] / 2)
-        # else:
-        init_weights = make_init_weight_function()
-        self.model.apply(init_weights)
+        torch.manual_seed(self.train_kwargs['random_seed'])
         train_kwarg_keys = list(self.train_kwargs.keys())
         for key in train_kwarg_keys:
             if key in self.loss_function_kwarg_keys:
@@ -384,23 +522,50 @@ class SklearnFitnessWrapper:
                 if value is not None:
                     self.loss_function_kwargs[key] = value
 
+            elif key in self.fitness_wrapper_kwarg_keys:
+                value = self.train_kwargs.pop(key)
+                if value is not None:
+                    self.fitness_wrapper_kwargs[key] = value
+
+        self.model = FitnessEnergyModel(**self.model_kwargs)
+        bias_init_margin_ratio = self.fitness_wrapper_kwargs.get('bias_init_margin_ratio', 0)
+        if 'margin' in self.train_kwargs:
+            init_weights = make_init_weight_function(self.train_kwargs['margin'] * bias_init_margin_ratio)
+        else:
+            init_weights = make_init_weight_function(bias_init_margin_ratio)
+
+        self.model.apply(init_weights)
+
         self.train_kwargs['loss_function_kwargs'] = self.loss_function_kwargs
 
     def fit(self, X, y=None) -> 'SklearnFitnessWrapper':
-        self._init_model_and_train_kwargs()
+        if self.init_model:
+            self._init_model_and_train_kwargs()
         if isinstance(X, ConstrativeTrainingData):
-            self.model = train_and_validate_model_weighted_sampling(self.model, X, **self.train_kwargs)
+            self.model, losses = train_and_validate_model_weighted_sampling(self.model, X, **self.train_kwargs)
         else:
-            self.model = train_and_validate_model(self.model, X, **self.train_kwargs)
+            if isinstance(X, tuple):
+                X_train, X_val = X
+            else:
+                X_train = X
+                X_val = None
+
+            self.model, losses = train_and_validate_model(self.model, X_train, X_val, **self.train_kwargs)
+
+        for key, value in losses.items():
+            self.losses[key].extend(value) # type: ignore
+
         return self
 
-    def fit_with_weighted_negative_sampling(
-        self, train_data: ConstrativeTrainingData,
-        val_data: typing.Optional[ConstrativeTrainingData] = None,) -> 'SklearnFitnessWrapper':
+    # def fit_with_weighted_negative_sampling(
+    #     self, train_data: ConstrativeTrainingData,
+    #     val_data: typing.Optional[ConstrativeTrainingData] = None,
+    #     init_model: bool = True) -> 'SklearnFitnessWrapper':
 
-        self._init_model_and_train_kwargs()
-        self.model = train_and_validate_model_weighted_sampling(self.model, train_data, val_data, **self.train_kwargs)
-        return self
+    #     if init_model:
+    #         self._init_model_and_train_kwargs()
+    #     self.model, self.train_losses, self.val_losses = train_and_validate_model_weighted_sampling(self.model, train_data, val_data, **self.train_kwargs)
+    #     return self
 
     def transform(self, X, y=None) -> torch.Tensor:
         return self.model(X)
@@ -464,6 +629,7 @@ def _score_samples(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torc
 #     X: torch.Tensor, y=None):
 #     return _score_samples(model, X, y, score_sign=-1)
 
+
 def _ecdf(positive_scores: np.ndarray, negative_scores: np.ndarray) -> float:
     ecdf = ECDF(np.concatenate([positive_scores, negative_scores.reshape(-1)]))
     positive_mean_quantile = ecdf(positive_scores).mean()
@@ -477,14 +643,19 @@ def evaluate_fitness_overall_ecdf_separate_tensors(model: ModelClasses,
     return _ecdf(positive_scores, negative_scores)
 
 
-def contrastive_data_wrapper_to_tensor(score_function: typing.Callable):
-    def wrapper(model: ModelClasses, X: typing.Union[torch.Tensor, ConstrativeTrainingData], *args, **kwargs):
+class ContrastiveDataWrapper:
+    def __init__(self, score_function: typing.Callable):
+        self.score_function = score_function
+
+    def __call__(self, model: ModelClasses, X: typing.Union[torch.Tensor, ConstrativeTrainingData], *args, **kwargs):
         if isinstance(X, ConstrativeTrainingData):
             X = torch.cat([X.positive_samples, X.negative_samples.reshape(X.positive_samples.shape[0], -1, X.positive_samples.shape[1])], dim=0)
 
-        return score_function(model, X, *args, **kwargs)
+        return self.score_function(model, X, *args, **kwargs)
 
-    return wrapper
+
+def contrastive_data_wrapper_to_tensor(score_function: typing.Callable):
+    return ContrastiveDataWrapper(score_function)
 
 
 @contrastive_data_wrapper_to_tensor
@@ -503,14 +674,90 @@ def evaluate_fitness_single_game_rank(model: ModelClasses, X: torch.Tensor, y=No
     return single_game_rank.mean().item()
 
 
+@contrastive_data_wrapper_to_tensor
+def evaluate_fitness_single_game_min_rank(model: ModelClasses, X: torch.Tensor, y=None) -> float:
+    positive_scores, negative_scores = _score_samples(model, X, y)
+    single_game_rank = (positive_scores[:, None] < negative_scores).float().mean(axis=1)  # type: ignore
+    return single_game_rank.min().item()
+
+
+class LossFunctionMetricWrapper:
+    def __init__(self, loss_function: typing.Callable[..., torch.Tensor],
+                                 kwargs: typing.Optional[dict] = None, positive_negative_split: bool = False,
+                                 flip_sign: bool = True):
+
+        self.loss_function = loss_function
+        if kwargs is None:
+            kwargs = {}
+        self.kwargs = kwargs
+        self.positive_negative_split = positive_negative_split
+        self.flip_sign = flip_sign
+
+    def __call__(self, model: ModelClasses, X: torch.Tensor, y=None) -> float:
+        positive_scores, negative_scores = _score_samples(model, X, y)
+        if self.positive_negative_split:
+            score = self.loss_function(positive_scores, negative_scores, **self.kwargs)  # type: ignore
+
+        else:
+            n_positive_scores = positive_scores.shape[0]
+            n_negataive_scores = negative_scores.shape[0]
+            if n_positive_scores != n_negataive_scores:
+                negative_scores_per_positive = n_negataive_scores // n_positive_scores
+                negative_scores = negative_scores[:int(n_positive_scores * negative_scores_per_positive)].reshape(n_positive_scores, negative_scores_per_positive, -1)
+
+            if positive_scores.ndim < negative_scores.ndim:
+                positive_scores = positive_scores.unsqueeze(1)
+            scores = torch.cat([positive_scores, negative_scores], dim=1) # type: ignore
+            score = self.loss_function(scores, **self.kwargs)  # type: ignore
+
+        if isinstance(score, torch.Tensor):
+            score = score.item()
+
+        return -score if self.flip_sign else score
+
+
+@contrastive_data_wrapper_to_tensor
+def wrap_loss_function_to_metric(loss_function: typing.Callable[..., torch.Tensor],
+                                 kwargs: typing.Optional[dict] = None, positive_negative_split: bool = False,
+                                 flip_sign: bool = True) -> typing.Callable[[ModelClasses, torch.Tensor, typing.Optional[torch.Tensor]], float]:
+    return LossFunctionMetricWrapper(loss_function, kwargs, positive_negative_split, flip_sign)
+
+
+class MultipleScoringWrapper:
+    def __init__(self,
+                 evaluators: typing.Sequence[typing.Callable[[ModelClasses, typing.Union[torch.Tensor, ConstrativeTrainingData], typing.Optional[torch.Tensor]], float]],
+                 names: typing.Sequence[str]):
+
+        self.evaluators = evaluators
+        self.names = names
+
+    def __call__(self, model: ModelClasses, X: typing.Union[torch.Tensor, ConstrativeTrainingData], y=None, return_all=False):
+        return {name: evaluator(model, X, y) for name, evaluator in zip(self.names, self.evaluators)}
+
+
 def build_multiple_scoring_function(
     evaluators: typing.Sequence[typing.Callable[[ModelClasses, typing.Union[torch.Tensor, ConstrativeTrainingData], typing.Optional[torch.Tensor]], float]],
     names: typing.Sequence[str]
     ) -> typing.Callable[[ModelClasses, typing.Union[torch.Tensor, ConstrativeTrainingData], typing.Optional[torch.Tensor]], typing.Dict[str, float]]:
-    def _evaluate_fitness_multiple(model: ModelClasses, X: typing.Union[torch.Tensor, ConstrativeTrainingData], y=None, return_all=False):
-        return {name: evaluator(model, X, y) for name, evaluator in zip(names, evaluators)}
+    # def _evaluate_fitness_multiple(model: ModelClasses, X: typing.Union[torch.Tensor, ConstrativeTrainingData], y=None, return_all=False):
+    #     return {name: evaluator(model, X, y) for name, evaluator in zip(names, evaluators)}
 
-    return _evaluate_fitness_multiple
+    # _evaluate_fitness_multiple.names = names
+
+    return MultipleScoringWrapper(evaluators, names)
+
+
+default_multiple_scoring = build_multiple_scoring_function(
+    [
+        wrap_loss_function_to_metric(fitness_sofmin_loss_positive_negative_split, dict(beta=1.0), True),  # type: ignore
+        evaluate_fitness_overall_ecdf,
+        evaluate_fitness_single_game_rank,
+        evaluate_fitness_single_game_min_rank,
+        wrap_loss_function_to_metric(energy_of_negative_at_quantile, dict(quantile=0.01), True),  # type: ignore
+        wrap_loss_function_to_metric(energy_of_negative_at_quantile, dict(quantile=0.05), True),  # type: ignore
+    ],
+    ['loss', 'overall_ecdf', 'single_game_rank', 'single_game_min_rank', 'energy_of_negative@1%', 'energy_of_negative@5%'],
+)
 
 
 DEFAULT_INITIAL_ENERGY = 1.0
@@ -593,30 +840,49 @@ class EnergyRecencyWeightedDataset(IterableDataset):
 
 
 def train_and_validate_model_weighted_sampling(
-        model: nn.Module,
-        train_data: ConstrativeTrainingData,
-        val_data: typing.Optional[ConstrativeTrainingData] = None,
-        loss_function: typing.Callable = fitness_square_square_loss,
-        loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        val_loss_function: typing.Callable = fitness_square_square_loss_positive_negative_split,
-        optimizer_class: typing.Callable = torch.optim.SGD,
-        n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
-        should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
-        patience_epochs: int = 5, patience_threshold: float = 0.01,
-        batch_size: int = 8, k: int = 4,
-        dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
-        dataset_initial_energy: float = DEFAULT_INITIAL_ENERGY,
-        regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
-        num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
-    ) -> nn.Module:
+    model: nn.Module,
+    train_data: ConstrativeTrainingData,
+    val_data: typing.Optional[ConstrativeTrainingData] = None,
+    loss_function: typing.Callable = fitness_square_square_loss,
+    loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    val_loss_function: typing.Callable = fitness_sofmin_loss_positive_negative_split,
+    optimizer_class: typing.Callable = torch.optim.SGD,
+    n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
+    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+    patience_epochs: int = 5, patience_threshold: float = 0.01,
+    batch_size: int = 8, k: int = 4,
+    dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
+    dataset_initial_energy: float = DEFAULT_INITIAL_ENERGY,
+    split_validation_from_train: bool = False,
+    regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
+    use_lr_scheduler: bool = False, lr_scheduler_class: typing.Callable = torch.optim.lr_scheduler.ReduceLROnPlateau,
+    lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
+    lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
+    lr_scheduler_threshold_mode: str = 'abs', lr_scheduler_verbose: bool = False,
+    num_workers: int = 0, device: str = 'cpu', random_seed: int = 33, **kwargs,
+    ) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
 
+    torch.manual_seed(random_seed)
+    model.to(device)
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    model.to(device)
-    torch.manual_seed(random_seed)
+    scheduler = None
+    if use_lr_scheduler:
+        if lr_scheduler_patience is None:
+            lr_scheduler_patience = patience_epochs // 2
+        if lr_scheduler_threshold is None:
+            lr_scheduler_threshold = patience_threshold
+        scheduler = lr_scheduler_class(
+            optimizer, lr_scheduler_mode,
+            factor=lr_scheduler_factor, patience=lr_scheduler_patience,
+            threshold=lr_scheduler_threshold, threshold_mode=lr_scheduler_threshold_mode,
+            verbose=lr_scheduler_verbose)
+
+    if split_validation_from_train and val_data is None:
+        train_data, val_data = train_data.split_train_test(training_prop=DEFAULT_TRAINING_PROP, random_seed=random_seed)  # type: ignore
 
     train_dataset = EnergyRecencyWeightedDataset(train_data, k=k, energy_beta=dataset_energy_beta, initial_energy=dataset_initial_energy, device=device)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -627,6 +893,8 @@ def train_and_validate_model_weighted_sampling(
     patience_loss = np.Inf
     patience_update_epoch = 0
     best_model = model
+    train_losses = []
+    val_losses = []
 
     epoch = 0
     for epoch in range(n_epochs):
@@ -668,7 +936,16 @@ def train_and_validate_model_weighted_sampling(
                 else:
                     print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f}')
 
-        epoch_loss = np.mean(epoch_val_losses) if validate else np.mean(epoch_train_losses)
+        epoch_train_loss = np.mean(epoch_train_losses)
+        train_losses.append(epoch_train_loss)
+        if validate:
+            epoch_loss = np.mean(epoch_val_losses)
+            val_losses.append(epoch_loss)
+        else:
+            epoch_loss = epoch_train_loss
+
+        if scheduler is not None:
+            scheduler.step(epoch_loss)
 
         if epoch_loss < min_loss:
             if should_print:
@@ -692,22 +969,30 @@ def train_and_validate_model_weighted_sampling(
 
     model = best_model.to(device)
 
-    return model
+    return model, dict(train=train_losses, val=val_losses)
 
 
 class NegativeShuffleDataset(IterableDataset):
     dataset: torch.Tensor
     negatives: torch.Tensor
     positives: torch.Tensor
+    shuffle_only_once: bool
+    shuffled: bool
 
-    def __init__(self, tensor):
-        self.positives = tensor[:, 0, :]
-        self.negatives = tensor[:, 1:, :]
+    def __init__(self, tensor, shuffle_only_once: bool = False):
+        self.positives = torch.clone(tensor[:, 0, :])
+        self.negatives = torch.clone(tensor[:, 1:, :])
+        self.shuffle_only_once = shuffle_only_once
+        self.shuffled = False
 
     def __len__(self):
         return self.positives.shape[0]
 
     def _new_epoch(self):
+        if self.shuffle_only_once and self.shuffled:
+            return
+
+        self.shuffled = True
         negatives_permuation = torch.randperm(self.negatives.shape[0] * self.negatives.shape[1])
         shuffled_negatives = self.negatives.reshape(-1, self.negatives.shape[2])[negatives_permuation].reshape(self.negatives.shape)
         positives_permutation = torch.randperm(self.positives.shape[0])
@@ -718,9 +1003,6 @@ class NegativeShuffleDataset(IterableDataset):
         return iter(self.dataset)
 
 
-
-
-
 def train_and_validate_model(model: nn.Module,
     train_data: torch.Tensor,
     val_data: typing.Optional[torch.Tensor] = None,
@@ -729,28 +1011,85 @@ def train_and_validate_model(model: nn.Module,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
     should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
-    patience_epochs: int = 5, patience_threshold: float = 0.01, shuffle_negatives: bool = False,
+    patience_epochs: int = 5, patience_threshold: float = 0.01,
+    shuffle_negatives: bool = False, shuffle_validation_negatives: typing.Optional[bool] = None,
+    evaluate_opposite_shuffle_mode: bool = False, split_validation_from_train: bool = False,
     regularizer: typing.Optional[typing.Callable[[nn.Module], torch.Tensor]] = None, regularization_weight: float = 0.0,
-    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33, **kwargs) -> nn.Module:
+    full_dataset_on_device: bool = False,
+    use_lr_scheduler: bool = False, lr_scheduler_class: typing.Callable = torch.optim.lr_scheduler.ReduceLROnPlateau,
+    lr_scheduler_mode: str = 'min', lr_scheduler_factor: float = 0.5,
+    lr_scheduler_patience: typing.Optional[int] = None, lr_scheduler_threshold: typing.Optional[float] = None,
+    lr_scheduler_threshold_mode: str = 'abs', lr_scheduler_verbose: bool = False,
+    batch_size: int = 8, k: int = 4, device: str = 'cpu', random_seed: int = 33,
+    **kwargs) -> typing.Tuple[nn.Module, typing.Dict[str, typing.List[float]]]:
 
     if loss_function_kwargs is None:
         loss_function_kwargs = {}
 
+    torch.manual_seed(random_seed)
     optimizer = optimizer_class(model.parameters(), lr=lr, weight_decay=weight_decay)
-
     model.to(device)
+
+    scheduler = None
+    if use_lr_scheduler:
+        if lr_scheduler_patience is None:
+            lr_scheduler_patience = patience_epochs // 2
+        if lr_scheduler_threshold is None:
+            lr_scheduler_threshold = patience_threshold
+        scheduler = lr_scheduler_class(
+            optimizer, lr_scheduler_mode,
+            factor=lr_scheduler_factor, patience=lr_scheduler_patience,
+            threshold=lr_scheduler_threshold, threshold_mode=lr_scheduler_threshold_mode,
+            verbose=lr_scheduler_verbose)
+
+    if split_validation_from_train and val_data is None:
+        train_data, val_data = train_test_split(train_data, random_state=random_seed, train_size=DEFAULT_TRAINING_PROP)  # type: ignore
+
+    if full_dataset_on_device:
+        train_data = train_data.to(device)
+
     if shuffle_negatives:
-        train_dataset = NegativeShuffleDataset(train_data.to(device))
+        train_dataset = NegativeShuffleDataset(train_data)  # .to(device)
         shuffle = None
     else:
-        train_dataset = TensorDataset(train_data.to(device))
+        train_dataset = TensorDataset(train_data)  # .to(device)
         shuffle = True
+
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
+
+    if shuffle_validation_negatives is None:
+        shuffle_validation_negatives = shuffle_negatives
 
     validate = val_data is not None
     if validate:
-        val_dataset = TensorDataset(val_data.to(device))
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        if full_dataset_on_device:
+            val_data = val_data.to(device)
+
+        if shuffle_validation_negatives:
+            val_dataset = NegativeShuffleDataset(val_data, shuffle_only_once=True)  # .to(device)
+        else:
+            val_dataset = TensorDataset(val_data)
+
+        val_dataloader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
+
+    extra_evaluation_sets = {}
+    if evaluate_opposite_shuffle_mode:
+        if shuffle_negatives:
+            opposite_train_dataset = TensorDataset(train_data)  # .to(device)
+        else:
+            opposite_train_dataset = NegativeShuffleDataset(train_data, shuffle_only_once=True)
+
+        opposite_train_dataloader = DataLoader(opposite_train_dataset, batch_size=len(opposite_train_dataset), shuffle=False)
+        extra_evaluation_sets[f'{"no_shuffle" if shuffle_negatives else "shuffle"}_train'] = opposite_train_dataloader
+
+        if validate:
+            if shuffle_validation_negatives:
+                opposite_val_dataset = TensorDataset(val_data)  # type: ignore
+            else:
+                opposite_val_dataset = NegativeShuffleDataset(val_data, shuffle_only_once=True)
+
+            opposite_val_dataloader = DataLoader(opposite_val_dataset, batch_size=len(opposite_val_dataset), shuffle=False)
+            extra_evaluation_sets[f'{"no_shuffle" if shuffle_validation_negatives else "shuffle"}_val'] = opposite_val_dataloader
 
     torch.manual_seed(random_seed)
 
@@ -758,22 +1097,15 @@ def train_and_validate_model(model: nn.Module,
     patience_loss = np.Inf
     patience_update_epoch = 0
     best_model = model
+    losses = defaultdict(list)
 
     epoch = 0
     for epoch in range(n_epochs):
         model.train()
         epoch_train_losses = []
         for batch in train_dataloader:
-            if shuffle_negatives:
-                X = batch
-            else:
-                X = batch[0]
             optimizer.zero_grad()
-            negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
-            indices = torch.cat((torch.tensor([0]), negative_indices))
-            X = X[:, indices].to(device)
-            scores = model(X)
-            loss = loss_function(scores, **loss_function_kwargs)
+            loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
             if regularizer is not None:
                 loss += regularization_weight * regularizer(model)
             epoch_train_losses.append(loss.item())
@@ -785,34 +1117,37 @@ def train_and_validate_model(model: nn.Module,
         if validate:
             model.eval()
             with torch.no_grad():
-                for batch in val_dataloader:  # type: ignore
-                    if shuffle_negatives:
-                        X = batch
-                    else:
-                        X = batch[0]
-                    negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
-                    indices = torch.cat((torch.tensor([0]), negative_indices))
-                    X = X[:, indices].to(device)
-
-                    scores = model(X)
-                    loss = loss_function(scores, **loss_function_kwargs)
+                for batch in val_dataloader:    # type: ignore
+                    loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
                     if regularizer is not None:
                         loss += regularization_weight * regularizer(model)
                     epoch_val_losses.append(loss.item())
 
-        if should_print and epoch % print_interval == 0:
-            if validate:
-                if should_print_weights:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
-                else:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | val loss {np.mean(epoch_val_losses):.4f}')
-            else:
-                if should_print_weights:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f} | weights {model.fc1.weight.data}')  # type: ignore
-                else:
-                    print(f'Epoch {epoch}: train loss {np.mean(epoch_train_losses):.4f}')
 
-        epoch_loss = np.mean(epoch_val_losses) if validate else np.mean(epoch_train_losses)
+        if len(extra_evaluation_sets) > 0:
+            model.eval()
+            with torch.no_grad():
+                for name, dataloader in extra_evaluation_sets.items():
+                    epoch_eval_losses = []
+                    for batch in dataloader:
+                        loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
+                        if regularizer is not None:
+                            loss += regularization_weight * regularizer(model)
+                        epoch_eval_losses.append(loss.item())
+
+                    losses[name].append(np.mean(epoch_eval_losses))
+
+        epoch_train_loss = np.mean(epoch_train_losses)
+
+        losses['train'].append(epoch_train_loss)
+        if validate:
+            epoch_loss = np.mean(epoch_val_losses)
+            losses['val'].append(epoch_loss)
+        else:
+            epoch_loss = epoch_train_loss
+
+        if scheduler is not None:
+            scheduler.step(epoch_loss)
 
         if epoch_loss < min_loss:
             if should_print:
@@ -836,7 +1171,106 @@ def train_and_validate_model(model: nn.Module,
 
     model = best_model.to(device)
 
-    return model
+    return model, losses
+
+
+def _get_batch_loss(model: torch.nn.Module, loss_function: typing.Callable,
+                    loss_function_kwargs: typing.Dict[str, typing.Any],
+                    k: int, device: str, X: torch.Tensor) -> torch.Tensor:
+    if not isinstance(X, torch.Tensor):
+        X = X[0]
+
+    if k != X.shape[1] - 1:
+        negative_indices = torch.randperm(X.shape[1] - 1)[:k] + 1
+        indices = torch.cat((torch.tensor([0]), negative_indices))
+        X = X[:, indices]
+
+    scores = model(X.to(device))
+    loss = loss_function(scores, **loss_function_kwargs)
+    return loss
+
+
+def initialize_and_fit_model(
+        input_data: typing.Union[pd.DataFrame, torch.Tensor, typing.Sequence[pd.DataFrame], typing.Sequence[torch.Tensor]],
+        split_test_set: bool = True, split_validation_set: bool = True,
+        feature_columns: typing.Optional[typing.List[str]] = None,
+        random_seed: int = DEFAULT_RANDOM_SEED,
+        scaler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        energy_weighted_resampling: bool = False,
+        train_prop: float = DEFAULT_TRAINING_PROP,
+        pipeline: typing.Optional[Pipeline] = None,
+        scoring_function: typing.Optional[typing.Callable] = None,
+    ) -> typing.Tuple[Pipeline, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor], typing.Optional[torch.Tensor]], typing.Dict[str, typing.Dict[str, typing.Any]]]:
+
+    if scaler_kwargs is None:
+        scaler_kwargs = {}
+
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    if train_kwargs is None:
+        train_kwargs = {}
+
+    train_tensor, test_tensor = _input_data_to_train_test_tensors(input_data=input_data, feature_columns=feature_columns,
+        split_test_set=split_test_set, random_seed=random_seed, train_prop=train_prop)
+
+    val_tensor = None
+    if split_validation_set:
+        train_tensor, val_tensor = train_test_split(train_tensor, random_state=random_seed, train_size=train_prop)
+
+    train_tensor = typing.cast(torch.Tensor, train_tensor)
+    model_kwargs['n_features'] = train_tensor.shape[-1]
+
+    if pipeline is None:
+        if energy_weighted_resampling:
+            pipeline = Pipeline(steps=[('wrapper', SklearnContrastiveTrainingDataWrapper()), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs)),])
+
+        else:
+            pipeline = Pipeline(steps=[('scaler', CustomSklearnScaler(**scaler_kwargs)), ('fitness', SklearnFitnessWrapper(model_kwargs=model_kwargs, train_kwargs=train_kwargs))])
+
+    if split_validation_set:
+        pipeline.fit(train_tensor, val_tensor)
+    else:
+        pipeline.fit(train_tensor)
+
+    train_results = evaluate_trained_model(pipeline, train_tensor, scoring_function)  # type: ignore
+    val_results = None
+    if split_validation_set:
+        val_results = evaluate_trained_model(pipeline, val_tensor, scoring_function)  # type: ignore
+
+    test_results = None
+    combined_results = None
+
+    if split_test_set:
+        if test_tensor is None:
+            raise ValueError(f'Encoutered None test tensor with split_test_set=True')
+        test_tensor = typing.cast(torch.Tensor, test_tensor)
+        test_results = evaluate_trained_model(pipeline, test_tensor, scoring_function)  # type: ignore
+
+        combined_tensor = torch.cat([train_tensor, val_tensor, test_tensor], dim=0) if split_validation_set else torch.cat([train_tensor, test_tensor], dim=0)    # type: ignore
+        combined_results = evaluate_trained_model(pipeline, combined_tensor, scoring_function)  # type: ignore
+
+    return pipeline, (train_tensor, val_tensor, test_tensor), dict(train=train_results, val=val_results, test=test_results, combined=combined_results)  # type: ignore
+
+
+# class TQDMParameterGrid(ParameterGrid):
+#     def __init__(self, param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]]):
+#         super().__init__(param_grid)
+
+#     def __iter__(self):
+#         for p in tqdm(super().__iter__(), total=len(self)):  # type: ignore
+#             yield p
+
+
+# class TQDMGridSearchCV(GridSearchCV):
+#     def __init__(self, estimator: typing.Any, param_grid: typing.Union[typing.List[typing.Dict[str, typing.Any]], typing.Dict[str, typing.Any]], *args, **kwargs):
+#         super().__init__(estimator, param_grid, *args, **kwargs)
+
+#     def _run_search(self, evaluate_candidates):
+#         """Search all candidates in param_grid"""
+#         evaluate_candidates(TQDMParameterGrid(self.param_grid))
 
 
 def cross_validate(train: torch.Tensor,
@@ -846,7 +1280,7 @@ def cross_validate(train: torch.Tensor,
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    n_folds: int = 5, energy_weighted_resampling: bool = True, verbose: int = 0) -> GridSearchCV:
+    n_folds: int = 5, energy_weighted_resampling: bool = False, verbose: int = 0) -> GridSearchCV:
 
     if scaler_kwargs is None:
         scaler_kwargs = {}
@@ -898,8 +1332,9 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     train_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     cv_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    n_folds: int = 5, energy_weighted_resampling: bool = True, verbose: int = 0,
-    ) -> typing.Tuple[GridSearchCV, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]], typing.Optional[typing.Dict[str, float]]]:
+    n_folds: int = 5, energy_weighted_resampling: bool = False,
+    train_prop: float = DEFAULT_TRAINING_PROP, verbose: int = 0,
+    ) -> typing.Tuple[GridSearchCV, typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]], typing.Dict[str, typing.Dict[str, float]]]:
 
     if scaler_kwargs is None:
         scaler_kwargs = {}
@@ -910,52 +1345,8 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
     if train_kwargs is None:
         train_kwargs = {}
 
-    cv_data = input_data
-    test_tensor = None
-
-    if isinstance(cv_data, pd.DataFrame):
-        if feature_columns is None:
-            feature_columns = [str(c) for c in cv_data.columns if c not in NON_FEATURE_COLUMNS]
-
-        if split_test_set:
-            cv_data, test_data = train_test_split_by_game_name(cv_data, random_seed=random_seed)
-            test_tensor = df_to_tensor(test_data, feature_columns)
-
-        cv_tensor = df_to_tensor(cv_data, feature_columns)
-
-    else:
-        if isinstance(cv_data, (list, tuple)):
-            if isinstance(cv_data[0], pd.DataFrame):
-                if feature_columns is None:
-                    feature_columns = [str(c) for c in cv_data[0].columns if c not in NON_FEATURE_COLUMNS]
-
-                cv_data = [df_to_tensor(df, feature_columns) for df in cv_data]   # type: ignore
-
-            if cv_data[0].ndim != 3:
-                raise ValueError('If cv_data is a list or tuple, the first tensor must be 3D [n_positives] x [1 + n_negatives] x [n_features]]')
-
-            tensors = [cv_data[0]]
-            n_positives = cv_data[0].shape[0]
-
-            for t in cv_data[1:]:
-                if t.ndim == 3:
-                    if t.shape[0] != n_positives:
-                        raise ValueError('If cv_data is a list or tuple, all 3D tensors must have the same number of positives')
-                    tensors.append(t)
-
-                elif t.ndim == 2:  # negatives only
-                    negatives_per_positive = t.shape[0] // n_positives
-                    t = t[:negatives_per_positive * n_positives].reshape(n_positives, negatives_per_positive, -1)
-                    tensors.append(t)
-
-            cv_data = torch.cat(tensors, dim=1)
-
-        cv_tensor = cv_data
-        if split_test_set:
-            cv_tensor, test_tensor = train_test_split(cv_tensor, random_state=random_seed,
-                train_size=DEFAULT_TRAINING_PROP)
-
-        cv_tensor = typing.cast(torch.Tensor, cv_tensor)
+    cv_tensor, test_tensor = _input_data_to_train_test_tensors(input_data=input_data, feature_columns=feature_columns,
+        split_test_set=split_test_set, random_seed=random_seed, train_prop=train_prop)
 
     if test_tensor is not None:
         print(f'Train tensor shape: {cv_tensor.shape} | Test tensor shape: {test_tensor.shape}')  # type: ignore
@@ -969,18 +1360,106 @@ def model_fitting_experiment(input_data: typing.Union[pd.DataFrame, torch.Tensor
         cv_kwargs=cv_kwargs, n_folds=n_folds,
         energy_weighted_resampling=energy_weighted_resampling, verbose=verbose)
 
+    train_tensor = typing.cast(torch.Tensor, cv_tensor)
+    best_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_)
+    train_results = evaluate_trained_model(best_model, train_tensor, scoring_function)
+
     test_results = None
+    combined_results = None
 
     if split_test_set:
         if test_tensor is None:
             raise ValueError(f'Encoutered None test tensor with split_test_set=True')
         test_tensor = typing.cast(torch.Tensor, test_tensor)
-        best_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_)
-        ecdf = evaluate_fitness_overall_ecdf(best_model, test_tensor)
-        game_rank = evaluate_fitness_single_game_rank(best_model, test_tensor)
-        test_results = dict(ecdf=ecdf, game_rank=game_rank)
+        test_results = evaluate_trained_model(best_model, test_tensor, scoring_function)
 
-    return cv, (cv_tensor, test_tensor), test_results  # type: ignore
+        combined_tensor = torch.cat([train_tensor, test_tensor], dim=0)
+        combined_results = evaluate_trained_model(best_model, combined_tensor, scoring_function)
+
+    return cv, (cv_tensor, test_tensor), dict(train=train_results, test=test_results, combined=combined_results)  # type: ignore
+
+
+def _input_data_to_train_test_tensors(
+    input_data: typing.Union[pd.DataFrame, torch.Tensor, typing.Sequence[pd.DataFrame], typing.Sequence[torch.Tensor]],
+    feature_columns: typing.Optional[typing.List[str]],
+    split_test_set: bool = True,
+    random_seed: int = DEFAULT_RANDOM_SEED,
+    train_prop: float = DEFAULT_TRAINING_PROP) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
+
+    test_tensor = None
+
+    if isinstance(input_data, pd.DataFrame):
+        if feature_columns is None:
+            feature_columns = [str(c) for c in input_data.columns if c not in NON_FEATURE_COLUMNS]
+
+        if split_test_set:
+            input_data, test_data = train_test_split_by_game_name(input_data, random_seed=random_seed)
+            test_tensor = df_to_tensor(test_data, feature_columns)
+
+        input_data = typing.cast(pd.DataFrame, input_data)
+        train_tensor = df_to_tensor(input_data, feature_columns)
+
+    else:
+        if isinstance(input_data, (list, tuple)):
+            first_input = input_data[0]
+            if isinstance(first_input, pd.DataFrame):
+                if feature_columns is None:
+                    feature_columns = [str(c) for c in first_input.columns if c not in NON_FEATURE_COLUMNS]  # type: ignore
+
+                input_data = [df_to_tensor(df, feature_columns) for df in input_data]   # type: ignore
+
+            if input_data[0].ndim != 3:
+                raise ValueError('If cv_data is a list or tuple, the first tensor must be 3D [n_positives] x [1 + n_negatives] x [n_features]]')
+
+            tensors = [input_data[0]]
+            n_positives = input_data[0].shape[0]
+
+            for t in input_data[1:]:
+                if t.ndim == 3:
+                    if t.shape[0] != n_positives:
+                        raise ValueError('If cv_data is a list or tuple, all 3D tensors must have the same number of positives')
+                    tensors.append(t)
+
+                elif t.ndim == 2:  # negatives only
+                    negatives_per_positive = t.shape[0] // n_positives
+                    t = t[:negatives_per_positive * n_positives].reshape(n_positives, negatives_per_positive, -1)
+                    tensors.append(t)
+
+            input_data = torch.cat(tensors, dim=1)  # type: ignore
+
+        train_tensor = input_data
+        if split_test_set:
+            train_tensor, test_tensor = train_test_split(train_tensor, random_state=random_seed,
+                train_size=train_prop)
+
+    return train_tensor, test_tensor  # type: ignore
+
+
+def evaluate_trained_model(model: SklearnFitnessWrapper, data_tensor: torch.Tensor,
+                           scoring_function: typing.Optional[typing.Callable] = None) -> typing.Dict[str, float]:
+
+    if scoring_function is not None:
+        output = scoring_function(model, data_tensor)
+        if not isinstance(output, dict):
+            output = dict(score=output)
+
+        shuffled_dataset = NegativeShuffleDataset(data_tensor)
+        shuffled_dataset._new_epoch()
+        shuffled_output = scoring_function(model, shuffled_dataset.dataset)
+
+        if not isinstance(shuffled_output, dict):
+            shuffled_output = dict(score=shuffled_output)
+
+        output.update({'shuffled_' + k: v for k, v in shuffled_output.items()})
+        return output
+
+    else:
+        combined_ecdf = evaluate_fitness_overall_ecdf(model, data_tensor)
+        combined_game_rank = evaluate_fitness_single_game_rank(model, data_tensor)
+        combined_game_min_rank = evaluate_fitness_single_game_min_rank(model, data_tensor)
+        combined_results = dict(ecdf=combined_ecdf, game_rank=combined_game_rank, game_min_rank=combined_game_min_rank)
+
+    return combined_results
 
 
 def plot_energy_histogram(energy_model: typing.Union[GridSearchCV, Pipeline],
@@ -1038,49 +1517,153 @@ def plot_energy_histogram(energy_model: typing.Union[GridSearchCV, Pipeline],
         energy_model.named_steps['wrapper'].train()
 
 
+def plot_loss_curves(losses: typing.Dict[str, typing.List[float]],
+    title: str = 'Loss curve', xlabel: str = 'Epoch', ylabel: str = 'Loss',
+    title_note: typing.Optional[str] = None, cmap: str = 'Dark2',
+    legend_loc: str = 'best'):
+
+    cm = plt.get_cmap(cmap)  # type: ignore
+
+    for i, (key, loss_list) in enumerate(losses.items()):
+        plt.plot(loss_list, label=key, color=cm(i))
+
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
+    if title_note is not None:
+        plt.title(f'{title} ({title_note})')
+    else:
+        plt.title(title)
+
+    plt.legend(loc=legend_loc)
+    plt.show()
+
+
+def print_results_dict(results: typing.Dict[str, typing.Dict[str, typing.Any]],
+                       results_keys: typing.Optional[typing.List[str]] = None, notebook: bool = True):
+    if results_keys is None:
+        results_keys = list(results.keys())
+
+    for results_key in results_keys:
+        results_dict = results[results_key]
+        if results_dict is not None:
+            if notebook:
+                display(Markdown(f'### {results_key.capitalize()} results:'))
+            else:
+                display(f'{results_key.capitalize()} results:')
+            display(results_dict)
+
+
+CV_RESULTS_KEY_PATTERNS = ['mean_test_{name}', 'std_test_{name}', 'rank_test_{name}']
+CV_RESULTS_COLUMN_PATTERNS = ['{name}_mean', '{name}_std', '{name}_rank']
+
+
 def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     test_tensor: typing.Optional[torch.Tensor] = None,
-    test_results: typing.Optional[dict] = None,
+    results: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = None,
+    display_metric_correlation_table: bool = True,
     display_by_ecdf: bool = True, display_by_game_rank: bool = True,
     display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
-    histogram_title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
+    title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
     dispaly_weights_histogram: bool = True, weights_histogram_title_base: str = 'Energy model weights',
+    cv_key_patterns: typing.List[str] = CV_RESULTS_KEY_PATTERNS,
+    cv_column_patterns: typing.List[str] = CV_RESULTS_COLUMN_PATTERNS,
+    cv_column_prefix: str = 'mean_test_', notebook: bool = True,
     ) -> None:
 
-    cv_df = pd.concat([
-        pd.DataFrame(cv.cv_results_["params"]),
-        pd.DataFrame(cv.cv_results_["mean_test_overall_ecdf"], columns=['ecdf_mean']),
-        pd.DataFrame(cv.cv_results_["std_test_overall_ecdf"], columns=['ecdf_std']),
-        pd.DataFrame(cv.cv_results_["rank_test_overall_ecdf"], columns=['ecdf_rank']),
-        pd.DataFrame(cv.cv_results_["mean_test_single_game_rank"], columns=['game_rank_mean']),
-        pd.DataFrame(cv.cv_results_["std_test_single_game_rank"], columns=['game_rank_std']),
-        pd.DataFrame(cv.cv_results_["rank_test_single_game_rank"], columns=['game_rank_rank']),
-    ], axis=1)
+    if len(cv_key_patterns) != len(cv_column_patterns):
+        raise ValueError(f'cv_key_patterns and cv_column_patterns must have the same length, but got {len(cv_key_patterns)} and {len(cv_column_patterns)} respectively.')
 
-    if test_results is not None:
-        display(Markdown('### Test results:'))
-        display(test_results)
+    scoring_names = cv.scorer_.names if hasattr(cv.scorer_, 'names') else []  # type: ignore
 
-    if display_by_ecdf:
-        display(Markdown('### CV results by overall ECDF:'))
-        display(cv_df.sort_values(by='ecdf_rank').head(10))
+    if not scoring_names:
+        scoring_names = [column.replace(cv_column_prefix, '') for column in cv.cv_results_.keys() if column.startswith(cv_column_prefix)]
 
-    if display_by_game_rank:
-        display(Markdown('### CV results by mean single game rank:'))
-        display(cv_df.sort_values(by='game_rank_rank').head(10))
+    cv_series_or_dfs = [
+        pd.Series(cv.cv_results_[key_pattern.format(name=name)], name=column_pattern.format(name=name))
+        for (key_pattern, column_pattern) in zip(cv_key_patterns, cv_column_patterns)
+        for name in scoring_names
+    ]
+    cv_series_or_dfs.insert(0, pd.DataFrame(cv.cv_results_["params"]))  # type: ignore
 
-    if display_energy_histogram:
-        plot_energy_histogram(cv, train_tensor, test_tensor, histogram_title_base, histogram_title_note, histogram_log_y)
+    # cv_series_or_dfs = [
+    #     pd.DataFrame(cv.cv_results_["params"]),
+    #     pd.Series(cv.cv_results_["mean_test_overall_ecdf"], name='ecdf_mean'),
+    #     pd.Series(cv.cv_results_["std_test_overall_ecdf"], name='ecdf_std'),
+    #     pd.Series(cv.cv_results_["rank_test_overall_ecdf"], name='ecdf_rank'),
+    #     pd.Series(cv.cv_results_["mean_test_single_game_rank"], name='game_rank_mean'),
+    #     pd.Series(cv.cv_results_["std_test_single_game_rank"], name='game_rank_std'),
+    #     pd.Series(cv.cv_results_["rank_test_single_game_rank"], name='game_rank_rank'),
+    # ]
 
-    if dispaly_weights_histogram:
-        weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().numpy().squeeze()  # type: ignore
-        bias = cv.best_estimator_.named_steps['fitness'].model.fc1.bias.data.detach().numpy().squeeze()  # type: ignore
-        print(weights.mean(), weights.std(), bias)
+    cv_df = pd.concat(cv_series_or_dfs, axis=1)
 
-        plt.hist(weights, bins=100)
+    if results is not None:
+        print_results_dict(results, notebook=notebook)
 
-        if histogram_title_note is not None:
-            plt.title(f'{weights_histogram_title_base} ({histogram_title_note})')
+    if display_metric_correlation_table:
+        n_score_funcs = len(scoring_names)
+        if notebook:
+            display(Markdown('### Rank (Spearman) correlations between metrics:'))
+        else:
+            logging.info('Rank (Spearman) correlations between metrics:')
+
+        metrics_table = [[''] * n_score_funcs for _ in range(n_score_funcs)]
+
+        for first_index, second_index in combinations(range(n_score_funcs), 2):
+            first_name = scoring_names[first_index]
+            second_name = scoring_names[second_index]
+            first_rank = cv_df[f'{first_name}_rank']
+            second_rank = cv_df[f'{second_name}_rank']
+            corr = spearmanr(first_rank, second_rank)
+            corr_str = f'{corr.statistic:.3f} (p={corr.pvalue:.4f})'  # type: ignore
+            metrics_table[first_index][second_index] = corr_str
+            metrics_table[second_index][first_index] = corr_str
+
+        for index, name in enumerate(scoring_names):
+            metrics_table[index].insert(0, f'**{name}**')
+
+        table = tabulate(metrics_table, headers=[''] + scoring_names, tablefmt='github')
+        if notebook:
+            display(Markdown(table))
+        else:
+            logging.info(f'Metric correlation table:\n{table}')
+
+    for name in scoring_names:
+        if notebook:
+            display(Markdown(f'### CV results by {name}:'))
+            display(cv_df.sort_values(by=f'{name}_rank').head(10))
+        else:
+            logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
+
+    # else:
+    #     if display_by_ecdf:
+    #         display(Markdown('### CV results by overall ECDF:'))
+    #         display(cv_df.sort_values(by='ecdf_rank').head(10))
+
+    #     if display_by_game_rank:
+    #         display(Markdown('### CV results by mean single game rank:'))
+    #         display(cv_df.sort_values(by='game_rank_rank').head(10))
+
+    if notebook and display_energy_histogram:
+        plot_energy_histogram(cv, train_tensor, test_tensor, histogram_title_base, title_note, histogram_log_y)
+
+    fitness_model = typing.cast(SklearnFitnessWrapper, cv.best_estimator_.named_steps['fitness'])  # type: ignore
+
+    if notebook and fitness_model.losses:
+        plot_loss_curves(fitness_model.losses, 'Fitness model loss curve', title_note=title_note)
+
+    if notebook and dispaly_weights_histogram:
+        fc1 = typing.cast(torch.nn.Linear, fitness_model.model.fc1)
+        weights = fc1.weight.data.detach().numpy().squeeze()
+        bias = fc1.bias.data.detach().numpy().squeeze()
+        print(f'Weights mean: {weights.mean():.3f} +/- {weights.std():.3f} with bias {bias:.3f}')
+
+        bins = max(min(50, len(weights) // 10), 10)
+        plt.hist(weights, bins=bins)
+
+        if title_note is not None:
+            plt.title(f'{weights_histogram_title_base} ({title_note})')
         else:
             plt.title(weights_histogram_title_base)
 
@@ -1090,7 +1673,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
 
 
 
-HTML_DIFF = HtmlDiff(wrapcolumn=100)
+HTML_DIFF = HtmlDiff(wrapcolumn=80)
 HTML_DIFF_SUBSTITUTIONS = {
     'td.diff_header {text-align:right}': '.diff td {text-align: left !important}\n.diff th {text-align: center!important }\n.diff td.diff_header {text-align:right !important}',
     '.diff_add {background-color:#aaffaa}': '.diff_add {background-color: #6fa66f !important; font-weight: bold !important}',
@@ -1185,8 +1768,10 @@ def evaluate_comparison_energy_contributions(
     if isinstance(energy_model, GridSearchCV):
         energy_model = energy_model.best_estimator_  # type: ignore
 
+    energy_model = typing.cast(Pipeline, energy_model)
+
     if 'wrapper' in energy_model.named_steps:
-        energy_model['wrapper'].eval()
+        energy_model['wrapper'].eval()   # type: ignore
 
     index_energy = energy_model.transform(comparison_game_features).item()  # type: ignore
     real_game_energy = energy_model.transform(original_game_features).item()  # type: ignore

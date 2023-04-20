@@ -115,7 +115,7 @@ class ASTPrinter(ast_parser.ASTParser):
                     handler(self, rule, ast, depth, increment, context)
                     return
 
-        raise ValueError(f'No match found in {self.ast_key} for rule: {ast.parseinfo.rule}: {ast}')
+        raise ValueError(f'No match found in {self.ast_key} for rule: {ast.parseinfo.rule}: {ast}')  # type: ignore
 
 
     def __call__(self, ast, depth=0, increment=DEFAULT_INCREMENT, context=None):
@@ -275,7 +275,7 @@ def _parse_type_definition(var_type_def, context):
     if isinstance(var_type, str):
         var_type_str = var_type
 
-    elif var_type.parseinfo.rule == 'either_types':
+    elif var_type.parseinfo.rule.startswith('either'):
         var_type_str = _parse_either_types(var_type, context)
 
         inner_prev_mutation = None
@@ -553,6 +553,7 @@ def _handle_predicate_or_function_term(caller, rule, ast, depth, increment, cont
     _indent_print(_out_str_to_span(ast.term, context, remove=ast.get('remove', False)), depth, increment, context)
 
 
+
 @mutation_and_removal_context
 def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=False,
     child_keys: typing.List[str] = ['pred', 'func'], child_rule_prefixes: typing.List[str] = ['predicate_', 'function_']):
@@ -609,13 +610,14 @@ def build_setup_printer():
     printer = ASTPrinter('(:setup', ('setup_', 'super_', 'predicate_'))
     printer.register_exact_matches(
         _handle_setup, _handle_statement, _handle_super_predicate,
-        _handle_function_comparison, _handle_function_eval,
-        _handle_predicate, _handle_predicate_or_function_term,
+        _handle_function_comparison, _handle_function_eval, _handle_predicate,
         _handle_two_arg_comparison, _handle_comparison_arg,
-        _handle_multiple_args_equal_comparison,
-        _handle_variable_list, _handle_type_definition,
-        _handle_variable_type_def, _handle_either_types)
+        _handle_multiple_args_equal_comparison, _handle_variable_list, )
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
+    printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
+    printer.register_keyword_match('type_definition', _handle_type_definition)
+    printer.register_keyword_match('either_types', _handle_either_types)
+    printer.register_keyword_match(('predicate_or_function',), _handle_predicate_or_function_term)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('game',), _handle_game)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
@@ -770,17 +772,20 @@ def build_constraints_printer():
     printer.register_exact_matches(
         _handle_preferences, _handle_pref_def, _handle_pref_body, _handle_seq_func,
         _handle_preference, _handle_super_predicate,
-        _handle_function_comparison, _handle_predicate, _handle_predicate_or_function_term,
+        _handle_function_comparison, _handle_predicate,
         _handle_at_end, _handle_always, _handle_then,
         _handle_any, _handle_once, _handle_once_measure,
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end,
         _handle_forall_seq, _handle_function_eval, _handle_two_arg_comparison,
         _handle_multiple_args_equal_comparison, _handle_comparison_arg,
-        _handle_variable_list, _handle_type_definition,
-        _handle_variable_type_def, _handle_either_types
+        _handle_variable_list,
     )
     printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
+    printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
+    printer.register_keyword_match('type_definition', _handle_type_definition)
+    printer.register_keyword_match('either_types', _handle_either_types)
+    printer.register_keyword_match('predicate_or_function', _handle_predicate_or_function_term)
     printer.register_keyword_match(('exists', 'forall'), _handle_quantifier)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
 

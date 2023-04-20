@@ -24,11 +24,18 @@ class FitnessFeaturesPreprocessor(ABC):
 
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
-BINARIZE_IGNORE_FEATURES = [
-    'setup_objects_used', 'starts_and_ends_once',
+BINARIZE_IGNORE_FEATURES = set([
+    'all_variables_defined', 'all_variables_used',
+    'setup_objects_used', 'setup_quantified_objects_used',
+    'starts_and_ends_once', 'all_preferences_used',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
-]
+    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
+    'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
+    'two_number_operation_found', 'single_argument_multi_operation_found',
+    'tautological_expression_found', 'redundant_expression_found',
+    'redundant_scoring_terminal_expression_found',
+    'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
+])
 
 BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_depth_[\w\d_]+'),
@@ -39,18 +46,14 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     re.compile(r'predicate_under_modal_[\w\d_]+'),
+    re.compile(r'section_doesnt_exist_[\w\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [
-    'all_variables_defined', 'all_variables_used',
-    'all_preferences_used', 'no_adjacent_once',
-    'no_variables_repeated', 'no_nested_logicals',
-    'no_identical_logical_children', 'no_two_number_operations',
-    'tautological_expression_found', 'redundant_expression_found',
 ]
 
-NGRAM_SCORE_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_score')
-NGRAM_PATTERN = re.compile(r'(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+')
+NGRAM_SCORE_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_score$')
+NGRAM_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+$')
 ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
@@ -87,8 +90,13 @@ def set_missing_value_min_epsilon(series: typing.Optional[pd.Series], min_value:
             raise ValueError('min_value must be provided if series is None')
         return min_value - epsilon
 
+    # if series.name == 'ast_ngram_scoring_n_5_score':
+    #     logging.debug(f'For series {series.name}, min_value is {min_value}, epsilon is {epsilon}')
+
     if min_value is None:
-        min_value = np.nanmean(series.values)  # type: ignore
+        min_value = np.nanmin(series.values)  # type: ignore
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'For series {series.name}, computed min_value {min_value}, min after subtracting epsilon {min_value - epsilon}')
 
     return series.fillna(min_value - epsilon), min_value  # type: ignore
 
@@ -136,7 +144,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 min_val, max_val = series.min(), series.max()
                 self.scale_series_min_max_values[c] = (min_val, max_val)
 
-            return (series - min_val) / (max_val - min_val)
+            return np.clip((series - min_val) / (max_val - min_val), 0, 1)
 
         if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
             return (series != 0).astype(int)
@@ -148,7 +156,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
         if not series.isna().any():
             return series
 
-        logging.info(f'Filling missing values for column {series.name}')
+        # logging.info(f'Filling missing values for column {series.name}')
         c = str(series.name)
         missing_value_function = None
         if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
@@ -159,6 +167,9 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if isinstance(p, re.Pattern) and p.match(c):
                     missing_value_function = f
                     break
+
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score: {series.isna().sum()} missing values, {series.isna().sum() / 1025}, found {missing_value_function}')
 
         if missing_value_function is None:
             raise ValueError(f'No missing value function for column {c}')
@@ -183,8 +194,14 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
 
     def _preprocess_series(self, series: pd.Series, use_prior_values: bool = False,
                            min_max_values: typing.Optional[typing.Dict[str, typing.Tuple[float, float]]] = None):
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score: {series.isna().sum()} missing values, {series.isna().sum() / 1025}')
         series = self._fill_series_missing_values(series, use_prior_values=use_prior_values, min_max_values=min_max_values)
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score, min after fill: {series.min()} ({(series == series.min()).sum() / 1025:.2f}%)')
         series = self._binarize_series(series, use_prior_values=use_prior_values, ignore_columns=self.ignore_columns)
+        # if series.name == 'ast_ngram_scoring_n_5_score':
+        #     logging.debug(f'ast_ngram_scoring_n_5_score, after binarizing: {series.min()} ({(series == series.min()).sum() / 1025:.2f}%)')
         return series
 
     def preprocess_df(self, df: pd.DataFrame, use_prior_values: bool = False,
@@ -202,20 +219,7 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
             raise ValueError('Must call preprocess_df before preprocess_row')
 
         for c in self.columns:
-            if c in row:
-                v = row[c]
-
-                if c in BINARIZE_NON_ONE:
-                    row[c] = 1 if v == 1 else 0
-
-                if c in self.scale_series_min_max_values:
-                    min_val, max_val = self.scale_series_min_max_values[c]
-                    row[c] = (v - min_val) / (max_val - min_val)
-
-                if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
-                    row[c] = 1 if v != 0 else 0
-
-            else:
+            if c not in row or row[c] is None:
                 missing_value_function = None
                 if c in COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION:
                     missing_value_function = COLUMN_NAME_OR_PATTERN_TO_MISSING_VALUE_FUNCTION[c]
@@ -229,15 +233,27 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 if missing_value_function is None:
                     raise ValueError(f'No missing value function for column {c} with no value in the row')
 
-                if self.missing_value_series_min_values:
+                if self.missing_value_series_min_values and c in self.missing_value_series_min_values:
                     row[c] = missing_value_function(None, min_value=self.missing_value_series_min_values[c], epsilon=self.missing_value_epsilon)
                 else:
                     row[c] = missing_value_function(None, epsilon=self.missing_value_epsilon)
 
+            v = row[c]
+
+            if c in BINARIZE_NON_ONE:
+                row[c] = 1 if v == 1 else 0
+
+            elif c in self.scale_series_min_max_values:
+                min_val, max_val = self.scale_series_min_max_values[c]
+                row[c] = np.clip((v - min_val) / (max_val - min_val), 0, 1)
+
+            elif any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
+                row[c] = 1 if v != 0 else 0
+
         return row
 
 
-DEFAULT_MERGE_THRESHOLD_PROPORTION = 0.001
+DEFAULT_MERGE_THRESHOLD_PROPORTION = 0.01   # ~ 1000 games out of the 98 * 1025
 DEFAULT_FEATURE_SUFFIXES = ('setup', 'constraints')
 DEFAULT_MERGE_COLUMN_SUFFIX = 'other'
 

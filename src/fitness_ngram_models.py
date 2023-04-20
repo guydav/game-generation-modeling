@@ -38,6 +38,8 @@ parser.add_argument('--stupid-backoff-discount', type=float, default=DEFAULT_STU
 DEFAULT_ZERO_LOG_PROB = -7
 parser.add_argument('--zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB)
 parser.add_argument('--from-asts', action='store_true')
+parser.add_argument('--no-pad', action='store_true')
+parser.add_argument('--padding', default=None, type=int)
 
 
 WHITESPACE_PATTERN = re.compile(r'\s+')
@@ -498,6 +500,7 @@ class NGramASTParser(ast_parser.ASTParser):
 
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'update_model_counts', False)
+        self._default_kwarg(kwargs, 'skip_game_and_domain', self.skip_game_and_domain)
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
@@ -505,7 +508,7 @@ class NGramASTParser(ast_parser.ASTParser):
             self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 
         if initial_call:
-            if self.skip_game_and_domain:
+            if kwargs['skip_game_and_domain']:
                 ast = ast[3:]
 
         super().__call__(ast, **kwargs)
@@ -537,6 +540,9 @@ class NGramASTParser(ast_parser.ASTParser):
     def _count_ngrams_from_tokens(self, tokens: typing.List[str], n: int, update_model_counts: bool = True, section: typing.Optional[str] = None):
         for start_index in range(len(tokens) - n + 1):
             ngram = tuple(tokens[start_index:start_index + n])
+            if all(t == START_PAD or t == END_PAD for t in ngram):
+                continue
+
             if update_model_counts:
                 if section is None:
                     self.ngram_counts[ngram] += 1
@@ -703,7 +709,12 @@ class ASTNGramTrieModel:
               stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
               top_k_max_n: typing.Optional[int] = None, k_for_sections: typing.Optional[int] = None,
-              score_all: bool = False, debug: bool = False):
+              score_all: bool = False, tokenize_entire_ast: bool = False,
+              ngram_ast_parser_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+              debug: bool = False):
+
+        if ngram_ast_parser_kwargs is None:
+            ngram_ast_parser_kwargs = {}
 
         if k_for_sections is None:
             k_for_sections = k
@@ -715,7 +726,11 @@ class ASTNGramTrieModel:
 
             n_values = list(range(top_k_min_n, top_k_max_n + 1))
 
-        current_input_ngrams, current_input_ngrams_by_section = self.ngram_ast_parser.parse_test_input(ast, n_values=n_values)
+        if 'skip_game_and_domain' not in ngram_ast_parser_kwargs:
+            ngram_ast_parser_kwargs['skip_game_and_domain'] = not tokenize_entire_ast
+
+        current_input_ngrams, current_input_ngrams_by_section = self.ngram_ast_parser.parse_test_input(
+            ast, n_values=n_values, **ngram_ast_parser_kwargs)
 
         if debug: print(current_input_ngrams[2])
 
@@ -738,7 +753,8 @@ class ASTNGramTrieModel:
 
 def main(args: argparse.Namespace):
     if args.from_asts:
-        model = ASTNGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
+        model = ASTNGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount,
+                                  zero_log_prob=args.zero_log_prob, pad=0 if args.no_pad else args.padding)
     else:
         model = NGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
 
@@ -772,5 +788,8 @@ if __name__ == '__main__':
     if args.output_path is None:
         args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
             n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
+
+    if args.padding is None:
+        args.padding = args.n - 1
 
     main(args)

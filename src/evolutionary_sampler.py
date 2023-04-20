@@ -21,7 +21,7 @@ from ast_utils import *
 
 from fitness_ngram_models import NGramTrieModel, NGramTrieNode, NGramASTParser, ASTNGramTrieModel
 
-class EvolutionarySampler():
+class PopulationBasedSampler():
     '''
     This is a type of game sampler which uses an evolutionary strategy to climb a
     provided fitness function. It's a population-based alternative to the MCMC samper
@@ -44,7 +44,7 @@ class EvolutionarySampler():
         # Used to generate the initial population of complete games
         self.initial_sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
         self.rng = self.initial_sampler.rng
-        
+
         # Used as the mutation operator to modify existing games
         self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed, rng=self.rng)
 
@@ -59,13 +59,13 @@ class EvolutionarySampler():
 
     def _best_fitness(self):
         return max(self.fitness_values)
-    
+
     def _avg_fitness(self):
         return np.mean(self.fitness_values)
-    
+
     def _best_individual(self):
         return self.population[np.argmax(self.fitness_values)]
-    
+
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
 
@@ -93,7 +93,7 @@ class EvolutionarySampler():
                 if self.verbose >= 2: print('Sampling exception in sample {idx} -- skipping')
 
         return sample
-    
+
     def _gen_regrowth_sample(self, game):
         '''
         Helper function for generating a new sample from an existing game (repeating until one is generated
@@ -108,7 +108,7 @@ class EvolutionarySampler():
 
         while not sample_generated:
             try:
-                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False) # TODO: does sample_index need to change? 
+                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False) # TODO: does sample_index need to change?
 
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
                     if self.verbose >= 2: print('Regrowth generated identical games, repeating')
@@ -166,7 +166,7 @@ class EvolutionarySampler():
             # - if a node is an element of a list, then the last entry of its selector will be an integer (since
             #   we need to index into that list to get the node)
             # - similarly, the first entry of the selector will yield a list when applied to the parent
-            valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context 
+            valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context
                                     in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
 
             # Dedupe valid nodes based on their parent and selector
@@ -175,13 +175,13 @@ class EvolutionarySampler():
                 key = (*self.regrowth_sampler._ast_key(parent), selector)
                 if key not in valid_node_dict:
                     valid_node_dict[key] = (parent, selector, section, global_context, local_context)
-            
+
             for parent, selector, section, global_context, local_context in valid_node_dict.values():
 
                 parent_rule = parent.parseinfo.rule # type: ignore
                 parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
                 assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
-                
+
                 # Determine whether we're sampling a rule or a token (for this case, it'll always be one or the other 100% of the time)
                 if parent_rule_posterior_dict['type_posterior']['rule'] == 1:
 
@@ -208,7 +208,7 @@ class EvolutionarySampler():
                         # Make a copy of the game
                         new_game = copy.deepcopy(game)
                         new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
-                        
+
                         # Insert the new node into the parent at a random index
                         new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
                         samples.append(new_game)
@@ -228,7 +228,7 @@ class EvolutionarySampler():
 
                 else:
                     raise Exception("Invalid type posterior")
-        
+
         # TODO: add cleanup step to add / remove predicates or variables in order to ensure agreement
 
         # Score the new samples
@@ -295,7 +295,7 @@ class EvolutionarySampler():
         # If there are no shared crossover keys, then throw an exception
         if len(shared_crossover_keys) == 0:
             raise SamplingException("No crossover keys shared between the two games")
-        
+
         # Select a random crossover key and a nodeinfo for each game with that key
         crossover_key = self.rng.choice(list(shared_crossover_keys))
         game_1_selected_node_info = self._choice(game_1_crossover_map[crossover_key])
@@ -325,6 +325,119 @@ class EvolutionarySampler():
 
 
     # TODO: add general step which can be used to combine the above steps
+    # TODO: break evolutionary step into selection / recombination / mutation steps?
+    # -> can use microbial GA tournament structure?
+    # TODO: add 'fixer' to make sure variables are used / defined
+    # TODO: parallelize
+    # TODO: store statistics about which locations are more likely to receive beneficial mutations?
+    # TODO: keep track of 'lineages'
+
+    def _get_operator(self):
+        '''
+        Returns a function (operator) which takes in a list of games and returns a list of new games.
+        As a default, always return a no_op operator
+        '''
+
+        def no_op(games):
+            return games
+
+        return no_op
+
+
+    def _get_parent_iterator(self):
+        '''
+        Returns an iterator which at each step yields one or more parents that will be modified
+        by the operator. As a default, return an iterator which yields the entire population
+        '''
+        return iter(self.population)
+
+    def _select_new_population(self, candidates, candidate_scores):
+        '''
+        Returns the new population given the current population, the candidate games, and the
+        scores for both the population and the candidate games. As a default, return the top P
+        games from the union of the population and the candidates
+        '''
+        all_games = self.population + candidates
+        all_scores = self.fitness_values + candidate_scores
+
+        top_indices = np.argsort(all_scores)[-self.population_size:]
+        self.population = [all_games[i] for i in top_indices]
+        self.fitness_values = [all_scores[i] for i in top_indices]
+
+
+
+    def evolutionary_step(self):
+        # The core steps are:
+        # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
+        # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
+        # 3. for each parent(s) yielded, apply the operator to produce one or more new games and add them to a "candidates" list
+        # 4. score the candidates
+        # 5. pass the initial population and the candidates to the "selector" which will return the new population
+
+        operator = self._get_operator() # return the number of games expected per call?
+        parent_iterator = self._get_parent_iterator()
+
+        candidates = []
+        for parents in parent_iterator:
+            children = operator(parents)
+
+            if isinstance(children, list):
+                candidates.extend(children)
+            else:
+                candidates.append(children)
+
+        candidate_scores = [self.fitness_function(candidate) for candidate in candidates]
+
+        self._select_new_population(candidates, candidate_scores)
+
+class BeamSearchSampler(PopulationBasedSampler):
+    '''
+    Implements 'beam search' by, at each generation, expanding every game in the population out k times
+    and then restricting the population to the top P games
+    '''
+    def __init__(self, k, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k
+
+    def _get_operator(self):
+        return self._gen_regrowth_sample
+
+    def _get_parent_iterator(self, population):
+        return iter(population * self.k)
+
+class WeightedBeamSearchSampler(PopulationBasedSampler):
+    '''
+    Implements a weighted form of beam search where the number of samples generated for each game
+    is dependent on its fitness rank in the population. The most fit game receives (in expectation)
+    2k samples, the median game k samples, and the least fit game 0 samples. This is achieved by
+    running 2 * P "tournaments" where two individuals are randomly sampled from the population and
+    the individual with higher fitness produces a child
+    '''
+    def __init__(self, k, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k
+
+    def _get_operator(self):
+
+        def weighted_beam_search_sample(games):
+            p1_idx = self.population.index(games[0])
+            p2_idx = self.population.index(games[1])
+
+            if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
+                return self._gen_regrowth_sample(games[0])
+            else:
+                return self._gen_regrowth_sample(games[1])
+
+        return weighted_beam_search_sample
+
+    def _get_parent_iterator(self):
+        parent_iterator = []
+        for _ in range(2 * self.population_size * self.k):
+            parent_1 = self._choice(self.population)
+            parent_2 = self._choice(self.population)
+            parent_iterator.append([parent_1, parent_2])
+
+        return iter(parent_iterator)
 
 if __name__ == '__main__':
 
@@ -351,14 +464,11 @@ if __name__ == '__main__':
         '''
         return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
 
-    evosampler = EvolutionarySampler(DEFAULT_ARGS, fitness_function, verbose=0)
-
-    evosampler.crossover_step(CrossoverType.SAME_RULE)
-    evosampler._crossover(evosampler.population[0], evosampler.population[1], CrossoverType.SAME_RULE)
-    exit()
+    evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
+    evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
 
     for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
-        evosampler.beam_step(k=25)
+        evosampler.evolutionary_step()
         print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
 
     print('Best individual:')

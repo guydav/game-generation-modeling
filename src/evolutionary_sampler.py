@@ -8,18 +8,28 @@ import sys
 import numpy as np
 import tatsu
 import tatsu.ast
+import tatsu.grammars
 import torch
-import tqdm
+from tqdm import tqdm
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
 import ast_printer
 import ast_parser
+from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
-from ast_crossover_sampler import ASTContextFixer, CrossoverType, node_info_to_key
+from ast_crossover_sampler import CrossoverType, node_info_to_key
+from ast_mcmc_regrowth import _load_pickle_gzip
 from ast_utils import *
+from fitness_energy_utils import load_model_and_feature_columns
+from fitness_features import *
+from fitness_ngram_models import *
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
-from fitness_ngram_models import NGramTrieModel, NGramTrieNode, NGramASTParser, ASTNGramTrieModel
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+
+import src
 
 class PopulationBasedSampler():
     '''
@@ -38,7 +48,7 @@ class PopulationBasedSampler():
         self.verbose = verbose
 
         self.grammar = open(args.grammar_file).read()
-        self.grammar_parser = tatsu.compile(self.grammar)
+        self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
         self.counter = parse_or_load_counter(args, self.grammar_parser)
 
         # Used to generate the initial population of complete games
@@ -49,13 +59,19 @@ class PopulationBasedSampler():
         self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed, rng=self.rng)
 
         # Used to fix the AST context after crossover / mutation
-        self.context_fixer = ASTContextFixer(self.initial_sampler.rules['variable_type_def']['var_names']['samplers']['variable'],
-                                             self.initial_sampler.local_context_propagating_rules,
-                                             self.rng)
+        self.context_fixer = ASTContextFixer(self.initial_sampler, self.rng)
 
         # Generate the initial population
-        self.population = [self._gen_init_sample(idx) for idx in range(self.population_size)]
-        self.fitness_values = [self.fitness_function(game) for game in self.population]
+        self.set_population([self._gen_init_sample(idx) for idx in range(self.population_size)])
+
+    def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
+        '''
+        Set the initial population of the sampler
+        '''
+        self.population = population
+        self.population_size = len(population)
+        if fitness_values is None:
+            self.fitness_values = [self.fitness_function(game) for game in self.population]
 
     def _best_fitness(self):
         return max(self.fitness_values)
@@ -69,12 +85,17 @@ class PopulationBasedSampler():
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
 
-    def _choice(self, iterable):
+    def _choice(self, iterable, n=1):
         '''
         Small hack to get around the rng invalid __array_struct__ error
         '''
-        idx = self.rng.integers(len(iterable))
-        return iterable[idx]
+        if n == 1:
+            idx = self.rng.integers(len(iterable))
+            return iterable[idx]
+
+        else:
+            idxs = self.rng.choice(len(iterable), size=n, replace=False)
+            return [iterable[idx] for idx in idxs]
 
     def _gen_init_sample(self, idx):
         '''
@@ -143,8 +164,7 @@ class PopulationBasedSampler():
 
         # Select the top n samples
         top_indices = np.argsort(scores)[-self.population_size:]
-        self.population = [samples[i] for i in top_indices]
-        self.fitness_values = [scores[i] for i in top_indices]
+        self.set_population([samples[i] for i in top_indices], [scores[i] for i in top_indices])
 
     def insert_delete_step(self, insert_prob=0.5, delete_prob=0.5):
         '''
@@ -154,7 +174,6 @@ class PopulationBasedSampler():
         - deleting an existing node if it is one of multiple children of its parent
         As with the beam step, the top n samples are selected to form the next generation
         '''
-
         samples = self.population.copy()
 
         for game in self.population:
@@ -274,6 +293,8 @@ class PopulationBasedSampler():
         is performed by finding the set of 'categories' that are present in both games, and then
         selecting a random category from which to sample the nodes that will be exchanged. If no
         categories are shared between the two games, then no crossover is performed
+
+        # TODO: we should decide who handles `SamplingException`s thrown here
         '''
 
         # Create a map from crossover_type keys to lists of nodeinfos for each game
@@ -302,14 +323,11 @@ class PopulationBasedSampler():
         game_2_selected_node_info = self._choice(game_2_crossover_map[crossover_key])
 
         # Apply the context fixer to both nodes
-        g1_node, g1_parent, g1_selector, _, _, g1_global_context, g1_local_context = game_1_selected_node_info
-        g2_node, g2_parent, g2_selector, _, _, g2_global_context, g2_local_context = game_2_selected_node_info
+        g1_node, g1_parent, g1_selector, _, _, _, _ = game_1_selected_node_info
+        g2_node, g2_parent, g2_selector, _, _, _, _ = game_2_selected_node_info
 
         game_1_crossover_node = copy.deepcopy(g1_node)
-        self.context_fixer(game_1_crossover_node, global_context=g2_global_context, local_context=g2_local_context)
-
         game_2_crossover_node = copy.deepcopy(g2_node)
-        self.context_fixer(game_2_crossover_node, global_context=g1_global_context, local_context=g1_local_context)
 
         # Perform the crossover
         game_1_copy = copy.deepcopy(game_1)
@@ -320,7 +338,11 @@ class PopulationBasedSampler():
         game_2_parent = self.regrowth_sampler.searcher(game_2_copy, parseinfo=g2_parent.parseinfo) # type: ignore
         replace_child(game_2_parent, g2_selector, game_1_crossover_node) # type: ignore
 
-        return game_1_copy, game_2_copy
+        # Fix the contexts of the new games
+        self.context_fixer.fix_contexts(game_1_copy, g1_node, game_2_crossover_node)
+        self.context_fixer.fix_contexts(game_2_copy, g2_node, game_1_crossover_node)
+
+        return [game_1_copy, game_2_copy]
 
 
 
@@ -390,6 +412,7 @@ class PopulationBasedSampler():
 
         self._select_new_population(candidates, candidate_scores)
 
+
 class BeamSearchSampler(PopulationBasedSampler):
     '''
     Implements 'beam search' by, at each generation, expanding every game in the population out k times
@@ -404,6 +427,7 @@ class BeamSearchSampler(PopulationBasedSampler):
 
     def _get_parent_iterator(self, population):
         return iter(population * self.k)
+
 
 class WeightedBeamSearchSampler(PopulationBasedSampler):
     '''
@@ -431,13 +455,66 @@ class WeightedBeamSearchSampler(PopulationBasedSampler):
         return weighted_beam_search_sample
 
     def _get_parent_iterator(self):
-        parent_iterator = []
         for _ in range(2 * self.population_size * self.k):
             parent_1 = self._choice(self.population)
             parent_2 = self._choice(self.population)
-            parent_iterator.append([parent_1, parent_2])
+            yield [parent_1, parent_2]
 
-        return iter(parent_iterator)
+
+MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
+
+
+class CrossoverOnlySampler(PopulationBasedSampler):
+    def __init__(self, args: argparse.Namespace,
+                 fitness_function: typing.Callable[[typing.Any], float],
+                 population_size: int = 100,
+                 verbose: int = 0, k: int = 1, max_attempts: int = 100,
+                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                 fitness_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
+                 monitor_feature_keys: typing.List[str] = MONITOR_FEATURES):
+
+        super().__init__(args, fitness_function, population_size, verbose)
+        self.k = k
+        self.max_attempts = max_attempts
+        self.crossover_type = crossover_type
+        self.fitness_featurizer = fitness_featurizer
+        self.monitor_feature_keys = monitor_feature_keys
+
+    def _extract_monitor_features(self, game):
+        if self.fitness_featurizer is not None:
+            return {k: v for k, v in self.fitness_featurizer.parse(game, return_row=True).items() if k in self.monitor_feature_keys}  # type: ignore
+        else:
+            return {}
+
+    def _get_operator(self):
+        def crossover_two_random_games(games):
+            for _ in range(self.max_attempts):
+                try:
+                    if len(games) > 2:
+                        games = self._choice(games, 2)
+
+                    before_feature_values = [self._extract_monitor_features(g) for g in games]
+                    post_crossover_games = self._crossover(games[0], games[1], self.crossover_type)
+                    after_feature_values = [self._extract_monitor_features(g) for g in post_crossover_games]
+
+                    for i, (before_features, after_features) in enumerate(zip(before_feature_values, after_feature_values)):
+                        for k, v in before_features.items():
+                            if v != after_features[k]:
+                                print(f'In game #{i + 1}, feature {k} changed from {v} to {after_features[k]}')
+
+                    return post_crossover_games
+                except SamplingException as e:
+                    if self.verbose:
+                        print(f'Failed to crossover: {e}')
+
+            raise SamplingException('Failed to crossover after max attempts')
+
+        return crossover_two_random_games
+
+    def _get_parent_iterator(self):
+        for _ in range(self.population_size * self.k):
+            yield self._choice(self.population, n=2)
+
 
 if __name__ == '__main__':
 
@@ -445,7 +522,7 @@ if __name__ == '__main__':
     DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
     DEFUALT_RANDOM_SEED = 0
     # DEFAULT_NGRAM_MODEL_PATH = '../models/text_5_ngram_model_2023_02_17.pkl'
-    DEFAULT_NGRAM_MODEL_PATH = './models/ast_7_ngram_model_2023_03_01.pkl'
+    DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
 
     DEFAULT_ARGS = argparse.Namespace(
         grammar_file=os.path.join('.', DEFAULT_GRAMMAR_FILE),
@@ -457,17 +534,31 @@ if __name__ == '__main__':
     with open(DEFAULT_NGRAM_MODEL_PATH, 'rb') as file:
         ngram_model = pickle.load(file)
 
+    # def fitness_function(game):
+    #     '''
+    #     A simple wrapper around the ASTNGramTrieModel.score function, allowing it
+    #     to run on just a single game and returning the score as float
+    #     '''
+    #     return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
+
+    fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
+    trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
+
     def fitness_function(game):
-        '''
-        A simple wrapper around the ASTNGramTrieModel.score function, allowing it
-        to run on just a single game and returning the score as float
-        '''
-        return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
+        features = typing.cast(dict, fitness_featurizer.parse(game, 'mcmc', True))
+        features_tensor = torch.tensor([features[name] for name in feature_names], dtype=torch.float32)
+        if 'wrapper' in trained_fitness_function.named_steps:  # type: ignore
+            trained_fitness_function.named_steps['wrapper'].eval()  # type: ignore
+        return -1 * trained_fitness_function.transform(features_tensor).item()
 
-    evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
+    # evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
+    # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
+    evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
 
-    for _ in tqdm.tqdm(range(10), desc='Evolutionary steps'):
+    # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
+    # evosampler.set_population(game_asts[:4])
+
+    for _ in tqdm(range(10), desc='Evolutionary steps'):
         evosampler.evolutionary_step()
         print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
 

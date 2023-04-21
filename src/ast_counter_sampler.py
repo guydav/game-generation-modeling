@@ -21,7 +21,7 @@ import sys
 
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
-from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES
+from ast_parser import ASTParser, ASTParentMapper, ASTParseinfoSearcher, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping
 import room_and_object_types
 
 logging.basicConfig(
@@ -70,7 +70,7 @@ MCMC_REGRWOTH = 'mcmc-regrowth'
 parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLING, MCMC_REGRWOTH], required=True)
 
 
-ContextDict = typing.Dict[str, typing.Any]
+
 
 
 class SamplingException(Exception):
@@ -1076,18 +1076,6 @@ class ASTSampler:
         raise SamplingException(f'Failed to sample {rule} after {max_attempts} attempts')
 
 
-class ASTNodeInfo(typing.NamedTuple):
-    ast: tatsu.ast.AST
-    parent: tatsu.ast.AST
-    selector: typing.List[typing.Union[str, int]]
-    depth: int
-    section: typing.Optional[str]
-    global_context: ContextDict
-    local_context: ContextDict
-
-ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
-
-
 SECTION_SAMPLE_WEIGHTS = {
     'uniform': {key: 1.0 for key in SECTION_KEYS},
     '2_to_1': {key: 2.0 if key == PREFERENCES else 1.0 for key in SECTION_KEYS},
@@ -1127,11 +1115,15 @@ class RegrowthSampler(ASTParentMapper):
                  section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
                  depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
                  seed: int = 0, rng: typing.Optional[np.random.Generator] = None):
-        super().__init__()
+
         if isinstance(sampler, ASTSampler):
             sampler = dict(default=sampler)
-
         self.samplers = sampler
+        self.sampler_keys = list(self.samplers.keys())
+        self.example_sampler = self.samplers[self.sampler_keys[0]]
+
+        super().__init__(local_context_propagating_rules=self.example_sampler.local_context_propagating_rules)
+
         self.section_sample_weights = section_sample_weights
         if self.section_sample_weights is not None:
             section_sample_weights_sum = sum(self.section_sample_weights.values())
@@ -1146,8 +1138,7 @@ class RegrowthSampler(ASTParentMapper):
         self.depth_parser = ASTDepthParser()
         self.searcher = ASTParseinfoSearcher()
         self.source_ast = None  # type: ignore
-        self.sampler_keys = list(self.samplers.keys())
-        self.example_sampler = self.samplers[self.sampler_keys[0]]
+
 
     def set_source_ast(self, source_ast: typing.Union[tuple, tatsu.ast.AST]):
         self.source_ast = source_ast
@@ -1165,96 +1156,9 @@ class RegrowthSampler(ASTParentMapper):
                 if isinstance(node_info.parent, tatsu.ast.AST) and node_info.section is not None:
                     self.node_keys_by_section[node_info.section].append(key)
 
-
-    def _update_contexts(self, kwargs: typing.Dict[str, typing.Any], retval: typing.Any):
-        if retval is not None and isinstance(retval, tuple) and len(retval) == 2:
-            global_context_update, local_context_update = retval
-            if global_context_update is not None:
-                kwargs['global_context'].update(global_context_update)
-            if local_context_update is not None:
-                kwargs['local_context'].update(local_context_update)
-
-    def __call__(self, ast, **kwargs):
-        self._default_kwarg(kwargs, 'global_context', dict())
-        self._default_kwarg(kwargs, 'local_context', dict())
-        kwargs['local_context'] = simplified_context_deepcopy(kwargs['local_context'])
-        retval = super().__call__(ast, **kwargs)
-        self._update_contexts(kwargs, retval)
-        return retval
-
-    def _build_mapping_value(self, ast, **kwargs):
-        return ASTNodeInfo(*super()._build_mapping_value(ast, **kwargs),
-            simplified_context_deepcopy(kwargs['global_context']),
-            simplified_context_deepcopy(kwargs['local_context']))
-
-    def _handle_iterable(self, ast, **kwargs):
-        base_selector = kwargs['selector']
-        current_depth = kwargs['depth']
-        for i, element in enumerate(ast):
-            kwargs['selector'] = base_selector + [i]
-            kwargs['depth'] = current_depth + 1
-            retval = self(element, **kwargs)
-            self._update_contexts(kwargs, retval)
-
-        return kwargs['global_context'], kwargs['local_context']
-
-    def _extract_variable_def_variables(self, ast):
-        var_names = ast.var_names
-        if isinstance(var_names, str):
-            var_names = [var_names]
-
-        return {v[1:]: ast.parseinfo.pos for v in var_names}
-
-    def _handle_ast(self, ast, **kwargs):
-        rule = ast.parseinfo.rule
-
-        if rule == 'game_def':
+    def _parse_current_node(self, ast, **kwargs):
+        if ast.parseinfo.rule == 'game_def':
             self.original_game_id = ast.game_name
-
-        elif rule == 'preference':
-            if 'preference_names' not in kwargs['global_context']:
-                kwargs['global_context']['preference_names'] = set()
-
-            kwargs['global_context']['preference_names'].add(ast.pref_name)
-
-        elif rule == 'variable_list':
-            if isinstance(ast.variables, tatsu.ast.AST):
-                self._update_variable_type_def_kwargs(ast.variables, kwargs)
-
-            else:
-                for var_def in ast.variables:
-                    self._update_variable_type_def_kwargs(var_def, kwargs)
-
-        elif rule.endswith('variable_type_def'):
-            self._update_variable_type_def_kwargs(ast, kwargs)
-
-        self._add_ast_to_mapping(ast, **kwargs)
-
-        current_depth = kwargs['depth']
-        for key in ast:
-            if key != 'parseinfo':
-                kwargs['parent'] = ast
-                kwargs['selector'] = [key]
-                kwargs['depth'] = current_depth + 1
-                retval = self(ast[key], **kwargs)
-                self._update_contexts(kwargs, retval)
-
-        if rule in self.example_sampler.local_context_propagating_rules:
-            return kwargs['global_context'], kwargs['local_context']
-
-        return kwargs['global_context'], None
-
-    def _update_variable_type_def_kwargs(self, ast, kwargs):
-        key = 'variables'
-        rule = ast.parseinfo.rule
-        if not rule.startswith('variable'):
-            variable_type = rule.split('_')[0]
-            key = f'{variable_type}_variables'
-
-        if key not in kwargs['local_context']:
-            kwargs['local_context'][key] = dict()
-
-        kwargs['local_context'][key].update(self._extract_variable_def_variables(ast))
 
     def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None) -> tuple:
         new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'

@@ -9,6 +9,7 @@ import numpy as np
 import tatsu
 import tatsu.ast
 import tatsu.buffering
+import tatsu.infos
 
 
 SETUP = '(:setup'
@@ -89,10 +90,76 @@ class ASTParser:
 
         return kwargs[key]
 
+    def _update_contexts_from_retval(self, kwargs: typing.Dict[str, typing.Any], retval: typing.Any):
+        if retval is not None and isinstance(retval, tuple) and len(retval) == 2:
+            global_context_update, local_context_update = retval
+            if global_context_update is not None:
+                kwargs['global_context'].update(global_context_update)
+            if local_context_update is not None:
+                kwargs['local_context'].update(local_context_update)
+
+    def _current_ast_to_contexts(self, ast: tatsu.ast.AST, **kwargs):
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+
+        if rule == 'preference':
+            if 'preference_names' not in kwargs['global_context']:
+                kwargs['global_context']['preference_names'] = set()
+
+            kwargs['global_context']['preference_names'].add(ast.pref_name)
+
+        elif rule == 'variable_list':
+            if isinstance(ast.variables, tatsu.ast.AST):
+                self._update_variable_type_def_kwargs(ast.variables, kwargs)
+
+            else:
+                for var_def in ast.variables:  # type: ignore
+                    self._update_variable_type_def_kwargs(var_def, kwargs)
+
+        elif rule.endswith('variable_type_def'):
+            self._update_variable_type_def_kwargs(ast, kwargs)
+
+    def _variable_type_def_rule_to_context_key(self, rule: str) -> str:
+        if rule.startswith('variable'):
+            return VARIABLES_CONTEXT_KEY
+        else:
+            return f'{rule.split("_")[0]}_{VARIABLES_CONTEXT_KEY}'
+
+    def _update_variable_type_def_kwargs(self, ast, kwargs):
+        key = self._variable_type_def_rule_to_context_key(ast.parseinfo.rule)
+
+        if key not in kwargs['local_context']:
+            kwargs['local_context'][key] = dict()
+
+        kwargs['local_context'][key].update(self._extract_variable_def_variables(ast))
+
+    def _extract_variable_def_variables(self, ast):
+        var_names = ast.var_names
+        if isinstance(var_names, str):
+            var_names = [var_names]
+
+        return {v[1:]: ast.parseinfo.pos for v in var_names}
+
+
+ContextDict = typing.Dict[str, typing.Any]
+
+
+class ASTNodeInfo(typing.NamedTuple):
+    ast: tatsu.ast.AST
+    parent: tatsu.ast.AST
+    selector: typing.List[typing.Union[str, int]]
+    depth: int
+    section: typing.Optional[str]
+    global_context: ContextDict
+    local_context: ContextDict
+
+
+ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
+
 
 class ASTParentMapper(ASTParser):
-    def __init__(self, root_node='root'):
+    def __init__(self, root_node='root', local_context_propagating_rules: typing.Optional[typing.Set[str]] = None):
         self.root_node = root_node
+        self.local_context_propagating_rules = local_context_propagating_rules
         self.parent_mapping = {}
 
     def __call__(self, ast, **kwargs):
@@ -100,7 +167,12 @@ class ASTParentMapper(ASTParser):
         self._default_kwarg(kwargs, 'selector', [])
         self._default_kwarg(kwargs, 'depth', 0)
         self._default_kwarg(kwargs, SECTION_CONTEXT_KEY, None)
-        return super().__call__(ast, **kwargs)
+        self._default_kwarg(kwargs, 'global_context', dict())
+        self._default_kwarg(kwargs, 'local_context', dict())
+        kwargs['local_context'] = ast_utils.simplified_context_deepcopy(kwargs['local_context'])
+        retval = super().__call__(ast, **kwargs)
+        self._update_contexts_from_retval(kwargs, retval)
+        return retval
 
     def _handle_tuple(self, ast: tuple, **kwargs):
         if isinstance(ast[0], str) and ast[0].startswith('(:'):
@@ -109,18 +181,44 @@ class ASTParentMapper(ASTParser):
         return self._handle_iterable(ast, **kwargs)
 
     def _handle_iterable(self, ast, **kwargs):
-        [self(element, parent=kwargs['parent'], selector=kwargs['selector'] + [i], depth=kwargs['depth'] + 1, section=kwargs[SECTION_CONTEXT_KEY])
-        for i, element in enumerate(ast)]
+        base_selector = kwargs['selector']
+        current_depth = kwargs['depth']
+        for i, element in enumerate(ast):
+            kwargs['selector'] = base_selector + [i]
+            kwargs['depth'] = current_depth + 1
+            retval = self(element, **kwargs)
+            self._update_contexts_from_retval(kwargs, retval)
+
+        return kwargs['global_context'], kwargs['local_context']
 
     def _build_mapping_value(self, ast, **kwargs):
-        return (ast, kwargs['parent'], kwargs['selector'], kwargs['depth'], kwargs[SECTION_CONTEXT_KEY])
+        return ASTNodeInfo(ast, kwargs['parent'], kwargs['selector'], kwargs['depth'], kwargs[SECTION_CONTEXT_KEY],
+            ast_utils.simplified_context_deepcopy(kwargs['global_context']),
+            ast_utils.simplified_context_deepcopy(kwargs['local_context']))
+
+    def _parse_current_node(self, ast, **kwargs):
+        pass
 
     def _handle_ast(self, ast, **kwargs):
+        self._current_ast_to_contexts(ast, **kwargs)
+
         self._add_ast_to_mapping(ast, **kwargs)
 
+        self._parse_current_node(ast, **kwargs)
+
+        current_depth = kwargs['depth']
         for key in ast:
             if key != 'parseinfo':
-                self(ast[key], parent=ast, selector=[key], depth=kwargs['depth'] + 1, section=kwargs[SECTION_CONTEXT_KEY])
+                kwargs['parent'] = ast
+                kwargs['selector'] = [key]
+                kwargs['depth'] = current_depth + 1
+                retval = self(ast[key], **kwargs)
+                self._update_contexts_from_retval(kwargs, retval)
+
+        if self.local_context_propagating_rules and ast.parseinfo.rule in self.local_context_propagating_rules:  # type: ignore
+            return kwargs['global_context'], kwargs['local_context']
+
+        return kwargs['global_context'], None
 
     def _ast_key(self, ast):
         return ast.parseinfo._replace(alerts=None)
@@ -130,6 +228,7 @@ class ASTParentMapper(ASTParser):
 
     def get_parent_info(self, ast):
         return self.parent_mapping[self._ast_key(ast)]
+
 
 DEFAULT_PARSEINFO_COMPARISON_INDICES = (1, 2, 3)
 

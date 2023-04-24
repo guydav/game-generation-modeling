@@ -270,7 +270,7 @@ class ASTFitnessFeaturizer:
 
         return self.all_column_keys
 
-    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str, return_row: bool = False, preprocess_row: bool = True):
+    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}
         row['src_file'] = os.path.basename(src_file)
         game_name = full_ast[1]['game_name']

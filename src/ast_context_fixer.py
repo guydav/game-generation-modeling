@@ -1,4 +1,7 @@
+import argparse
 from collections import defaultdict
+import os
+import sys
 import typing
 
 import numpy as np
@@ -7,9 +10,19 @@ import tatsu.ast
 
 import ast_printer
 import ast_parser
-from ast_counter_sampler import ASTSampler, SamplingException
-from ast_parser import ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY
-from ast_utils import replace_child,simplified_context_deepcopy
+from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
+from ast_parser import ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
+from ast_utils import replace_child
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+
+import src
+
+
+RPLACEMENT_MAPPINGS_CONTEXT_KEY = 'replacement_mappings'
+FORCED_REMAPPINGS_CONTEXT_KEY = 'forced_remappings'
 
 
 class ASTDefinedPreferenceNamesFinder(ASTParser):
@@ -42,6 +55,7 @@ class ASTContextFixer(ASTParentMapper):
         self.rng = rng
         self.preference_name_finder = ASTDefinedPreferenceNamesFinder()
         self.preference_count_nodes = defaultdict(list)
+        self.local_variable_ref_counts = defaultdict(dict)
 
     def _add_ast_to_mapping(self, ast, **kwargs):
         # NOOP here since I don't actually care about building a parent mapping, just wanted to use the structure
@@ -51,18 +65,22 @@ class ASTContextFixer(ASTParentMapper):
         index = self.rng.choice(len(sequence))
         return sequence[index]
 
-    def fix_contexts(self, crossed_over_game: tatsu.ast.AST, original_child: tatsu.ast.AST, crossover_child: tatsu.ast.AST):
+    def fix_contexts(self, crossed_over_game: tatsu.ast.AST, original_child: typing.Optional[tatsu.ast.AST] = None,
+                     crossover_child: typing.Optional[tatsu.ast.AST] = None):
         self.preference_count_nodes = defaultdict(list)
+        self.local_variable_ref_counts = defaultdict(dict)
 
         # if the crossover child defines any preferences, we need to note them, so we can add a reference to them at some point later
-        preference_names_to_add = self.preference_name_finder(crossover_child)
+        preference_names_to_add = self.preference_name_finder(crossover_child) if crossover_child is not None else set()
 
         # if the original child defines any preferences, we need to remove them from the global context, and remove any references to them
-        preference_names_to_remove = self.preference_name_finder(original_child)
+        preference_names_to_remove = self.preference_name_finder(original_child) if original_child is not None else set()
 
-        names_in_both_lists = preference_names_to_add.intersection(preference_names_to_remove)
-        preference_names_to_add.difference_update(names_in_both_lists)
-        preference_names_to_remove.difference_update(names_in_both_lists)
+        # TODO: implement a similar logic to the one for preference names, but for variables
+
+        names_in_both_sets = preference_names_to_add.intersection(preference_names_to_remove)
+        preference_names_to_add.difference_update(names_in_both_sets)
+        preference_names_to_remove.difference_update(names_in_both_sets)
 
         self(crossed_over_game, global_context=dict(preference_names_to_add=preference_names_to_add,
                                                     preference_names_to_remove=preference_names_to_remove,
@@ -91,6 +109,7 @@ class ASTContextFixer(ASTParentMapper):
 
         for i, var_name in enumerate(var_names):  # type: ignore
             variables_key = self._variable_type_def_rule_to_context_key(rule)
+            self.local_variable_ref_counts[variables_key][var_name[1:]] = 0
 
             if var_name in local_context[variables_key]:
                 if local_context[variables_key][var_name] == ast.parseinfo.pos:  # type: ignore
@@ -106,12 +125,49 @@ class ASTContextFixer(ASTParentMapper):
                     new_var_name = new_var[1:]
 
                     # TODO: this assumes we want to consistenly map each missing variable to a new variable, which may or may not be the case -- we should discsuss
-                    global_context['replacement_mappings'][var_name] = new_var_name
-                    local_context['variables'][new_var_name] = ast.parseinfo
+                    global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][var_name] = new_var_name
+                    local_context[variables_key][new_var_name] = ast.parseinfo
                     replace_child(ast, ['var_names'] if single_variable else ['var_names', i], new_var)
 
             else:
                 local_context[variables_key][var_name[1:]] = ast.parseinfo.pos  # type: ignore
+
+    def _should_rehandle_current_node(self, ast: tatsu.ast.AST, **kwargs):
+        should_rehandle = False
+        local_context = kwargs['local_context']
+        forced_remappings = {}
+
+        for key in local_context:
+            if key.startswith(VARIABLE_OWNER_CONTEXT_KEY_PREFIX):
+                variables_key = key[len(VARIABLE_OWNER_CONTEXT_KEY_PREFIX) + 1:]
+                owned_variables = [var for var, pos in local_context[key].items() if pos == ast.parseinfo.pos]  # type: ignore
+                if owned_variables:
+                    missing_variables = [var for var in owned_variables if var not in self.local_variable_ref_counts[variables_key] or self.local_variable_ref_counts[variables_key][var] == 0]
+                    if missing_variables:
+                        should_rehandle = True
+
+                        for missing_var in missing_variables:
+                            potential_replacements = {var: self.local_variable_ref_counts[variables_key][var]
+                                                      for var in owned_variables
+                                                      if var in self.local_variable_ref_counts[variables_key] and self.local_variable_ref_counts[variables_key][var] > 1}
+
+                            if not potential_replacements:
+                                raise SamplingException(f'Could not find a replacement for variable {missing_var}')
+
+                            var_to_replace = self._sample_from_sequence(list(potential_replacements.keys()))
+                            replacement_index = self.rng.integers(potential_replacements[var_to_replace])
+                            if variables_key not in forced_remappings:
+                                forced_remappings[variables_key] = defaultdict(dict)
+
+                            forced_remappings[variables_key][var_to_replace][replacement_index] = missing_var
+
+                    for var in owned_variables:
+                        del self.local_variable_ref_counts[variables_key][var]
+
+        if should_rehandle:
+            print(f'Forced remappings: {forced_remappings}')
+
+        return should_rehandle, (None, {FORCED_REMAPPINGS_CONTEXT_KEY: forced_remappings})
 
     def _parse_current_node(self, ast: tatsu.ast.AST, **kwargs):
         local_context = kwargs['local_context']
@@ -137,9 +193,28 @@ class ASTContextFixer(ASTParentMapper):
             term_variables_key = self._variable_type_def_rule_to_context_key(type_def_rule)
 
             if isinstance(term, str) and term.startswith('?'):
+                var_name = term[1:]
+                if term_variables_key not in self.local_variable_ref_counts:
+                    raise ValueError(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
+
+                if var_name not in self.local_variable_ref_counts[term_variables_key]:
+                    raise ValueError(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
+
+                # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
+                if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and
+                    term_variables_key in local_context[FORCED_REMAPPINGS_CONTEXT_KEY] and
+                    var_name in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key] and
+                    self.local_variable_ref_counts[term_variables_key][var_name] in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
+
+                    new_var_name = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][self.local_variable_ref_counts[term_variables_key][var_name]]
+                    replace_child(ast, ['term'], '?' + new_var_name)
+                    term = '?' + new_var_name
+
+                self.local_variable_ref_counts[term_variables_key][term[1:]] += 1
+
                 # If we already have a mapping for it, replace it with the mapping
-                if term in global_context['replacement_mappings']:
-                    replace_child(ast, ['term'], '?' + global_context['replacement_mappings'][term])
+                if term in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
+                    replace_child(ast, ['term'], '?' + global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term])
 
                 else:
                     # Check if there's anything that we could map it to
@@ -149,7 +224,7 @@ class ASTContextFixer(ASTParentMapper):
                     # If we don't have a mapping for it, and it's not in the local context, add a mapping
                     elif term[1:] not in local_context[term_variables_key]:
                         new_var_name = self._sample_from_sequence(list(local_context[term_variables_key].keys()))
-                        global_context['replacement_mappings'][term] = new_var_name
+                        global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term] = new_var_name
                         replace_child(ast, ['term'], '?' + new_var_name)
 
         elif rule == 'pref_name_and_types':
@@ -170,3 +245,48 @@ class ASTContextFixer(ASTParentMapper):
                 replace_child(ast, ['pref_name'], new_pref_name)
 
             self.preference_count_nodes[ast.pref_name].append(ast)  # type: ignore
+
+
+if __name__ == '__main__':
+    DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
+    DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
+    DEFUALT_RANDOM_SEED = 0
+    # DEFAULT_NGRAM_MODEL_PATH = '../models/text_5_ngram_model_2023_02_17.pkl'
+    DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
+
+    DEFAULT_ARGS = argparse.Namespace(
+        grammar_file=os.path.join('.', DEFAULT_GRAMMAR_FILE),
+        parse_counter=False,
+        counter_output_path=os.path.join('.', DEFAULT_COUNTER_OUTPUT_PATH),
+        random_seed=DEFUALT_RANDOM_SEED,
+    )
+
+    test_game = """
+(define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
+(:setup (and
+    (exists (?h - hexagonal_bin ?r - triangular_ramp)
+        (game-conserved (< (distance ?h ?r) 1))
+    )
+))
+(:constraints (and
+    (preference binKnockedOver
+        (exists (?h - hexagonal_bin ?b - ball)
+            (then
+                (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
+                (once (not (object_orientation ?h upright)))
+            )
+        )
+    )
+))
+(:scoring (count throwToRampToBin)
+))
+"""
+    args = DEFAULT_ARGS
+    grammar = open(args.grammar_file).read()
+    grammar_parser = tatsu.compile(grammar)
+    counter = parse_or_load_counter(args, grammar_parser)
+
+    # Used to generate the initial population of complete games
+    sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)  # type: ignore
+    context_fixer = ASTContextFixer(sampler, np.random.default_rng(args.random_seed))
+    context_fixer.fix_contexts(grammar_parser.parse(test_game))  # type: ignore

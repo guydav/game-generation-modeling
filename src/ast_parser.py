@@ -155,6 +155,7 @@ class ASTNodeInfo(typing.NamedTuple):
 
 ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
 
+VARIABLE_OWNER_CONTEXT_KEY_PREFIX = 'owner'
 
 class ASTParentMapper(ASTParser):
     def __init__(self, root_node='root', local_context_propagating_rules: typing.Optional[typing.Set[str]] = None):
@@ -183,13 +184,20 @@ class ASTParentMapper(ASTParser):
     def _handle_iterable(self, ast, **kwargs):
         base_selector = kwargs['selector']
         current_depth = kwargs['depth']
+        child_propagated_context = False
+
         for i, element in enumerate(ast):
             kwargs['selector'] = base_selector + [i]
             kwargs['depth'] = current_depth + 1
             retval = self(element, **kwargs)
+            if retval is not None and retval[1] is not None:
+                child_propagated_context = True
             self._update_contexts_from_retval(kwargs, retval)
 
-        return kwargs['global_context'], kwargs['local_context']
+        if child_propagated_context:
+            return kwargs['global_context'], kwargs['local_context']
+
+        return kwargs['global_context'], None
 
     def _build_mapping_value(self, ast, **kwargs):
         return ASTNodeInfo(ast, kwargs['parent'], kwargs['selector'], kwargs['depth'], kwargs[SECTION_CONTEXT_KEY],
@@ -198,6 +206,9 @@ class ASTParentMapper(ASTParser):
 
     def _parse_current_node(self, ast, **kwargs):
         pass
+
+    def _should_rehandle_current_node(self, ast, **kwargs) -> typing.Tuple[bool, typing.Optional[typing.Tuple[typing.Optional[typing.Dict[str, typing.Any]], typing.Optional[typing.Dict[str, typing.Any]]]]]:
+        return False, None
 
     def _handle_ast(self, ast, **kwargs):
         self._current_ast_to_contexts(ast, **kwargs)
@@ -213,7 +224,26 @@ class ASTParentMapper(ASTParser):
                 kwargs['selector'] = [key]
                 kwargs['depth'] = current_depth + 1
                 retval = self(ast[key], **kwargs)
+                # check if there's a local context update, and if there is, if we should change which node owns the variable
+                if retval is not None and isinstance(retval, tuple) and ast.parseinfo.rule not in self.local_context_propagating_rules:  # type: ignore
+                    local_context_update = retval[1]
+
+                    if local_context_update is not None and local_context_update:
+                        for key in list(local_context_update.keys()):
+                            if key.endswith(VARIABLES_CONTEXT_KEY) and not key.startswith(VARIABLE_OWNER_CONTEXT_KEY_PREFIX):
+                                owner_key = f'{VARIABLE_OWNER_CONTEXT_KEY_PREFIX}_{key}'
+                                if owner_key not in local_context_update:
+                                    local_context_update[owner_key] = dict()
+
+                                for var_name in local_context_update[key]:
+                                    local_context_update[owner_key][var_name] = ast.parseinfo.pos  # type: ignore
+
                 self._update_contexts_from_retval(kwargs, retval)
+
+        should_rehandle, kwarg_updates = self._should_rehandle_current_node(ast, **kwargs)
+        if should_rehandle:
+            self._update_contexts_from_retval(kwargs, kwarg_updates)
+            self._handle_ast(ast, **kwargs)
 
         if self.local_context_propagating_rules and ast.parseinfo.rule in self.local_context_propagating_rules:  # type: ignore
             return kwargs['global_context'], kwargs['local_context']
@@ -238,11 +268,11 @@ class ASTParseinfoSearcher(ASTParser):
         super().__init__()
         self.comparison_indices = comparison_indices
 
-    def __call__(self, ast, **kwargs):
+    def __call__(self, ast, **kwargs) -> typing.Optional[tatsu.ast.AST]:
         if 'parseinfo' not in kwargs:
             raise ValueError('parseinfo must be passed as a keyword argument')
 
-        return super().__call__(ast, **kwargs)
+        return super().__call__(ast, **kwargs)  # type: ignore
 
     def _handle_iterable(self, ast: typing.Iterable, **kwargs):
         for item in ast:

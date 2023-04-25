@@ -14,6 +14,7 @@ import ast_printer
 from ast_parser import ASTParser, ASTNodeInfo, ASTParentMapping, ContextDict
 from ast_utils import replace_child
 from ast_counter_sampler import RegrowthSampler, ASTSampler, SamplingException, simplified_context_deepcopy
+from ast_context_fixer import ASTContextFixer
 
 
 class CrossoverType(Enum):

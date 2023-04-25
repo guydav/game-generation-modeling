@@ -111,7 +111,7 @@ class PopulationBasedSampler():
             except RecursionError:
                 if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
-                if self.verbose >= 2: print('Sampling exception in sample {idx} -- skipping')
+                if self.verbose >= 2: print(f'Sampling exception in sample {idx} -- skipping')
 
         return sample
 
@@ -321,16 +321,27 @@ class PopulationBasedSampler():
 
                         # Insert the new node into the parent at a random index
                         new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
+
+                        # Do any necessary context-fixing
+                        self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
+
                         samples.append(new_game)
 
                     # Check whether we're doing a deletion
                     if self.rng.random() < delete_prob:
                         # Make a copy of the game
                         new_game = copy.deepcopy(game)
-                        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+                        new_parent = typing.cast(tatsu.ast.AST, self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo))  # type: ignore
 
                         # Delete a random node from the parent
-                        del new_parent[selector][self.rng.integers(len(new_parent[selector]))] # type: ignore
+                        delete_index = self.rng.integers(len(new_parent[selector]))  # type: ignore
+                        child_to_delete = new_parent[selector][delete_index]  # type: ignore
+
+                        del new_parent[selector][delete_index] # type: ignore
+
+                        # Do any necessary context-fixing
+                        self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
+
                         samples.append(new_game)
 
                 elif parent_rule_posterior_dict['type_posterior']['token'] == 1:
@@ -456,7 +467,6 @@ class PopulationBasedSampler():
 
         return no_op
 
-
     def _get_parent_iterator(self):
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
@@ -476,8 +486,6 @@ class PopulationBasedSampler():
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.population = [all_games[i] for i in top_indices]
         self.fitness_values = [all_scores[i] for i in top_indices]
-
-
 
     def evolutionary_step(self):
         # The core steps are:
@@ -646,8 +654,8 @@ if __name__ == '__main__':
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
     evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
 
-    # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
-    # evosampler.set_population(game_asts[:4])
+    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
+    evosampler.set_population(game_asts[:4])
 
     for _ in tqdm(range(10), desc='Evolutionary steps'):
         evosampler.evolutionary_step()

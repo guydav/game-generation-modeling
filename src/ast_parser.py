@@ -218,10 +218,12 @@ class ASTParentMapper(ASTParser):
         current_depth = kwargs['depth']
         for key in ast:
             if key != 'parseinfo':
-                kwargs['parent'] = ast
-                kwargs['selector'] = [key]
-                kwargs['depth'] = current_depth + 1
-                retval = self(ast[key], **kwargs)
+                child_kwargs = kwargs.copy()
+
+                child_kwargs['parent'] = ast
+                child_kwargs['selector'] = [key]
+                child_kwargs['depth'] = current_depth + 1
+                retval = self(ast[key], **child_kwargs)
                 # check if there's a local context update, and if there is, if we should change which node owns the variable
                 if retval is not None and isinstance(retval, tuple) and ast.parseinfo.rule not in self.local_context_propagating_rules:  # type: ignore
                     local_context_update = retval[1]

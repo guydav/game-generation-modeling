@@ -159,7 +159,7 @@ class PopulationBasedSampler():
         # yields a list when its first selector is applied. Also make sure that the list has a minimum length
         valid_nodes = []
         for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
-            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list) and len(parent[selector[0]]) >= min_length:                
+            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list) and len(parent[selector[0]]) >= min_length:  # type: ignore
                 valid_nodes.append((parent, selector[0], section, global_context, local_context))
 
         if len(valid_nodes) == 0:
@@ -175,8 +175,8 @@ class PopulationBasedSampler():
         valid_nodes = list(valid_node_dict.values())
 
         return valid_nodes
-    
-    def _insert(self, game):
+
+    def _insert(self, game, print_before_fix: bool = False):
         '''
         Attempt to insert a new node into the provided game by identifying a node which can have multiple
         children and inserting a new node into it. The new node is selected using the initial sampler
@@ -216,12 +216,16 @@ class PopulationBasedSampler():
         # Insert the new node into the parent at a random index
         new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
 
+        if print_before_fix:
+            print("Before fixing:")
+            print(ast_printer.ast_to_string(new_game, "\n"))
+
         # Do any necessary context-fixing
         self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
 
         return new_game
-    
-    def _delete(self, game):
+
+    def _delete(self, game, print_before_fix: bool = False):
         '''
         Attempt to deleting a new node into the provided game by identifying a node which can have multiple
         children and deleting one of them
@@ -246,6 +250,10 @@ class PopulationBasedSampler():
         child_to_delete = new_parent[selector][delete_index]  # type: ignore
 
         del new_parent[selector][delete_index] # type: ignore
+
+        if print_before_fix:
+            print("Before fixing:")
+            print(ast_printer.ast_to_string(new_game, "\n"))
 
         # Do any necessary context-fixing
         self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
@@ -571,23 +579,24 @@ class InsertDeleteSampler(PopulationBasedSampler):
     def _get_operator(self):
         def insert_delete_operator(game):
             try:
-                new_game = self._insert(game)
+                new_game = self._insert(game,  True)
                 print("\nINSERTED GAME")
                 print(ast_printer.ast_to_string(new_game, "\n"))
-                new_game = self._delete(new_game)
+                new_game = self._delete(new_game, True)
 
                 return new_game
             except SamplingException as e:
-                print(ast_printer.ast_to_string(game, "\n"))
+                # print(ast_printer.ast_to_string(game, "\n"))
                 print(f"Failed to insert/delete: {e}")
                 return game
-            
-            except Exception as e:
-                print(ast_printer.ast_to_string(game, "\n"))
-                print(f"Failed to insert/delete: {e}")
-                raise e
-        
+
+            # except Exception as e:
+            #     print(ast_printer.ast_to_string(game, "\n"))
+            #     print(f"Failed to insert/delete: {e}")
+            #     raise e
+
         return insert_delete_operator
+
 
 MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
 

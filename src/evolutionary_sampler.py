@@ -146,25 +146,107 @@ class PopulationBasedSampler():
 
         return new_proposal
 
-    def beam_step(self, k: int = 10):
+    def _get_valid_insert_or_delete_nodes(self, game):
         '''
-        The simplest kind of evolutionary step. Each member of the population is mutated k times using
-        the regrowth sampler, giving a total of k * n new samples. Each sample is scored using the fitness
-        function, and then the top n samples are selected to form the next generation (including the initial samples)
+        Returns a list of every node in the game which is a valid candidate for insertion or deletion
+        (i.e. can have more than one child). Each entry in the list is of the form:
+            (parent, selector, section, global_context, local_context)
         '''
 
-        # Generate the new samples
-        samples = self.population.copy()
-        for game in self.population:
-            for i in range(k):
-                samples.append(self._gen_regrowth_sample(game))
+        self.regrowth_sampler.set_source_ast(game)
 
-        # Score the new samples
-        scores = [self.fitness_function(sample) for sample in samples]
+        # Collect all nodes whose final selector is an integet (i.e. an index into a list) and whose parent
+        # yields a list when its first selector is applied. In addition, only collect nodes whose parents
+        # parent rules have a length posterior
+        valid_nodes = []
+        for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
+            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list):
+                
+                parent_rule = parent.parseinfo.rule # type: ignore
+                parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
 
-        # Select the top n samples
-        top_indices = np.argsort(scores)[-self.population_size:]
-        self.set_population([samples[i] for i in top_indices], [scores[i] for i in top_indices])
+                if "length_posterior" in parent_rule_posterior_dict:
+                    valid_nodes.append((parent, selector[0], section, global_context, local_context))
+
+        if len(valid_nodes) == 0:
+            raise SamplingException('No valid nodes found for insertion or deletion')
+
+        # Dedupe valid nodes based on their parent and selector
+        valid_node_dict = {}
+        for parent, selector, section, global_context, local_context in valid_nodes:
+            key = (*self.regrowth_sampler._ast_key(parent), selector)
+            if key not in valid_node_dict:
+                valid_node_dict[key] = (parent, selector, section, global_context, local_context)
+
+        valid_nodes = list(valid_node_dict.values())
+
+        return valid_nodes
+    
+    def _insert(self, game):
+        '''
+        Attempt to insert a new node into the provided game by identifying a node which can have multiple
+        children and inserting a new node into it. The new node is selected using the initial sampler
+        '''
+
+        # TODO: can throw a SamplingException if no valid nodes are found
+        valid_nodes = self._get_valid_insert_or_delete_nodes(game)
+
+        # Select a random node from the list of valid nodes
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes)
+
+        parent_rule = parent.parseinfo.rule # type: ignore
+        parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+
+        # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
+        new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
+
+        new_node = None
+        while new_node is None:
+            try:
+                new_node = self.initial_sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
+
+            except RecursionError:
+                if self.verbose >= 2: print('Recursion error, skipping sample')
+
+            except SamplingException:
+                if self.verbose >= 2: print('Sampling exception, skipping sample')
+
+        if isinstance(new_node, tuple):
+            new_node = new_node[0]
+
+        # Make a copy of the game
+        new_game = copy.deepcopy(game)
+        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+
+        # Insert the new node into the parent at a random index
+        new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
+
+        # TODO: apply context fixer
+
+        return new_game
+    
+    def _delete(self, game):
+        '''
+        Attempt to deleting a new node into the provided game by identifying a node which can have multiple
+        children and deleting one of them
+        '''
+
+        # TODO: can throw a SamplingException if no valid nodes are found
+        valid_nodes = self._get_valid_insert_or_delete_nodes(game)
+
+        # Select a random node from the list of valid nodes
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes)
+
+        # Make a copy of the game
+        new_game = copy.deepcopy(game)
+        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+
+        # Delete a random node from the parent
+        del new_parent[selector][self.rng.integers(len(new_parent[selector]))] # type: ignore
+
+        # TODO: apply context fixer
+
+        return new_game
 
     def insert_delete_step(self, insert_prob=0.5, delete_prob=0.5):
         '''
@@ -174,7 +256,16 @@ class PopulationBasedSampler():
         - deleting an existing node if it is one of multiple children of its parent
         As with the beam step, the top n samples are selected to form the next generation
         '''
+
+        # TODO: break this into two functions, _insert and _delete, which are each responsible for just
+        #       one of the two operations, applying it to a random valid node in a provided game. We can
+        #       probably reuse certain bits, like the valid_nodes list generation
+        # NOTE: should we just propagate any exceptions received during context fixing "up the chain", as it were?
+
         samples = self.population.copy()
+
+        valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context
+                            in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
 
         for game in self.population:
             self.regrowth_sampler.set_source_ast(game)

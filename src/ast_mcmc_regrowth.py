@@ -19,7 +19,6 @@ from ast_counter_sampler import *
 from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler
 from ast_initial_proposal_sampler import *
 from fitness_ngram_models import *
-from ast_crossover_sampler import CrossoverSampler, CrossoverType
 from ast_parser import ASTSamplePostprocessor
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
@@ -111,6 +110,24 @@ class InitialProposalSamplerType(enum.Enum):
     SECTION_SAMPLER = 1
 
 
+def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType, sampler: ASTSampler,
+                                    ngram_model_path: typing.Optional[str] = None,
+                                    section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None):
+    if initial_proposal_type == InitialProposalSamplerType.MAP:
+        return sampler
+    elif initial_proposal_type == InitialProposalSamplerType.SECTION_SAMPLER:
+        if section_sampler_kwargs is None:
+            section_sampler_kwargs = {}
+
+        if ngram_model_path is None:
+            raise ValueError('ngram_model_path must be specified for section sampler')
+
+        with open(ngram_model_path, 'rb') as f:
+            ngram_model = pickle.load(f)
+
+        return SectionBySectionNGramScoreSampler(sampler, ngram_model, **section_sampler_kwargs)
+
+
 def _load_pickle_gzip(path: str):
     with gzip.open(path, 'rb') as f:
         return pickle.load(f)
@@ -174,15 +191,8 @@ class MCMCRegrowthSampler:
         self.acceptance_temperature = acceptance_temperature
         self.initial_proposal_type = initial_proposal_type
 
-        if self.initial_proposal_type == InitialProposalSamplerType.MAP:
-            self.initial_proposal_sampler = self.sampler
-        elif self.initial_proposal_type == InitialProposalSamplerType.SECTION_SAMPLER:
-            if section_sampler_kwargs is None:
-                section_sampler_kwargs = {}
-
-            with open(ngram_model_path, 'rb') as f:
-                ngram_model = pickle.load(f)
-            self.initial_proposal_sampler = SectionBySectionNGramScoreSampler(self.sampler, ngram_model, **section_sampler_kwargs)
+        self.initial_proposal_sampler = create_initial_proposal_sampler(
+            initial_proposal_type, sampler, ngram_model_path, section_sampler_kwargs)
 
         self.postprocessor = ASTSamplePostprocessor()
 
@@ -400,38 +410,38 @@ class MCMCRegrowthSampler:
         return proposal_features, proposal_fitness
 
 
-class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
-    def __init__(self,
-        args: argparse.Namespace,
-        crossover_type: CrossoverType,
-        crossover_population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
-        p_crossover: float,
-        fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
-        fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
-        plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
-        max_steps: int = DEFAULT_MAX_STEPS,
-        greedy_acceptance: bool = False,
-        acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
-        fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
-        fitness_function_relative_path: str = '.',
-        ):
-        super().__init__(args=args,
-            fitness_function_date_id=fitness_function_date_id, fitness_featurizer_path=fitness_featurizer_path,
-            plateau_patience_steps=plateau_patience_steps, max_steps=max_steps,
-            greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature,
-            fitness_function_model_name=fitness_function_model_name, relative_path=fitness_function_relative_path,
-        )
-        self.crossover_sampler = CrossoverSampler(crossover_type, crossover_population, self.sampler, args.random_seed)
-        self.p_crossover = p_crossover
-        self.step_index_sampled = -1
-        self.crossover_current_step = None
+# class MCMCRegrowthCrossoverSampler(MCMCRegrowthSampler):
+#     def __init__(self,
+#         args: argparse.Namespace,
+#         crossover_type: CrossoverType,
+#         crossover_population: typing.List[typing.Union[tatsu.ast.AST, tuple]],
+#         p_crossover: float,
+#         fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
+#         fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
+#         plateau_patience_steps: int = DEFAULT_PLATEAU_PATIENCE_STEPS,
+#         max_steps: int = DEFAULT_MAX_STEPS,
+#         greedy_acceptance: bool = False,
+#         acceptance_temperature: float = DEFAULT_ACCEPTANCE_TEMPERATURE,
+#         fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
+#         fitness_function_relative_path: str = '.',
+#         ):
+#         super().__init__(args=args,
+#             fitness_function_date_id=fitness_function_date_id, fitness_featurizer_path=fitness_featurizer_path,
+#             plateau_patience_steps=plateau_patience_steps, max_steps=max_steps,
+#             greedy_acceptance=greedy_acceptance, acceptance_temperature=acceptance_temperature,
+#             fitness_function_model_name=fitness_function_model_name, relative_path=fitness_function_relative_path,
+#         )
+#         self.crossover_sampler = CrossoverSampler(crossover_type, crossover_population, self.sampler, args.random_seed)
+#         self.p_crossover = p_crossover
+#         self.step_index_sampled = -1
+#         self.crossover_current_step = None
 
-    def _pre_mcmc_step(self, current_proposal: tatsu.ast.AST):
-        # TODO: consider in the future to optimize setting source ast only to the sampler chosen for this step
-        if self.crossover_sampler.source_ast != current_proposal:
-            self.crossover_sampler.set_source_ast(current_proposal)
+#     def _pre_mcmc_step(self, current_proposal: tatsu.ast.AST):
+#         # TODO: consider in the future to optimize setting source ast only to the sampler chosen for this step
+#         if self.crossover_sampler.source_ast != current_proposal:
+#             self.crossover_sampler.set_source_ast(current_proposal)
 
-        return super()._pre_mcmc_step(current_proposal)
+#         return super()._pre_mcmc_step(current_proposal)
 
     # def _generate_step_proposal(self):
     #     if self.step_index_sampled < self.step_index:

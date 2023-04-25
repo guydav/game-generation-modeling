@@ -18,10 +18,9 @@ import ast_parser
 from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
-from ast_crossover_sampler import CrossoverType, node_info_to_key
-from ast_mcmc_regrowth import _load_pickle_gzip
+from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
 from ast_utils import *
-from fitness_energy_utils import load_model_and_feature_columns
+from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME
 from fitness_features import *
 from fitness_ngram_models import *
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
@@ -30,6 +29,92 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
 import src
+
+
+
+parser = argparse.ArgumentParser(description='Evolutionary Sampler')
+parser.add_argument('--grammar-file', type=str, default=DEFAULT_GRAMMAR_FILE)
+parser.add_argument('--parse-counter', action='store_true')
+parser.add_argument('--counter-output-path', type=str, default=DEFAULT_COUNTER_OUTPUT_PATH)
+
+DEFAULT_FITNESS_FUNCTION_DATE_ID = LATEST_FITNESS_FUNCTION_DATE_ID
+parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITNESS_FUNCTION_DATE_ID)
+DEFAULT_FITNESS_FEATURIZER_PATH = LATEST_FITNESS_FEATURIZER_PATH
+parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
+parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
+
+DEFAULT_POPULATION_SIZE = 100
+parser.add_argument('--population-size', type=int, default=DEFAULT_POPULATION_SIZE)
+DEFAULT_N_STEPS = 100
+parser.add_argument('--n-steps', type=int, default=DEFAULT_N_STEPS)
+
+# TODO: rewrite these arguments to the things this sampler actually needs
+# DEFAULT_PLATEAU_PATIENCE_STEPS = 1000
+# parser.add_argument('--plateau-patience-steps', type=int, default=DEFAULT_PLATEAU_PATIENCE_STEPS)
+# DEFAULT_MAX_STEPS = 20000
+# parser.add_argument('--max-steps', type=int, default=DEFAULT_MAX_STEPS)
+# DEFAULT_N_SAMPLES_PER_STEP = 1
+# parser.add_argument('--n-samples-per-step', type=int, default=DEFAULT_N_SAMPLES_PER_STEP)
+# parser.add_argument('--non-greedy', action='store_true')
+# DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
+# parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
+
+DEFAULT_RELATIVE_PATH = '.'
+parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
+DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
+parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_PATH)
+DEFUALT_RANDOM_SEED = 33
+parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
+
+parser.add_argument('--initial-proposal-type', type=int, default=0)
+parser.add_argument('--crossover-type', type=int, default=0)
+
+# TODO: implement parallel sampling support here
+parser.add_argument('--sample-parallel', action='store_true')
+parser.add_argument('--parallel-n-workers', type=int, default=8)
+parser.add_argument('--parallel-chunksize', type=int, default=1)
+parser.add_argument('--verbose', type=int, default=0)
+parser.add_argument('--should-tqdm', action='store_true')
+parser.add_argument('--postprocess', action='store_true')
+
+DEFAULT_OUTPUT_NAME = 'evo-sampler'
+parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
+parser.add_argument('--output-folder', type=str, default='./samples')
+
+
+class CrossoverType(Enum):
+    SAME_RULE = 0
+    SAME_PARENT = 1
+    SAME_PARENT_RULE = 2
+    SAME_PARENT_RULE_SELECTOR = 3
+
+
+def _get_node_key(node: typing.Any):
+    if isinstance(node, tatsu.ast.AST):
+        if node.parseinfo.rule is None:  # type: ignore
+            raise ValueError('Node has no rule')
+        return node.parseinfo.rule  # type: ignore
+
+    else:
+        return type(node).__name__
+
+
+def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNodeInfo):
+    if crossover_type == CrossoverType.SAME_RULE:
+        return _get_node_key(node_info[0])
+
+    elif crossover_type == CrossoverType.SAME_PARENT:
+        return _get_node_key(node_info[1])
+
+    elif crossover_type == CrossoverType.SAME_PARENT_RULE:
+        return '_'.join([_get_node_key(node_info[1]), _get_node_key(node_info[0])])
+
+    elif crossover_type == CrossoverType.SAME_PARENT_RULE_SELECTOR:
+        return '_'.join([_get_node_key(node_info[1]),  *[str(s) for s in node_info[2]],  _get_node_key(node_info[0])])
+
+    else:
+        raise ValueError(f'Invalid crossover type {crossover_type}')
+
 
 class PopulationBasedSampler():
     '''
@@ -40,8 +125,13 @@ class PopulationBasedSampler():
     def __init__(self,
                  args: argparse.Namespace,
                  fitness_function: typing.Callable[[typing.Any], float],
-                 population_size: int = 100,
-                 verbose: int = 0):
+                 population_size: int = DEFAULT_POPULATION_SIZE,
+                 verbose: int = 0,
+                 initial_proposal_type: InitialProposalSamplerType = InitialProposalSamplerType.MAP,
+                 ngram_model_path: str = DEFAULT_NGRAM_MODEL_PATH,
+                 section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+
+                 ):
 
         self.fitness_function = fitness_function
         self.population_size = population_size
@@ -52,14 +142,17 @@ class PopulationBasedSampler():
         self.counter = parse_or_load_counter(args, self.grammar_parser)
 
         # Used to generate the initial population of complete games
-        self.initial_sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
-        self.rng = self.initial_sampler.rng
+        self.sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
+        self.rng = self.sampler.rng
+
+        self.initial_sampler = create_initial_proposal_sampler(
+            initial_proposal_type, self.sampler, ngram_model_path, section_sampler_kwargs)
 
         # Used as the mutation operator to modify existing games
-        self.regrowth_sampler = RegrowthSampler(self.initial_sampler, seed=args.random_seed, rng=self.rng)
+        self.regrowth_sampler = RegrowthSampler(self.sampler, seed=args.random_seed, rng=self.rng)
 
         # Used to fix the AST context after crossover / mutation
-        self.context_fixer = ASTContextFixer(self.initial_sampler, self.rng)
+        self.context_fixer = ASTContextFixer(self.sampler, self.rng)
 
         # Generate the initial population
         self.set_population([self._gen_init_sample(idx) for idx in range(self.population_size)])
@@ -107,7 +200,7 @@ class PopulationBasedSampler():
 
         while sample is None:
             try:
-                sample = typing.cast(tuple, self.initial_sampler.sample(global_context=dict(original_game_id=f'mcmc-{idx}')))
+                sample = typing.cast(tuple, self.sampler.sample(global_context=dict(original_game_id=f'mcmc-{idx}')))
             except RecursionError:
                 if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
@@ -198,7 +291,7 @@ class PopulationBasedSampler():
             for parent, selector, section, global_context, local_context in valid_node_dict.values():
 
                 parent_rule = parent.parseinfo.rule # type: ignore
-                parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+                parent_rule_posterior_dict = self.sampler.rules[parent_rule][selector]
                 assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
                 # Determine whether we're sampling a rule or a token (for this case, it'll always be one or the other 100% of the time)
@@ -213,7 +306,7 @@ class PopulationBasedSampler():
                         new_node = None
                         while new_node is None:
                             try:
-                                new_node = self.initial_sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
+                                new_node = self.sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
 
                             except RecursionError:
                                 if self.verbose >= 2: print('Recursion error, skipping sample')
@@ -374,7 +467,7 @@ class PopulationBasedSampler():
         def no_op(games):
             return games
 
-        return no_op
+        return no_op, 1
 
     def _get_parent_iterator(self):
         '''
@@ -404,8 +497,9 @@ class PopulationBasedSampler():
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
-        operator = self._get_operator() # return the number of games expected per call?
-        parent_iterator = self._get_parent_iterator()
+        operator, num_samples_per_call = self._get_operator() # return the number of games expected per call?
+        # TODO: parent_iterator should get an argument that corresponds to how many children to return at each
+        parent_iterator = self._get_parent_iterator(num_samples_per_call)
 
         candidates = []
         for parents in parent_iterator:
@@ -419,6 +513,16 @@ class PopulationBasedSampler():
         candidate_scores = [self.fitness_function(candidate) for candidate in candidates]
 
         self._select_new_population(candidates, candidate_scores)
+
+    def multiple_evolutionary_steps(self, num_steps: int, should_tqdm: bool = True):
+        step_iter = range(num_steps)
+        if should_tqdm:
+            step_iter = tqdm(step_iter, desc='Evolutionary steps')
+
+        for _ in step_iter:
+            self.evolutionary_step()
+            if self.verbose:
+                print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -524,31 +628,7 @@ class CrossoverOnlySampler(PopulationBasedSampler):
             yield self._choice(self.population, n=2)
 
 
-if __name__ == '__main__':
-
-    DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
-    DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
-    DEFUALT_RANDOM_SEED = 0
-    # DEFAULT_NGRAM_MODEL_PATH = '../models/text_5_ngram_model_2023_02_17.pkl'
-    DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
-
-    DEFAULT_ARGS = argparse.Namespace(
-        grammar_file=os.path.join('.', DEFAULT_GRAMMAR_FILE),
-        parse_counter=False,
-        counter_output_path=os.path.join('.', DEFAULT_COUNTER_OUTPUT_PATH),
-        random_seed=DEFUALT_RANDOM_SEED,
-    )
-
-    with open(DEFAULT_NGRAM_MODEL_PATH, 'rb') as file:
-        ngram_model = pickle.load(file)
-
-    # def fitness_function(game):
-    #     '''
-    #     A simple wrapper around the ASTNGramTrieModel.score function, allowing it
-    #     to run on just a single game and returning the score as float
-    #     '''
-    #     return ngram_model.score(game, k=None, top_k_min_n=5, score_all=False)['full_score']
-
+def main(args):
     fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
     trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
 
@@ -559,16 +639,39 @@ if __name__ == '__main__':
             trained_fitness_function.named_steps['wrapper'].eval()  # type: ignore
         return -1 * trained_fitness_function.transform(features_tensor).item()
 
-    # evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
+    evosampler = PopulationBasedSampler(
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
+    # evosampler = CrossoverOnlySampler(
+        args, fitness_function,
+        population_size=args.populartion_size,
+        verbose=args.verbose,
+        initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+        ngram_model_path=args.ngram_model_path,
+    )
 
-    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
-    evosampler.set_population(game_asts[:4])
+    # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
+    # evosampler.set_population(game_asts[:4])
 
-    for _ in tqdm(range(10), desc='Evolutionary steps'):
+    for _ in tqdm(range(args.n_steps), desc='Evolutionary steps'):
         evosampler.evolutionary_step()
         print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
 
     print('Best individual:')
     evosampler._print_game(evosampler._best_individual())
+
+    save_data(evosampler, args.output_folder, args.output_name, args.relative_path)
+
+
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+
+    args.grammar_file = os.path.join(args.relative_path, args.grammar_file)
+    args.counter_output_path = os.path.join(args.relative_path, args.counter_output_path)
+    args.fitness_featurizer_path = os.path.join(args.relative_path, args.fitness_featurizer_path)
+    args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
+
+    args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
+    logging.debug(f'Shell arguments:\n{args_str}')
+
+    main(args)

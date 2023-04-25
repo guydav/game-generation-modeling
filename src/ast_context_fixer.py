@@ -11,7 +11,7 @@ import tatsu.ast
 import ast_printer
 import ast_parser
 from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
-from ast_parser import ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
+from ast_parser import ASTNodeInfo, ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
 from ast_utils import replace_child
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
@@ -289,4 +289,7 @@ if __name__ == '__main__':
     # Used to generate the initial population of complete games
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)  # type: ignore
     context_fixer = ASTContextFixer(sampler, np.random.default_rng(args.random_seed))
-    context_fixer.fix_contexts(grammar_parser.parse(test_game))  # type: ignore
+    ast = grammar_parser.parse(test_game)  # type: ignore
+    print(ast_printer.ast_to_string(ast, '\n'))
+    context_fixer.fix_contexts(ast)
+    print(ast_printer.ast_to_string(ast, '\n'))

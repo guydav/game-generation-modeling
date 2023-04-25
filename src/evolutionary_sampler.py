@@ -176,7 +176,7 @@ class PopulationBasedSampler():
 
         return valid_nodes
 
-    def _insert(self, game, print_before_fix: bool = False):
+    def _insert(self, game):
         '''
         Attempt to insert a new node into the provided game by identifying a node which can have multiple
         children and inserting a new node into it. The new node is selected using the initial sampler
@@ -216,16 +216,12 @@ class PopulationBasedSampler():
         # Insert the new node into the parent at a random index
         new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
 
-        if print_before_fix:
-            print("Before fixing:")
-            print(ast_printer.ast_to_string(new_game, "\n"))
-
         # Do any necessary context-fixing
         self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
 
         return new_game
 
-    def _delete(self, game, print_before_fix: bool = False):
+    def _delete(self, game):
         '''
         Attempt to deleting a new node into the provided game by identifying a node which can have multiple
         children and deleting one of them
@@ -251,154 +247,10 @@ class PopulationBasedSampler():
 
         del new_parent[selector][delete_index] # type: ignore
 
-        if print_before_fix:
-            print("Before fixing:")
-            print(ast_printer.ast_to_string(new_game, "\n"))
-
         # Do any necessary context-fixing
         self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
 
         return new_game
-
-    def insert_delete_step(self, insert_prob=0.5, delete_prob=0.5):
-        '''
-        Perform an evolutionary step by mutating each member of the population. Each mutation consists of
-        an independent probability of:
-        - inserting a new node inside of an existing node with multiple children (e.g. an [and] node)
-        - deleting an existing node if it is one of multiple children of its parent
-        As with the beam step, the top n samples are selected to form the next generation
-        '''
-
-        # TODO: break this into two functions, _insert and _delete, which are each responsible for just
-        #       one of the two operations, applying it to a random valid node in a provided game. We can
-        #       probably reuse certain bits, like the valid_nodes list generation
-        # NOTE: should we just propagate any exceptions received during context fixing "up the chain", as it were?
-
-        samples = self.population.copy()
-
-        valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context
-                            in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
-
-        for game in self.population:
-            self.regrowth_sampler.set_source_ast(game)
-
-            # After processing the game with the regrowth sampler, we can use its parent mapping to
-            # determine which nodes are eligible for insertion and deletion. This relies on the fact
-            # that:
-            # - if a node is an element of a list, then the last entry of its selector will be an integer (since
-            #   we need to index into that list to get the node)
-            # - similarly, the first entry of the selector will yield a list when applied to the parent
-            valid_nodes = list([(parent, selector[0], section, global_context, local_context) for _, parent, selector, _, section, global_context, local_context
-                                    in self.regrowth_sampler.parent_mapping.values() if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list)])
-
-            # Dedupe valid nodes based on their parent and selector
-            valid_node_dict = {}
-            for parent, selector, section, global_context, local_context in valid_nodes:
-                key = (*self.regrowth_sampler._ast_key(parent), selector)
-                if key not in valid_node_dict:
-                    valid_node_dict[key] = (parent, selector, section, global_context, local_context)
-
-            for parent, selector, section, global_context, local_context in valid_node_dict.values():
-
-                parent_rule = parent.parseinfo.rule # type: ignore
-                parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
-                assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
-
-                # Determine whether we're sampling a rule or a token (for this case, it'll always be one or the other 100% of the time)
-                if parent_rule_posterior_dict['type_posterior']['rule'] == 1:
-
-                    # Check whether we're doing an insertion
-                    if self.rng.random() < insert_prob:
-
-                        # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
-                        new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
-
-                        new_node = None
-                        while new_node is None:
-                            try:
-                                new_node = self.initial_sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
-
-                            except RecursionError:
-                                if self.verbose >= 2: print('Recursion error, skipping sample')
-
-                            except SamplingException:
-                                if self.verbose >= 2: print('Sampling exception, skipping sample')
-
-                        if isinstance(new_node, tuple):
-                            new_node = new_node[0]
-
-                        # Make a copy of the game
-                        new_game = copy.deepcopy(game)
-                        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
-
-                        # Insert the new node into the parent at a random index
-                        new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
-
-                        # Do any necessary context-fixing
-                        self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
-
-                        samples.append(new_game)
-
-                    # Check whether we're doing a deletion
-                    if self.rng.random() < delete_prob:
-                        # Make a copy of the game
-                        new_game = copy.deepcopy(game)
-                        new_parent = typing.cast(tatsu.ast.AST, self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo))  # type: ignore
-
-                        # Delete a random node from the parent
-                        delete_index = self.rng.integers(len(new_parent[selector]))  # type: ignore
-                        child_to_delete = new_parent[selector][delete_index]  # type: ignore
-
-                        del new_parent[selector][delete_index] # type: ignore
-
-                        # Do any necessary context-fixing
-                        self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
-
-                        samples.append(new_game)
-
-                elif parent_rule_posterior_dict['type_posterior']['token'] == 1:
-                    raise Exception("Encountered unexpected rule: parent of multiple children of type token")
-
-                else:
-                    raise Exception("Invalid type posterior")
-
-        # TODO: add cleanup step to add / remove predicates or variables in order to ensure agreement
-
-        # Score the new samples
-        scores = [self.fitness_function(sample) for sample in samples]
-
-        # Select the top n samples
-        top_indices = np.argsort(scores)[-self.population_size:]
-        self.population = [samples[i] for i in top_indices]
-        self.fitness_values = [scores[i] for i in top_indices]
-
-    def crossover_step(self, crossover_type):
-        '''
-        Performs crossover between members of the population. Currently, we'll generate crossover
-        pairs for every valid pair of games in the population and then select the top n samples.
-
-        But we should probably make a more efficient selection scheme (i.e. fitness-proportional or
-        rank-based)
-        '''
-
-        samples = self.population.copy()
-        for i in range(len(self.population)):
-            for j in range(i+1, len(self.population)):
-                try:
-                    new_game_1, new_game_2 = self._crossover(self.population[i], self.population[j], crossover_type)
-                    samples.append(new_game_1)
-                    samples.append(new_game_2)
-
-                except SamplingException:
-                    if self.verbose >= 2: print('Sampling exception, skipping crossover')
-
-        # Score the new samples
-        scores = [self.fitness_function(sample) for sample in samples]
-
-        # Select the top n samples
-        top_indices = np.argsort(scores)[-self.population_size:]
-        self.population = [samples[i] for i in top_indices]
-        self.fitness_values = [scores[i] for i in top_indices]
 
     def _crossover(self, game_1, game_2, crossover_type):
         '''
@@ -468,7 +320,7 @@ class PopulationBasedSampler():
     # TODO: store statistics about which locations are more likely to receive beneficial mutations?
     # TODO: keep track of 'lineages'
 
-    def _get_operator(self):
+    def _get_operator(self) -> typing.Tuple[typing.Callable, int]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
         As a default, always return a no_op operator
@@ -477,14 +329,20 @@ class PopulationBasedSampler():
         def no_op(games):
             return games
 
-        return no_op
+        return no_op, 1
 
-    def _get_parent_iterator(self):
+    def _get_parent_iterator(self, n_parents_per_sample: int):
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
         '''
-        return iter(self.population)
+        if n_parents_per_sample == 1:
+            for p in self.population:
+                yield p
+        
+        else:
+            for _ in range(self.population_size):
+                yield self._choice(self.population, n_parents_per_sample)
 
     def _select_new_population(self, candidates, candidate_scores):
         '''
@@ -507,8 +365,8 @@ class PopulationBasedSampler():
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
-        operator = self._get_operator() # return the number of games expected per call?
-        parent_iterator = self._get_parent_iterator()
+        operator, num_parents_per_sample = self._get_operator() # return the number of games expected per call?
+        parent_iterator = self._get_parent_iterator(num_parents_per_sample)
 
         candidates = []
         for parents in parent_iterator:
@@ -534,10 +392,10 @@ class BeamSearchSampler(PopulationBasedSampler):
         self.k = k
 
     def _get_operator(self):
-        return self._gen_regrowth_sample
+        return self._gen_regrowth_sample, 1
 
-    def _get_parent_iterator(self, population):
-        return iter(population * self.k)
+    def _get_parent_iterator(self, n_parents_per_sample: int):
+        return iter(self.population * self.k)
 
 
 class WeightedBeamSearchSampler(PopulationBasedSampler):
@@ -563,13 +421,11 @@ class WeightedBeamSearchSampler(PopulationBasedSampler):
             else:
                 return self._gen_regrowth_sample(games[1])
 
-        return weighted_beam_search_sample
+        return weighted_beam_search_sample, 2
 
-    def _get_parent_iterator(self):
+    def _get_parent_iterator(self, n_parents_per_sample: int):
         for _ in range(2 * self.population_size * self.k):
-            parent_1 = self._choice(self.population)
-            parent_2 = self._choice(self.population)
-            yield [parent_1, parent_2]
+            yield self._choice(self.population, n=n_parents_per_sample)
 
 
 class InsertDeleteSampler(PopulationBasedSampler):
@@ -579,23 +435,15 @@ class InsertDeleteSampler(PopulationBasedSampler):
     def _get_operator(self):
         def insert_delete_operator(game):
             try:
-                new_game = self._insert(game,  True)
-                print("\nINSERTED GAME")
-                print(ast_printer.ast_to_string(new_game, "\n"))
-                new_game = self._delete(new_game, True)
-
+                new_game = self._insert(game)
+                new_game = self._delete(new_game)
                 return new_game
+            
             except SamplingException as e:
-                # print(ast_printer.ast_to_string(game, "\n"))
-                print(f"Failed to insert/delete: {e}")
+                if self.verbose >=2: print(f"Failed to insert/delete: {e}")
                 return game
 
-            # except Exception as e:
-            #     print(ast_printer.ast_to_string(game, "\n"))
-            #     print(f"Failed to insert/delete: {e}")
-            #     raise e
-
-        return insert_delete_operator
+        return insert_delete_operator, 1
 
 
 MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
@@ -646,11 +494,11 @@ class CrossoverOnlySampler(PopulationBasedSampler):
 
             raise SamplingException('Failed to crossover after max attempts')
 
-        return crossover_two_random_games
+        return crossover_two_random_games, 2
 
-    def _get_parent_iterator(self):
+    def _get_parent_iterator(self, n_parents_per_sample: int):
         for _ in range(self.population_size * self.k):
-            yield self._choice(self.population, n=2)
+            yield self._choice(self.population, n=n_parents_per_sample)
 
 
 if __name__ == '__main__':
@@ -689,8 +537,8 @@ if __name__ == '__main__':
         return -1 * trained_fitness_function.transform(features_tensor).item()
 
     # evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
-    # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = InsertDeleteSampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
+    evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
+    # evosampler = InsertDeleteSampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
     # evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
 
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))

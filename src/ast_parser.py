@@ -213,8 +213,6 @@ class ASTParentMapper(ASTParser):
     def _handle_ast(self, ast, **kwargs):
         self._current_ast_to_contexts(ast, **kwargs)
 
-        self._add_ast_to_mapping(ast, **kwargs)
-
         self._parse_current_node(ast, **kwargs)
 
         current_depth = kwargs['depth']
@@ -236,7 +234,8 @@ class ASTParentMapper(ASTParser):
                                     local_context_update[owner_key] = dict()
 
                                 for var_name in local_context_update[key]:
-                                    local_context_update[owner_key][var_name] = ast.parseinfo.pos  # type: ignore
+                                    if var_name not in local_context_update[owner_key]:
+                                        local_context_update[owner_key][var_name] = ast.parseinfo.pos  # type: ignore
 
                 self._update_contexts_from_retval(kwargs, retval)
 
@@ -244,6 +243,8 @@ class ASTParentMapper(ASTParser):
         if should_rehandle:
             self._update_contexts_from_retval(kwargs, kwarg_updates)
             self._handle_ast(ast, **kwargs)
+
+        self._add_ast_to_mapping(ast, **kwargs)
 
         if self.local_context_propagating_rules and ast.parseinfo.rule in self.local_context_propagating_rules:  # type: ignore
             return kwargs['global_context'], kwargs['local_context']

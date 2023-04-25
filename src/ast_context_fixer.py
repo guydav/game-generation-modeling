@@ -195,10 +195,10 @@ class ASTContextFixer(ASTParentMapper):
             if isinstance(term, str) and term.startswith('?'):
                 var_name = term[1:]
                 if term_variables_key not in self.local_variable_ref_counts:
-                    raise ValueError(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
+                    raise SamplingException(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
 
                 if var_name not in self.local_variable_ref_counts[term_variables_key]:
-                    raise ValueError(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
+                    raise SamplingException(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
 
                 # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
                 if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and

@@ -146,7 +146,7 @@ class PopulationBasedSampler():
 
         return new_proposal
 
-    def _get_valid_insert_or_delete_nodes(self, game):
+    def _get_valid_insert_or_delete_nodes(self, game, min_length=1):
         '''
         Returns a list of every node in the game which is a valid candidate for insertion or deletion
         (i.e. can have more than one child). Each entry in the list is of the form:
@@ -156,17 +156,11 @@ class PopulationBasedSampler():
         self.regrowth_sampler.set_source_ast(game)
 
         # Collect all nodes whose final selector is an integet (i.e. an index into a list) and whose parent
-        # yields a list when its first selector is applied. In addition, only collect nodes whose parents
-        # parent rules have a length posterior
+        # yields a list when its first selector is applied. Also make sure that the list has a minimum length
         valid_nodes = []
         for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
-            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list):
-                
-                parent_rule = parent.parseinfo.rule # type: ignore
-                parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
-
-                if "length_posterior" in parent_rule_posterior_dict:
-                    valid_nodes.append((parent, selector[0], section, global_context, local_context))
+            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list) and len(parent[selector[0]]) >= min_length:                
+                valid_nodes.append((parent, selector[0], section, global_context, local_context))
 
         if len(valid_nodes) == 0:
             raise SamplingException('No valid nodes found for insertion or deletion')
@@ -196,6 +190,7 @@ class PopulationBasedSampler():
 
         parent_rule = parent.parseinfo.rule # type: ignore
         parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+        assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
         # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
         new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
@@ -221,7 +216,8 @@ class PopulationBasedSampler():
         # Insert the new node into the parent at a random index
         new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
 
-        # TODO: apply context fixer
+        # Do any necessary context-fixing
+        self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
 
         return new_game
     
@@ -232,19 +228,27 @@ class PopulationBasedSampler():
         '''
 
         # TODO: can throw a SamplingException if no valid nodes are found
-        valid_nodes = self._get_valid_insert_or_delete_nodes(game)
+        valid_nodes = self._get_valid_insert_or_delete_nodes(game, min_length=2)
 
         # Select a random node from the list of valid nodes
         parent, selector, section, global_context, local_context = self._choice(valid_nodes)
 
+        parent_rule = parent.parseinfo.rule # type: ignore
+        parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+        assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
+
         # Make a copy of the game
         new_game = copy.deepcopy(game)
-        new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
+        new_parent = typing.cast(tatsu.ast.AST, self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo))  # type: ignore
 
         # Delete a random node from the parent
-        del new_parent[selector][self.rng.integers(len(new_parent[selector]))] # type: ignore
+        delete_index = self.rng.integers(len(new_parent[selector]))  # type: ignore
+        child_to_delete = new_parent[selector][delete_index]  # type: ignore
 
-        # TODO: apply context fixer
+        del new_parent[selector][delete_index] # type: ignore
+
+        # Do any necessary context-fixing
+        self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
 
         return new_game
 
@@ -560,6 +564,31 @@ class WeightedBeamSearchSampler(PopulationBasedSampler):
             yield [parent_1, parent_2]
 
 
+class InsertDeleteSampler(PopulationBasedSampler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _get_operator(self):
+        def insert_delete_operator(game):
+            try:
+                new_game = self._insert(game)
+                print("\nINSERTED GAME")
+                print(ast_printer.ast_to_string(new_game, "\n"))
+                new_game = self._delete(new_game)
+
+                return new_game
+            except SamplingException as e:
+                print(ast_printer.ast_to_string(game, "\n"))
+                print(f"Failed to insert/delete: {e}")
+                return game
+            
+            except Exception as e:
+                print(ast_printer.ast_to_string(game, "\n"))
+                print(f"Failed to insert/delete: {e}")
+                raise e
+        
+        return insert_delete_operator
+
 MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
 
 
@@ -652,7 +681,8 @@ if __name__ == '__main__':
 
     # evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
+    evosampler = InsertDeleteSampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
+    # evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
 
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     evosampler.set_population(game_asts[:4])

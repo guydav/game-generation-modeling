@@ -10,7 +10,7 @@ import tatsu
 import tatsu.ast
 import tatsu.grammars
 import torch
-from tqdm import tqdm
+from tqdm import tqdm, notebook
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
 import ast_printer
@@ -18,7 +18,7 @@ import ast_parser
 from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
-from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
+from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler, mpp
 from ast_utils import *
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME
 from fitness_features import *
@@ -156,6 +156,8 @@ class PopulationBasedSampler():
 
         # Generate the initial population
         self.set_population([self._gen_init_sample(idx) for idx in range(self.population_size)])
+
+        self.postprocessor = ast_parser.ASTSamplePostprocessor()
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -448,8 +450,6 @@ class PopulationBasedSampler():
 
         return [game_1_copy, game_2_copy]
 
-
-
     # TODO: add general step which can be used to combine the above steps
     # TODO: break evolutionary step into selection / recombination / mutation steps?
     # -> can use microbial GA tournament structure?
@@ -458,7 +458,7 @@ class PopulationBasedSampler():
     # TODO: store statistics about which locations are more likely to receive beneficial mutations?
     # TODO: keep track of 'lineages'
 
-    def _get_operator(self):
+    def _get_operator(self) -> typing.Tuple[typing.Callable, int]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
         As a default, always return a no_op operator
@@ -469,12 +469,18 @@ class PopulationBasedSampler():
 
         return no_op, 1
 
-    def _get_parent_iterator(self):
+    def _get_parent_iterator(self, n_parents_per_sample: int):
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
         '''
-        return iter(self.population)
+        if n_parents_per_sample == 1:
+            for p in self.population:
+                yield p
+
+        else:
+            for _ in range(self.population_size):
+                yield self._choice(self.population, n_parents_per_sample)
 
     def _select_new_population(self, candidates, candidate_scores):
         '''
@@ -489,7 +495,8 @@ class PopulationBasedSampler():
         self.population = [all_games[i] for i in top_indices]
         self.fitness_values = [all_scores[i] for i in top_indices]
 
-    def evolutionary_step(self):
+    def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
+                          should_tqdm: bool = False):
         # The core steps are:
         # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
         # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
@@ -498,31 +505,54 @@ class PopulationBasedSampler():
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
         operator, num_samples_per_call = self._get_operator() # return the number of games expected per call?
-        # TODO: parent_iterator should get an argument that corresponds to how many children to return at each
         parent_iterator = self._get_parent_iterator(num_samples_per_call)
 
         candidates = []
-        for parents in parent_iterator:
-            children = operator(parents)
+        candidate_scores = []
 
+        if pool is not None:
+            children_iter = pool.istarmap(operator, parent_iterator, chunksize=chunksize)  # type: ignore
+        else:
+            children_iter = map(operator, parent_iterator)
+
+        if should_tqdm:
+            children_iter = tqdm(children_iter)  # type: ignore
+
+        # TODO: make sure the operators also return fitness scores -- probably using a decorator
+        # TODO: make sure the operators all receive their rng as a kwarg
+        for children, children_fitness_scores in children_iter:
             if isinstance(children, list):
                 candidates.extend(children)
+                candidate_scores.extend(children_fitness_scores)
             else:
                 candidates.append(children)
-
-        candidate_scores = [self.fitness_function(candidate) for candidate in candidates]
+                candidate_scores.append(children_fitness_scores)
 
         self._select_new_population(candidates, candidate_scores)
 
-    def multiple_evolutionary_steps(self, num_steps: int, should_tqdm: bool = True):
+    def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
+                                    chunksize: int = 1, should_tqdm: bool = False,
+                                    inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False):
         step_iter = range(num_steps)
         if should_tqdm:
-            step_iter = tqdm(step_iter, desc='Evolutionary steps')
+            step_iter = tqdm(step_iter, desc='Evolutionary steps')  # type: ignore
 
         for _ in step_iter:
-            self.evolutionary_step()
+            self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm)
             if self.verbose:
                 print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
+
+        if postprocess:
+            self.population = [self.postprocessor(g) for g in self.population]
+
+    def multiple_eovlutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
+                                             inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False, n_workers: int = 8, chunksize: int = 1):
+
+        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        with mpp.Pool(n_workers) as pool:
+            self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
+                                             should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
+                                             postprocess=postprocess)
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -652,9 +682,7 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
-    for _ in tqdm(range(args.n_steps), desc='Evolutionary steps'):
-        evosampler.evolutionary_step()
-        print(f"Average fitness: {evosampler._avg_fitness():.3f}, Best fitness: {evosampler._best_fitness():.3f}")
+    evosampler.multiple_evolutionary_steps(args.n_steps, args.should_tqdm)
 
     print('Best individual:')
     evosampler._print_game(evosampler._best_individual())

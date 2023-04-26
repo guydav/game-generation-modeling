@@ -500,6 +500,46 @@ class CrossoverOnlySampler(PopulationBasedSampler):
         for _ in range(self.population_size * self.k):
             yield self._choice(self.population, n=n_parents_per_sample)
 
+class MicrobialGASampler(PopulationBasedSampler):
+    def __init__(self,
+                 args: argparse.Namespace,
+                 fitness_function: typing.Callable[[typing.Any], float],
+                 population_size: int = 100,
+                 verbose: int = 0,
+                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE):
+        
+        super().__init__(args, fitness_function, population_size, verbose)
+        self.crossover_type = crossover_type
+
+    def _get_operator(self):
+        '''
+        Implements the classic "Microbial GA" operator, which operates as follows:
+            1. fitness of the two individuals is compared, "winner" and "loser" assigned
+            2. winner "infects" loser by randomly replacing a subtree in loser with a subtree from winner (crossover)
+            3. loser is mutated (randomly selected from regrowth, insertion, and deletion)
+            4. winner and loser re-enter population
+        '''
+        def microbial_ga_operator(games):
+            if len(games) > 2:
+                games = self._choice(games, 2)
+
+            p1_idx = self.population.index(games[0])
+            p2_idx = self.population.index(games[1])
+
+            winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
+            _, crossovered_loser = self._crossover(winner, loser, self.crossover_type)
+            
+            # Apply a randomly selected mutation operator to the loser
+            mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete])
+            mutated_loser = mutation(crossovered_loser)
+
+            return mutated_loser
+
+        return microbial_ga_operator, 2
+    
+    def _get_parent_iterator(self, n_parents_per_sample: int):
+        for _ in range(2 * self.population_size):
+            yield self._choice(self.population, n=n_parents_per_sample)
 
 if __name__ == '__main__':
 
@@ -537,9 +577,10 @@ if __name__ == '__main__':
         return -1 * trained_fitness_function.transform(features_tensor).item()
 
     # evosampler = PopulationBasedSampler(DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
+    # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
     # evosampler = InsertDeleteSampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
     # evosampler = CrossoverOnlySampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0, k=1, crossover_type=CrossoverType.SAME_PARENT_RULE, fitness_featurizer=fitness_featurizer)
+    evosampler = MicrobialGASampler(DEFAULT_ARGS, fitness_function, population_size=10, verbose=0)
 
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     evosampler.set_population(game_asts[:4])

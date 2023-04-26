@@ -67,7 +67,7 @@ DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
 
 parser.add_argument('--initial-proposal-type', type=int, default=0)
-parser.add_argument('--crossover-type', type=int, default=0)
+parser.add_argument('--crossover-type', type=int, default=2)
 
 # TODO: implement parallel sampling support here
 parser.add_argument('--sample-parallel', action='store_true')
@@ -75,6 +75,7 @@ parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
+parser.add_argument('--within-step-tqdm', action='store_true')
 parser.add_argument('--postprocess', action='store_true')
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
@@ -116,7 +117,32 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
         raise ValueError(f'Invalid crossover type {crossover_type}')
 
 
+ASTType = typing.Union[tuple, tatsu.ast.AST]
+
+
+def no_op_operator(games: ASTType, rng=None):
+    return games
+
+
+
 class PopulationBasedSampler():
+    context_fixer: ASTContextFixer
+    counter: ASTRuleValueCounter
+    fitness_function: typing.Callable[[ASTType], float]
+    generation_index: int
+    grammar: str
+    grammar_parser: tatsu.grammars.Grammar  # type: ignore
+    initial_sampler: typing.Callable[[], ASTType]
+    postprocessor: ast_parser.ASTSamplePostprocessor
+    population: typing.List[ASTType]
+    population_size: int
+    random_seed: int
+    regrowth_sampler: RegrowthSampler
+    rng: np.random.Generator
+    sampler: ASTSampler
+    verbose: int
+
+
     '''
     This is a type of game sampler which uses an evolutionary strategy to climb a
     provided fitness function. It's a population-based alternative to the MCMC samper
@@ -143,10 +169,11 @@ class PopulationBasedSampler():
 
         # Used to generate the initial population of complete games
         self.sampler = ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed)
+        self.random_seed = args.random_seed
         self.rng = self.sampler.rng
 
         self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self.sampler, ngram_model_path, section_sampler_kwargs)
+            initial_proposal_type, self.sampler, ngram_model_path, section_sampler_kwargs)  # type: ignore
 
         # Used as the mutation operator to modify existing games
         self.regrowth_sampler = RegrowthSampler(self.sampler, seed=args.random_seed, rng=self.rng)
@@ -158,6 +185,7 @@ class PopulationBasedSampler():
         self.set_population([self._gen_init_sample(idx) for idx in range(self.population_size)])
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
+        self.generation_index = 0
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -354,8 +382,6 @@ class PopulationBasedSampler():
                 else:
                     raise Exception("Invalid type posterior")
 
-        # TODO: add cleanup step to add / remove predicates or variables in order to ensure agreement
-
         # Score the new samples
         scores = [self.fitness_function(sample) for sample in samples]
 
@@ -458,16 +484,13 @@ class PopulationBasedSampler():
     # TODO: store statistics about which locations are more likely to receive beneficial mutations?
     # TODO: keep track of 'lineages'
 
-    def _get_operator(self) -> typing.Tuple[typing.Callable, int]:
+    def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[ASTType, np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
         As a default, always return a no_op operator
         '''
 
-        def no_op(games):
-            return games
-
-        return no_op, 1
+        return no_op_operator
 
     def _get_parent_iterator(self, n_parents_per_sample: int):
         '''
@@ -495,6 +518,16 @@ class PopulationBasedSampler():
         self.population = [all_games[i] for i in top_indices]
         self.fitness_values = [all_scores[i] for i in top_indices]
 
+    def _sample_and_apply_operator(self, parent: typing.Union[tuple, tatsu.ast.AST], generation_index: int, sample_index: int):
+        rng = np.random.default_rng(self.random_seed + (self.population_size * generation_index) + sample_index)
+        operator = self._get_operator(rng)
+        child_or_children = operator(parent, rng)
+        if not isinstance(child_or_children, list):
+            child_or_children = [child_or_children]
+
+        children_fitness_scores = [self.fitness_function(child) for child in child_or_children]
+        return child_or_children, children_fitness_scores
+
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
                           should_tqdm: bool = False):
         # The core steps are:
@@ -504,21 +537,22 @@ class PopulationBasedSampler():
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
-        operator, num_samples_per_call = self._get_operator() # return the number of games expected per call?
-        parent_iterator = self._get_parent_iterator(num_samples_per_call)
+        # TODO: move the operator sampling step to the middle, and think about what that means for crossover (which requires two parents)
+        parent_iterator = self._get_parent_iterator(1)
+
+        param_iterator = zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
         candidates = []
         candidate_scores = []
 
         if pool is not None:
-            children_iter = pool.istarmap(operator, parent_iterator, chunksize=chunksize)  # type: ignore
+            children_iter = pool.istarmap(self._sample_and_apply_operator, param_iterator, chunksize=chunksize)  # type: ignore
         else:
-            children_iter = map(operator, parent_iterator)
+            children_iter = itertools.starmap(self._sample_and_apply_operator, param_iterator)  # type: ignore
 
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        # TODO: make sure the operators also return fitness scores -- probably using a decorator
         # TODO: make sure the operators all receive their rng as a kwarg
         for children, children_fitness_scores in children_iter:
             if isinstance(children, list):
@@ -543,9 +577,9 @@ class PopulationBasedSampler():
                 print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
 
         if postprocess:
-            self.population = [self.postprocessor(g) for g in self.population]
+            self.population = [self.postprocessor(g) for g in self.population]  # type: ignore
 
-    def multiple_eovlutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
+    def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False, n_workers: int = 8, chunksize: int = 1):
 
         logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
@@ -658,22 +692,36 @@ class CrossoverOnlySampler(PopulationBasedSampler):
             yield self._choice(self.population, n=2)
 
 
+class EnergyFunctionFitnessWrapper:
+    energy_function: typing.Callable[[typing.Any], float]
+    feature_names: typing.List[str]
+    fitness_featurizer: ASTFitnessFeaturizer
+    flip_sign: bool
+
+    def __init__(self, fitness_featurizer: ASTFitnessFeaturizer, energy_function: typing.Callable[[typing.Any], float], feature_names: typing.List[str],
+                 flip_sign: bool = True):
+        self.fitness_featurizer = fitness_featurizer
+        self.energy_function = energy_function
+        self.feature_names = feature_names
+        self.flip_sign = flip_sign
+
+    def __call__(self, game: ASTType):
+        features = typing.cast(dict, self.fitness_featurizer.parse(game, 'mcmc', True))  # type: ignore
+        features_tensor = torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)
+        if 'wrapper' in self.energy_function.named_steps:  # type: ignore
+            self.energy_function.named_steps['wrapper'].eval()  # type: ignore
+        energy = self.energy_function.transform(features_tensor).item()
+        return -1 * energy if self.flip_sign else energy
+
 def main(args):
     fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
     trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
 
-    def fitness_function(game):
-        features = typing.cast(dict, fitness_featurizer.parse(game, 'mcmc', True))
-        features_tensor = torch.tensor([features[name] for name in feature_names], dtype=torch.float32)
-        if 'wrapper' in trained_fitness_function.named_steps:  # type: ignore
-            trained_fitness_function.named_steps['wrapper'].eval()  # type: ignore
-        return -1 * trained_fitness_function.transform(features_tensor).item()
-
     evosampler = PopulationBasedSampler(
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
     # evosampler = CrossoverOnlySampler(
-        args, fitness_function,
-        population_size=args.populartion_size,
+        args, EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
+        population_size=args.population_size,
         verbose=args.verbose,
         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
         ngram_model_path=args.ngram_model_path,
@@ -682,7 +730,17 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
-    evosampler.multiple_evolutionary_steps(args.n_steps, args.should_tqdm)
+    if args.sample_parallel:
+        evosampler.multiple_evolutionary_steps_parallel(
+            num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
+            postprocess=args.postprocess, n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
+            )
+
+    else:
+        evosampler.multiple_evolutionary_steps(
+            num_steps=args.n_steps, should_tqdm=args.should_tqdm,
+            inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
+            )
 
     print('Best individual:')
     evosampler._print_game(evosampler._best_individual())

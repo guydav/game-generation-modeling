@@ -135,6 +135,7 @@ class ASTContextFixer(ASTParentMapper):
     def _should_rehandle_current_node(self, ast: tatsu.ast.AST, **kwargs):
         should_rehandle = False
         local_context = kwargs['local_context']
+        global_context = kwargs['global_context']
         forced_remappings = {}
 
         for key in local_context:
@@ -163,6 +164,8 @@ class ASTContextFixer(ASTParentMapper):
 
                     for var in owned_variables:
                         del self.local_variable_ref_counts[variables_key][var]
+                        if var in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
+                            del global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][var]
 
         if should_rehandle:
             print(f'Forced remappings: {forced_remappings}')
@@ -195,26 +198,30 @@ class ASTContextFixer(ASTParentMapper):
             if isinstance(term, str) and term.startswith('?'):
                 var_name = term[1:]
                 if term_variables_key not in self.local_variable_ref_counts:
-                    raise ValueError(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
+                    self.local_variable_ref_counts[term_variables_key] = {}
+                #     raise SamplingException(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
 
                 if var_name not in self.local_variable_ref_counts[term_variables_key]:
-                    raise ValueError(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
+                    self.local_variable_ref_counts[term_variables_key][var_name] = 0
+                #     raise SamplingException(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
 
                 # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
+                reference_index = self.local_variable_ref_counts[term_variables_key][var_name]
+
                 if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and
                     term_variables_key in local_context[FORCED_REMAPPINGS_CONTEXT_KEY] and
                     var_name in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key] and
-                    self.local_variable_ref_counts[term_variables_key][var_name] in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
+                    reference_index in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
 
-                    new_var_name = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][self.local_variable_ref_counts[term_variables_key][var_name]]
+                    new_var_name = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][reference_index]
                     replace_child(ast, ['term'], '?' + new_var_name)
                     term = '?' + new_var_name
-
-                self.local_variable_ref_counts[term_variables_key][term[1:]] += 1
+                    del local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][reference_index]
 
                 # If we already have a mapping for it, replace it with the mapping
-                if term in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
-                    replace_child(ast, ['term'], '?' + global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term])
+                if term[1:] in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
+                    term = '?' + global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]]
+                    replace_child(ast, ['term'], term)
 
                 else:
                     # Check if there's anything that we could map it to
@@ -224,8 +231,11 @@ class ASTContextFixer(ASTParentMapper):
                     # If we don't have a mapping for it, and it's not in the local context, add a mapping
                     elif term[1:] not in local_context[term_variables_key]:
                         new_var_name = self._sample_from_sequence(list(local_context[term_variables_key].keys()))
-                        global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term] = new_var_name
-                        replace_child(ast, ['term'], '?' + new_var_name)
+                        global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]] = new_var_name
+                        term = '?' + new_var_name
+                        replace_child(ast, ['term'], term)
+
+                self.local_variable_ref_counts[term_variables_key][term[1:]] += 1
 
         elif rule == 'pref_name_and_types':
             if 'preference_names' not in global_context:

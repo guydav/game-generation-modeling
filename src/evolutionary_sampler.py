@@ -1,4 +1,5 @@
 import argparse
+from functools import wraps
 import gzip
 import os
 import pickle
@@ -10,7 +11,7 @@ import tatsu
 import tatsu.ast
 import tatsu.grammars
 import torch
-from tqdm import tqdm, notebook
+from tqdm import tqdm
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
 import ast_printer
@@ -124,6 +125,28 @@ def no_op_operator(games: ASTType, rng=None):
     return games
 
 
+def handle_multiple_inputs(operator):
+    @wraps(operator)
+    def wrapped_operator(self, games: typing.Union[ASTType, typing.List[ASTType]], rng: np.random.Generator, *args, **kwargs):
+        if not isinstance(games, list):
+            return operator(self, games, rng=rng, *args, **kwargs)
+
+        if len(games) == 1:
+            return operator(self, games[0], rng=rng, *args, **kwargs)
+
+        else:
+            operator_outputs = [operator(self, game, rng=rng, *args, **kwargs) for game in games]
+            outputs = []
+            for out in operator_outputs:
+                if isinstance(out, list):
+                    outputs.extend(out)
+                else:
+                    outputs.append(out)
+
+            return outputs
+
+    return wrapped_operator
+
 
 class PopulationBasedSampler():
     context_fixer: ASTContextFixer
@@ -208,16 +231,19 @@ class PopulationBasedSampler():
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
 
-    def _choice(self, iterable, n=1):
+    def _choice(self, iterable, n: int = 1, rng: typing.Optional[np.random.Generator] = None):
         '''
         Small hack to get around the rng invalid __array_struct__ error
         '''
+        if rng is None:
+            rng = self.rng
+
         if n == 1:
-            idx = self.rng.integers(len(iterable))
+            idx = rng.integers(len(iterable))
             return iterable[idx]
 
         else:
-            idxs = self.rng.choice(len(iterable), size=n, replace=False)
+            idxs = rng.choice(len(iterable), size=n, replace=False)
             return [iterable[idx] for idx in idxs]
 
     def _gen_init_sample(self, idx):
@@ -230,7 +256,7 @@ class PopulationBasedSampler():
 
         while sample is None:
             try:
-                sample = typing.cast(tuple, self.sampler.sample(global_context=dict(original_game_id=f'mcmc-{idx}')))
+                sample = typing.cast(tuple, self.initial_sampler.sample(global_context=dict(original_game_id=f'evo-{idx}')))
             except RecursionError:
                 if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
@@ -238,7 +264,8 @@ class PopulationBasedSampler():
 
         return sample
 
-    def _gen_regrowth_sample(self, game):
+    @handle_multiple_inputs
+    def _gen_regrowth_sample(self, game: ASTType, rng: np.random.Generator):
         '''
         Helper function for generating a new sample from an existing game (repeating until one is generated
         without errors)
@@ -252,7 +279,9 @@ class PopulationBasedSampler():
 
         while not sample_generated:
             try:
-                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False) # TODO: does sample_index need to change?
+                # TODO: does sample_index need to change?
+                # Guy: not really -- it only contributes to the name the regrown sample is given
+                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False, rng=rng)
 
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
                     if self.verbose >= 2: print('Regrowth generated identical games, repeating')
@@ -265,11 +294,9 @@ class PopulationBasedSampler():
             except SamplingException:
                 if self.verbose >= 2: print('Sampling exception, skipping sample')
 
-        new_proposal = typing.cast(tuple, new_proposal)
-
         return new_proposal
 
-    def _get_valid_insert_or_delete_nodes(self, game, min_length=1):
+    def _get_valid_insert_or_delete_nodes(self, game: ASTType, min_length: int = 1) -> typing.List[typing.Tuple[tatsu.ast.AST, typing.List[typing.Union[str, int]], str, typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]]:
         '''
         Returns a list of every node in the game which is a valid candidate for insertion or deletion
         (i.e. can have more than one child). Each entry in the list is of the form:
@@ -299,7 +326,8 @@ class PopulationBasedSampler():
 
         return valid_nodes
 
-    def _insert(self, game):
+    @handle_multiple_inputs
+    def _insert(self, game: ASTType, rng: np.random.Generator):
         '''
         Attempt to insert a new node into the provided game by identifying a node which can have multiple
         children and inserting a new node into it. The new node is selected using the initial sampler
@@ -309,19 +337,22 @@ class PopulationBasedSampler():
         valid_nodes = self._get_valid_insert_or_delete_nodes(game)
 
         # Select a random node from the list of valid nodes
-        parent, selector, section, global_context, local_context = self._choice(valid_nodes)
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
 
         parent_rule = parent.parseinfo.rule # type: ignore
-        parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+        parent_rule_posterior_dict = self.sampler.rules[parent_rule][selector]
         assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
         # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
         new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
 
+        sample_global_context = global_context.copy()
+        sample_global_context['rng'] = rng
+
         new_node = None
         while new_node is None:
             try:
-                new_node = self.initial_sampler.sample(new_rule, global_context=global_context, local_context=local_context) # type: ignore
+                new_node = self.sampler.sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
 
             except RecursionError:
                 if self.verbose >= 2: print('Recursion error, skipping sample')
@@ -337,14 +368,15 @@ class PopulationBasedSampler():
         new_parent = self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo)  # type: ignore
 
         # Insert the new node into the parent at a random index
-        new_parent[selector].insert(self.rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
+        new_parent[selector].insert(rng.integers(len(new_parent[selector])+1), new_node) # type: ignore
 
         # Do any necessary context-fixing
         self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
 
         return new_game
 
-    def _delete(self, game):
+    @handle_multiple_inputs
+    def _delete(self, game: ASTType, rng: np.random.Generator):
         '''
         Attempt to deleting a new node into the provided game by identifying a node which can have multiple
         children and deleting one of them
@@ -354,10 +386,10 @@ class PopulationBasedSampler():
         valid_nodes = self._get_valid_insert_or_delete_nodes(game, min_length=2)
 
         # Select a random node from the list of valid nodes
-        parent, selector, section, global_context, local_context = self._choice(valid_nodes)
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
 
         parent_rule = parent.parseinfo.rule # type: ignore
-        parent_rule_posterior_dict = self.initial_sampler.rules[parent_rule][selector]
+        parent_rule_posterior_dict = self.sampler.rules[parent_rule][selector]
         assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
         # Make a copy of the game
@@ -365,7 +397,7 @@ class PopulationBasedSampler():
         new_parent = typing.cast(tatsu.ast.AST, self.regrowth_sampler.searcher(new_game, parseinfo=parent.parseinfo))  # type: ignore
 
         # Delete a random node from the parent
-        delete_index = self.rng.integers(len(new_parent[selector]))  # type: ignore
+        delete_index = rng.integers(len(new_parent[selector]))  # type: ignore
         child_to_delete = new_parent[selector][delete_index]  # type: ignore
 
         del new_parent[selector][delete_index] # type: ignore
@@ -375,7 +407,8 @@ class PopulationBasedSampler():
 
         return new_game
 
-    def _crossover(self, game_1, game_2, crossover_type):
+    def _crossover(self, game_1: ASTType, game_2: typing.Optional[ASTType] = None, crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                   rng: typing.Optional[np.random.Generator] = None):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
         how nodes in the game are categorized (i.e. by rule, by parent rule, etc.). The crossover
@@ -385,6 +418,11 @@ class PopulationBasedSampler():
 
         # TODO: we should decide who handles `SamplingException`s thrown here
         '''
+        if rng is None:
+            rng = self.rng
+
+        if game_2 is None:
+            game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
 
         # Create a map from crossover_type keys to lists of nodeinfos for each game
         self.regrowth_sampler.set_source_ast(game_1)
@@ -407,11 +445,11 @@ class PopulationBasedSampler():
             raise SamplingException("No crossover keys shared between the two games")
 
         # Select a random crossover key and a nodeinfo for each game with that key
-        crossover_key = self.rng.choice(list(shared_crossover_keys))
-        game_1_selected_node_info = self._choice(game_1_crossover_map[crossover_key])
-        game_2_selected_node_info = self._choice(game_2_crossover_map[crossover_key])
+        crossover_key = self._choice(list(shared_crossover_keys), rng=rng)
+        game_1_selected_node_info = self._choice(game_1_crossover_map[crossover_key], rng=rng)
+        game_2_selected_node_info = self._choice(game_2_crossover_map[crossover_key], rng=rng)
 
-        # Apply the context fixer to both nodes
+        # Create new copies of the nodes to be crossed over
         g1_node, g1_parent, g1_selector, _, _, _, _ = game_1_selected_node_info
         g2_node, g2_parent, g2_selector, _, _, _, _ = game_2_selected_node_info
 
@@ -428,8 +466,8 @@ class PopulationBasedSampler():
         replace_child(game_2_parent, g2_selector, game_1_crossover_node) # type: ignore
 
         # Fix the contexts of the new games
-        self.context_fixer.fix_contexts(game_1_copy, g1_node, game_2_crossover_node)
-        self.context_fixer.fix_contexts(game_2_copy, g2_node, game_1_crossover_node)
+        self.context_fixer.fix_contexts(game_1_copy, g1_node, game_2_crossover_node)  # type: ignore
+        self.context_fixer.fix_contexts(game_2_copy, g2_node, game_1_crossover_node)  # type: ignore
 
         return [game_1_copy, game_2_copy]
 
@@ -449,18 +487,21 @@ class PopulationBasedSampler():
 
         return no_op_operator
 
-    def _get_parent_iterator(self, n_parents_per_sample: int):
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
         '''
+        indices = np.repeat(np.arange(self.population_size), n_times_each_parent)
+        indices = self.rng.permutation(indices)
+
         if n_parents_per_sample == 1:
-            for p in self.population:
-                yield p
+            for i in indices:
+                yield self.population[i]
 
         else:
-            for _ in range(self.population_size):
-                yield self._choice(self.population, n_parents_per_sample)
+            for idxs in range(0, len(indices), n_parents_per_sample):
+                yield [self.population[i] for i in indices[idxs:idxs + n_parents_per_sample]]
 
     def _select_new_population(self, candidates, candidate_scores):
         '''
@@ -494,7 +535,7 @@ class PopulationBasedSampler():
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
-        # TODO: move the operator sampling step to the middle, and think about what that means for crossover (which requires two parents)
+        # TODO: figure out if this should always be called with 1, or 2, or what
         parent_iterator = self._get_parent_iterator(1)
 
         param_iterator = zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
@@ -528,7 +569,7 @@ class PopulationBasedSampler():
         if should_tqdm:
             step_iter = tqdm(step_iter, desc='Evolutionary steps')  # type: ignore
 
-        for _ in step_iter:
+        for _ in step_iter:  # type: ignore
             self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm)
             if self.verbose:
                 print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
@@ -555,11 +596,11 @@ class BeamSearchSampler(PopulationBasedSampler):
         super().__init__(*args, **kwargs)
         self.k = k
 
-    def _get_operator(self):
-        return self._gen_regrowth_sample, 1
+    def _get_operator(self, rng):
+        return self._gen_regrowth_sample
 
-    def _get_parent_iterator(self, n_parents_per_sample: int):
-        return iter(self.population * self.k)
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        return super()._get_parent_iterator(1, self.k)
 
 
 class WeightedBeamSearchSampler(PopulationBasedSampler):
@@ -574,40 +615,41 @@ class WeightedBeamSearchSampler(PopulationBasedSampler):
         super().__init__(*args, **kwargs)
         self.k = k
 
-    def _get_operator(self):
+    def _get_operator(self, rng):
 
-        def weighted_beam_search_sample(games):
+        def weighted_beam_search_sample(games, rng):
+            if not isinstance(games, list) or len(games) != 2:
+                raise ValueError(f'Expected games to be a list of length 2, got {games}')
+
             p1_idx = self.population.index(games[0])
             p2_idx = self.population.index(games[1])
 
             if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
-                return self._gen_regrowth_sample(games[0])
+                return self._gen_regrowth_sample(games[0], rng)
             else:
-                return self._gen_regrowth_sample(games[1])
+                return self._gen_regrowth_sample(games[1], rng)
 
-        return weighted_beam_search_sample, 2
+        return weighted_beam_search_sample
 
-    def _get_parent_iterator(self, n_parents_per_sample: int):
-        for _ in range(2 * self.population_size * self.k):
-            yield self._choice(self.population, n=n_parents_per_sample)
-
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        return super()._get_parent_iterator(2, 2 * self.k)
 
 class InsertDeleteSampler(PopulationBasedSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _get_operator(self):
-        def insert_delete_operator(game):
+    def _get_operator(self, rng):
+        def insert_delete_operator(game, rng):
             try:
-                new_game = self._insert(game)
-                new_game = self._delete(new_game)
+                new_game = self._insert(game, rng)
+                new_game = self._delete(new_game, rng)
                 return new_game
 
             except SamplingException as e:
                 if self.verbose >=2: print(f"Failed to insert/delete: {e}")
                 return game
 
-        return insert_delete_operator, 1
+        return insert_delete_operator
 
 
 MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
@@ -635,15 +677,15 @@ class CrossoverOnlySampler(PopulationBasedSampler):
         else:
             return {}
 
-    def _get_operator(self):
-        def crossover_two_random_games(games):
+    def _get_operator(self, rng):
+        def crossover_two_random_games(games, rng):
             for _ in range(self.max_attempts):
                 try:
                     if len(games) > 2:
                         games = self._choice(games, 2)
 
                     before_feature_values = [self._extract_monitor_features(g) for g in games]
-                    post_crossover_games = self._crossover(games[0], games[1], self.crossover_type)
+                    post_crossover_games = self._crossover(games[0], games[1], self.crossover_type, rng=rng)
                     after_feature_values = [self._extract_monitor_features(g) for g in post_crossover_games]
 
                     for i, (before_features, after_features) in enumerate(zip(before_feature_values, after_feature_values)):
@@ -658,11 +700,10 @@ class CrossoverOnlySampler(PopulationBasedSampler):
 
             raise SamplingException('Failed to crossover after max attempts')
 
-        return crossover_two_random_games, 2
+        return crossover_two_random_games
 
-    def _get_parent_iterator(self, n_parents_per_sample: int):
-        for _ in range(self.population_size * self.k):
-            yield self._choice(self.population, n=n_parents_per_sample)
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        super()._get_parent_iterator(2, self.k)
 
 
 class EnergyFunctionFitnessWrapper:
@@ -686,14 +727,15 @@ class EnergyFunctionFitnessWrapper:
         energy = self.energy_function.transform(features_tensor).item()
         return -1 * energy if self.flip_sign else energy
 
+
 def main(args):
     fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
     trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
 
-    evosampler = PopulationBasedSampler(
+    evosampler = WeightedBeamSearchSampler(k=5,
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
     # evosampler = CrossoverOnlySampler(
-        args, EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
+        args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
         population_size=args.population_size,
         verbose=args.verbose,
         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),

@@ -70,7 +70,6 @@ parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
 parser.add_argument('--initial-proposal-type', type=int, default=0)
 parser.add_argument('--crossover-type', type=int, default=2)
 
-# TODO: implement parallel sampling support here
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
@@ -78,6 +77,7 @@ parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
 parser.add_argument('--postprocess', action='store_true')
+parser.add_argument('--sample-patience', type=int, default=100)
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
@@ -121,7 +121,7 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
 ASTType = typing.Union[tuple, tatsu.ast.AST]
 
 
-def no_op_operator(games: ASTType, rng=None):
+def no_op_operator(games: typing.Union[ASTType, typing.List[ASTType]], rng=None):
     return games
 
 
@@ -169,6 +169,9 @@ class PopulationBasedSampler():
     '''
     This is a type of game sampler which uses an evolutionary strategy to climb a
     provided fitness function. It's a population-based alternative to the MCMC samper
+
+    # TODO: store statistics about which locations are more likely to receive beneficial mutations?
+    # TODO: keep track of 'lineages'
     '''
 
     def __init__(self,
@@ -179,12 +182,13 @@ class PopulationBasedSampler():
                  initial_proposal_type: InitialProposalSamplerType = InitialProposalSamplerType.MAP,
                  ngram_model_path: str = DEFAULT_NGRAM_MODEL_PATH,
                  section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-
+                 sample_patience: int = 100,
                  ):
 
         self.fitness_function = fitness_function
         self.population_size = population_size
         self.verbose = verbose
+        self.sample_patience = sample_patience
 
         self.grammar = open(args.grammar_file).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
@@ -279,8 +283,6 @@ class PopulationBasedSampler():
 
         while not sample_generated:
             try:
-                # TODO: does sample_index need to change?
-                # Guy: not really -- it only contributes to the name the regrown sample is given
                 new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False, rng=rng)
 
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
@@ -333,7 +335,6 @@ class PopulationBasedSampler():
         children and inserting a new node into it. The new node is selected using the initial sampler
         '''
 
-        # TODO: can throw a SamplingException if no valid nodes are found
         valid_nodes = self._get_valid_insert_or_delete_nodes(game)
 
         # Select a random node from the list of valid nodes
@@ -382,7 +383,6 @@ class PopulationBasedSampler():
         children and deleting one of them
         '''
 
-        # TODO: can throw a SamplingException if no valid nodes are found
         valid_nodes = self._get_valid_insert_or_delete_nodes(game, min_length=2)
 
         # Select a random node from the list of valid nodes
@@ -407,7 +407,7 @@ class PopulationBasedSampler():
 
         return new_game
 
-    def _crossover(self, game_1: ASTType, game_2: typing.Optional[ASTType] = None, crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+    def _crossover(self, games: typing.Union[ASTType, typing.List[ASTType]], crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
                    rng: typing.Optional[np.random.Generator] = None):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
@@ -415,11 +415,18 @@ class PopulationBasedSampler():
         is performed by finding the set of 'categories' that are present in both games, and then
         selecting a random category from which to sample the nodes that will be exchanged. If no
         categories are shared between the two games, then no crossover is performed
-
-        # TODO: we should decide who handles `SamplingException`s thrown here
         '''
         if rng is None:
             rng = self.rng
+
+        game_2 = None
+        if isinstance(games, list):
+            game_1 = games[0]
+            
+            if len(games) > 1:
+                game_2 = games[1]
+        else:
+            game_1 = games
 
         if game_2 is None:
             game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
@@ -471,15 +478,7 @@ class PopulationBasedSampler():
 
         return [game_1_copy, game_2_copy]
 
-    # TODO: add general step which can be used to combine the above steps
-    # TODO: break evolutionary step into selection / recombination / mutation steps?
-    # -> can use microbial GA tournament structure?
-    # TODO: add 'fixer' to make sure variables are used / defined
-    # TODO: parallelize
-    # TODO: store statistics about which locations are more likely to receive beneficial mutations?
-    # TODO: keep track of 'lineages'
-
-    def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[ASTType, np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
+    def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
         As a default, always return a no_op operator
@@ -492,8 +491,7 @@ class PopulationBasedSampler():
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
         '''
-        indices = np.repeat(np.arange(self.population_size), n_times_each_parent)
-        indices = self.rng.permutation(indices)
+        indices = np.concatenate([self.rng.permutation(self.population_size) for _ in range(n_times_each_parent)])
 
         if n_parents_per_sample == 1:
             for i in indices:
@@ -516,15 +514,27 @@ class PopulationBasedSampler():
         self.population = [all_games[i] for i in top_indices]
         self.fitness_values = [all_scores[i] for i in top_indices]
 
-    def _sample_and_apply_operator(self, parent: typing.Union[tuple, tatsu.ast.AST], generation_index: int, sample_index: int):
+    def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]], generation_index: int, sample_index: int):
+        '''
+        Given a parent, a generation and sample index (to make sure that the RNG is seeded differently for each generation / individual),
+        sample an operator and apply it to the parent. Returns the child or children and their fitness scores
+        '''
         rng = np.random.default_rng(self.random_seed + (self.population_size * generation_index) + sample_index)
-        operator = self._get_operator(rng)
-        child_or_children = operator(parent, rng)
-        if not isinstance(child_or_children, list):
-            child_or_children = [child_or_children]
 
-        children_fitness_scores = [self.fitness_function(child) for child in child_or_children]
-        return child_or_children, children_fitness_scores
+        for _ in range(self.sample_patience):
+            try:
+                operator = self._get_operator(rng)
+                child_or_children = operator(parent, rng)
+                if not isinstance(child_or_children, list):
+                    child_or_children = [child_or_children]
+                
+                children_fitness_scores = [self.fitness_function(child) for child in child_or_children]
+                return child_or_children, children_fitness_scores
+
+            except SamplingException:
+                continue
+
+        raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
                           should_tqdm: bool = False):
@@ -534,9 +544,7 @@ class PopulationBasedSampler():
         # 3. for each parent(s) yielded, apply the operator to produce one or more new games and add them to a "candidates" list
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
-
-        # TODO: figure out if this should always be called with 1, or 2, or what
-        parent_iterator = self._get_parent_iterator(1)
+        parent_iterator = self._get_parent_iterator(2)
 
         param_iterator = zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
@@ -575,7 +583,7 @@ class PopulationBasedSampler():
             if should_tqdm:
                 pbar.update(1)
                 pbar.set_postfix({"Average": f"{self._avg_fitness():.3f}", "Best": f"{self._best_fitness():.3f}"})
-                
+
             elif self.verbose:
                 print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
 
@@ -667,9 +675,10 @@ class CrossoverOnlySampler(PopulationBasedSampler):
                  verbose: int = 0, k: int = 1, max_attempts: int = 100,
                  crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
                  fitness_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
-                 monitor_feature_keys: typing.List[str] = MONITOR_FEATURES):
+                 monitor_feature_keys: typing.List[str] = MONITOR_FEATURES,
+                 *addl_args, **kwargs):
 
-        super().__init__(args, fitness_function, population_size, verbose)
+        super().__init__(args, fitness_function, population_size, verbose, *addl_args, **kwargs)
         self.k = k
         self.max_attempts = max_attempts
         self.crossover_type = crossover_type
@@ -690,7 +699,7 @@ class CrossoverOnlySampler(PopulationBasedSampler):
                         games = self._choice(games, 2)
 
                     before_feature_values = [self._extract_monitor_features(g) for g in games]
-                    post_crossover_games = self._crossover(games[0], games[1], self.crossover_type, rng=rng)
+                    post_crossover_games = self._crossover(games, self.crossover_type, rng=rng)
                     after_feature_values = [self._extract_monitor_features(g) for g in post_crossover_games]
 
                     for i, (before_features, after_features) in enumerate(zip(before_feature_values, after_feature_values)):
@@ -708,7 +717,7 @@ class CrossoverOnlySampler(PopulationBasedSampler):
         return crossover_two_random_games
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        super()._get_parent_iterator(2, self.k)
+        return super()._get_parent_iterator(2, self.k)
 
 
 class EnergyFunctionFitnessWrapper:
@@ -737,9 +746,9 @@ def main(args):
     fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
     trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
 
-    evosampler = WeightedBeamSearchSampler(k=5,
+    # evosampler = WeightedBeamSearchSampler(k=5,
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    # evosampler = CrossoverOnlySampler(
+    evosampler = CrossoverOnlySampler(
         args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
         population_size=args.population_size,
         verbose=args.verbose,

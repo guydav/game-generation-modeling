@@ -567,11 +567,16 @@ class PopulationBasedSampler():
                                     inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False):
         step_iter = range(num_steps)
         if should_tqdm:
-            step_iter = tqdm(step_iter, desc='Evolutionary steps')  # type: ignore
+            pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
 
         for _ in step_iter:  # type: ignore
             self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm)
-            if self.verbose:
+
+            if should_tqdm:
+                pbar.update(1)
+                pbar.set_postfix({"Average": f"{self._avg_fitness():.3f}", "Best": f"{self._best_fitness():.3f}"})
+                
+            elif self.verbose:
                 print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
 
         if postprocess:

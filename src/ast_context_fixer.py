@@ -20,10 +20,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
 import src
 
-
-RPLACEMENT_MAPPINGS_CONTEXT_KEY = 'replacement_mappings'
+PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY = 'preference_names_to_add'
+PREFERENCE_NAMES_TO_REMOVE_CONTEXT_KEY = 'preference_names_to_remove'
+REPLACEMENT_MAPPINGS_CONTEXT_KEY = 'replacement_mappings'
 FORCED_REMAPPINGS_CONTEXT_KEY = 'forced_remappings'
-
+LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY = 'local_variable_ref_counts'
 
 class ASTDefinedPreferenceNamesFinder(ASTParser):
     def __init__(self):
@@ -55,7 +56,6 @@ class ASTContextFixer(ASTParentMapper):
         self.rng = rng
         self.preference_name_finder = ASTDefinedPreferenceNamesFinder()
         self.preference_count_nodes = defaultdict(list)
-        self.local_variable_ref_counts = defaultdict(dict)
 
     def _add_ast_to_mapping(self, ast, **kwargs):
         # NOOP here since I don't actually care about building a parent mapping, just wanted to use the structure
@@ -68,7 +68,6 @@ class ASTContextFixer(ASTParentMapper):
     def fix_contexts(self, crossed_over_game: tatsu.ast.AST, original_child: typing.Optional[tatsu.ast.AST] = None,
                      crossover_child: typing.Optional[tatsu.ast.AST] = None):
         self.preference_count_nodes = defaultdict(list)
-        self.local_variable_ref_counts = defaultdict(dict)
 
         # if the crossover child defines any preferences, we need to note them, so we can add a reference to them at some point later
         preference_names_to_add = self.preference_name_finder(crossover_child) if crossover_child is not None else set()
@@ -80,9 +79,12 @@ class ASTContextFixer(ASTParentMapper):
         preference_names_to_add.difference_update(names_in_both_sets)
         preference_names_to_remove.difference_update(names_in_both_sets)
 
-        self(crossed_over_game, global_context=dict(preference_names_to_add=preference_names_to_add,
-                                                    preference_names_to_remove=preference_names_to_remove,
-                                                    replacement_mappings=dict(),))
+        self(crossed_over_game, global_context={
+            PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_add,
+            PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_remove,
+            REPLACEMENT_MAPPINGS_CONTEXT_KEY: dict(),
+            LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY: defaultdict(dict),
+        })
 
         # If any preference names still remain unadded, we need to add them to the game
         if len(preference_names_to_add) > 0:
@@ -107,7 +109,7 @@ class ASTContextFixer(ASTParentMapper):
 
         for i, var_name in enumerate(var_names):  # type: ignore
             variables_key = self._variable_type_def_rule_to_context_key(rule)
-            self.local_variable_ref_counts[variables_key][var_name[1:]] = 0
+            global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][var_name[1:]] = 0
 
             if var_name in local_context[variables_key]:
                 if local_context[variables_key][var_name] == ast.parseinfo.pos:  # type: ignore
@@ -123,7 +125,7 @@ class ASTContextFixer(ASTParentMapper):
                     new_var_name = new_var[1:]
 
                     # TODO: this assumes we want to consistenly map each missing variable to a new variable, which may or may not be the case -- we should discsuss
-                    global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][var_name] = new_var_name
+                    global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][var_name] = new_var_name
                     local_context[variables_key][new_var_name] = ast.parseinfo
                     replace_child(ast, ['var_names'] if single_variable else ['var_names', i], new_var)
 
@@ -139,14 +141,16 @@ class ASTContextFixer(ASTParentMapper):
         for key in local_context:
             if key.startswith(VARIABLE_OWNER_CONTEXT_KEY_PREFIX):
                 variables_key = key[len(VARIABLE_OWNER_CONTEXT_KEY_PREFIX) + 1:]
+                variable_ref_counts = global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key]
+
                 owned_variables = [var for var, pos in local_context[key].items() if pos == ast.parseinfo.pos]  # type: ignore
                 if owned_variables:
-                    missing_variables = [var for var in owned_variables if var not in self.local_variable_ref_counts[variables_key] or self.local_variable_ref_counts[variables_key][var] == 0]
+                    missing_variables = [var for var in owned_variables if var not in variable_ref_counts or variable_ref_counts[var] == 0]
                     if missing_variables:
                         for missing_var in missing_variables:
-                            potential_replacements = {var: self.local_variable_ref_counts[variables_key][var]
+                            potential_replacements = {var: variable_ref_counts[var]
                                                       for var in owned_variables
-                                                      if var in self.local_variable_ref_counts[variables_key] and self.local_variable_ref_counts[variables_key][var] > 1}
+                                                      if var in variable_ref_counts and variable_ref_counts[var] > 1}
 
                             if not potential_replacements:
                                 # raise SamplingException(f'Could not find a replacement for variable {missing_var}')
@@ -161,12 +165,19 @@ class ASTContextFixer(ASTParentMapper):
                             should_rehandle = True
 
                     for var in owned_variables:
-                        del self.local_variable_ref_counts[variables_key][var]
-                        if var in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
-                            del global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][var]
+                        if var in variable_ref_counts:
+                            del variable_ref_counts[var]
 
-        if should_rehandle:
-            print(f'Forced remappings: {forced_remappings}')
+                    replacement_mapping_keys_to_delete = []
+                    for v_key, v_val in global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY].items():
+                        if v_key in owned_variables or v_val in owned_variables:
+                            replacement_mapping_keys_to_delete.append(v_key)
+
+                    for v_key in replacement_mapping_keys_to_delete:
+                        del global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][v_key]
+
+        # if should_rehandle:
+        #     print(f'Forced remappings: {forced_remappings}')
 
         return should_rehandle, (None, {FORCED_REMAPPINGS_CONTEXT_KEY: forced_remappings})
 
@@ -195,16 +206,16 @@ class ASTContextFixer(ASTParentMapper):
 
             if isinstance(term, str) and term.startswith('?'):
                 var_name = term[1:]
-                if term_variables_key not in self.local_variable_ref_counts:
-                    self.local_variable_ref_counts[term_variables_key] = {}
+                if term_variables_key not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY]:
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key] = {}
                 #     raise SamplingException(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
 
-                if var_name not in self.local_variable_ref_counts[term_variables_key]:
-                    self.local_variable_ref_counts[term_variables_key][var_name] = 0
+                if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
                 #     raise SamplingException(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
 
                 # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
-                reference_index = self.local_variable_ref_counts[term_variables_key][var_name]
+                reference_index = global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name]
 
                 if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and
                     term_variables_key in local_context[FORCED_REMAPPINGS_CONTEXT_KEY] and
@@ -224,8 +235,8 @@ class ASTContextFixer(ASTParentMapper):
                         del current_term_replacements[idx]
 
                 # If we already have a mapping for it, replace it with the mapping
-                if term[1:] in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
-                    term = '?' + global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]]
+                if term[1:] in global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY]:
+                    term = '?' + global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]]
                     replace_child(ast, ['term'], term)
 
                 else:
@@ -236,11 +247,11 @@ class ASTContextFixer(ASTParentMapper):
                     # If we don't have a mapping for it, and it's not in the local context, add a mapping
                     elif term[1:] not in local_context[term_variables_key]:
                         new_var_name = self._sample_from_sequence(list(local_context[term_variables_key].keys()))
-                        global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]] = new_var_name
+                        global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]] = new_var_name
                         term = '?' + new_var_name
                         replace_child(ast, ['term'], term)
 
-                self.local_variable_ref_counts[term_variables_key][term[1:]] += 1
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][term[1:]] += 1
 
         elif rule == 'pref_name_and_types':
             if 'preference_names' not in global_context:
@@ -250,9 +261,9 @@ class ASTContextFixer(ASTParentMapper):
             if ast.pref_name not in preference_names:
                 # TODO: do we want to be consistent with the preference names we map to?
                 # if ast.pref_name in global_context['preference_names_to_remove']:
-                if len(global_context['preference_names_to_add']) > 0:
-                    new_pref_name = self._sample_from_sequence(list(global_context['preference_names_to_add']))
-                    global_context['preference_names_to_add'].remove(new_pref_name)
+                if len(global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY]) > 0:
+                    new_pref_name = self._sample_from_sequence(list(global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY]))
+                    global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].remove(new_pref_name)
 
                 else:
                     new_pref_name = self._sample_from_sequence(list(preference_names))

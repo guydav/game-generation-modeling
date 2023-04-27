@@ -719,6 +719,46 @@ class CrossoverOnlySampler(PopulationBasedSampler):
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         return super()._get_parent_iterator(2, self.k)
 
+class MicrobialGASampler(PopulationBasedSampler):
+    def __init__(self,
+                 args: argparse.Namespace,
+                 fitness_function: typing.Callable[[typing.Any], float],
+                 population_size: int = 100,
+                 verbose: int = 0,
+                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE):
+        
+        super().__init__(args, fitness_function, population_size, verbose)
+        self.crossover_type = crossover_type
+
+    def _get_operator(self):
+        '''
+        Implements the classic "Microbial GA" operator, which operates as follows:
+            1. fitness of the two individuals is compared, "winner" and "loser" assigned
+            2. winner "infects" loser by randomly replacing a subtree in loser with a subtree from winner (crossover)
+            3. loser is mutated (randomly selected from regrowth, insertion, and deletion)
+            4. winner and loser re-enter population
+        '''
+        def microbial_ga_operator(games):
+            if len(games) > 2:
+                games = self._choice(games, 2)
+
+            p1_idx = self.population.index(games[0])
+            p2_idx = self.population.index(games[1])
+
+            winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
+            _, crossovered_loser = self._crossover(winner, loser, self.crossover_type)
+            
+            # Apply a randomly selected mutation operator to the loser
+            mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete])
+            mutated_loser = mutation(crossovered_loser)
+
+            return mutated_loser
+
+        return microbial_ga_operator, 2
+    
+    def _get_parent_iterator(self, n_parents_per_sample: int):
+        for _ in range(2 * self.population_size):
+            yield self._choice(self.population, n=n_parents_per_sample)
 
 class EnergyFunctionFitnessWrapper:
     energy_function: typing.Callable[[typing.Any], float]

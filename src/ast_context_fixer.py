@@ -251,7 +251,11 @@ class ASTContextFixer(ASTParentMapper):
                         term = '?' + new_var_name
                         replace_child(ast, ['term'], term)
 
-                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][term[1:]] += 1
+                var_name = term[1:]
+                if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
+
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] += 1
 
         elif rule == 'pref_name_and_types':
             if 'preference_names' not in global_context:

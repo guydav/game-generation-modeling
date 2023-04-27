@@ -1208,12 +1208,16 @@ class RegrowthSampler(ASTParentMapper):
             rng = self.rng
 
         node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
+        new_source = typing.cast(tuple, copy.deepcopy(self.source_ast))
+
         if section is None: section = ''
 
         if external_global_context is not None:
+            global_context = global_context.copy()
             global_context.update(external_global_context)
 
         if external_local_context is not None:
+            local_context = local_context.copy()
             local_context.update(external_local_context)
 
         global_context['original_game_id'] = self.original_game_id
@@ -1223,8 +1227,6 @@ class RegrowthSampler(ASTParentMapper):
         sampler = self.samplers[sampler_key]
 
         new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
-        new_source = copy.deepcopy(self.source_ast)
-        new_source = typing.cast(tuple, new_source)
 
         if update_game_id:
             regrwoth_depth = self.depth_parser(node)

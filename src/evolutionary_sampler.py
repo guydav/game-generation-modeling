@@ -725,12 +725,13 @@ class MicrobialGASampler(PopulationBasedSampler):
                  fitness_function: typing.Callable[[typing.Any], float],
                  population_size: int = 100,
                  verbose: int = 0,
-                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE):
+                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                 *addl_args, **kwargs):
         
-        super().__init__(args, fitness_function, population_size, verbose)
+        super().__init__(args, fitness_function, population_size, verbose, *addl_args, **kwargs)
         self.crossover_type = crossover_type
 
-    def _get_operator(self):
+    def _get_operator(self, rng):
         '''
         Implements the classic "Microbial GA" operator, which operates as follows:
             1. fitness of the two individuals is compared, "winner" and "loser" assigned
@@ -738,7 +739,7 @@ class MicrobialGASampler(PopulationBasedSampler):
             3. loser is mutated (randomly selected from regrowth, insertion, and deletion)
             4. winner and loser re-enter population
         '''
-        def microbial_ga_operator(games):
+        def microbial_ga_operator(games, rng):
             if len(games) > 2:
                 games = self._choice(games, 2)
 
@@ -746,7 +747,7 @@ class MicrobialGASampler(PopulationBasedSampler):
             p2_idx = self.population.index(games[1])
 
             winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
-            _, crossovered_loser = self._crossover(winner, loser, self.crossover_type)
+            _, crossovered_loser = self._crossover([winner, loser], self.crossover_type, rng)
             
             # Apply a randomly selected mutation operator to the loser
             mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete])
@@ -756,9 +757,9 @@ class MicrobialGASampler(PopulationBasedSampler):
 
         return microbial_ga_operator, 2
     
-    def _get_parent_iterator(self, n_parents_per_sample: int):
-        for _ in range(2 * self.population_size):
-            yield self._choice(self.population, n=n_parents_per_sample)
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        return super()._get_parent_iterator(2)
+
 
 class EnergyFunctionFitnessWrapper:
     energy_function: typing.Callable[[typing.Any], float]
@@ -788,7 +789,8 @@ def main(args):
 
     # evosampler = WeightedBeamSearchSampler(k=5,
     # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = CrossoverOnlySampler(
+    evosampler = MicrobialGASampler(
+    # evosampler = CrossoverOnlySampler(
         args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
         population_size=args.population_size,
         verbose=args.verbose,

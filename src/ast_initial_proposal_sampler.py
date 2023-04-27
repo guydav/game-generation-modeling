@@ -57,10 +57,10 @@ DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION = {
 #     ast_parser.SCORING: -2.75,
 # }
 DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
-    ast_parser.SETUP: -4,
-    ast_parser.PREFERENCES: -5.5,
-    ast_parser.TERMINAL: -3,
-    ast_parser.SCORING: -3.75,
+    ast_parser.SETUP: -4.5,  # -4,
+    ast_parser.PREFERENCES: -6,  # -5.5,
+    ast_parser.TERMINAL: -3.5,  # -3,
+    ast_parser.SCORING: -4.5,  # -3.75,
 }
 
 

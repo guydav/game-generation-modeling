@@ -11,9 +11,9 @@ import tatsu
 import tatsu.ast
 import tatsu.grammars
 import torch
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
-# from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
+# from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
 import ast_printer
 import ast_parser
 from ast_context_fixer import ASTContextFixer
@@ -119,6 +119,7 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
 
 
 ASTType = typing.Union[tuple, tatsu.ast.AST]
+T = typing.TypeVar('T')
 
 
 def no_op_operator(games: typing.Union[ASTType, typing.List[ASTType]], rng=None):
@@ -209,10 +210,12 @@ class PopulationBasedSampler():
         self.context_fixer = ASTContextFixer(self.sampler, self.rng)
 
         # Generate the initial population
-        self.set_population([self._gen_init_sample(idx) for idx in range(self.population_size)])
+        self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
+        self.mean_fitness_history = []
+        self.best_fitness_history = []
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -223,11 +226,8 @@ class PopulationBasedSampler():
         if fitness_values is None:
             self.fitness_values = [self.fitness_function(game) for game in self.population]
 
-    def _best_fitness(self):
-        return max(self.fitness_values)
-
-    def _avg_fitness(self):
-        return np.mean(self.fitness_values)
+        self.best_fitness = max(self.fitness_values)
+        self.mean_fitness = np.mean(self.fitness_values)
 
     def _best_individual(self):
         return self.population[np.argmax(self.fitness_values)]
@@ -235,7 +235,7 @@ class PopulationBasedSampler():
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
 
-    def _choice(self, iterable, n: int = 1, rng: typing.Optional[np.random.Generator] = None):
+    def _choice(self, iterable: typing.Sequence[T], n: int = 1, rng: typing.Optional[np.random.Generator] = None) -> typing.Union[T, typing.List[T]]:
         '''
         Small hack to get around the rng invalid __array_struct__ error
         '''
@@ -347,7 +347,7 @@ class PopulationBasedSampler():
         # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
         new_rule = posterior_dict_sample(self.rng, parent_rule_posterior_dict['rule_posterior'])
 
-        sample_global_context = global_context.copy()
+        sample_global_context = global_context.copy()  # type: ignore
         sample_global_context['rng'] = rng
 
         new_node = None
@@ -408,7 +408,7 @@ class PopulationBasedSampler():
         return new_game
 
     def _crossover(self, games: typing.Union[ASTType, typing.List[ASTType]], crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                   rng: typing.Optional[np.random.Generator] = None):
+                   rng: typing.Optional[np.random.Generator] = None, crossover_first_game: bool = True, crossover_second_game: bool = True):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
         how nodes in the game are categorized (i.e. by rule, by parent rule, etc.). The crossover
@@ -416,13 +416,16 @@ class PopulationBasedSampler():
         selecting a random category from which to sample the nodes that will be exchanged. If no
         categories are shared between the two games, then no crossover is performed
         '''
+        if not crossover_first_game and not crossover_second_game:
+            raise ValueError("At least one of crossover_first_game and crossover_second_game must be True")
+
         if rng is None:
             rng = self.rng
 
         game_2 = None
         if isinstance(games, list):
             game_1 = games[0]
-            
+
             if len(games) > 1:
                 game_2 = games[1]
         else:
@@ -463,18 +466,22 @@ class PopulationBasedSampler():
         game_1_crossover_node = copy.deepcopy(g1_node)
         game_2_crossover_node = copy.deepcopy(g2_node)
 
-        # Perform the crossover
-        game_1_copy = copy.deepcopy(game_1)
-        game_1_parent = self.regrowth_sampler.searcher(game_1_copy, parseinfo=g1_parent.parseinfo) # type: ignore
-        replace_child(game_1_parent, g1_selector, game_2_crossover_node) # type: ignore
+        # Perform the crossover and fix the contexts of the new games
+        if crossover_first_game:
+            game_1_copy = copy.deepcopy(game_1)
+            game_1_parent = self.regrowth_sampler.searcher(game_1_copy, parseinfo=g1_parent.parseinfo) # type: ignore
+            replace_child(game_1_parent, g1_selector, game_2_crossover_node) # type: ignore
+            self.context_fixer.fix_contexts(game_1_copy, g1_node, game_2_crossover_node)  # type: ignore
+        else:
+            game_1_copy = game_1
 
-        game_2_copy = copy.deepcopy(game_2)
-        game_2_parent = self.regrowth_sampler.searcher(game_2_copy, parseinfo=g2_parent.parseinfo) # type: ignore
-        replace_child(game_2_parent, g2_selector, game_1_crossover_node) # type: ignore
-
-        # Fix the contexts of the new games
-        self.context_fixer.fix_contexts(game_1_copy, g1_node, game_2_crossover_node)  # type: ignore
-        self.context_fixer.fix_contexts(game_2_copy, g2_node, game_1_crossover_node)  # type: ignore
+        if crossover_second_game:
+            game_2_copy = copy.deepcopy(game_2)
+            game_2_parent = self.regrowth_sampler.searcher(game_2_copy, parseinfo=g2_parent.parseinfo) # type: ignore
+            replace_child(game_2_parent, g2_selector, game_1_crossover_node) # type: ignore
+            self.context_fixer.fix_contexts(game_2_copy, g2_node, game_1_crossover_node)  # type: ignore
+        else:
+            game_2_copy = game_2
 
         return [game_1_copy, game_2_copy]
 
@@ -511,8 +518,7 @@ class PopulationBasedSampler():
         all_scores = self.fitness_values + candidate_scores
 
         top_indices = np.argsort(all_scores)[-self.population_size:]
-        self.population = [all_games[i] for i in top_indices]
-        self.fitness_values = [all_scores[i] for i in top_indices]
+        self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
     def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]], generation_index: int, sample_index: int):
         '''
@@ -527,13 +533,14 @@ class PopulationBasedSampler():
                 child_or_children = operator(parent, rng)
                 if not isinstance(child_or_children, list):
                     child_or_children = [child_or_children]
-                
+
                 children_fitness_scores = [self.fitness_function(child) for child in child_or_children]
                 return child_or_children, children_fitness_scores
 
             except SamplingException:
                 continue
 
+        # TODO: should this raise an exception or just return the parent unmodified?
         raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
@@ -544,7 +551,7 @@ class PopulationBasedSampler():
         # 3. for each parent(s) yielded, apply the operator to produce one or more new games and add them to a "candidates" list
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
-        parent_iterator = self._get_parent_iterator(2)
+        parent_iterator = self._get_parent_iterator()
 
         param_iterator = zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
@@ -559,7 +566,6 @@ class PopulationBasedSampler():
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        # TODO: make sure the operators all receive their rng as a kwarg
         for children, children_fitness_scores in children_iter:
             if isinstance(children, list):
                 candidates.extend(children)
@@ -581,11 +587,14 @@ class PopulationBasedSampler():
             self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm)
 
             if should_tqdm:
-                pbar.update(1)
-                pbar.set_postfix({"Average": f"{self._avg_fitness():.3f}", "Best": f"{self._best_fitness():.3f}"})
+                pbar.update(1)  # type: ignore
+                pbar.set_postfix({"Average": f"{self.mean_fitness:.3f}", "Best": f"{self.best_fitness:.3f}"})  # type: ignore
 
             elif self.verbose:
-                print(f"Average fitness: {self._avg_fitness():.3f}, Best fitness: {self._best_fitness():.3f}")
+                print(f"Average fitness: {self.mean_fitness:.3f}, Best fitness: {self.best_fitness:.3f}")
+
+            self.mean_fitness_history.append(self.mean_fitness)
+            self.best_fitness_history.append(self.best_fitness)
 
         if postprocess:
             self.population = [self.postprocessor(g) for g in self.population]  # type: ignore
@@ -719,6 +728,7 @@ class CrossoverOnlySampler(PopulationBasedSampler):
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         return super()._get_parent_iterator(2, self.k)
 
+
 class MicrobialGASampler(PopulationBasedSampler):
     def __init__(self,
                  args: argparse.Namespace,
@@ -726,9 +736,11 @@ class MicrobialGASampler(PopulationBasedSampler):
                  population_size: int = 100,
                  verbose: int = 0,
                  crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                 n_loser_crossovers: int = 1,
                  *addl_args, **kwargs):
-        
+
         super().__init__(args, fitness_function, population_size, verbose, *addl_args, **kwargs)
+        self.n_loser_crossovers = n_loser_crossovers
         self.crossover_type = crossover_type
 
     def _get_operator(self, rng):
@@ -741,24 +753,25 @@ class MicrobialGASampler(PopulationBasedSampler):
         '''
         def microbial_ga_operator(games, rng):
             if len(games) > 2:
-                games = self._choice(games, 2)
+                games = self._choice(games, 2, rng=rng)
 
             p1_idx = self.population.index(games[0])
             p2_idx = self.population.index(games[1])
 
             winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
-            _, crossovered_loser = self._crossover([winner, loser], self.crossover_type, rng)
-            
+            for _ in range(self.n_loser_crossovers):
+                _, loser = self._crossover([winner, loser], self.crossover_type, rng=rng, crossover_first_game=False)
+
             # Apply a randomly selected mutation operator to the loser
-            mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete])
-            mutated_loser = mutation(crossovered_loser)
+            mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete], rng=rng)
+            mutated_loser = mutation(loser, rng)  # type: ignore
 
             return mutated_loser
 
-        return microbial_ga_operator, 2
-    
+        return microbial_ga_operator
+
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        return super()._get_parent_iterator(2)
+        return super()._get_parent_iterator(n_parents_per_sample=2)
 
 
 class EnergyFunctionFitnessWrapper:
@@ -796,6 +809,7 @@ def main(args):
         verbose=args.verbose,
         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
         ngram_model_path=args.ngram_model_path,
+        n_loser_crossovers=3,
     )
 
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))

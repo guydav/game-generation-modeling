@@ -60,6 +60,11 @@ parser.add_argument('--n-steps', type=int, default=DEFAULT_N_STEPS)
 # DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 # parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
 
+DEFAULT_MICROBIAL_GA_N_CROSSOVERS = 3
+parser.add_argument('--microbial-ga-n-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_N_CROSSOVERS)
+DEFAULT_BEAM_SEARCH_K = 10
+parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
+
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
 DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
@@ -800,16 +805,15 @@ def main(args):
     fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
     trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
 
-    # evosampler = WeightedBeamSearchSampler(k=5,
-    # evosampler = WeightedBeamSearchSampler(25, DEFAULT_ARGS, fitness_function, verbose=0)
-    evosampler = MicrobialGASampler(
     # evosampler = CrossoverOnlySampler(
+    # evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
+    # evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
+    evosampler = MicrobialGASampler(n_loser_crossovers=args.microbial_ga_n_loser_crossovers,
         args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
         population_size=args.population_size,
         verbose=args.verbose,
         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
         ngram_model_path=args.ngram_model_path,
-        n_loser_crossovers=3,
     )
 
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))

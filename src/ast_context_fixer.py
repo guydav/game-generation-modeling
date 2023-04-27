@@ -11,7 +11,7 @@ import tatsu.ast
 import ast_printer
 import ast_parser
 from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
-from ast_parser import ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
+from ast_parser import ASTNodeInfo, ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
 from ast_utils import replace_child
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
@@ -75,8 +75,6 @@ class ASTContextFixer(ASTParentMapper):
 
         # if the original child defines any preferences, we need to remove them from the global context, and remove any references to them
         preference_names_to_remove = self.preference_name_finder(original_child) if original_child is not None else set()
-
-        # TODO: implement a similar logic to the one for preference names, but for variables
 
         names_in_both_sets = preference_names_to_add.intersection(preference_names_to_remove)
         preference_names_to_add.difference_update(names_in_both_sets)
@@ -145,15 +143,14 @@ class ASTContextFixer(ASTParentMapper):
                 if owned_variables:
                     missing_variables = [var for var in owned_variables if var not in self.local_variable_ref_counts[variables_key] or self.local_variable_ref_counts[variables_key][var] == 0]
                     if missing_variables:
-                        should_rehandle = True
-
                         for missing_var in missing_variables:
                             potential_replacements = {var: self.local_variable_ref_counts[variables_key][var]
                                                       for var in owned_variables
                                                       if var in self.local_variable_ref_counts[variables_key] and self.local_variable_ref_counts[variables_key][var] > 1}
 
                             if not potential_replacements:
-                                raise SamplingException(f'Could not find a replacement for variable {missing_var}')
+                                # raise SamplingException(f'Could not find a replacement for variable {missing_var}')
+                                break
 
                             var_to_replace = self._sample_from_sequence(list(potential_replacements.keys()))
                             replacement_index = self.rng.integers(potential_replacements[var_to_replace])
@@ -161,6 +158,7 @@ class ASTContextFixer(ASTParentMapper):
                                 forced_remappings[variables_key] = defaultdict(dict)
 
                             forced_remappings[variables_key][var_to_replace][replacement_index] = missing_var
+                            should_rehandle = True
 
                     for var in owned_variables:
                         del self.local_variable_ref_counts[variables_key][var]
@@ -213,10 +211,17 @@ class ASTContextFixer(ASTParentMapper):
                     var_name in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key] and
                     reference_index in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
 
-                    new_var_name = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][reference_index]
+                    current_term_replacements = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]
+                    new_var_name = current_term_replacements[reference_index]
                     replace_child(ast, ['term'], '?' + new_var_name)
                     term = '?' + new_var_name
-                    del local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name][reference_index]
+                    del current_term_replacements[reference_index]
+
+                    # We need to decrement the target replacement index for all future replacements to account for the fact that we've removed one
+                    future_replacement_indices = list(current_term_replacements.keys())
+                    for idx in sorted(future_replacement_indices):
+                        current_term_replacements[idx - 1] = current_term_replacements[idx]
+                        del current_term_replacements[idx]
 
                 # If we already have a mapping for it, replace it with the mapping
                 if term[1:] in global_context[RPLACEMENT_MAPPINGS_CONTEXT_KEY]:
@@ -299,4 +304,7 @@ if __name__ == '__main__':
     # Used to generate the initial population of complete games
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)  # type: ignore
     context_fixer = ASTContextFixer(sampler, np.random.default_rng(args.random_seed))
-    context_fixer.fix_contexts(grammar_parser.parse(test_game))  # type: ignore
+    ast = grammar_parser.parse(test_game)  # type: ignore
+    print(ast_printer.ast_to_string(ast, '\n'))
+    context_fixer.fix_contexts(ast)
+    print(ast_printer.ast_to_string(ast, '\n'))

@@ -154,5 +154,22 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
         },
+        {
+            "name": "Python: evolutionary search",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--population-size", "10",
+                "--n-steps", "10",
+                "--initial-proposal-type", "1",
+                "--parallel-n-workers", "3",
+                "--sample-parallel",
+                "--should-tqdm",
+            ],
+            "console": "integratedTerminal",
+            // "notes": "--parse-counter",
+            // "justMyCode": false,
+        },
     ]
 }

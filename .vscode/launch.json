@@ -160,8 +160,10 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "--population-size", "100",
-                "--n-steps", "100",
+                "--sampler-type", "microbial_ga",
+                "--microbial-ga-crossover-full-sections",
+                "--population-size", "20",
+                "--n-steps", "20",
                 "--initial-proposal-type", "1",
                 "--parallel-n-workers", "7",
                 "--sample-parallel",

@@ -24,7 +24,7 @@ from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler, mpp
 from ast_utils import *
-from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME
+from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
@@ -75,6 +75,7 @@ parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITN
 DEFAULT_FITNESS_FEATURIZER_PATH = LATEST_FITNESS_FEATURIZER_PATH
 parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
 parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
+parser.add_argument('--no-flip-fitness-sign', action='store_true')
 
 DEFAULT_POPULATION_SIZE = 100
 parser.add_argument('--population-size', type=int, default=DEFAULT_POPULATION_SIZE)
@@ -97,8 +98,13 @@ WEIGHTED_BEAM_SEARCH = 'weighted_beam_search'
 SAMPLER_TYPES = [MICROBIAL_GA, WEIGHTED_BEAM_SEARCH]
 parser.add_argument('--sampler-type', type=str, required=True, choices=SAMPLER_TYPES)
 
-DEFAULT_MICROBIAL_GA_N_CROSSOVERS = 3
-parser.add_argument('--microbial-ga-n-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_N_CROSSOVERS)
+
+parser.add_argument('--microbial-ga-crossover-full-sections', action='store_true')
+parser.add_argument('--microbial-ga-crossover-type', type=int, default=2)
+DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS = 1
+parser.add_argument('--microbial-ga-n-min-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS)
+DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS = 5
+parser.add_argument('--microbial-ga-n-max-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS)
 DEFAULT_BEAM_SEARCH_K = 10
 parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 
@@ -108,10 +114,7 @@ DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
 parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_PATH)
 DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
-
 parser.add_argument('--initial-proposal-type', type=int, default=0)
-parser.add_argument('--crossover-type', type=int, default=2)
-
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
@@ -194,7 +197,13 @@ def handle_multiple_inputs(operator):
 class PopulationBasedSampler():
     context_fixers: typing.List[ASTContextFixer]
     counter: ASTRuleValueCounter
+    feature_names: typing.List[str]
+    fitness_featurizer: ASTFitnessFeaturizer
+    fitness_featurizer_path: str
     fitness_function: typing.Callable[[ASTType], float]
+    fitness_function_date_id: str
+    fitness_function_model_name: str
+    flip_fitness_sign: bool
     generation_index: int
     grammar: str
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
@@ -221,10 +230,14 @@ class PopulationBasedSampler():
 
     def __init__(self,
                  args: argparse.Namespace,
-                 fitness_function: typing.Callable[[typing.Any], float],
                  population_size: int = DEFAULT_POPULATION_SIZE,
                  verbose: int = 0,
                  initial_proposal_type: InitialProposalSamplerType = InitialProposalSamplerType.MAP,
+                 fitness_featurizer_path: str = DEFAULT_FITNESS_FEATURIZER_PATH,
+                 fitness_function_date_id: str = DEFAULT_FITNESS_FUNCTION_DATE_ID,
+                 fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
+                 flip_fitness_sign: bool = True,
+                 relative_path: str = DEFAULT_RELATIVE_PATH,
                  ngram_model_path: str = DEFAULT_NGRAM_MODEL_PATH,
                  section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  sample_patience: int = 100,
@@ -232,7 +245,6 @@ class PopulationBasedSampler():
                  n_workers: int = 1,
                  ):
 
-        self.fitness_function = fitness_function
         self.population_size = population_size
         self.verbose = verbose
         self.sample_patience = sample_patience
@@ -243,8 +255,15 @@ class PopulationBasedSampler():
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
         self.counter = parse_or_load_counter(args, self.grammar_parser)
 
+        self.fitness_featurizer_path = fitness_featurizer_path
+        self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
+        self.fitness_function_date_id = fitness_function_date_id
+        self.fitness_function_model_name = fitness_function_model_name
+        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
+        self.flip_fitness_sign = flip_fitness_sign
+
         # Used to generate the initial population of complete games
-        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i) for i in range(self.n_workers)]
+        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i) for i in range(self.n_workers)]  # type: ignore
         self.random_seed = args.random_seed
         self.rng = self.samplers[0].rng
 
@@ -263,7 +282,30 @@ class PopulationBasedSampler():
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
         self.mean_fitness_history = []
+        self.std_fitness_history = []
         self.best_fitness_history = []
+
+    def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
+        return typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
+
+    def _features_to_tensor(self, features: typing.Dict[str, typing.Any]) -> torch.Tensor:
+        return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
+
+    def _evaluate_fitness(self, features: torch.Tensor) -> float:
+        if 'wrapper' in self.fitness_function.named_steps:  # type: ignore
+            self.fitness_function.named_steps['wrapper'].eval()  # type: ignore
+        score = self.fitness_function.transform(features).item()
+        return -score if self.flip_fitness_sign else score
+
+    def _score_proposal(self, proposal: ASTType, return_features: bool = False):
+        proposal_features = self._proposal_to_features(proposal)
+        proposal_tensor = self._features_to_tensor(proposal_features)
+        proposal_fitness = self._evaluate_fitness(proposal_tensor)
+
+        if return_features:
+            return proposal_fitness, proposal_features
+
+        return proposal_fitness
 
     def _process_index(self):
         identity = multiprocessing.current_process()._identity
@@ -288,12 +330,13 @@ class PopulationBasedSampler():
         self.population = population
         self.population_size = len(population)
         if fitness_values is None:
-            fitness_values = [self.fitness_function(game) for game in self.population]
+            fitness_values = typing.cast(typing.List[float], [self._score_proposal(game, return_features=False) for game in self.population])
 
         self.fitness_values = fitness_values
 
         self.best_fitness = max(self.fitness_values)
         self.mean_fitness = np.mean(self.fitness_values)
+        self.std_fitness = np.std(self.fitness_values)
 
     def _best_individual(self):
         return self.population[np.argmax(self.fitness_values)]
@@ -541,6 +584,69 @@ class PopulationBasedSampler():
 
         return [game_1, game_2]
 
+    def _find_index_for_section(self, existing_sections: typing.List[str], new_section: str) -> typing.Tuple[int, bool]:
+        try:
+            index = existing_sections.index(new_section)
+            return index, True
+
+        except ValueError:
+            if new_section == ast_parser.SETUP:
+                return 0, False
+
+            # in this case, it's ast_parser.TERMINAL
+            return len(existing_sections) - 1, False
+
+    def _insert_section_to_game(self, game: ASTType, new_section: tuple, index: int, replace: bool):
+        continue_index = index if not replace else index + 1
+        return (*game[:index], new_section, *game[continue_index:])  # type: ignore
+
+    def _crossover_full_sections(self, games: typing.Union[ASTType, typing.List[ASTType]], rng: typing.Optional[np.random.Generator] = None,
+                                 crossover_first_game: bool = True, crossover_second_game: bool = True):
+
+        if not crossover_first_game and not crossover_second_game:
+            raise ValueError("At least one of crossover_first_game and crossover_second_game must be True")
+
+        if rng is None:
+            rng = self.rng
+
+        game_2 = None
+        if isinstance(games, list):
+            game_1 = games[0]
+
+            if len(games) > 1:
+                game_2 = games[1]
+        else:
+            game_1 = games
+
+        if game_2 is None:
+            game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
+
+        if crossover_first_game:
+            game_1 = copy.deepcopy(game_1)
+
+        if crossover_second_game:
+            game_2 = copy.deepcopy(game_2)
+
+        game_1_sections = [t[0] for t in game_1[3:-1]]  # type: ignore
+        game_2_sections = [t[0] for t in game_2[3:-1]]  # type: ignore
+
+        if crossover_first_game:
+            game_2_section_index = rng.integers(len(game_2_sections))
+            game_2_section = game_2_sections[game_2_section_index]
+            index, replace = self._find_index_for_section(game_1_sections, game_2_section)
+            section_copy = copy.deepcopy(game_2[3 + game_2_section_index])
+            self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
+
+        if crossover_second_game:
+            game_1_section_index = rng.integers(len(game_1_sections))
+            game_1_section = game_1_sections[game_1_section_index]
+            index, replace = self._find_index_for_section(game_2_sections, game_1_section)
+            section_copy = copy.deepcopy(game_1[3 + game_1_section_index])
+            self._insert_section_to_game(game_2, section_copy, index, replace)  # type: ignore
+
+        return [game_1, game_2]
+
+
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
@@ -590,7 +696,7 @@ class PopulationBasedSampler():
                 if not isinstance(child_or_children, list):
                     child_or_children = [child_or_children]
 
-                children_fitness_scores = [self.fitness_function(child) for child in child_or_children]
+                children_fitness_scores = [self._score_proposal(child, return_features=False) for child in child_or_children]
                 return child_or_children, children_fitness_scores
 
             except SamplingException:
@@ -644,12 +750,13 @@ class PopulationBasedSampler():
 
             if should_tqdm:
                 pbar.update(1)  # type: ignore
-                pbar.set_postfix({"Average": f"{self.mean_fitness:.3f}", "Best": f"{self.best_fitness:.3f}"})  # type: ignore
+                pbar.set_postfix({"Mean": f"{self.mean_fitness:.3f}", "Std": f"{self.std_fitness:.3f}", "Best": f"{self.best_fitness:.3f}"})  # type: ignore
 
             elif self.verbose:
-                print(f"Average fitness: {self.mean_fitness:.3f}, Best fitness: {self.best_fitness:.3f}")
+                print(f"Average fitness: {self.mean_fitness:.3f} +/- {self.std_fitness:.3f}, Best fitness: {self.best_fitness:.3f}")
 
             self.mean_fitness_history.append(self.mean_fitness)
+            self.std_fitness_history.append(self.std_fitness)
             self.best_fitness_history.append(self.best_fitness)
 
         if postprocess:
@@ -663,6 +770,24 @@ class PopulationBasedSampler():
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess)
+
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        sample = self.population[sample_index]
+        if postprocess_sample:
+            sample = self.postprocessor(sample)
+
+        sample_features = self._proposal_to_features(sample)  # type: ignore
+        sample_features_tensor = self._features_to_tensor(sample_features)
+
+        evaluate_single_game_energy_contributions(
+            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,   # type: ignore
+            top_k=top_k, display_overall_features=display_overall_features,
+            display_game=display_game, min_display_threshold=min_display_threshold,
+            )
+
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        sample_index = np.argsort(self.fitness_values)[-top_index]
+        self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -735,19 +860,15 @@ MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferen
 
 class CrossoverOnlySampler(PopulationBasedSampler):
     def __init__(self, args: argparse.Namespace,
-                 fitness_function: typing.Callable[[typing.Any], float],
-                 population_size: int = 100,
-                 verbose: int = 0, k: int = 1, max_attempts: int = 100,
+                 k: int = 1, max_attempts: int = 100,
                  crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                 fitness_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
                  monitor_feature_keys: typing.List[str] = MONITOR_FEATURES,
                  *addl_args, **kwargs):
 
-        super().__init__(args, fitness_function, population_size, verbose, *addl_args, **kwargs)
+        super().__init__(args, *addl_args, **kwargs)
         self.k = k
         self.max_attempts = max_attempts
         self.crossover_type = crossover_type
-        self.fitness_featurizer = fitness_featurizer
         self.monitor_feature_keys = monitor_feature_keys
 
     def _extract_monitor_features(self, game):
@@ -786,18 +907,28 @@ class CrossoverOnlySampler(PopulationBasedSampler):
 
 
 class MicrobialGASampler(PopulationBasedSampler):
+    crossover_full_sections: bool
+    crossover_type: CrossoverType
+    min_n_loser_crossovers: int
+    max_n_loser_crossovers: int
+
     def __init__(self,
                  args: argparse.Namespace,
-                 fitness_function: typing.Callable[[typing.Any], float],
-                 population_size: int = 100,
-                 verbose: int = 0,
+                 crossover_full_sections: bool = False,
                  crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                 n_loser_crossovers: int = 1,
+                 min_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS,
+                 max_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS,
                  *addl_args, **kwargs):
 
-        super().__init__(args, fitness_function, population_size, verbose, *addl_args, **kwargs)
-        self.n_loser_crossovers = n_loser_crossovers
+        super().__init__(args, *addl_args, **kwargs)
+        if max_n_loser_crossovers <= min_n_loser_crossovers:
+            raise ValueError(f'max_n_loser_crossovers must be greater than min_n_loser_crossovers, got {max_n_loser_crossovers} <= {min_n_loser_crossovers}')
+
+        self.crossover_full_sections = crossover_full_sections
         self.crossover_type = crossover_type
+        self.min_n_loser_crossovers = min_n_loser_crossovers
+        self.max_n_loser_crossovers = max_n_loser_crossovers
+
 
     def _get_operator(self, rng):
         '''
@@ -815,8 +946,14 @@ class MicrobialGASampler(PopulationBasedSampler):
             p2_idx = self.population.index(games[1])
 
             winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
-            for _ in range(self.n_loser_crossovers):
-                _, loser = self._crossover([winner, loser], self.crossover_type, rng=rng, crossover_first_game=False)
+
+            if self.crossover_full_sections:
+                _, loser = self._crossover_full_sections([winner, loser], rng=rng, crossover_first_game=False)
+
+            else:
+                n_crossovers = rng.integers(self.min_n_loser_crossovers, self.max_n_loser_crossovers + 1)
+                for _ in range(n_crossovers):
+                    _, loser = self._crossover([winner, loser], self.crossover_type, rng=rng, crossover_first_game=False)
 
             # Apply a randomly selected mutation operator to the loser
             mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete], rng=rng)
@@ -830,39 +967,19 @@ class MicrobialGASampler(PopulationBasedSampler):
         return super()._get_parent_iterator(n_parents_per_sample=2)
 
 
-class EnergyFunctionFitnessWrapper:
-    energy_function: typing.Callable[[typing.Any], float]
-    feature_names: typing.List[str]
-    fitness_featurizer: ASTFitnessFeaturizer
-    flip_sign: bool
-
-    def __init__(self, fitness_featurizer: ASTFitnessFeaturizer, energy_function: typing.Callable[[typing.Any], float], feature_names: typing.List[str],
-                 flip_sign: bool = True):
-        self.fitness_featurizer = fitness_featurizer
-        self.energy_function = energy_function
-        self.feature_names = feature_names
-        self.flip_sign = flip_sign
-
-    def __call__(self, game: ASTType):
-        features = typing.cast(dict, self.fitness_featurizer.parse(game, 'mcmc', True))  # type: ignore
-        features_tensor = torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)
-        if 'wrapper' in self.energy_function.named_steps:  # type: ignore
-            self.energy_function.named_steps['wrapper'].eval()  # type: ignore
-        energy = self.energy_function.transform(features_tensor).item()
-        return -1 * energy if self.flip_sign else energy
-
-
 def main(args):
-    fitness_featurizer = _load_pickle_gzip(LATEST_FITNESS_FEATURIZER_PATH)
-    trained_fitness_function, feature_names = load_model_and_feature_columns(LATEST_FITNESS_FUNCTION_DATE_ID, relative_path='.')
-
-
     if args.sampler_type == MICROBIAL_GA:
-        evosampler = MicrobialGASampler(n_loser_crossovers=args.microbial_ga_n_loser_crossovers,
-            args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
+        evosampler = MicrobialGASampler(
+            crossover_full_sections=args.microbial_ga_crossover_full_sections, crossover_type=CrossoverType(args.microbial_ga_crossover_type),
+            min_n_loser_crossovers=args.microbial_ga_n_min_loser_crossovers, max_n_loser_crossovers=args.microbial_ga_n_max_loser_crossovers,
+            args=args,
             population_size=args.population_size,
             verbose=args.verbose,
             initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+            fitness_featurizer_path=args.fitness_featurizer_path,
+            fitness_function_date_id=args.fitness_function_date_id,
+            fitness_function_model_name=args.fitness_function_model_name,
+            flip_fitness_sign=not args.no_flip_fitness_sign,
             ngram_model_path=args.ngram_model_path,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
@@ -870,10 +987,14 @@ def main(args):
 
     elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
         evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
-            args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
+            args=args,
             population_size=args.population_size,
             verbose=args.verbose,
             initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+            fitness_featurizer_path=args.fitness_featurizer_path,
+            fitness_function_date_id=args.fitness_function_date_id,
+            fitness_function_model_name=args.fitness_function_model_name,
+            flip_fitness_sign=not args.no_flip_fitness_sign,
             ngram_model_path=args.ngram_model_path,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
@@ -898,22 +1019,24 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
-    if args.sample_parallel:
-        evosampler.multiple_evolutionary_steps_parallel(
-            num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
-            postprocess=args.postprocess, n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
-            )
+    try:
+        if args.sample_parallel:
+            evosampler.multiple_evolutionary_steps_parallel(
+                num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
+                postprocess=args.postprocess, n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
+                )
 
-    else:
-        evosampler.multiple_evolutionary_steps(
-            num_steps=args.n_steps, should_tqdm=args.should_tqdm,
-            inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
-            )
+        else:
+            evosampler.multiple_evolutionary_steps(
+                num_steps=args.n_steps, should_tqdm=args.should_tqdm,
+                inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
+                )
 
-    print('Best individual:')
-    evosampler._print_game(evosampler._best_individual())
+        print('Best individual:')
+        evosampler._print_game(evosampler._best_individual())
 
-    save_data(evosampler, args.output_folder, args.output_name, args.relative_path)
+    finally:
+        save_data(evosampler, args.output_folder, args.output_name, args.relative_path)
 
 
 

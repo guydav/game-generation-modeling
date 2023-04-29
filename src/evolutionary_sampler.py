@@ -24,6 +24,7 @@ from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler, mpp
 from ast_utils import *
+from evolutionary_sampler_diversity import *
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
@@ -97,7 +98,7 @@ MICROBIAL_GA = 'microbial_ga'
 WEIGHTED_BEAM_SEARCH = 'weighted_beam_search'
 SAMPLER_TYPES = [MICROBIAL_GA, WEIGHTED_BEAM_SEARCH]
 parser.add_argument('--sampler-type', type=str, required=True, choices=SAMPLER_TYPES)
-
+parser.add_argument('--diversity-scorer-type', type=str, required=False, choices=DIVERSITY_SCORERS)
 
 parser.add_argument('--microbial-ga-crossover-full-sections', action='store_true')
 parser.add_argument('--microbial-ga-crossover-type', type=int, default=2)
@@ -197,6 +198,8 @@ def handle_multiple_inputs(operator):
 class PopulationBasedSampler():
     context_fixers: typing.List[ASTContextFixer]
     counter: ASTRuleValueCounter
+    diversity_scorer: typing.Optional[DiversityScorer]
+    diversity_scorer_type: typing.Optional[str]
     feature_names: typing.List[str]
     fitness_featurizer: ASTFitnessFeaturizer
     fitness_featurizer_path: str
@@ -243,6 +246,7 @@ class PopulationBasedSampler():
                  sample_patience: int = 100,
                  sample_parallel: bool = False,
                  n_workers: int = 1,
+                 diversity_scorer_type: typing.Optional[str] = None,
                  ):
 
         self.population_size = population_size
@@ -250,6 +254,7 @@ class PopulationBasedSampler():
         self.sample_patience = sample_patience
         self.sample_parallel = sample_parallel
         self.n_workers = n_workers
+        self.diversity_scorer_type = diversity_scorer_type
 
         self.grammar = open(args.grammar_file).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
@@ -261,6 +266,9 @@ class PopulationBasedSampler():
         self.fitness_function_model_name = fitness_function_model_name
         self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
+
+        if self.diversity_scorer_type is not None:
+            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
         # Used to generate the initial population of complete games
         self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i) for i in range(self.n_workers)]  # type: ignore
@@ -286,7 +294,7 @@ class PopulationBasedSampler():
         self.best_fitness_history = []
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
-        return typing.cast(dict, self.fitness_featurizer.parse(proposal, 'mcmc', True))  # type: ignore
+        return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
 
     def _features_to_tensor(self, features: typing.Dict[str, typing.Any]) -> torch.Tensor:
         return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
@@ -322,6 +330,9 @@ class PopulationBasedSampler():
 
     def _context_fixer(self):
         return self.context_fixers[self._process_index()]
+
+    def _rename_game(self, game: ASTType, name: str) -> None:
+        replace_child(game[1], ['game_name'], name)  # type: ignore
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -646,7 +657,6 @@ class PopulationBasedSampler():
 
         return [game_1, game_2]
 
-
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
@@ -679,6 +689,8 @@ class PopulationBasedSampler():
         all_games = self.population + candidates
         all_scores = self.fitness_values + candidate_scores
 
+        # TODO: do something with the diversity scorer?
+
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
@@ -695,6 +707,9 @@ class PopulationBasedSampler():
                 child_or_children = operator(parent, rng)
                 if not isinstance(child_or_children, list):
                     child_or_children = [child_or_children]
+
+                for i, child in enumerate(child_or_children):
+                    self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
 
                 children_fitness_scores = [self._score_proposal(child, return_features=False) for child in child_or_children]
                 return child_or_children, children_fitness_scores
@@ -983,6 +998,7 @@ def main(args):
             ngram_model_path=args.ngram_model_path,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
+            diversity_scorer_type=args.diversity_scorer_type,
         )
 
     elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
@@ -998,6 +1014,7 @@ def main(args):
             ngram_model_path=args.ngram_model_path,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
+            diversity_scorer_type=args.diversity_scorer_type,
         )
 
     else:

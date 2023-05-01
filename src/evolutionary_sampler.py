@@ -123,11 +123,15 @@ parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
 parser.add_argument('--postprocess', action='store_true')
-parser.add_argument('--sample-patience', type=int, default=100)
+parser.add_argument('--compute-diversity-metrics', action='store_true')
+parser.add_argument('--save-every-generation', action='store_true')
+parser.add_argument('--omit-rules', type=str, nargs='*')
+parser.add_argument('--omit-tokens', type=str, nargs='*')
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
-parser.add_argument('--output-folder', type=str, default='./samples')
+DEFAULT_OUTPUT_FOLDER = './samples'
+parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
 
 
 class CrossoverType(Enum):
@@ -212,13 +216,17 @@ class PopulationBasedSampler():
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
     initial_sampler: typing.Callable[[], ASTType]
     n_workers: int
+    output_folder: str
+    output_name: str
     postprocessor: ast_parser.ASTSamplePostprocessor
     population: typing.List[ASTType]
     population_size: int
     random_seed: int
     regrowth_samplers: typing.List[RegrowthSampler]
+    relative_path: str
     rng: np.random.Generator
     sample_parallel: bool
+    sampler_kwargs: typing.Dict[str, typing.Any]
     samplers: typing.List[ASTSampler]
     verbose: int
 
@@ -241,7 +249,10 @@ class PopulationBasedSampler():
                  fitness_function_model_name: str = DEFAULT_SAVE_MODEL_NAME,
                  flip_fitness_sign: bool = True,
                  relative_path: str = DEFAULT_RELATIVE_PATH,
+                 output_folder: str = DEFAULT_OUTPUT_FOLDER,
+                 output_name: str = DEFAULT_OUTPUT_NAME,
                  ngram_model_path: str = DEFAULT_NGRAM_MODEL_PATH,
+                 sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  sample_patience: int = 100,
                  sample_parallel: bool = False,
@@ -260,6 +271,10 @@ class PopulationBasedSampler():
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
         self.counter = parse_or_load_counter(args, self.grammar_parser)
 
+        self.relative_path = relative_path
+        self.output_folder = output_folder
+        self.output_name = output_name
+
         self.fitness_featurizer_path = fitness_featurizer_path
         self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
         self.fitness_function_date_id = fitness_function_date_id
@@ -267,11 +282,16 @@ class PopulationBasedSampler():
         self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
 
+        self.diversity_scorer = None
         if self.diversity_scorer_type is not None:
             self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
         # Used to generate the initial population of complete games
-        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i) for i in range(self.n_workers)]  # type: ignore
+        if sampler_kwargs is None:
+            sampler_kwargs = {}
+        self.sampler_kwargs = sampler_kwargs
+        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i, **sampler_kwargs)
+                         for i in range(self.n_workers)]  # type: ignore
         self.random_seed = args.random_seed
         self.rng = self.samplers[0].rng
 
@@ -289,9 +309,8 @@ class PopulationBasedSampler():
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
-        self.mean_fitness_history = []
-        self.std_fitness_history = []
-        self.best_fitness_history = []
+        self.fitness_metrics_history = []
+        self.diversity_metrics_history = []
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
         return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
@@ -333,6 +352,13 @@ class PopulationBasedSampler():
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
+
+    def save(self, suffix: typing.Optional[str] = None, log_message: bool = True):
+        output_name = self.output_name
+        if suffix is not None:
+            output_name += f'_{suffix}'
+
+        save_data(self, self.output_folder, output_name, self.relative_path, log_message=log_message)
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -754,8 +780,9 @@ class PopulationBasedSampler():
         self._select_new_population(candidates, candidate_scores)
 
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
-                                    chunksize: int = 1, should_tqdm: bool = False,
-                                    inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False):
+                                    chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
+                                    postprocess: typing.Optional[bool] = True,
+                                    compute_diversity_metrics: bool = False, save_every_generation: bool = False):
         step_iter = range(num_steps)
         if should_tqdm:
             pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
@@ -765,26 +792,47 @@ class PopulationBasedSampler():
 
             if should_tqdm:
                 pbar.update(1)  # type: ignore
-                pbar.set_postfix({"Mean": f"{self.mean_fitness:.3f}", "Std": f"{self.std_fitness:.3f}", "Best": f"{self.best_fitness:.3f}"})  # type: ignore
+                postfix = {"Mean": f"{self.mean_fitness:.2f}", "Std": f"{self.std_fitness:.2f}", "Max": f"{self.best_fitness:.2f}"}
+
+                if compute_diversity_metrics:
+                    if self.diversity_scorer is None:
+                        raise ValueError('Cannot compute diversity metrics without a diversity scorer')
+
+                    self.diversity_scorer.set_population(self.population)
+                    diversity_scores = np.array(self.diversity_scorer.score_entire_population())
+                    self.diversity_metrics_history.append({'mean': diversity_scores.mean(), 'std': diversity_scores.std(), 'max': diversity_scores.max(), 'min': diversity_scores.min()})
+
+                    postfix["DivMean"] = f"{self.diversity_metrics_history[-1]['mean']:.2f}"
+                    postfix["DivStd"] = f"{self.diversity_metrics_history[-1]['std']:.2f}"
+                    postfix["DivMax"] = f"{self.diversity_metrics_history[-1]['max']:.2f}"
+                    postfix["DivMin"] = f"{self.diversity_metrics_history[-1]['min']:.2f}"
+
+                pbar.set_postfix(postfix)  # type: ignore
 
             elif self.verbose:
                 print(f"Average fitness: {self.mean_fitness:.3f} +/- {self.std_fitness:.3f}, Best fitness: {self.best_fitness:.3f}")
 
-            self.mean_fitness_history.append(self.mean_fitness)
-            self.std_fitness_history.append(self.std_fitness)
-            self.best_fitness_history.append(self.best_fitness)
+            self.fitness_metrics_history.append({'mean': self.mean_fitness, 'std': self.std_fitness, 'max': self.best_fitness})
 
-        if postprocess:
-            self.population = [self.postprocessor(g) for g in self.population]  # type: ignore
+            if postprocess:
+                self.population = [self.postprocessor(g) for g in self.population]  # type: ignore
+
+            if save_every_generation:
+                self.save(suffix=f'gen_{self.generation_index}', log_message=False)
+
+            self.generation_index += 1
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
-                                             inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False, n_workers: int = 8, chunksize: int = 1):
+                                             inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False,
+                                             compute_diversity_metrics: bool = False, save_every_generation: bool = False,
+                                             n_workers: int = 8, chunksize: int = 1):
 
         logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
-                                             postprocess=postprocess)
+                                             postprocess=postprocess, compute_diversity_metrics=compute_diversity_metrics,
+                                             save_every_generation=save_every_generation)
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         sample = self.population[sample_index]
@@ -983,6 +1031,15 @@ class MicrobialGASampler(PopulationBasedSampler):
 
 
 def main(args):
+    if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
+        logging.debug('Setting postprocess to True because diversity scorer uses edit distance')
+        args.postprocess = True
+
+    sampler_kwargs = dict(
+        omit_rules=args.omit_rules,
+        omit_tokens=args.omit_tokens,
+    )
+
     if args.sampler_type == MICROBIAL_GA:
         evosampler = MicrobialGASampler(
             crossover_full_sections=args.microbial_ga_crossover_full_sections, crossover_type=CrossoverType(args.microbial_ga_crossover_type),
@@ -996,6 +1053,10 @@ def main(args):
             fitness_function_model_name=args.fitness_function_model_name,
             flip_fitness_sign=not args.no_flip_fitness_sign,
             ngram_model_path=args.ngram_model_path,
+            sampler_kwargs=sampler_kwargs,
+            relative_path=args.relative_path,
+            output_folder=args.output_folder,
+            output_name=args.output_name,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
             diversity_scorer_type=args.diversity_scorer_type,
@@ -1012,6 +1073,10 @@ def main(args):
             fitness_function_model_name=args.fitness_function_model_name,
             flip_fitness_sign=not args.no_flip_fitness_sign,
             ngram_model_path=args.ngram_model_path,
+            sampler_kwargs=sampler_kwargs,
+            relative_path=args.relative_path,
+            output_folder=args.output_folder,
+            output_name=args.output_name,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
             diversity_scorer_type=args.diversity_scorer_type,
@@ -1040,20 +1105,24 @@ def main(args):
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
-                postprocess=args.postprocess, n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
+                postprocess=args.postprocess, compute_diversity_metrics=args.compute_diversity_metrics,
+                save_every_generation=args.save_every_generation,
+                n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
                 )
 
         else:
             evosampler.multiple_evolutionary_steps(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm,
                 inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
+                compute_diversity_metrics=args.compute_diversity_metrics,
+                save_every_generation=args.save_every_generation,
                 )
 
         print('Best individual:')
         evosampler._print_game(evosampler._best_individual())
 
     finally:
-        save_data(evosampler, args.output_folder, args.output_name, args.relative_path)
+        evosampler.save()
 
 
 

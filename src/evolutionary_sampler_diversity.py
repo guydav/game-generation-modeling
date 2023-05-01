@@ -1,4 +1,5 @@
 from functools import lru_cache
+import itertools
 import typing
 from queue import PriorityQueue
 
@@ -9,7 +10,8 @@ import torch
 import ast_parser
 import ast_printer
 
-MAX_CACHE_SIZE = 10000
+
+MAX_CACHE_SIZE = 100000
 
 
 EDIT_DISTANCE = 'edit_distance'
@@ -21,14 +23,14 @@ TENSOR_FEATURES_DISTANCE = 'tensor_features_distance'
 DIVERSITY_SCORERS = (EDIT_DISTANCE, BY_SECTION_EDIT_DISTANCE, BY_SECTION_EDIT_DISTANCE_MEAN, BY_SECTION_EDIT_DISTANCE_MAX, BY_SECTION_EDIT_DISTANCE_MIN, TENSOR_FEATURES_DISTANCE)
 
 
-
-
 class DiversityScorer:
+    cache: typing.Dict[str, typing.Any]
     population: typing.Dict[str, typing.Any]
     # population_pairwise_scores: typing.Dict[typing.Tuple[str, str], float]
 
     def __init__(self):
         self.population = {}
+        self.cache = {}
         # self.population_pairwise_scores = {}
 
     def _game_to_key(self, game) -> str:
@@ -38,12 +40,28 @@ class DiversityScorer:
         first_key, second_key = self._game_to_key(first_game), self._game_to_key(second_game)
         return (first_key, second_key) if first_key < second_key else (second_key, first_key)
 
+    def _key_to_game(self, game_key: str) -> typing.Any:
+        if game_key in self.population:
+            return self.population[game_key]
+        elif game_key in self.cache:
+            return self.cache[game_key]
+        else:
+            raise ValueError(f'Game {game_key} not found in population or cache')
+
     @lru_cache(maxsize=MAX_CACHE_SIZE)
-    def featurize(self, game):
-        return self._featurize(game)
+    def featurize(self, game_key: str) -> typing.Any:
+        return self._featurize(self._key_to_game(game_key))
 
     def _featurize(self, game) -> typing.Any:
         raise NotImplemented
+
+    def score(self, first_game_key: str, second_game_key: str) -> typing.Any:
+        keys = first_game_key, second_game_key if first_game_key < second_game_key else second_game_key, first_game_key
+        return self._cached_score(*keys)
+
+    @lru_cache(maxsize=MAX_CACHE_SIZE)
+    def _cached_score(self, first_game_key: str, second_game_key: str):
+        return self._score(self.featurize(first_game_key), self.featurize(second_game_key))
 
     def _score(self, first_game, second_game) -> float:
         raise NotImplemented
@@ -55,13 +73,19 @@ class DiversityScorer:
         """
         Find the k most similar games to the given game.
         """
+        game_key = self._game_to_key(game)
+        self.cache[game_key] = game
         scores = PriorityQueue()
-        for other_game in self.population.values():
-            if other_game is game:
+        for other_game_key in self.population:
+            if other_game_key == game_key:
                 continue
-            score = self._score(self.featurize(game), self.featurize(other_game))
-            scores.put((score, other_game))
+            score = self.score(game_key, other_game_key)
+            scores.put((score, other_game_key))
         return [scores.get() for _ in range(k)]
+
+    def score_entire_population(self):
+        return [self.score(first_key, second_key) for first_key, second_key in itertools.combinations(self.population, 2)]
+
 
 
 EDIT_DISTANCE_WEIGHTS = (1, 1, 1)

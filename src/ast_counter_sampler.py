@@ -578,6 +578,8 @@ class ASTSampler:
                  rule_field_value_types: typing.Dict[typing.Tuple[str, str], typing.Union[str, typing.Tuple[str]]] = SPECIAL_RULE_FIELD_VALUE_TYPES,
                  pattern_type_mappings: typing.Dict[str, str] = PATTERN_TYPE_MAPPINGS,
                  local_context_propagating_rules: typing.Set[str] = LOCAL_CONTEXT_PROPAGATING_RULES,
+                 omit_rules: typing.Optional[typing.Sequence[str]] = None,
+                 omit_tokens: typing.Optional[typing.Sequence[str]] = None,
                  prior_rule_count: int = PRIOR_COUNT, prior_token_count: int = PRIOR_COUNT,
                  length_prior: typing.Dict[int, int] = LENGTH_PRIOR, hardcoded_rules: typing.Dict[str, dict]=HARDCODED_RULES,
                  verbose: bool = False, rng: typing.Optional[np.random.Generator] = None, seed: int = DEFAULT_RANDOM_SEED):
@@ -590,6 +592,13 @@ class ASTSampler:
         self.rule_field_value_types = rule_field_value_types
         self.pattern_type_mappings = pattern_type_mappings
         self.local_context_propagating_rules = local_context_propagating_rules
+
+        if omit_rules is None:
+            omit_rules = []
+        self.omit_rules = set(omit_rules)
+        if omit_tokens is None:
+            omit_tokens = []
+        self.omit_tokens = set(omit_tokens)
 
         self.prior_rule_count = prior_rule_count
         self.prior_token_count = prior_token_count
@@ -653,16 +662,19 @@ class ASTSampler:
 
         # Normalize the rule and token posteriors
         if RULE_POSTERIOR in field_prior:
-            field_prior[RULE_POSTERIOR] = self._normalize_posterior_dict(field_prior[RULE_POSTERIOR])
+            field_prior[RULE_POSTERIOR] = self._normalize_posterior_dict(field_prior[RULE_POSTERIOR], omit_keys=self.omit_rules)
         if TOKEN_POSTERIOR in field_prior:
-            field_prior[TOKEN_POSTERIOR] = self._normalize_posterior_dict(field_prior[TOKEN_POSTERIOR])
+            field_prior[TOKEN_POSTERIOR] = self._normalize_posterior_dict(field_prior[TOKEN_POSTERIOR], omit_keys=self.omit_tokens)
 
-    def _normalize_posterior_dict(self, posterior_dict):
-        total_counts = sum(posterior_dict.values())
+    def _normalize_posterior_dict(self, posterior_dict: typing.Dict[str, float], omit_keys: typing.Optional[typing.Set[str]] = None):
+        if omit_keys is None:
+            omit_keys = set()
+
+        total_counts = sum([count for key, count in posterior_dict.items() if key not in omit_keys])  # type: ignore
         if total_counts == 0:
             total_counts = 1
 
-        return {key: count / total_counts for key, count in posterior_dict.items()}
+        return {key: count / total_counts for key, count in posterior_dict.items() if key not in omit_keys}  # type: ignore
 
     def _create_length_posterior(self, rule_name: str, field_name: str,
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],

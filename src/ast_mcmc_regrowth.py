@@ -110,7 +110,8 @@ class InitialProposalSamplerType(enum.Enum):
     SECTION_SAMPLER = 1
 
 
-def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType, sampler: ASTSampler,
+def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType,
+                                    sampler: ASTSampler,
                                     ngram_model_path: typing.Optional[str] = None,
                                     section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None):
     if initial_proposal_type == InitialProposalSamplerType.MAP:

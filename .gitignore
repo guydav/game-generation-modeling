@@ -18,3 +18,5 @@ dsl/cache/ast-real-regrowth-samples-1024-cache.pkl.gz
 
 tmp/**/*
 notes.md
+
+samples/every_gen

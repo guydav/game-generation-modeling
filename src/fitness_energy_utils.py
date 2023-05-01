@@ -67,7 +67,7 @@ def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.Lis
     save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder=folder, name=name, relative_path=relative_path)
 
 
-def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..'):
+def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):
     output_path = f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
 
     i = 0
@@ -81,7 +81,8 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
         filename = filename + f'_{i}'
         output_path = os.path.join(folder, filename + period + extensions)
 
-    logging.debug(f'Saving data to {output_path} ...')
+    if log_message:
+        logging.debug(f'Saving data to {output_path} ...')
     with gzip.open(output_path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 

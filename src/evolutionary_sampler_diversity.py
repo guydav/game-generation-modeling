@@ -2,6 +2,7 @@ from functools import lru_cache
 import itertools
 import typing
 from queue import PriorityQueue
+from typing import Any
 
 from Levenshtein import distance as edit_distance
 import numpy as np
@@ -11,7 +12,7 @@ import ast_parser
 import ast_printer
 
 
-MAX_CACHE_SIZE = 100000
+MAX_CACHE_SIZE = 1000000
 
 
 EDIT_DISTANCE = 'edit_distance'
@@ -25,12 +26,16 @@ DIVERSITY_SCORERS = (EDIT_DISTANCE, BY_SECTION_EDIT_DISTANCE, BY_SECTION_EDIT_DI
 
 class DiversityScorer:
     cache: typing.Dict[str, typing.Any]
+    k: int
     population: typing.Dict[str, typing.Any]
     # population_pairwise_scores: typing.Dict[typing.Tuple[str, str], float]
 
-    def __init__(self):
-        self.population = {}
+    def __init__(self, k: int = 1):
+        self.k = k
+
         self.cache = {}
+        self.population = {}
+
         # self.population_pairwise_scores = {}
 
     def _game_to_key(self, game) -> str:
@@ -56,7 +61,7 @@ class DiversityScorer:
         raise NotImplemented
 
     def score(self, first_game_key: str, second_game_key: str) -> typing.Any:
-        keys = first_game_key, second_game_key if first_game_key < second_game_key else second_game_key, first_game_key
+        keys = (first_game_key, second_game_key) if first_game_key < second_game_key else (second_game_key, first_game_key)
         return self._cached_score(*keys)
 
     @lru_cache(maxsize=MAX_CACHE_SIZE)
@@ -69,23 +74,39 @@ class DiversityScorer:
     def set_population(self, population: typing.List[typing.Any]):
         self.population = {self._game_to_key(game): game for game in population}
 
-    def find_most_similar_games(self, game, k: int) -> typing.List[typing.Tuple[float, typing.Any]]:
+    def find_most_similar_scores(self, game) -> np.ndarray:
         """
         Find the k most similar games to the given game.
         """
         game_key = self._game_to_key(game)
-        self.cache[game_key] = game
-        scores = PriorityQueue()
-        for other_game_key in self.population:
-            if other_game_key == game_key:
-                continue
-            score = self.score(game_key, other_game_key)
-            scores.put((score, other_game_key))
-        return [scores.get() for _ in range(k)]
+        if game_key not in self.population:
+            self.cache[game_key] = game
+
+        return self.find_most_similar_scores_by_key(game_key)
+
+    def find_most_similar_scores_by_key(self, game_key: str) -> np.ndarray:
+        # scores = PriorityQueue()
+        # for other_game_key in self.population:
+        #     if other_game_key == game_key:
+        #         continue
+        #     score = self.score(game_key, other_game_key)
+        #     scores.put((score, other_game_key))
+        # return [scores.get()[0] for _ in range(self.k)]
+
+        scores = np.array([self.score(game_key, other_game_key) for other_game_key in self.population if other_game_key != game_key])
+        return scores[np.argsort(scores)[:self.k]]
 
     def score_entire_population(self):
         return [self.score(first_key, second_key) for first_key, second_key in itertools.combinations(self.population, 2)]
 
+    def population_score_distribution(self) -> np.ndarray:
+        return np.array([self(game_key=game_key) for game_key in self.population])
+
+    def __call__(self, game: typing.Optional[typing.Any] = None, game_key: typing.Optional[str] = None) -> float:
+        if game_key is not None:
+            return self.find_most_similar_scores_by_key(game_key).mean()
+
+        return np.mean(self.find_most_similar_scores(game)).mean()
 
 
 EDIT_DISTANCE_WEIGHTS = (1, 1, 1)
@@ -93,7 +114,8 @@ EDIT_DISTANCE_WEIGHTS = (1, 1, 1)
 
 class EditDistanceDiversityScorer(DiversityScorer):
     weights: typing.Tuple[float, float, float]
-    def __init__(self, weights: typing.Tuple[float, float, float] = EDIT_DISTANCE_WEIGHTS, **kwargs):
+    def __init__(self, k: int = 1, weights: typing.Tuple[float, float, float] = EDIT_DISTANCE_WEIGHTS, **kwargs):
+        super().__init__(k=k)
         self.weights = weights
 
     def _featurize(self, game):
@@ -107,18 +129,18 @@ class EditDistanceDiversityScorer(DiversityScorer):
 class BySectionEditDistanceDiversityScorer(EditDistanceDiversityScorer):
     agg_func: typing.Callable[[typing.Sequence[float]], float]
 
-    def __init__(self, agg_func: typing.Callable[[typing.Sequence[float]], float], weights: typing.Tuple[float, float, float] = EDIT_DISTANCE_WEIGHTS, **kwargs):
-        super().__init__(weights=weights)
+    def __init__(self, agg_func: typing.Callable[[typing.Sequence[float]], float], k: int = 1, weights: typing.Tuple[float, float, float] = EDIT_DISTANCE_WEIGHTS, **kwargs):
+        super().__init__(k=k, weights=weights)
         self.agg_func = agg_func
 
     def _featurize(self, game):
         return {
-            section: ast_printer.ast_section_to_string(section[1], section[0])
+            section[0]: ast_printer.ast_section_to_string(section[1], section[0])
             for section in game[3:-1]
         }
 
     def _score(self, first_game, second_game):
-        return self.agg_func([super()._score(first_game[key], second_game[key]) for key in first_game if key in second_game])  # type: ignore
+        return self.agg_func([EditDistanceDiversityScorer._score(self, first_game[key], second_game[key]) for key in first_game if key in second_game])  # type: ignore
 
 
 class TensorFeaturesDistanceDiversityScorer(DiversityScorer):
@@ -126,13 +148,14 @@ class TensorFeaturesDistanceDiversityScorer(DiversityScorer):
     featurizer: typing.Callable[..., typing.Dict[str, typing.Any]]
     ord: float
 
-    def __init__(self, featurizer: typing.Callable[..., typing.Dict[str, typing.Any]], feature_names: typing.List[str], ord: float = 2, **kwargs):
+    def __init__(self, featurizer: typing.Callable[..., typing.Dict[str, typing.Any]], feature_names: typing.List[str], k: int = 1, ord: float = 2, **kwargs):
+        super().__init__(k=k)
         self.featurizer = featurizer
         self.feature_names = feature_names
         self.ord = ord
 
     def _featurize(self, game):
-        features = typing.cast(dict, self.fitness_featurizer.parse(game, return_row=True))  # type: ignore
+        features = typing.cast(dict, self.featurizer.parse(game, return_row=True))  # type: ignore
         return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
 
     def _score(self, first_game, second_game):

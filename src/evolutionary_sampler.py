@@ -5,9 +5,10 @@ import logging
 import multiprocessing
 from multiprocessing import pool as mpp
 import os
-import pickle
-import typing
+import re
 import sys
+import typing
+
 
 import numpy as np
 import tatsu
@@ -21,13 +22,17 @@ import ast_printer
 import ast_parser
 from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
-from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
+from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH, typing
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler, mpp
 from ast_utils import *
+from ast_utils import typing
 from evolutionary_sampler_diversity import *
+from evolutionary_sampler_diversity import typing
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
+from fitness_features import typing
 from fitness_ngram_models import *
+from fitness_ngram_models import typing
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -95,10 +100,14 @@ parser.add_argument('--n-steps', type=int, default=DEFAULT_N_STEPS)
 # parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
 
 MICROBIAL_GA = 'microbial_ga'
+MICROBIAL_GA_WITH_BEAM_SEARCH = 'microbial_ga_with_beam_search'
 WEIGHTED_BEAM_SEARCH = 'weighted_beam_search'
-SAMPLER_TYPES = [MICROBIAL_GA, WEIGHTED_BEAM_SEARCH]
+SAMPLER_TYPES = [MICROBIAL_GA, MICROBIAL_GA_WITH_BEAM_SEARCH, WEIGHTED_BEAM_SEARCH]
 parser.add_argument('--sampler-type', type=str, required=True, choices=SAMPLER_TYPES)
 parser.add_argument('--diversity-scorer-type', type=str, required=False, choices=DIVERSITY_SCORERS)
+parser.add_argument('--diversity-scorer-k', type=int, default=1)
+parser.add_argument('--diversity-score-threshold', type=float, default=0.0)
+parser.add_argument('--diversity-threshold-absolute', action='store_true')
 
 parser.add_argument('--microbial-ga-crossover-full-sections', action='store_true')
 parser.add_argument('--microbial-ga-crossover-type', type=int, default=2)
@@ -168,8 +177,16 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
         raise ValueError(f'Invalid crossover type {crossover_type}')
 
 
-ASTType = typing.Union[tuple, tatsu.ast.AST]
+ASTType: typing.TypeAlias = typing.Union[tuple, tatsu.ast.AST]
 T = typing.TypeVar('T')
+
+
+class SingleStepResults(typing.NamedTuple):
+    samples: typing.List[ASTType]
+    fitness_scores: typing.List[float]
+    diversity_scores: typing.Optional[typing.List[float]]
+    sample_features: typing.Optional[typing.List[typing.Dict[str, typing.Any]]]
+
 
 
 def no_op_operator(games: typing.Union[ASTType, typing.List[ASTType]], rng=None):
@@ -211,6 +228,8 @@ class PopulationBasedSampler():
     fitness_function_date_id: str
     fitness_function_model_name: str
     flip_fitness_sign: bool
+    generation_diversity_scores: np.ndarray
+    generation_diversity_scores_index: int
     generation_index: int
     grammar: str
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
@@ -258,6 +277,9 @@ class PopulationBasedSampler():
                  sample_parallel: bool = False,
                  n_workers: int = 1,
                  diversity_scorer_type: typing.Optional[str] = None,
+                 diversity_scorer_k: int = 1,
+                 diversity_score_threshold: float = 0.0,
+                 diversity_threshold_absolute: bool = False,
                  ):
 
         self.population_size = population_size
@@ -282,15 +304,20 @@ class PopulationBasedSampler():
         self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
 
+        self.diversity_scorer_type = diversity_scorer_type
+        self.diversity_scorer_k = diversity_scorer_k
+        self.diversity_score_threshold = diversity_score_threshold
+        self.diversity_threshold_absolute = diversity_threshold_absolute
+
         self.diversity_scorer = None
         if self.diversity_scorer_type is not None:
-            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
+            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
         # Used to generate the initial population of complete games
         if sampler_kwargs is None:
             sampler_kwargs = {}
         self.sampler_kwargs = sampler_kwargs
-        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i, **sampler_kwargs)
+        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i, **sampler_kwargs)  # type: ignore
                          for i in range(self.n_workers)]  # type: ignore
         self.random_seed = args.random_seed
         self.rng = self.samplers[0].rng
@@ -311,6 +338,9 @@ class PopulationBasedSampler():
         self.generation_index = 0
         self.fitness_metrics_history = []
         self.diversity_metrics_history = []
+
+        self.generation_diversity_scores = np.zeros(self.population_size)
+        self.generation_diversity_scores_index = -1
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
         return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
@@ -374,6 +404,9 @@ class PopulationBasedSampler():
         self.best_fitness = max(self.fitness_values)
         self.mean_fitness = np.mean(self.fitness_values)
         self.std_fitness = np.std(self.fitness_values)
+
+        if self.diversity_scorer is not None:
+            self.diversity_scorer.set_population(self.population)
 
     def _best_individual(self):
         return self.population[np.argmax(self.fitness_values)]
@@ -706,21 +739,63 @@ class PopulationBasedSampler():
             for idxs in range(0, len(indices), n_parents_per_sample):
                 yield [self.population[i] for i in indices[idxs:idxs + n_parents_per_sample]]
 
-    def _select_new_population(self, candidates, candidate_scores):
+    def _update_generation_diversity_scores(self):
+        if self.diversity_scorer is not None and self.generation_index != self.generation_diversity_scores_index:
+            if self.verbose:
+                logging.info(f'Updating diversity scores for generation {self.generation_index}')
+
+            population_diversity_scores = self.diversity_scorer.population_score_distribution()
+            self.generation_diversity_scores = population_diversity_scores
+            self.generation_diversity_scores_index = self.generation_index
+
+    def _select_new_population(self, candidates: typing.List[ASTType],
+                               candidate_scores: typing.List[float],
+                               candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
+                               candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
         '''
         Returns the new population given the current population, the candidate games, and the
         scores for both the population and the candidate games. As a default, return the top P
         games from the union of the population and the candidates
         '''
+        if candidate_diversity_scores is not None and len(candidate_diversity_scores) > 0:
+            diversity_scores = np.array(candidate_diversity_scores)  # type: ignore
+
+            if self.verbose:
+                logging.info(f'Candidate diversity scores: min: {diversity_scores.min():.3f}, 25th percentile: {np.percentile(diversity_scores, 25):.3f} mean: {diversity_scores.mean():.3f}, 75th percentile: {np.percentile(diversity_scores, 25):.3f},  max: {diversity_scores.max():.3f},')
+
+            if not self.diversity_threshold_absolute:
+                self._update_generation_diversity_scores()
+                threshold = np.percentile(self.generation_diversity_scores, self.diversity_score_threshold)
+                if self.verbose:
+                    logging.info(f'Using diversity threshold of {threshold} (percentile {self.diversity_score_threshold} of generation {self.generation_index} diversity scores, min {self.generation_diversity_scores.min()}, max {self.generation_diversity_scores.max()})')
+            else:
+                threshold = self.diversity_score_threshold
+
+            diverse_candidate_indices = np.where(diversity_scores >= threshold)[0]
+            if len(diverse_candidate_indices) == 0:
+                logging.warning(f'No diverse candidates found with a threshold of {threshold} (highest candidate diversity score was {diversity_scores.max()}), not replacing any population members')
+                return
+
+            diversity_message = ''
+            if self.verbose:
+                diversity_message = f'Found {len(diverse_candidate_indices)} diverse candidates (highest candidate diversity score was {diversity_scores.max()}'
+
+            candidates = [candidates[i] for i in diverse_candidate_indices]
+            candidate_scores = [candidate_scores[i] for i in diverse_candidate_indices]
+
+            if self.verbose:
+                diversity_message += f', highest diverse candidate fitness score was {max(candidate_scores)})'
+                logging.info(diversity_message)
+
         all_games = self.population + candidates
         all_scores = self.fitness_values + candidate_scores
-
-        # TODO: do something with the diversity scorer?
 
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
-    def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]], generation_index: int, sample_index: int):
+    def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]],
+                                   generation_index: int, sample_index: int,
+                                   return_sample_features: bool = False) -> SingleStepResults:
         '''
         Given a parent, a generation and sample index (to make sure that the RNG is seeded differently for each generation / individual),
         sample an operator and apply it to the parent. Returns the child or children and their fitness scores
@@ -737,14 +812,30 @@ class PopulationBasedSampler():
                 for i, child in enumerate(child_or_children):
                     self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
 
-                children_fitness_scores = [self._score_proposal(child, return_features=False) for child in child_or_children]
-                return child_or_children, children_fitness_scores
+                children_fitness_scores = [self._score_proposal(child, return_features=return_sample_features) for child in child_or_children]
+                children_features = None
+                if return_sample_features:
+                    children_fitness_scores, children_features = zip(*children_fitness_scores)  # type: ignore
+                    children_fitness_scores = list(children_fitness_scores)
+                    children_features = list(children_features)
 
-            except SamplingException:
+                child_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
+                return SingleStepResults(child_or_children, children_fitness_scores, child_diversity_scores, children_features)  # type: ignore
+
+            except SamplingException as e:
+                # if self.verbose:
+                #     logging.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
-        # TODO: should this raise an exception or just return the parent unmodified?
-        raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
+        # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
+        # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
+        return SingleStepResults([], [], None, None)
+
+    def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
+        '''
+        Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index)
+        '''
+        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
                           should_tqdm: bool = False):
@@ -754,12 +845,13 @@ class PopulationBasedSampler():
         # 3. for each parent(s) yielded, apply the operator to produce one or more new games and add them to a "candidates" list
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
-        parent_iterator = self._get_parent_iterator()
 
-        param_iterator = zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
+        param_iterator = self._build_evolutionary_step_param_iterator(self._get_parent_iterator())
 
         candidates = []
         candidate_scores = []
+        candidate_diversity_scores = []
+        candidate_features = []
 
         if pool is not None:
             children_iter = pool.istarmap(self._sample_and_apply_operator, param_iterator, chunksize=chunksize)  # type: ignore
@@ -769,15 +861,15 @@ class PopulationBasedSampler():
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        for children, children_fitness_scores in children_iter:
-            if isinstance(children, list):
-                candidates.extend(children)
-                candidate_scores.extend(children_fitness_scores)
-            else:
-                candidates.append(children)
-                candidate_scores.append(children_fitness_scores)
+        for children, children_fitness_scores, children_diversity_scores, children_features in children_iter:
+            candidates.extend(children)
+            candidate_scores.extend(children_fitness_scores)
+            if children_diversity_scores is not None:
+                candidate_diversity_scores.extend(children_diversity_scores)
+            if children_features is not None:
+                candidate_features.extend(children_features)
 
-        self._select_new_population(candidates, candidate_scores)
+        self._select_new_population(candidates, candidate_scores, candidate_diversity_scores, candidate_features)
 
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
@@ -798,9 +890,13 @@ class PopulationBasedSampler():
                     if self.diversity_scorer is None:
                         raise ValueError('Cannot compute diversity metrics without a diversity scorer')
 
-                    self.diversity_scorer.set_population(self.population)
-                    diversity_scores = np.array(self.diversity_scorer.score_entire_population())
-                    self.diversity_metrics_history.append({'mean': diversity_scores.mean(), 'std': diversity_scores.std(), 'max': diversity_scores.max(), 'min': diversity_scores.min()})
+                    self._update_generation_diversity_scores()
+                    self.diversity_metrics_history.append({
+                        'mean': self.generation_diversity_scores.mean(),
+                        'std': self.generation_diversity_scores.std(),
+                        'max': self.generation_diversity_scores.max(),
+                        'min': self.generation_diversity_scores.min()
+                    })
 
                     postfix["DivMean"] = f"{self.diversity_metrics_history[-1]['mean']:.2f}"
                     postfix["DivStd"] = f"{self.diversity_metrics_history[-1]['std']:.2f}"
@@ -810,7 +906,7 @@ class PopulationBasedSampler():
                 pbar.set_postfix(postfix)  # type: ignore
 
             elif self.verbose:
-                print(f"Average fitness: {self.mean_fitness:.3f} +/- {self.std_fitness:.3f}, Best fitness: {self.best_fitness:.3f}")
+                print(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
 
             self.fitness_metrics_history.append({'mean': self.mean_fitness, 'std': self.std_fitness, 'max': self.best_fitness})
 
@@ -851,6 +947,58 @@ class PopulationBasedSampler():
     def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         sample_index = np.argsort(self.fitness_values)[-top_index]
         self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+
+
+class MAPElitesSampler(PopulationBasedSampler):
+    map_elites_feature_names: typing.List[str]
+
+    def __init__(self, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.map_elites_feature_names = []
+
+        names = set([name for name in map_elites_feature_names_or_patterns if isinstance(name, str)])
+        patterns = [pattern for pattern in map_elites_feature_names_or_patterns if isinstance(pattern, re.Pattern)]
+
+        for feature_name in self.feature_names:
+            if feature_name in names:
+                self.map_elites_feature_names.append(feature_name)
+                names.remove(feature_name)
+
+            else:
+                for pattern in patterns:
+                    if pattern.match(feature_name):
+                        self.map_elites_feature_names.append(feature_name)
+                        break
+
+        if len(names) > 0:
+            raise ValueError(f'Could not find the following feature names in the list of feature names: {names}')
+
+    def _score_proposal(self, proposal: ASTType, return_features: bool = False):
+        retval = super()._score_proposal(proposal, return_features=return_features)  # type: ignore
+        if return_features:
+            score, features = retval  # type: ignore
+            # TODO: do we want a dict? a list? a vector?
+            return score, {name: features[name] for name in self.map_elites_feature_names}
+
+        return retval
+
+    def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
+        '''
+        Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index, return_features)
+        '''
+        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
+
+    def set_population(self, population: typing.List[Any], fitness_values: typing.List[float] | None = None):
+        # TODO: decide what we're doing with the previous set_popluation method
+        return super().set_population(population, fitness_values)
+
+    def _select_new_population(self, candidates: typing.List[ASTType],
+                               candidate_scores: typing.List[float],
+                               candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
+                               candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
+
+        # TODO: implement me!
+        pass
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -899,6 +1047,7 @@ class WeightedBeamSearchSampler(PopulationBasedSampler):
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         return super()._get_parent_iterator(2, 2 * self.k)
+
 
 class InsertDeleteSampler(PopulationBasedSampler):
     def __init__(self, *args, **kwargs):
@@ -958,7 +1107,7 @@ class CrossoverOnlySampler(PopulationBasedSampler):
 
                     return post_crossover_games
                 except SamplingException as e:
-                    if self.verbose:
+                    if self.verbose >= 2:
                         print(f'Failed to crossover: {e}')
 
             raise SamplingException('Failed to crossover after max attempts')
@@ -992,6 +1141,17 @@ class MicrobialGASampler(PopulationBasedSampler):
         self.min_n_loser_crossovers = min_n_loser_crossovers
         self.max_n_loser_crossovers = max_n_loser_crossovers
 
+    def _sample_mutation(self, rng) -> typing.Callable[[ASTType, np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
+        return self._choice([self._gen_regrowth_sample, self._insert, self._delete], rng=rng)  # type: ignore
+
+    def _randomly_mutate_game(self, game, rng):
+        return self._sample_mutation(rng)(game, rng)
+
+    def _mutate_loser(self, loser_game, rng):
+        return self._randomly_mutate_game(loser_game, rng)
+
+    def _mutate_winner(self, winner_game, rng):
+        return None
 
     def _get_operator(self, rng):
         '''
@@ -1018,11 +1178,21 @@ class MicrobialGASampler(PopulationBasedSampler):
                 for _ in range(n_crossovers):
                     _, loser = self._crossover([winner, loser], self.crossover_type, rng=rng, crossover_first_game=False)
 
-            # Apply a randomly selected mutation operator to the loser
-            mutation = self._choice([self._gen_regrowth_sample, self._insert, self._delete], rng=rng)
-            mutated_loser = mutation(loser, rng)  # type: ignore
+            # Optionally, apply a randomly selected mutation operator to the loser
+            mutated_loser = self._mutate_loser(loser, rng)
+            if mutated_loser is None:
+                mutated_loser = []
+            elif not isinstance(mutated_loser, list):
+                mutated_loser = [mutated_loser]
 
-            return mutated_loser
+            # and to the winer
+            mutated_winner = self._mutate_winner(winner, rng)
+            if mutated_winner is None:
+                mutated_winner = []
+            elif not isinstance(mutated_winner, list):
+                mutated_winner = [mutated_winner]
+
+            return mutated_loser + mutated_winner
 
         return microbial_ga_operator
 
@@ -1030,18 +1200,52 @@ class MicrobialGASampler(PopulationBasedSampler):
         return super()._get_parent_iterator(n_parents_per_sample=2)
 
 
+class MicrobialGASamplerWithBeamSearch(MicrobialGASampler):
+    beam_search_k: int
+
+    def __init__(self,
+                 args: argparse.Namespace,
+                 beam_search_k: int = 1,
+                 crossover_full_sections: bool = False,
+                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                 min_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS,
+                 max_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS,
+                 *addl_args, **kwargs):
+
+        super().__init__(
+            args=args,
+            crossover_full_sections=crossover_full_sections, crossover_type=crossover_type,
+            min_n_loser_crossovers=min_n_loser_crossovers, max_n_loser_crossovers=max_n_loser_crossovers,
+            *addl_args, **kwargs)
+
+        self.beam_search_k = beam_search_k
+
+    def _randomly_mutate_game_beams(self, game, rng):
+        return [self._randomly_mutate_game(game, rng=rng) for _ in range(self.beam_search_k)]
+
+    def _mutate_loser(self, loser_game, rng):
+        return self._randomly_mutate_game_beams(loser_game, rng)
+
+    def _mutate_winner(self, winner_game, rng):
+        return self._randomly_mutate_game_beams(winner_game, rng)
+
+
 def main(args):
     if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
         logging.debug('Setting postprocess to True because diversity scorer uses edit distance')
         args.postprocess = True
+
+    if not args.diversity_threshold_absolute and args.diversity_score_threshold <= 1.0:
+        logging.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
+        args.diversity_score_threshold = args.diversity_score_threshold * 100
 
     sampler_kwargs = dict(
         omit_rules=args.omit_rules,
         omit_tokens=args.omit_tokens,
     )
 
-    if args.sampler_type == MICROBIAL_GA:
-        evosampler = MicrobialGASampler(
+    if args.sampler_type in (MICROBIAL_GA, MICROBIAL_GA_WITH_BEAM_SEARCH):
+        evo_sampler_kwarsgs = dict(
             crossover_full_sections=args.microbial_ga_crossover_full_sections, crossover_type=CrossoverType(args.microbial_ga_crossover_type),
             min_n_loser_crossovers=args.microbial_ga_n_min_loser_crossovers, max_n_loser_crossovers=args.microbial_ga_n_max_loser_crossovers,
             args=args,
@@ -1060,7 +1264,19 @@ def main(args):
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
             diversity_scorer_type=args.diversity_scorer_type,
+            diversity_scorer_k=args.diversity_scorer_k,
+            diversity_score_threshold=args.diversity_score_threshold,
+            diversity_threshold_absolute=args.diversity_threshold_absolute,
         )
+
+        if args.sampler_type == MICROBIAL_GA:
+            sampler_class = MicrobialGASampler
+
+        elif args.sampler_type == MICROBIAL_GA_WITH_BEAM_SEARCH:
+            sampler_class = MicrobialGASamplerWithBeamSearch
+            evo_sampler_kwarsgs['beam_search_k'] = args.beam_search_k
+
+        evosampler = sampler_class(**evo_sampler_kwarsgs)  # type: ignore
 
     elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
         evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
@@ -1080,6 +1296,9 @@ def main(args):
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
             diversity_scorer_type=args.diversity_scorer_type,
+            diversity_scorer_k=args.diversity_scorer_k,
+            diversity_score_threshold=args.diversity_score_threshold,
+            diversity_threshold_absolute=args.diversity_threshold_absolute,
         )
 
     else:
@@ -1121,8 +1340,14 @@ def main(args):
         print('Best individual:')
         evosampler._print_game(evosampler._best_individual())
 
+    except:
+        exception_caught = True
+
+    else:
+        exception_caught = False
+
     finally:
-        evosampler.save()
+        evosampler.save(suffix='final' if not exception_caught else 'error')
 
 
 

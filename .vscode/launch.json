@@ -168,7 +168,15 @@
                 "--parallel-n-workers", "7",
                 "--sample-parallel",
                 "--should-tqdm",
-                "--random-seed", "33"
+                "--random-seed", "33",
+                "--microbial-ga-crossover-full-sections",
+                "--postprocess",
+                "--compute-diversity-metrics",
+                "--diversity-scorer-type", "by_section_edit_distance_max",
+                "--diversity-scorer-k", "10",
+                "--diversity-score-threshold", "0.05",
+                "--omit-rules", "at_end",
+                "--verbose", "1"
             ],
             "console": "integratedTerminal",
             // "notes": "--parse-counter",

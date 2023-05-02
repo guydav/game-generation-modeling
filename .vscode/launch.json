@@ -165,7 +165,7 @@
                 "--n-steps", "20",
                 "--initial-proposal-type", "1",
                 "--parallel-n-workers", "7",
-                "--sample-parallel",
+                // "--sample-parallel",
                 "--should-tqdm",
                 "--random-seed", "33",
                 "--postprocess",

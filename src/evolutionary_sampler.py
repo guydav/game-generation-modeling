@@ -121,6 +121,7 @@ parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 
 DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
+parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 
 
 DEFAULT_RELATIVE_PATH = '.'
@@ -424,7 +425,8 @@ class PopulationBasedSampler():
     def _print_game(self, game):
         print(ast_printer.ast_to_string(game, "\n"))
 
-    def _choice(self, iterable: typing.Sequence[T], n: int = 1, rng: typing.Optional[np.random.Generator] = None) -> typing.Union[T, typing.List[T]]:
+    def _choice(self, iterable: typing.Sequence[T], n: int = 1, rng: typing.Optional[np.random.Generator] = None,
+                weights: typing.Optional[typing.Sequence[float]] = None) -> typing.Union[T, typing.List[T]]:
         '''
         Small hack to get around the rng invalid __array_struct__ error
         '''
@@ -432,11 +434,11 @@ class PopulationBasedSampler():
             rng = self.rng
 
         if n == 1:
-            idx = rng.integers(len(iterable))
+            idx = rng.choice(len(iterable), p=weights)
             return iterable[idx]
 
         else:
-            idxs = rng.choice(len(iterable), size=n, replace=False)
+            idxs = rng.choice(len(iterable), size=n, replace=False, p=weights)
             return [iterable[idx] for idx in idxs]
 
     def _gen_init_sample(self, idx):
@@ -942,7 +944,7 @@ class PopulationBasedSampler():
             self.generation_index += 1
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
-                                             inner_tqdm: bool = False, postprocess: typing.Optional[bool] = False,
+                                             inner_tqdm: bool = False, postprocess: bool = True,
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
                                              n_workers: int = 8, chunksize: int = 1):
 
@@ -972,17 +974,25 @@ class PopulationBasedSampler():
         self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
 
+class MAPElitesWeightStrategy(Enum):
+    UNIFORM = 0
+    FITNESS_RANK = 1
+    UCB = 2
+    FITNESS_RANK_AND_UCB = 3
+
+
 class MAPElitesSampler(PopulationBasedSampler):
     fitness_values: typing.Dict[float, float]
     generation_size: int
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
     population: typing.Dict[float, ASTType]
-    generation_size: int
+    weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],  *args, **kwargs):
+    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],  *args, **kwargs):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
+        self.weight_strategy = weight_strategy
         super().__init__(*args, **kwargs)
 
     def _pre_population_sample_setup(self):
@@ -1047,7 +1057,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         self._select_new_population(population, fitness_values, candidate_features=keys)  # type: ignore
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: float):
-        # TODO: any thresholding here?
+        # TODO: any thresholding here? or keeping multiple candidates per cell?
         if key not in self.population or fitness_value > self.fitness_values[key]:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
@@ -1070,15 +1080,26 @@ class MAPElitesSampler(PopulationBasedSampler):
         return {
             '# Cells': self.population_size,
             '# Good': len([fitness for fitness in self.fitness_values.values() if fitness > 70]),
+            '# Great': len([fitness for fitness in self.fitness_values.values() if fitness > 75]),
         }
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        weights = None
+        if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
+            pass
+        elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
+            fitness_values = np.array(list(self.fitness_values.values()))
+            ranks = len(fitness_values) - np.argsort(fitness_values)
+            weights = 0.5 + (ranks / len(fitness_values))
+            weights /= weights.sum()
+
         # TODO: sample proportionally to fitness? UCB? ...?
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
-            yield self.population[self._choice(keys)]  #  type: ignore
+            yield self.population[self._choice(keys, weights=weights)]  #  type: ignore
 
     def _get_operator(self, rng):
+        # TODO: do we want to do crossover as well?
         return self._randomly_mutate_game
 
 
@@ -1384,6 +1405,7 @@ def main(args):
         evosampler = MAPElitesSampler(
             map_elites_feature_names_or_patterns=FEATURE_NAMES_OR_PATTERNS,  # type: ignore
             generation_size=args.map_elites_generation_size,
+            weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             args=args,
             population_size=args.population_size,
             verbose=args.verbose,

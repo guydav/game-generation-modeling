@@ -529,6 +529,29 @@ class AllPreferencesUsed(FitnessTerm):
         return len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))
 
 
+class NumPreferencesDefined(FitnessTerm):
+    defined_preferences: typing.Set[str] = set()
+    max_count: int
+    min_count: int
+
+    def __init__(self, max_count: int = 5, min_count: int = 1):
+        super().__init__('preference', 'num_preferences_defined')
+        self.max_count = max_count
+        self.min_count = min_count
+
+    def game_start(self) -> None:
+        self.defined_preferences = set()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.defined_preferences.add(ast.pref_name)  # type: ignore
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return {str(d): d == len(self.defined_preferences) for d in range(self.min_count, self.max_count + 1)}
+
+    def _get_all_inner_keys(self):
+        return [str(d) for d in range(self.min_count, self.max_count + 1)]
+
+
 SETUP_OBJECTS_SKIP_CATEGORIES = [room_and_object_types.AGENT, room_and_object_types.COLORS, room_and_object_types.ORIENTATIONS, room_and_object_types.SIDES]
 SETUP_OBJECTS_SKIP_OBJECTS = set(sum([list(room_and_object_types.CATEGORIES_TO_TYPES[category]) for category in SETUP_OBJECTS_SKIP_CATEGORIES], []))
 
@@ -2121,6 +2144,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     all_preferences_used = AllPreferencesUsed()
     fitness.register(all_preferences_used)
+
+    num_preferences_defined = NumPreferencesDefined()
+    fitness.register(num_preferences_defined)
 
     all_setup_objects_used = SetupObjectsUsed()
     fitness.register(all_setup_objects_used)

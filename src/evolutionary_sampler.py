@@ -190,6 +190,7 @@ T = typing.TypeVar('T')
 class SingleStepResults(typing.NamedTuple):
     samples: typing.List[ASTType]
     fitness_scores: typing.List[float]
+    parent_infos: typing.List[typing.Dict[str, typing.Any]]
     diversity_scores: typing.Optional[typing.List[float]]
     sample_features: typing.Optional[typing.List[typing.Dict[str, typing.Any]]]
 
@@ -220,6 +221,9 @@ def handle_multiple_inputs(operator):
             return outputs
 
     return wrapped_operator
+
+
+PARENT_INDEX = 'parent_index'
 
 
 class PopulationBasedSampler():
@@ -742,7 +746,7 @@ class PopulationBasedSampler():
 
         return no_op_operator
 
-    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1) -> typing.Iterator[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Dict[str, typing.Any]]]:
         '''
         Returns an iterator which at each step yields one or more parents that will be modified
         by the operator. As a default, return an iterator which yields the entire population
@@ -751,11 +755,12 @@ class PopulationBasedSampler():
 
         if n_parents_per_sample == 1:
             for i in indices:
-                yield self.population[i]
+                yield (self.population[i], {PARENT_INDEX: i})
 
         else:
             for idxs in range(0, len(indices), n_parents_per_sample):
-                yield [self.population[i] for i in indices[idxs:idxs + n_parents_per_sample]]
+                sample_indices = indices[idxs:idxs + n_parents_per_sample]
+                yield ([self.population[i] for i in sample_indices], {PARENT_INDEX: sample_indices})
 
     def _update_generation_diversity_scores(self):
         if self.diversity_scorer is not None and self.generation_index != self.generation_diversity_scores_index:
@@ -768,6 +773,7 @@ class PopulationBasedSampler():
 
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
+                               parent_infos: typing.List[typing.Dict[str, typing.Any]],
                                candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
                                candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
         '''
@@ -812,6 +818,7 @@ class PopulationBasedSampler():
         self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
     def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]],
+                                   parent_info: typing.Dict[str, typing.Any],
                                    generation_index: int, sample_index: int,
                                    return_sample_features: bool = False) -> SingleStepResults:
         '''
@@ -838,7 +845,7 @@ class PopulationBasedSampler():
                     children_features = list(children_features)
 
                 child_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
-                return SingleStepResults(child_or_children, children_fitness_scores, child_diversity_scores, children_features)  # type: ignore
+                return SingleStepResults(child_or_children, children_fitness_scores, itertools.repeat(parent_info, len(child_or_children)), child_diversity_scores, children_features)  # type: ignore
 
             except SamplingException as e:
                 # if self.verbose:
@@ -847,13 +854,13 @@ class PopulationBasedSampler():
 
         # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
-        return SingleStepResults([], [], None, None)
+        return SingleStepResults([], [], [], None, None)
 
-    def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
+    def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index)
         '''
-        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
+        return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
                           postprocess: bool = True, should_tqdm: bool = False):
@@ -868,6 +875,7 @@ class PopulationBasedSampler():
 
         candidates = []
         candidate_scores = []
+        candidate_parent_infos = []
         candidate_diversity_scores = []
         candidate_features = []
 
@@ -879,18 +887,19 @@ class PopulationBasedSampler():
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        for children, children_fitness_scores, children_diversity_scores, children_features in children_iter:
+        for children, children_fitness_scores, parent_infos, children_diversity_scores, children_features in children_iter:
             if postprocess:
                 children = [self.postprocessor(c) for c in children]
 
             candidates.extend(children)
             candidate_scores.extend(children_fitness_scores)
+            candidate_parent_infos.extend(parent_infos)
             if children_diversity_scores is not None:
                 candidate_diversity_scores.extend(children_diversity_scores)
             if children_features is not None:
                 candidate_features.extend(children_features)
 
-        self._select_new_population(candidates, candidate_scores, candidate_diversity_scores, candidate_features)
+        self._select_new_population(candidates, candidate_scores, candidate_parent_infos, candidate_diversity_scores, candidate_features)
 
     def _create_tqdm_postfix(self) -> typing.Dict[str, str]:
         baseline_postfix = {"Mean": f"{self.mean_fitness:.2f}", "Std": f"{self.std_fitness:.2f}", "Max": f"{self.best_fitness:.2f}"}
@@ -983,6 +992,9 @@ class MAPElitesWeightStrategy(Enum):
     FITNESS_RANK_AND_UCB = 3
 
 
+PARENT_KEY = 'parent_key'
+
+
 class MAPElitesSampler(PopulationBasedSampler):
     fitness_values: typing.Dict[int, float]
     generation_size: int
@@ -1029,7 +1041,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         retval = super()._score_proposal(proposal, return_features=return_features)  # type: ignore
         if return_features:
             score, features = retval  # type: ignore
-            # TODO: do we want a dict? a list? a vector?
             return score, self._features_to_key(features)
 
         return retval
@@ -1038,7 +1049,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         '''
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index, return_features)
         '''
-        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
+
+        return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
 
     def _update_population_statistics(self):
         self.population_size = len(self.population)
@@ -1048,7 +1060,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.std_fitness = np.std(fitness_values)
 
     def set_population(self, population: typing.List[Any], fitness_values: typing.List[float] | None = None):
-        # TODO: decide what we're doing with the previous set_popluation method
         keys = None
         if fitness_values is None:
             fitness_values, keys = zip(*[self._score_proposal(game, return_features=True) for game in population])   # type: ignore
@@ -1056,24 +1067,28 @@ class MAPElitesSampler(PopulationBasedSampler):
         if keys is None:
             keys = [self._features_to_key(self._proposal_to_features(game)) for game in population]
 
-        self._select_new_population(population, fitness_values, candidate_features=keys)  # type: ignore
+        self._select_new_population(population, fitness_values, parent_infos=itertools.repeat(None, len(population)), candidate_features=keys)  # type: ignore
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int):
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]]):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
-        if key not in self.population or fitness_value > self.fitness_values[key]:
+        if (key not in self.population) or (fitness_value > self.fitness_values[key]):
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
 
+            # TODO: parent_info will be a dict with PARENT_KEY = the key of the parent that created this sample
+            # TODO: if parent_info is None it means this is the initial population setting
+
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
+                               parent_infos: typing.List[typing.Dict[str, typing.Any]],
                                candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
                                candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
 
         if candidate_features is None:
             raise ValueError('MAPElitesSampler requires candidate_features to be provided')
 
-        for candidate, score, key in zip(candidates, candidate_scores, candidate_features):
-            self._add_to_archive(candidate, score, key)  # type: ignore
+        for candidate, score, key, parent_info in zip(candidates, candidate_scores, candidate_features, parent_infos):
+            self._add_to_archive(candidate, score, key, parent_info)  # type: ignore
 
         self._update_population_statistics()
 
@@ -1081,8 +1096,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make this threshold a parameter
         return {
             '# Cells': self.population_size,
-            '# Good': len([fitness for fitness in self.fitness_values.values() if fitness > 70]),
-            '# Great': len([fitness for fitness in self.fitness_values.values() if fitness > 75]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 75]),
         }
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
@@ -1094,11 +1109,14 @@ class MAPElitesSampler(PopulationBasedSampler):
             ranks = len(fitness_values) - np.argsort(fitness_values)
             weights = 0.5 + (ranks / len(fitness_values))
             weights /= weights.sum()
+        else:
+            # TODO: implement UCB
+            raise NotImplementedError(f'Unknown weight strategy: {self.weight_strategy}')
 
-        # TODO: sample proportionally to fitness? UCB? ...?
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
-            yield self.population[self._choice(keys, weights=weights)]  #  type: ignore
+            key = self._choice(keys, weights=weights)
+            yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
 
     def _get_operator(self, rng):
         # TODO: do we want to do crossover as well?
@@ -1118,12 +1136,14 @@ class MAPElitesSampler(PopulationBasedSampler):
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         population_keys = list(self.population.keys())
         self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return population_keys[sample_index]
 
     def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
         fitness_values_and_keys.sort(key=lambda x: x[0])
         key = fitness_values_and_keys[-top_index][1]
         self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return key
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -1423,6 +1443,9 @@ def main(args):
     elif args.sampler_type == MAP_ELITES:
         FEATURE_NAMES_OR_PATTERNS = [
             re.compile(r'compositionality_structure_.*'),
+            'section_doesnt_exist_setup',
+            'section_doesnt_exist_terminal',
+
         ]
 
         evosampler = MAPElitesSampler(

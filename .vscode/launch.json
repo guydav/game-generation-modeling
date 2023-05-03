@@ -161,8 +161,9 @@
             "program": "${file}",
             "args": [
                 "--sampler-type", "map_elites",
-                "--population-size", "20",
-                "--n-steps", "20",
+                "--population-size", "32",
+                "--n-steps", "32",
+                "--map-elites-generation-size", "256",
                 "--initial-proposal-type", "1",
                 "--parallel-n-workers", "7",
                 // "--sample-parallel",
@@ -176,7 +177,7 @@
                 // "--diversity-score-threshold", "0.05",
                 "--omit-rules", "at_end",
                 "--verbose", "1",
-                "--map-elites-generation-size", "20",
+
             ],
             "console": "integratedTerminal",
             // "notes": "--parse-counter",

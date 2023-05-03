@@ -955,10 +955,9 @@ class PopulationBasedSampler():
                                              postprocess=postprocess, compute_diversity_metrics=compute_diversity_metrics,
                                              save_every_generation=save_every_generation)
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
-        sample = self.population[sample_index]
+    def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         if postprocess_sample:
-            sample = self.postprocessor(sample)
+            sample = self.postprocessor(sample)  # type: ignore
 
         sample_features = self._proposal_to_features(sample)  # type: ignore
         sample_features_tensor = self._features_to_tensor(sample_features)
@@ -968,6 +967,9 @@ class PopulationBasedSampler():
             top_k=top_k, display_overall_features=display_overall_features,
             display_game=display_game, min_display_threshold=min_display_threshold,
             )
+
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        self._visualize_sample(self.population[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
     def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         sample_index = np.argsort(self.fitness_values)[-top_index]
@@ -982,11 +984,11 @@ class MAPElitesWeightStrategy(Enum):
 
 
 class MAPElitesSampler(PopulationBasedSampler):
-    fitness_values: typing.Dict[float, float]
+    fitness_values: typing.Dict[int, float]
     generation_size: int
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
-    population: typing.Dict[float, ASTType]
+    population: typing.Dict[int, ASTType]
     weight_strategy: MAPElitesWeightStrategy
 
     def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],  *args, **kwargs):
@@ -1056,7 +1058,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         self._select_new_population(population, fitness_values, candidate_features=keys)  # type: ignore
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: float):
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
         if key not in self.population or fitness_value > self.fitness_values[key]:
             self.population[key] = candidate
@@ -1101,6 +1103,27 @@ class MAPElitesSampler(PopulationBasedSampler):
     def _get_operator(self, rng):
         # TODO: do we want to do crossover as well?
         return self._randomly_mutate_game
+
+    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        if key not in self.population:
+            raise ValueError(f'Key {key} not found in population')
+
+        key_dict = {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
+        print('Sample features:')
+        for feature_name, feature_value in key_dict.items():
+            print(f'{feature_name}: {feature_value}')
+
+        self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        population_keys = list(self.population.keys())
+        self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
+        fitness_values_and_keys.sort(key=lambda x: x[0])
+        key = fitness_values_and_keys[-top_index][1]
+        self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
 
 class BeamSearchSampler(PopulationBasedSampler):

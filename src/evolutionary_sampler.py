@@ -1,4 +1,5 @@
 import argparse
+from collections import OrderedDict
 from functools import wraps
 import gzip
 import logging
@@ -1007,6 +1008,14 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
+
+        # UCB selection requires us to store additional information for each key / cell
+        if self.weight_strategy == MAPElitesWeightStrategy.UCB:
+            self.key_to_ucb_improvements = defaultdict(int)
+            self.key_to_ucb_samples = defaultdict(int)
+            self.ucb_exploration_constant = 1.0
+            self.ucb_sample_idx = 0
+
         super().__init__(*args, **kwargs)
 
     def _pre_population_sample_setup(self):
@@ -1029,8 +1038,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         if len(names) > 0:
             raise ValueError(f'Could not find the following feature names in the list of feature names: {names}')
 
-        self.population = {}
-        self.fitness_values = {}
+        self.population = OrderedDict()
+        self.fitness_values = OrderedDict()
 
     def _features_to_key(self, features: typing.Dict[str, float]) -> int:
         return sum([(2 ** i) * int(features[feature_name])
@@ -1075,8 +1084,10 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
 
-            # TODO: parent_info will be a dict with PARENT_KEY = the key of the parent that created this sample
-            # TODO: if parent_info is None it means this is the initial population setting
+            # If this isn't the initial population, then the candidate being added to archive counts as a success for
+            # its parent (i.e. the cell from which it was createdd) when using UCB
+            if self.weight_strategy == MAPElitesWeightStrategy.UCB and parent_info is not None:
+                self.key_to_ucb_improvements[parent_info[PARENT_KEY]] += 1
 
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
@@ -1104,19 +1115,43 @@ class MAPElitesSampler(PopulationBasedSampler):
         weights = None
         if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
             pass
+
         elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
             fitness_values = np.array(list(self.fitness_values.values()))
             ranks = len(fitness_values) - np.argsort(fitness_values)
             weights = 0.5 + (ranks / len(fitness_values))
             weights /= weights.sum()
+
+        elif self.weight_strategy == MAPElitesWeightStrategy.UCB:
+
+            # If this is the first time we're sampling, then we initialize ucb_sample_idx as though we've
+            # already sampled each cell once
+            if self.ucb_sample_idx == 0:
+                self.ucb_sample_idx = len(self.population)
+
+            # We add 1 each visit to perform uniform sampling in the case where we haven't visited a cell yet
+            visits = np.array([1.0 + self.key_to_ucb_samples[key] for key in self.population.keys()])
+
+            # We estimate the value of each cell as the proportion of times selecting that cell led to a new elite being created
+            estimated_values = np.array([self.key_to_ucb_improvements[key] for key in self.population.keys()]) / visits
+
+            ucb_values = estimated_values + self.ucb_exploration_constant * np.sqrt(np.log(self.ucb_sample_idx) / visits)
+
+            weights = ucb_values / ucb_values.sum()
+
         else:
-            # TODO: implement UCB
             raise NotImplementedError(f'Unknown weight strategy: {self.weight_strategy}')
 
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
             key = self._choice(keys, weights=weights)
+
+            if self.weight_strategy == MAPElitesWeightStrategy.UCB:
+                self.key_to_ucb_samples[key] += 1
+                self.ucb_sample_idx += 1
+
             yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
+
 
     def _get_operator(self, rng):
         # TODO: do we want to do crossover as well?

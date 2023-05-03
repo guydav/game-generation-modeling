@@ -20,3 +20,5 @@ tmp/**/*
 notes.md
 
 samples/every_gen
+
+.vscode/sftp.json

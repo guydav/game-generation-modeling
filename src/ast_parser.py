@@ -1,6 +1,7 @@
 from collections import namedtuple
 import copy
 import itertools
+import logging
 import re
 import typing
 
@@ -10,6 +11,12 @@ import tatsu
 import tatsu.ast
 import tatsu.buffering
 import tatsu.infos
+
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)-8s - %(message)s',
+    level=logging.DEBUG,
+    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 SETUP = '(:setup'

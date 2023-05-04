@@ -43,10 +43,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 import src
 
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -767,7 +765,7 @@ class PopulationBasedSampler():
     def _update_generation_diversity_scores(self):
         if self.diversity_scorer is not None and self.generation_index != self.generation_diversity_scores_index:
             if self.verbose:
-                logging.info(f'Updating diversity scores for generation {self.generation_index}')
+                logger.info(f'Updating diversity scores for generation {self.generation_index}')
 
             population_diversity_scores = self.diversity_scorer.population_score_distribution()
             self.generation_diversity_scores = population_diversity_scores
@@ -787,19 +785,19 @@ class PopulationBasedSampler():
             diversity_scores = np.array(candidate_diversity_scores)  # type: ignore
 
             if self.verbose:
-                logging.info(f'Candidate diversity scores: min: {diversity_scores.min():.3f}, 25th percentile: {np.percentile(diversity_scores, 25):.3f} mean: {diversity_scores.mean():.3f}, 75th percentile: {np.percentile(diversity_scores, 25):.3f},  max: {diversity_scores.max():.3f},')
+                logger.info(f'Candidate diversity scores: min: {diversity_scores.min():.3f}, 25th percentile: {np.percentile(diversity_scores, 25):.3f} mean: {diversity_scores.mean():.3f}, 75th percentile: {np.percentile(diversity_scores, 25):.3f},  max: {diversity_scores.max():.3f},')
 
             if not self.diversity_threshold_absolute:
                 self._update_generation_diversity_scores()
                 threshold = np.percentile(self.generation_diversity_scores, self.diversity_score_threshold)
                 if self.verbose:
-                    logging.info(f'Using diversity threshold of {threshold} (percentile {self.diversity_score_threshold} of generation {self.generation_index} diversity scores, min {self.generation_diversity_scores.min()}, max {self.generation_diversity_scores.max()})')
+                    logger.info(f'Using diversity threshold of {threshold} (percentile {self.diversity_score_threshold} of generation {self.generation_index} diversity scores, min {self.generation_diversity_scores.min()}, max {self.generation_diversity_scores.max()})')
             else:
                 threshold = self.diversity_score_threshold
 
             diverse_candidate_indices = np.where(diversity_scores >= threshold)[0]
             if len(diverse_candidate_indices) == 0:
-                logging.warning(f'No diverse candidates found with a threshold of {threshold} (highest candidate diversity score was {diversity_scores.max()}), not replacing any population members')
+                logger.warning(f'No diverse candidates found with a threshold of {threshold} (highest candidate diversity score was {diversity_scores.max()}), not replacing any population members')
                 return
 
             diversity_message = ''
@@ -811,7 +809,7 @@ class PopulationBasedSampler():
 
             if self.verbose:
                 diversity_message += f', highest diverse candidate fitness score was {max(candidate_scores)})'
-                logging.info(diversity_message)
+                logger.info(diversity_message)
 
         all_games = self.population + candidates
         all_scores = self.fitness_values + candidate_scores
@@ -851,7 +849,7 @@ class PopulationBasedSampler():
 
             except SamplingException as e:
                 # if self.verbose:
-                #     logging.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
+                #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
         # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
@@ -959,7 +957,7 @@ class PopulationBasedSampler():
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
                                              n_workers: int = 8, chunksize: int = 1):
 
-        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
@@ -1385,11 +1383,11 @@ class MicrobialGASamplerWithBeamSearch(MicrobialGASampler):
 
 def main(args):
     if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
-        logging.debug('Setting postprocess to True because diversity scorer uses edit distance')
+        logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
         args.postprocess = True
 
     if not args.diversity_threshold_absolute and args.diversity_score_threshold <= 1.0:
-        logging.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
+        logger.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
         args.diversity_score_threshold = args.diversity_score_threshold * 100
 
     sampler_kwargs = dict(
@@ -1528,11 +1526,11 @@ def main(args):
 
     except Exception as e:
         exception_caught = True
-        logging.exception(e)
+        logger.exception(e)
 
     except:
         exception_caught = True
-        logging.exception('Unknown exception caught')
+        logger.exception('Unknown exception caught')
 
     else:
         exception_caught = False
@@ -1551,6 +1549,6 @@ if __name__ == '__main__':
     args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

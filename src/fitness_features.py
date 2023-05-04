@@ -73,10 +73,9 @@ parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
 parser.add_argument('--maxtasksperchild', default=None)
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
@@ -396,7 +395,7 @@ class ASTFitnessFeaturizer:
                     self._parse(ast[child_key], child_context)  # type: ignore
 
         else:
-            logging.warn(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
+            logger.warn(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
 
 
 class ASTNodeCounter(ast_parser.ASTParser):
@@ -2290,7 +2289,7 @@ def extract_negative_index(game_name: str):
 
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
     if args.existing_featurizer_path is not None:
-        logging.info(f'Loading featurizer from {args.existing_featurizer_path}')
+        logger.info(f'Loading featurizer from {args.existing_featurizer_path}')
         with gzip.open(args.existing_featurizer_path, 'rb') as f:
             featurizer = pickle.load(f)  # type: ignore
 
@@ -2338,9 +2337,9 @@ if __name__ == '__main__':
 
         # TODO: consider rewriting with asyncio instead of multiprocessing
 
-        logging.info(f'About to start pool with {args.n_workers} workers')
+        logger.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
-            logging.info('Pool started')
+            logger.info('Pool started')
             for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):  # type: ignore
                 continue
                 # if headers is None:
@@ -2352,7 +2351,7 @@ if __name__ == '__main__':
 
         featurizer = featurizers[0]
         # featurizer.rows = rows
-        logging.info('About to parse rows from temp files into dataframe')
+        logger.info('About to parse rows from temp files into dataframe')
         rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
         rows_df = pd.concat(rows_dfs, sort=False)
 
@@ -2372,19 +2371,19 @@ if __name__ == '__main__':
             for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):  # type: ignore
                 featurizer.parse(ast, test_file)  # type: ignore
 
-    logging.info('Done parsing games, about to convert to dataframe')
+    logger.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)
 
-    logging.debug(df.groupby('src_file').agg([np.mean, np.std]))
+    logger.debug(df.groupby('src_file').agg([np.mean, np.std]))
 
     for src_file in df.src_file.unique():
         zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
         zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
-        logging.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
+        logger.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
 
     global_zero_std = df.std(numeric_only=True) == 0
     global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore
-    logging.debug(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
+    logger.debug(f'For all src_files, the following columns have zero std (excluding arg_types columns): {global_zero_std_columns}')
 
 
     zero_mean_features = []
@@ -2408,15 +2407,15 @@ if __name__ == '__main__':
             positive_mean_features.append(feature)
 
     zero_mean_features_str = '\n'.join([f'    - {feature}' for feature in zero_mean_features])
-    logging.debug(f'The following features have a mean of zero over the real games:\n{zero_mean_features_str}\n')
+    logger.debug(f'The following features have a mean of zero over the real games:\n{zero_mean_features_str}\n')
 
     positive_mean_features_str = '\n'.join([f'    - {feature}' for feature in positive_mean_features])
-    logging.debug(f'The following features have a positive mean over the real games:\n{positive_mean_features_str}\n')
+    logger.debug(f'The following features have a positive mean over the real games:\n{positive_mean_features_str}\n')
 
     one_mean_features_str = '\n'.join([f'    - {feature}' for feature in one_mean_features])
-    logging.debug(f'The following features have a mean of 1 over the real games:\n{one_mean_features_str}\n')
+    logger.debug(f'The following features have a mean of 1 over the real games:\n{one_mean_features_str}\n')
 
-    logging.info(f'Writing to {args.output_path}')
+    logger.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 
     if args.existing_featurizer_path is None and args.featurizer_output_path is not None:

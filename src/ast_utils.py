@@ -10,11 +10,14 @@ import tatsu
 import tatsu.ast
 import tatsu.infos
 import tatsu.grammars
+import tempfile
 import tqdm
 import typing
 
-
 import ast_printer
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 DEFAULT_TEST_FILES = (
@@ -79,7 +82,7 @@ def load_games_from_file(path: str, start_token: str='(define',
         start = text.find(start_token)
 
         while start != -1:
-            end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
+            end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]  # type: ignore
             end_matches = [match != -1 and match or len(text) for match in end_matches]
             end = min(end_matches)
             next_start = text.find(start_token, start + 1)
@@ -95,7 +98,8 @@ def load_games_from_file(path: str, start_token: str='(define',
 
 
 
-CACHE_FOLDER = './dsl/cache'
+CACHE_FOLDER = os.path.abspath(os.environ.get('GAME_GENERATION_CACHE', os.path.join(tempfile.gettempdir(), 'game_generation_cache')))
+logger.debug(f'Using cache folder: {CACHE_FOLDER}')
 CACHE_FILE_PATTERN = '{name}-cache.pkl.gz'
 CACHE_HASHES_KEY = 'hashes'
 CACHE_ASTS_KEY = 'asts'
@@ -103,11 +107,15 @@ CACHE_DSL_HASH_KEY = 'dsl'
 
 
 def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str] = None):
+    if not os.path.exists(CACHE_FOLDER):
+        logger.debug(f'Creating cache folder: {CACHE_FOLDER}')
+        os.makedirs(CACHE_FOLDER, exist_ok=True)
+
     name, _ = os.path.splitext(os.path.basename(file_path))
-    if relative_path is not None:
-        return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
-    else:
-        return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    # if relative_path is not None:
+    #     return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    # else:
+    return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
 
 
 def _extract_game_id(game_str: str):
@@ -146,9 +154,9 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
         if CACHE_DSL_HASH_KEY not in cache:
-            logging.debug('No cached DSL hash found')
+            logger.debug('No cached DSL hash found')
         else:
-            logging.debug('Grammar changed, clearing cache')
+            logger.debug('Grammar changed, clearing cache')
 
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
@@ -158,7 +166,11 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         game_hash = fixed_hash(game)
 
         if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
-            if not grammar_changed and log_every_change: logging.debug(f'Game {game_id} changed or not in cache, parsing')
+            if not grammar_changed and log_every_change:
+                if game_id not in cache[CACHE_HASHES_KEY]:
+                    logger.debug(f'Game not found in cache: {game_id}')
+                else:
+                    logger.debug(f'Game changed: {game_id}')
             cache_updated = True
             ast = grammar_parser.parse(game)
             cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
@@ -171,7 +183,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         yield ast
 
         if save_updates_every > 0 and n_cache_updates >= save_updates_every:
-            logging.debug(f'Updating cache with {n_cache_updates} new games')
+            logger.debug(f'Updating cache with {n_cache_updates} new games')
             cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
             cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
             with gzip.open(cache_path, 'wb') as f:
@@ -179,10 +191,16 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
             cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
                 CACHE_DSL_HASH_KEY: grammar_hash}
             n_cache_updates = 0
-            logging.debug(f'Done updating cache, returning to parsing')
+            logger.debug(f'Done updating cache, returning to parsing')
+
+    if n_cache_updates > 0:
+        logger.debug(f'Updating cache with {n_cache_updates} new games')
+        cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
+        cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
+        cache_updated = True
 
     if cache_updated:
-        logging.debug(f'About to finally update the cache')
+        logger.debug(f'About to finally update the cache')
         with gzip.open(cache_path, 'wb') as f:
             pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
 

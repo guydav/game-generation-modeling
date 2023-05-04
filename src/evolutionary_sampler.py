@@ -29,6 +29,7 @@ from ast_utils import *
 from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
+from evolutionary_sampler_utils import UCBSelector
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
@@ -1009,12 +1010,9 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
 
-        # UCB selection requires us to store additional information for each key / cell
+        self.selector = None
         if self.weight_strategy == MAPElitesWeightStrategy.UCB:
-            self.key_to_ucb_improvements = defaultdict(int)
-            self.key_to_ucb_samples = defaultdict(int)
-            self.ucb_exploration_constant = 1.0
-            self.ucb_sample_idx = 0
+            self.selector = UCBSelector()
 
         super().__init__(*args, **kwargs)
 
@@ -1080,14 +1078,13 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]]):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
-        if (key not in self.population) or (fitness_value > self.fitness_values[key]):
+        successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
+        if successful:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
 
-            # If this isn't the initial population, then the candidate being added to archive counts as a success for
-            # its parent (i.e. the cell from which it was createdd) when using UCB
-            if self.weight_strategy == MAPElitesWeightStrategy.UCB and parent_info is not None:
-                self.key_to_ucb_improvements[parent_info[PARENT_KEY]] += 1
+        if self.selector is not None and parent_info is not None:
+            self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
@@ -1122,33 +1119,12 @@ class MAPElitesSampler(PopulationBasedSampler):
             weights = 0.5 + (ranks / len(fitness_values))
             weights /= weights.sum()
 
-        elif self.weight_strategy == MAPElitesWeightStrategy.UCB:
-
-            # If this is the first time we're sampling, then we initialize ucb_sample_idx as though we've
-            # already sampled each cell once
-            if self.ucb_sample_idx == 0:
-                self.ucb_sample_idx = len(self.population)
-
-            # We add 1 each visit to perform uniform sampling in the case where we haven't visited a cell yet
-            visits = np.array([1.0 + self.key_to_ucb_samples[key] for key in self.population.keys()])
-
-            # We estimate the value of each cell as the proportion of times selecting that cell led to a new elite being created
-            estimated_values = np.array([self.key_to_ucb_improvements[key] for key in self.population.keys()]) / visits
-
-            ucb_values = estimated_values + self.ucb_exploration_constant * np.sqrt(np.log(self.ucb_sample_idx) / visits)
-
-            weights = ucb_values / ucb_values.sum()
-
-        else:
-            raise NotImplementedError(f'Unknown weight strategy: {self.weight_strategy}')
-
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
-            key = self._choice(keys, weights=weights)
-
-            if self.weight_strategy == MAPElitesWeightStrategy.UCB:
-                self.key_to_ucb_samples[key] += 1
-                self.ucb_sample_idx += 1
+            if self.selector is None:
+                key = self._choice(keys, weights=weights)
+            else:
+                key = self.selector.select(keys, rng=self.rng)
 
             yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
 

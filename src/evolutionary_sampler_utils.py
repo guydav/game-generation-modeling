@@ -81,7 +81,10 @@ class ThompsonSamplingSelector(Selector):
         '''
         Given a list of keys, returns the key with the highest sampled mean
         '''
-        thompson_values = [rng.beta(self.reward_map[key].count(1) + self.prior_alpha, self.reward_map[key].count(0) + self.prior_beta) for key in keys]
+        alpha = np.array([self.reward_map[key].count(1) for key in keys]) + self.prior_alpha 
+        beta = np.array([self.reward_map[key].count(0) for key in keys]) + self.prior_beta
+        thompson_values = rng.beta(alpha, beta)
+        
         max_index = np.argmax(thompson_values)
         max_key = keys[max_index]
 

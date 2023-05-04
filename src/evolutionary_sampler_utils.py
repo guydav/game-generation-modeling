@@ -11,7 +11,7 @@ class Selector():
         raise NotImplementedError
 
 DEFAULT_EXPLORATION_CONSTANT = np.sqrt(0.5)
-DEFAULT_BUFFER_SIZE = 500
+DEFAULT_BUFFER_SIZE = 100
 
 class UCBSelector(Selector):
     '''
@@ -53,5 +53,36 @@ class UCBSelector(Selector):
 
         self.count_map[max_key] += 1
         self.n_draws += 1
+
+        return max_key
+    
+class ThompsonSamplingSelector(Selector):
+    '''
+    Implements the Thompson Sampling algorithm for selecting from a provided set of keys (arms). 
+    Assumes that the rewards are Bernoulli distributed (i.e. 0 or 1)
+    '''
+    def __init__(self,
+                 prior_alpha: int = 1,
+                 prior_beta: int = 1,
+                 buffer_size: typing.Optional[int] = DEFAULT_BUFFER_SIZE):
+        
+        self.prior_alpha = prior_alpha
+        self.prior_beta = prior_beta
+        self.buffer_size = buffer_size
+
+        self.reward_map = defaultdict(list)
+
+    def update(self, key, reward):
+        self.reward_map[key].append(reward)
+        if self.buffer_size is not None and len(self.reward_map[key]) > self.buffer_size:
+            self.reward_map[key].pop(0)
+
+    def select(self, keys, rng):
+        '''
+        Given a list of keys, returns the key with the highest sampled mean
+        '''
+        thompson_values = [rng.beta(self.reward_map[key].count(1) + self.prior_alpha, self.reward_map[key].count(0) + self.prior_beta) for key in keys]
+        max_index = np.argmax(thompson_values)
+        max_key = keys[max_index]
 
         return max_key

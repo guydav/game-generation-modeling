@@ -29,7 +29,7 @@ from ast_utils import *
 from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
-from evolutionary_sampler_utils import UCBSelector
+from evolutionary_sampler_utils import UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
@@ -991,7 +991,8 @@ class MAPElitesWeightStrategy(Enum):
     UNIFORM = 0
     FITNESS_RANK = 1
     UCB = 2
-    FITNESS_RANK_AND_UCB = 3
+    THOMPSON = 3
+    FITNESS_RANK_AND_UCB = 4
 
 
 PARENT_KEY = 'parent_key'
@@ -1013,6 +1014,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.selector = None
         if self.weight_strategy == MAPElitesWeightStrategy.UCB:
             self.selector = UCBSelector()
+        elif self.weight_strategy == MAPElitesWeightStrategy.THOMPSON:
+            self.selector = ThompsonSamplingSelector()
 
         super().__init__(*args, **kwargs)
 

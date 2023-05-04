@@ -1,5 +1,4 @@
 import argparse
-import cProfile
 from collections import OrderedDict
 from functools import wraps
 import gzip
@@ -12,13 +11,14 @@ import sys
 import tempfile
 import typing
 
-
 import numpy as np
 import tatsu
 import tatsu.ast
 import tatsu.grammars
 import torch
 from tqdm import tqdm, trange
+from viztracer import VizTracer
+
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
 import ast_printer
@@ -153,7 +153,7 @@ DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
 
 parser.add_argument('--profile', action='store_true')
-parser.add_argument('--profile-output-file', type=str, default='profile.txt')
+parser.add_argument('--profile-output-file', type=str, default='tracer.json')
 parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
 
@@ -1537,12 +1537,12 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
-    profile = None
+    tracer = None
 
     try:
         if args.profile:
-            profile = cProfile.Profile()
-            profile.enable()
+            tracer = VizTracer()
+            tracer.start()
 
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
@@ -1578,11 +1578,11 @@ def main(args):
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
 
-        if profile is not None:
-            profile.disable()
+        if tracer is not None:
+            tracer.stop()
             profile_output_path = os.path.join(args.profile_output_folder, args.profile_output_file)
             logger.info(f'Saving profile to {profile_output_path}')
-            profile.dump_stats(profile_output_path)
+            tracer.save(profile_output_path)
 
 
 if __name__ == '__main__':

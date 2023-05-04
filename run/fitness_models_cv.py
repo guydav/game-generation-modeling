@@ -14,13 +14,11 @@ import torch.nn as nn
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
+import ast_parser  # for logging configuration
 from src import fitness_energy_utils as utils
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
-
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--fitness-features-file', type=str, default='./data/fitness_features_1024_regrowths.csv.gz')
@@ -63,21 +61,21 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float) -> typing.List
 
 def main(args: argparse.Namespace):
     fitness_df = utils.load_fitness_data('./data/fitness_features_1024_regrowths.csv.gz')
-    logging.info(f'Unique source files: {fitness_df.src_file.unique()}')
-    logging.info(f'Dataframe shape: {fitness_df.shape}')
+    logger.info(f'Unique source files: {fitness_df.src_file.unique()}')
+    logger.info(f'Dataframe shape: {fitness_df.shape}')
     original_game_counts = fitness_df.groupby('original_game_name').src_file.count().value_counts()
     if len(original_game_counts) == 1:
-        logging.debug(f'All original games have {original_game_counts.index[0] - 1} regrowths')  # type: ignore
+        logger.debug(f'All original games have {original_game_counts.index[0] - 1} regrowths')  # type: ignore
     else:
         raise ValueError('Some original games have different numbers of regrowths: {original_game_counts}')
 
     feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold)
-    logging.debug(f'Fitting models with {len(feature_columns)} features')
+    logger.debug(f'Fitting models with {len(feature_columns)} features')
 
     with open(args.cv_settings_json, 'r') as f:
         cv_settings = json.load(f)
 
-    logging.debug(f'CV settings:\n{pformat(cv_settings)}')
+    logger.debug(f'CV settings:\n{pformat(cv_settings)}')
 
     param_grid = cv_settings['param_grid']
     cv_kwargs = cv_settings['cv_kwargs']
@@ -117,7 +115,7 @@ def main(args: argparse.Namespace):
         random_seed=args.random_seed,
         )
 
-    logging.info(f'Best params: {cv.best_params_}')
+    logger.info(f'Best params: {cv.best_params_}')
 
     utils.visualize_cv_outputs(cv, train_tensor, test_tensor, results, notebook=False)
     cv.scorer_ = None
@@ -127,9 +125,9 @@ def main(args: argparse.Namespace):
     utils.save_data(output_data, folder=args.output_folder, name=args.output_name, relative_path=args.output_relative_path)
 
     if not args.no_save_full_model:
-        logging.debug('Saving full model')
+        logger.debug('Saving full model')
         if not args.full_model_without_test:
-            logging.debug('Fitting full model with entire dataset (including test data)')
+            logger.debug('Fitting full model with entire dataset (including test data)')
             full_tensor = utils.df_to_tensor(fitness_df, feature_columns)
             cv.best_estimator_['fitness'].train_kwargs['split_validation_from_train'] = False  # type: ignore
             cv.best_estimator_.fit(full_tensor)  # type: ignore
@@ -152,6 +150,6 @@ if __name__ == '__main__':
         args.device = torch.device(args.device)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

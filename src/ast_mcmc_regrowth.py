@@ -30,10 +30,8 @@ sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
 
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -245,7 +243,7 @@ class MCMCRegrowthSampler:
                                   postprocess: typing.Optional[bool] = None, n_workers: int = 8,
                                   chunksize: int = 1, notebook_tqdm: bool = False):
 
-        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers) as pool:
             if initial_proposals is None:
                 initial_proposals = [None] * n_samples_per_initial_proposal  # type: ignore
@@ -515,6 +513,6 @@ if __name__ == '__main__':
     args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

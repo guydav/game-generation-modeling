@@ -1,4 +1,6 @@
 import argparse
+import cProfile
+from collections import OrderedDict
 from functools import wraps
 import gzip
 import logging
@@ -7,6 +9,7 @@ from multiprocessing import pool as mpp
 import os
 import re
 import sys
+import tempfile
 import typing
 
 
@@ -28,6 +31,7 @@ from ast_utils import *
 from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
+from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
@@ -41,10 +45,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 import src
 
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -134,6 +136,7 @@ parser.add_argument('--initial-proposal-type', type=int, default=0)
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
+parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
@@ -143,10 +146,15 @@ parser.add_argument('--save-every-generation', action='store_true')
 parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
 
+
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
 DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
+
+parser.add_argument('--profile', action='store_true')
+parser.add_argument('--profile-output-file', type=str, default='profile.txt')
+parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
 
 class CrossoverType(Enum):
@@ -765,7 +773,7 @@ class PopulationBasedSampler():
     def _update_generation_diversity_scores(self):
         if self.diversity_scorer is not None and self.generation_index != self.generation_diversity_scores_index:
             if self.verbose:
-                logging.info(f'Updating diversity scores for generation {self.generation_index}')
+                logger.info(f'Updating diversity scores for generation {self.generation_index}')
 
             population_diversity_scores = self.diversity_scorer.population_score_distribution()
             self.generation_diversity_scores = population_diversity_scores
@@ -785,19 +793,19 @@ class PopulationBasedSampler():
             diversity_scores = np.array(candidate_diversity_scores)  # type: ignore
 
             if self.verbose:
-                logging.info(f'Candidate diversity scores: min: {diversity_scores.min():.3f}, 25th percentile: {np.percentile(diversity_scores, 25):.3f} mean: {diversity_scores.mean():.3f}, 75th percentile: {np.percentile(diversity_scores, 25):.3f},  max: {diversity_scores.max():.3f},')
+                logger.info(f'Candidate diversity scores: min: {diversity_scores.min():.3f}, 25th percentile: {np.percentile(diversity_scores, 25):.3f} mean: {diversity_scores.mean():.3f}, 75th percentile: {np.percentile(diversity_scores, 25):.3f},  max: {diversity_scores.max():.3f},')
 
             if not self.diversity_threshold_absolute:
                 self._update_generation_diversity_scores()
                 threshold = np.percentile(self.generation_diversity_scores, self.diversity_score_threshold)
                 if self.verbose:
-                    logging.info(f'Using diversity threshold of {threshold} (percentile {self.diversity_score_threshold} of generation {self.generation_index} diversity scores, min {self.generation_diversity_scores.min()}, max {self.generation_diversity_scores.max()})')
+                    logger.info(f'Using diversity threshold of {threshold} (percentile {self.diversity_score_threshold} of generation {self.generation_index} diversity scores, min {self.generation_diversity_scores.min()}, max {self.generation_diversity_scores.max()})')
             else:
                 threshold = self.diversity_score_threshold
 
             diverse_candidate_indices = np.where(diversity_scores >= threshold)[0]
             if len(diverse_candidate_indices) == 0:
-                logging.warning(f'No diverse candidates found with a threshold of {threshold} (highest candidate diversity score was {diversity_scores.max()}), not replacing any population members')
+                logger.warning(f'No diverse candidates found with a threshold of {threshold} (highest candidate diversity score was {diversity_scores.max()}), not replacing any population members')
                 return
 
             diversity_message = ''
@@ -809,7 +817,7 @@ class PopulationBasedSampler():
 
             if self.verbose:
                 diversity_message += f', highest diverse candidate fitness score was {max(candidate_scores)})'
-                logging.info(diversity_message)
+                logger.info(diversity_message)
 
         all_games = self.population + candidates
         all_scores = self.fitness_values + candidate_scores
@@ -849,7 +857,12 @@ class PopulationBasedSampler():
 
             except SamplingException as e:
                 # if self.verbose:
-                #     logging.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
+                #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
+                continue
+
+            except RecursionError as e:
+                # if self.verbose:
+                #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
         # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
@@ -955,10 +968,10 @@ class PopulationBasedSampler():
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, postprocess: bool = True,
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
-                                             n_workers: int = 8, chunksize: int = 1):
+                                             n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
-        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
-        with mpp.Pool(n_workers) as pool:
+        logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess, compute_diversity_metrics=compute_diversity_metrics,
@@ -989,24 +1002,43 @@ class MAPElitesWeightStrategy(Enum):
     UNIFORM = 0
     FITNESS_RANK = 1
     UCB = 2
-    FITNESS_RANK_AND_UCB = 3
+    THOMPSON = 3
+    # FITNESS_RANK_AND_UCB = 4
 
 
 PARENT_KEY = 'parent_key'
 
 
 class MAPElitesSampler(PopulationBasedSampler):
+    archive_metrics_history: typing.List[typing.Dict[str, int | float]]
     fitness_values: typing.Dict[int, float]
     generation_size: int
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
     population: typing.Dict[int, ASTType]
+    selector: typing.Optional[Selector]
+    selector_kwargs: typing.Dict[str, typing.Any]
     weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],  *args, **kwargs):
+    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
+                 selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, *args, **kwargs):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
+
+        if selector_kwargs is None:
+            selector_kwargs = {}
+
+        selector_kwargs['generation_size'] = generation_size
+        self.selector_kwargs = selector_kwargs
+        self.selector = None
+        if self.weight_strategy == MAPElitesWeightStrategy.UCB:
+            self.selector = UCBSelector(**selector_kwargs)
+        elif self.weight_strategy == MAPElitesWeightStrategy.THOMPSON:
+            self.selector = ThompsonSamplingSelector(**selector_kwargs)
+
+        self.archive_metrics_history = []
+
         super().__init__(*args, **kwargs)
 
     def _pre_population_sample_setup(self):
@@ -1029,8 +1061,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         if len(names) > 0:
             raise ValueError(f'Could not find the following feature names in the list of feature names: {names}')
 
-        self.population = {}
-        self.fitness_values = {}
+        self.population = OrderedDict()
+        self.fitness_values = OrderedDict()
 
     def _features_to_key(self, features: typing.Dict[str, float]) -> int:
         return sum([(2 ** i) * int(features[feature_name])
@@ -1071,12 +1103,13 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]]):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
-        if (key not in self.population) or (fitness_value > self.fitness_values[key]):
+        successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
+        if successful:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
 
-            # TODO: parent_info will be a dict with PARENT_KEY = the key of the parent that created this sample
-            # TODO: if parent_info is None it means this is the initial population setting
+        if self.selector is not None and parent_info is not None:
+            self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
@@ -1094,28 +1127,32 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _custom_tqdm_postfix(self):
         # TODO: make this threshold a parameter
-        return {
+        metrics = {
             '# Cells': self.population_size,
             '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
             '# Great': len([True for fitness in self.fitness_values.values() if fitness > 75]),
         }
+        self.archive_metrics_history.append(metrics)  # type: ignore
+        return metrics
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         weights = None
         if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
             pass
+
         elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
             fitness_values = np.array(list(self.fitness_values.values()))
             ranks = len(fitness_values) - np.argsort(fitness_values)
             weights = 0.5 + (ranks / len(fitness_values))
             weights /= weights.sum()
-        else:
-            # TODO: implement UCB
-            raise NotImplementedError(f'Unknown weight strategy: {self.weight_strategy}')
 
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
-            key = self._choice(keys, weights=weights)
+            if self.selector is None:
+                key = self._choice(keys, weights=weights)
+            else:
+                key = self.selector.select(keys, rng=self.rng)
+
             yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
 
     def _get_operator(self, rng):
@@ -1371,11 +1408,11 @@ class MicrobialGASamplerWithBeamSearch(MicrobialGASampler):
 
 def main(args):
     if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
-        logging.debug('Setting postprocess to True because diversity scorer uses edit distance')
+        logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
         args.postprocess = True
 
     if not args.diversity_threshold_absolute and args.diversity_score_threshold <= 1.0:
-        logging.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
+        logger.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
         args.diversity_score_threshold = args.diversity_score_threshold * 100
 
     sampler_kwargs = dict(
@@ -1445,7 +1482,9 @@ def main(args):
             re.compile(r'compositionality_structure_.*'),
             'section_doesnt_exist_setup',
             'section_doesnt_exist_terminal',
-
+            'num_preferences_defined_1',
+            'num_preferences_defined_2',
+            'num_preferences_defined_3'
         ]
 
         evosampler = MAPElitesSampler(
@@ -1492,13 +1531,20 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
+    profile = None
+
     try:
+        if args.profile:
+            profile = cProfile.Profile()
+            profile.enable()
+
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
                 postprocess=args.postprocess, compute_diversity_metrics=args.compute_diversity_metrics,
                 save_every_generation=args.save_every_generation,
-                n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
+                n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
+                maxtasksperchild=args.parallel_maxtasksperchild,
                 )
 
         else:
@@ -1514,11 +1560,11 @@ def main(args):
 
     except Exception as e:
         exception_caught = True
-        logging.exception(e)
+        logger.exception(e)
 
     except:
         exception_caught = True
-        logging.exception('Unknown exception caught')
+        logger.exception('Unknown exception caught')
 
     else:
         exception_caught = False
@@ -1526,6 +1572,11 @@ def main(args):
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
 
+        if profile is not None:
+            profile.disable()
+            profile_output_path = os.path.join(args.profile_output_folder, args.profile_output_file)
+            logger.info(f'Saving profile to {profile_output_path}')
+            profile.dump_stats(profile_output_path)
 
 
 if __name__ == '__main__':
@@ -1537,6 +1588,6 @@ if __name__ == '__main__':
     args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

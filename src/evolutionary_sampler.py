@@ -29,7 +29,7 @@ from ast_utils import *
 from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
-from evolutionary_sampler_utils import UCBSelector, ThompsonSamplingSelector
+from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
@@ -134,6 +134,7 @@ parser.add_argument('--initial-proposal-type', type=int, default=0)
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
+parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
@@ -142,6 +143,7 @@ parser.add_argument('--compute-diversity-metrics', action='store_true')
 parser.add_argument('--save-every-generation', action='store_true')
 parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
+
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
@@ -852,6 +854,11 @@ class PopulationBasedSampler():
                 #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
+            except RecursionError as e:
+                # if self.verbose:
+                #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
+                continue
+
         # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
         return SingleStepResults([], [], [], None, None)
@@ -955,10 +962,10 @@ class PopulationBasedSampler():
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, postprocess: bool = True,
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
-                                             n_workers: int = 8, chunksize: int = 1):
+                                             n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
         logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
-        with mpp.Pool(n_workers) as pool:
+        with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess, compute_diversity_metrics=compute_diversity_metrics,
@@ -990,30 +997,41 @@ class MAPElitesWeightStrategy(Enum):
     FITNESS_RANK = 1
     UCB = 2
     THOMPSON = 3
-    FITNESS_RANK_AND_UCB = 4
+    # FITNESS_RANK_AND_UCB = 4
 
 
 PARENT_KEY = 'parent_key'
 
 
 class MAPElitesSampler(PopulationBasedSampler):
+    archive_metrics_history: typing.List[typing.Dict[str, int | float]]
     fitness_values: typing.Dict[int, float]
     generation_size: int
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
     population: typing.Dict[int, ASTType]
+    selector: typing.Optional[Selector]
+    selector_kwargs: typing.Dict[str, typing.Any]
     weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],  *args, **kwargs):
+    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
+                 selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, *args, **kwargs):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
 
+        if selector_kwargs is None:
+            selector_kwargs = {}
+
+        selector_kwargs['generation_size'] = generation_size
+        self.selector_kwargs = selector_kwargs
         self.selector = None
         if self.weight_strategy == MAPElitesWeightStrategy.UCB:
-            self.selector = UCBSelector()
+            self.selector = UCBSelector(**selector_kwargs)
         elif self.weight_strategy == MAPElitesWeightStrategy.THOMPSON:
-            self.selector = ThompsonSamplingSelector()
+            self.selector = ThompsonSamplingSelector(**selector_kwargs)
+
+        self.archive_metrics_history = []
 
         super().__init__(*args, **kwargs)
 
@@ -1103,11 +1121,13 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _custom_tqdm_postfix(self):
         # TODO: make this threshold a parameter
-        return {
+        metrics = {
             '# Cells': self.population_size,
             '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
             '# Great': len([True for fitness in self.fitness_values.values() if fitness > 75]),
         }
+        self.archive_metrics_history.append(metrics)  # type: ignore
+        return metrics
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
         weights = None
@@ -1128,7 +1148,6 @@ class MAPElitesSampler(PopulationBasedSampler):
                 key = self.selector.select(keys, rng=self.rng)
 
             yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
-
 
     def _get_operator(self, rng):
         # TODO: do we want to do crossover as well?
@@ -1457,7 +1476,9 @@ def main(args):
             re.compile(r'compositionality_structure_.*'),
             'section_doesnt_exist_setup',
             'section_doesnt_exist_terminal',
-
+            'num_preferences_defined_1',
+            'num_preferences_defined_2',
+            'num_preferences_defined_3'
         ]
 
         evosampler = MAPElitesSampler(
@@ -1510,7 +1531,8 @@ def main(args):
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
                 postprocess=args.postprocess, compute_diversity_metrics=args.compute_diversity_metrics,
                 save_every_generation=args.save_every_generation,
-                n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize
+                n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
+                maxtasksperchild=args.parallel_maxtasksperchild,
                 )
 
         else:

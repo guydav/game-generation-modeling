@@ -534,7 +534,7 @@ class NumPreferencesDefined(FitnessTerm):
     max_count: int
     min_count: int
 
-    def __init__(self, max_count: int = 5, min_count: int = 1):
+    def __init__(self, max_count: int = 6, min_count: int = 1):
         super().__init__('preference', 'num_preferences_defined')
         self.max_count = max_count
         self.min_count = min_count
@@ -546,7 +546,8 @@ class NumPreferencesDefined(FitnessTerm):
         self.defined_preferences.add(ast.pref_name)  # type: ignore
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return {str(d): d == len(self.defined_preferences) for d in range(self.min_count, self.max_count + 1)}
+        num_preferences = np.clip(len(self.defined_preferences), self.min_count, self.max_count)
+        return {str(d): d == num_preferences for d in range(self.min_count, self.max_count + 1)}
 
     def _get_all_inner_keys(self):
         return [str(d) for d in range(self.min_count, self.max_count + 1)]
@@ -1772,20 +1773,24 @@ def build_argument_types_fitness_terms(
 
 
 COMPOSITIONALITY_STRUCTURES = (
-    '(hold (and (not (agent_holds ?x) ) (in_motion ?x) ) )',
-    '(once (and (not (in_motion ?x) ) (in ?x ?x) ) )',
-    '(once (agent_holds ?x) )',
-    '(once (not (in_motion ?x) ) )',
-    '(once (and (agent_holds ?x) (adjacent ?x ?x) ) )',
-    '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) )',
-    '(once (and (not (in_motion ?x) ) (on ?x ?x) ) )',
-    '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) )',
-    '(once (and (adjacent ?x ?x) (agent_holds ?x) ) )',
-    '(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (and (not (agent_holds ?x) ) (in_motion ?x) ) ) ) (touch ?x ?x) )',
-    '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) )',
-    '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) )',
-    '(once (and (agent_holds ?x) (on ?x ?x) ) )'
+    ['(hold (and (not (agent_holds ?x) ) (in_motion ?x) ) )', '(hold (and (in_motion ?x) (not (agent_holds ?x) ) ) )'],
+    ['(once (and (not (in_motion ?x) ) (in ?x ?x) ) )', '(once (and (in ?x ?x) (not (in_motion ?x) ) ) )'],
+    ['(once (agent_holds ?x) )',],
+    ['(once (not (in_motion ?x) ) )',],
+    ['(once (and (agent_holds ?x) (adjacent ?x ?x) ) )', '(once (and (adjacent ?x ?x) (agent_holds ?x) ) )',],
+    ['(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) )',  '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) )'],
+    ['(once (and (not (in_motion ?x) ) (on ?x ?x) ) )', '(once (and (on ?x ?x) (not (in_motion ?x) ) ) )'],
+    # ['(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) )',  '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) )'],  # removed because equivalent to another after consider both orders
+    # ['(once (and (adjacent ?x ?x) (agent_holds ?x) ) )',  '(once (and (agent_holds ?x) (adjacent ?x ?x) ) )'],  # removed because equivalent to another after consider both orders
+    # '(hold-while (and (not (agent_holds ?x) ) (in ?x ?x) (or (agent_holds ?x) (in_motion ?x) ) ) (touch ?x ?x) )',  # removed because rare and conjunction of three + disjunction of two is pain to enumerate
+    ['(once (and (agent_holds ?x) (on ?x ?x) ) )', '(once (and (on ?x ?x) (agent_holds ?x) ) )'],
+    ['(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (touch ?x ?x) (in_motion ?x) )',  '(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (touch ?x ?x) (in_motion ?x) )',],
+    ['(hold-while (and (not (agent_holds ?x) ) (in_motion ?x) ) (on ?x ?x) )',  '(hold-while (and (in_motion ?x) (not (agent_holds ?x) ) ) (on ?x ?x) )',],
+
  )
+
+
+COMPOSITIONALITY_STRUCTURES_TO_INDEX = {s: i for i, structures in enumerate(COMPOSITIONALITY_STRUCTURES) for s in structures}
 
 
 PREDICATE_ARGS_PATTERN = r'\(\s*(?:[\w-]+)\s+((?:\??\w+\s*)+)\)'
@@ -1793,26 +1798,24 @@ COMPOSITIONALITY_VARIABLE_REPLACEMENT = '?x'
 
 
 class CompositionalityStructureCounter(FitnessTerm):
-    structure_str: str
-    structure_count: int = 0
-    structure_index: int
+    structure_counts: typing.Dict[int, int]
+    structure_to_index: typing.Dict[str, int]
     args_pattern: re.Pattern
     variable_replacement: str
 
-    def __init__(self, structure: str, structure_index: int,
+    def __init__(self, structure_to_index: typing.Dict[str, int] = COMPOSITIONALITY_STRUCTURES_TO_INDEX,
         variable_replacement: str = COMPOSITIONALITY_VARIABLE_REPLACEMENT,
         predicate_arg_pattern: str = PREDICATE_ARGS_PATTERN):
-        rule = structure.split(' ')[0][1:].replace('-', '_')
-        if rule == 'hold_while':
-            rule = 'while_hold'
-        super().__init__(rule, f'compositionality_structure_{structure_index}')
-        self.structure_str = structure
-        self.structure_index = structure_index
+
+        super().__init__(MODALS, f'compositionality_structure')
+        self.structure_to_index = structure_to_index
         self.variable_replacement = variable_replacement
         self.args_pattern = re.compile(predicate_arg_pattern)
+        self.min_structure_index = min(self.structure_to_index.values())
+        self.max_structure_index = max(self.structure_to_index.values())
 
     def game_start(self) -> None:
-        self.structure_count = 0
+        self.structure_counts = {i: 0 for i in range(self.min_structure_index, self.max_structure_index + 1)}
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
@@ -1820,17 +1823,14 @@ class CompositionalityStructureCounter(FitnessTerm):
             for args in self.args_pattern.findall(ast_str):
                 ast_str = ast_str.replace(args, ' '.join(map(lambda x: self.variable_replacement, args.split(" "))), 1)
 
-            self.structure_count += ast_str == self.structure_str
+            if ast_str in self.structure_to_index:
+                self.structure_counts[self.structure_to_index[ast_str]] += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return self.structure_count
+        return {str(i): c for i, c in self.structure_counts.items()}
 
-
-def build_compositionality_fitness_terms(
-    compositionality_structures: typing.Sequence[str] = COMPOSITIONALITY_STRUCTURES,
-    variable_replacement: str = COMPOSITIONALITY_VARIABLE_REPLACEMENT) -> typing.Sequence[FitnessTerm]:
-
-    return [CompositionalityStructureCounter(structure, i, variable_replacement) for i, structure in enumerate(compositionality_structures)]
+    def _get_all_inner_keys(self):
+        return [str(i) for i in range(self.min_structure_index, self.max_structure_index + 1)]
 
 
 class SectionCountTerm(FitnessTerm):
@@ -2233,8 +2233,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     argument_types_fitness_terms = build_argument_types_fitness_terms()
     fitness.register_multiple(argument_types_fitness_terms)
 
-    compositionality_fitness_terms = build_compositionality_fitness_terms()
-    fitness.register_multiple(compositionality_fitness_terms)
+    compositionality_fitness_term = CompositionalityStructureCounter()
+    fitness.register(compositionality_fitness_term)
 
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)
@@ -2259,14 +2259,14 @@ def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
 
 def game_iterator():
     for src_file in args.test_files:
-        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False):
+        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False):  # type: ignore
             yield game, src_file
 
 
 def get_headers(args: argparse.Namespace, featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
     src_file = args.test_files[0]
-    game = next(cached_load_and_parse_games_from_file(src_file, grammar_parser, False))
-    featurizer.parse(game, src_file, return_row=True, preprocess_row=False)
+    game = next(cached_load_and_parse_games_from_file(src_file, grammar_parser, False))  # type: ignore
+    featurizer.parse(game, src_file, return_row=True, preprocess_row=False)  # type: ignore
     return featurizer.get_all_column_keys()
 
 
@@ -2341,7 +2341,7 @@ if __name__ == '__main__':
         logging.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
             logging.info('Pool started')
-            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):
+            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):  # type: ignore
                 continue
                 # if headers is None:
                 #     headers = list(row.keys())
@@ -2369,8 +2369,8 @@ if __name__ == '__main__':
     else:
         featurizer = build_or_load_featurizer(args)
         for test_file in args.test_files:
-            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):
-                featurizer.parse(ast, test_file)
+            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):  # type: ignore
+                featurizer.parse(ast, test_file)  # type: ignore
 
     logging.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)

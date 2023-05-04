@@ -166,7 +166,7 @@
                 "--map-elites-generation-size", "256",
                 "--initial-proposal-type", "1",
                 "--parallel-n-workers", "7",
-                // "--sample-parallel",
+                "--sample-parallel",
                 "--should-tqdm",
                 "--random-seed", "33",
                 "--postprocess",

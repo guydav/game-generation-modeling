@@ -145,7 +145,11 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     cache_updated = False
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
-        logging.debug('Grammar changed, clearing cache')
+        if CACHE_DSL_HASH_KEY not in cache:
+            logging.debug('No cached DSL hash found')
+        else:
+            logging.debug('Grammar changed, clearing cache')
+
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
 

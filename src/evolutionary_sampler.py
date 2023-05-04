@@ -1,4 +1,5 @@
 import argparse
+import cProfile
 from collections import OrderedDict
 from functools import wraps
 import gzip
@@ -8,6 +9,7 @@ from multiprocessing import pool as mpp
 import os
 import re
 import sys
+import tempfile
 import typing
 
 
@@ -149,6 +151,10 @@ DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
 DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
+
+parser.add_argument('--profile', action='store_true')
+parser.add_argument('--profile-output-file', type=str, default='profile.txt')
+parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
 
 class CrossoverType(Enum):
@@ -1525,7 +1531,13 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
+    profile = None
+
     try:
+        if args.profile:
+            profile = cProfile.Profile()
+            profile.enable()
+
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
@@ -1560,6 +1572,11 @@ def main(args):
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
 
+        if profile is not None:
+            profile.disable()
+            profile_output_path = os.path.join(args.profile_output_folder, args.profile_output_file)
+            logger.info(f'Saving profile to {profile_output_path}')
+            profile.dump_stats(profile_output_path)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import argparse
+from collections import OrderedDict
 from functools import wraps
 import gzip
 import logging
@@ -28,6 +29,7 @@ from ast_utils import *
 from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
+from evolutionary_sampler_utils import UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
@@ -989,7 +991,8 @@ class MAPElitesWeightStrategy(Enum):
     UNIFORM = 0
     FITNESS_RANK = 1
     UCB = 2
-    FITNESS_RANK_AND_UCB = 3
+    THOMPSON = 3
+    FITNESS_RANK_AND_UCB = 4
 
 
 PARENT_KEY = 'parent_key'
@@ -1007,6 +1010,13 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
+
+        self.selector = None
+        if self.weight_strategy == MAPElitesWeightStrategy.UCB:
+            self.selector = UCBSelector()
+        elif self.weight_strategy == MAPElitesWeightStrategy.THOMPSON:
+            self.selector = ThompsonSamplingSelector()
+
         super().__init__(*args, **kwargs)
 
     def _pre_population_sample_setup(self):
@@ -1029,8 +1039,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         if len(names) > 0:
             raise ValueError(f'Could not find the following feature names in the list of feature names: {names}')
 
-        self.population = {}
-        self.fitness_values = {}
+        self.population = OrderedDict()
+        self.fitness_values = OrderedDict()
 
     def _features_to_key(self, features: typing.Dict[str, float]) -> int:
         return sum([(2 ** i) * int(features[feature_name])
@@ -1071,12 +1081,13 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]]):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
-        if (key not in self.population) or (fitness_value > self.fitness_values[key]):
+        successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
+        if successful:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
 
-            # TODO: parent_info will be a dict with PARENT_KEY = the key of the parent that created this sample
-            # TODO: if parent_info is None it means this is the initial population setting
+        if self.selector is not None and parent_info is not None:
+            self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _select_new_population(self, candidates: typing.List[ASTType],
                                candidate_scores: typing.List[float],
@@ -1104,19 +1115,22 @@ class MAPElitesSampler(PopulationBasedSampler):
         weights = None
         if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
             pass
+
         elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
             fitness_values = np.array(list(self.fitness_values.values()))
             ranks = len(fitness_values) - np.argsort(fitness_values)
             weights = 0.5 + (ranks / len(fitness_values))
             weights /= weights.sum()
-        else:
-            # TODO: implement UCB
-            raise NotImplementedError(f'Unknown weight strategy: {self.weight_strategy}')
 
         keys = list(self.population.keys())
         for _ in range(self.generation_size):
-            key = self._choice(keys, weights=weights)
+            if self.selector is None:
+                key = self._choice(keys, weights=weights)
+            else:
+                key = self.selector.select(keys, rng=self.rng)
+
             yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
+
 
     def _get_operator(self, rng):
         # TODO: do we want to do crossover as well?

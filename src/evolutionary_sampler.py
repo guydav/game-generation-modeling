@@ -32,7 +32,7 @@ from ast_utils import np, typing
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_diversity import np, typing
 from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
-from fitness_energy_utils import load_model_and_feature_columns, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
+from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_features import np, typing
 from fitness_ngram_models import *
@@ -137,6 +137,7 @@ parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
+parser.add_argument('--parallel-use-plain-map', action='store_true')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
@@ -352,7 +353,7 @@ class PopulationBasedSampler():
         self._pre_population_sample_setup()
 
         # Generate the initial population
-        self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
+        self._initialize_population()
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
@@ -364,6 +365,9 @@ class PopulationBasedSampler():
 
     def _pre_population_sample_setup(self):
         pass
+
+    def _initialize_population(self):
+        self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
         return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
@@ -869,6 +873,9 @@ class PopulationBasedSampler():
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
         return SingleStepResults([], [], [], None, None)
 
+    def _sample_and_apply_operator_map_wrapper(self, *args):
+        return self._sample_and_apply_operator(*args)
+
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index)
@@ -876,7 +883,7 @@ class PopulationBasedSampler():
         return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
-                          postprocess: bool = False, should_tqdm: bool = False):
+                          postprocess: bool = False, should_tqdm: bool = False, use_imap: bool = True):
         # The core steps are:
         # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
         # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
@@ -893,9 +900,12 @@ class PopulationBasedSampler():
         candidate_features = []
 
         if pool is not None:
-            children_iter = pool.istarmap(self._sample_and_apply_operator, param_iterator, chunksize=chunksize)  # type: ignore
+            if use_imap:
+                children_iter = pool.imap(self._sample_and_apply_operator_map_wrapper, param_iterator, chunksize=chunksize)  # type: ignore
+            else:
+                children_iter = pool.map(self._sample_and_apply_operator_map_wrapper, param_iterator, chunksize=chunksize)  # type: ignore
         else:
-            children_iter = itertools.starmap(self._sample_and_apply_operator, param_iterator)  # type: ignore
+            children_iter = map(self._sample_and_apply_operator_map_wrapper, param_iterator)  # type: ignore
 
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
@@ -929,14 +939,14 @@ class PopulationBasedSampler():
 
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
-                                    postprocess: bool = False,
+                                    postprocess: bool = False, use_imap: bool = True,
                                     compute_diversity_metrics: bool = False, save_every_generation: bool = False):
         step_iter = range(num_steps)
         if should_tqdm:
             pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
 
         for _ in step_iter:  # type: ignore
-            self.evolutionary_step(pool, chunksize, postprocess=postprocess, should_tqdm=inner_tqdm)
+            self.evolutionary_step(pool, chunksize, postprocess=postprocess, should_tqdm=inner_tqdm, use_imap=use_imap)
 
             if compute_diversity_metrics:
                 if self.diversity_scorer is None:
@@ -966,7 +976,7 @@ class PopulationBasedSampler():
             self.generation_index += 1
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
-                                             inner_tqdm: bool = False, postprocess: bool = False,
+                                             inner_tqdm: bool = False, postprocess: bool = False, use_imap: bool = True,
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
@@ -974,7 +984,8 @@ class PopulationBasedSampler():
         with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
-                                             postprocess=postprocess, compute_diversity_metrics=compute_diversity_metrics,
+                                             postprocess=postprocess,  use_imap=use_imap,
+                                             compute_diversity_metrics=compute_diversity_metrics,
                                              save_every_generation=save_every_generation)
 
     def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
@@ -1016,12 +1027,16 @@ class MAPElitesSampler(PopulationBasedSampler):
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
     population: typing.Dict[int, ASTType]
+    previous_sampler_population_seed_path: typing.Optional[str]
     selector: typing.Optional[Selector]
     selector_kwargs: typing.Dict[str, typing.Any]
     weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy, map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
-                 selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None, *args, **kwargs):
+    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy,
+                 map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
+                 selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+                 previous_sampler_population_seed_path: typing.Optional[str] = None,
+                 *args, **kwargs):
         self.generation_size = generation_size
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
@@ -1038,6 +1053,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.selector = ThompsonSamplingSelector(**selector_kwargs)
 
         self.archive_metrics_history = []
+        self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
 
         super().__init__(*args, **kwargs)
 
@@ -1063,6 +1079,21 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         self.population = OrderedDict()
         self.fitness_values = OrderedDict()
+
+    def _initialize_population(self):
+        if self.previous_sampler_population_seed_path is None:
+            super()._initialize_population()
+
+        else:
+            logger.info(f'Loading population from {self.previous_sampler_population_seed_path}')
+            previous_map_elites = load_data_from_path(self.previous_sampler_population_seed_path)
+            for game in previous_map_elites.population.values():
+                game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
+                self._add_to_archive(game, game_fitness, game_key, None)  # type: ignore
+
+            self._update_population_statistics()
+            logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
+
 
     def _features_to_key(self, features: typing.Dict[str, float]) -> int:
         return sum([(2 ** i) * int(features[feature_name])
@@ -1164,23 +1195,25 @@ class MAPElitesSampler(PopulationBasedSampler):
             raise ValueError(f'Key {key} not found in population')
 
         key_dict = {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
-        print('Sample features:')
+        print(f'Sample features for key {key}:')
         for feature_name, feature_value in key_dict.items():
             print(f'{feature_name}: {feature_value}')
 
         self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return key
 
     def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
         population_keys = list(self.population.keys())
-        self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
-        return population_keys[sample_index]
+        return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
     def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        if top_index < 1:
+            top_index = 1
+
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
         fitness_values_and_keys.sort(key=lambda x: x[0])
         key = fitness_values_and_keys[-top_index][1]
-        self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
-        return key
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
     def _best_individual(self):
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
@@ -1188,7 +1221,24 @@ class MAPElitesSampler(PopulationBasedSampler):
         key = fitness_values_and_keys[-1][1]
         return self.population[key]
 
-    def visualize_top_sample
+    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+        if any(f not in self.map_elites_feature_names for f in features.keys()):
+            raise ValueError(f'Feature names ({list(features.keys())})must be in {self.map_elites_feature_names}')
+
+        if top_index < 1:
+            top_index = 1
+
+        keys = list(self.population.keys())
+        feature_to_index = {f: i for i, f in enumerate(self.map_elites_feature_names)}
+        filtered_keys = [key for key in keys if all(feature_value == ((key >> feature_to_index[feature_name]) % 2) for feature_name, feature_value in features.items())]
+        if len(filtered_keys) == 0:
+            print(f'No samples found with features {features}')
+            return
+
+        fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items() if key in filtered_keys]
+        fitness_values_and_keys.sort(key=lambda x: x[0])
+        key = fitness_values_and_keys[-top_index][1]
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -1549,10 +1599,11 @@ def main(args):
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
-                postprocess=args.postprocess, compute_diversity_metrics=args.compute_diversity_metrics,
-                save_every_generation=args.save_every_generation,
+                postprocess=args.postprocess, use_imap=not args.parallel_use_plain_map,
                 n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
                 maxtasksperchild=args.parallel_maxtasksperchild,
+                compute_diversity_metrics=args.compute_diversity_metrics,
+                save_every_generation=args.save_every_generation,
                 )
 
         else:

@@ -98,11 +98,15 @@ def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MO
 
 
 def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
-    output_path = f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz'
-    if not os.path.exists(output_path):
-        raise FileNotFoundError(f'No model found at {output_path}')
+    return load_data_from_path(f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz')
 
-    with gzip.open(output_path, 'rb') as f:
+
+
+def load_data_from_path(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'No data file found at {path}')
+
+    with gzip.open(path, 'rb') as f:
         data = pickle.load(f)
 
     return data

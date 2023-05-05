@@ -1,5 +1,4 @@
 import argparse
-import cProfile
 from collections import OrderedDict
 from functools import wraps
 import gzip
@@ -12,13 +11,14 @@ import sys
 import tempfile
 import typing
 
-
 import numpy as np
 import tatsu
 import tatsu.ast
 import tatsu.grammars
 import torch
 from tqdm import tqdm, trange
+from viztracer import VizTracer
+
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
 import ast_printer
@@ -153,7 +153,7 @@ DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
 
 parser.add_argument('--profile', action='store_true')
-parser.add_argument('--profile-output-file', type=str, default='profile.txt')
+parser.add_argument('--profile-output-file', type=str, default='tracer.json')
 parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
 
@@ -876,7 +876,7 @@ class PopulationBasedSampler():
         return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
-                          postprocess: bool = True, should_tqdm: bool = False):
+                          postprocess: bool = False, should_tqdm: bool = False):
         # The core steps are:
         # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
         # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
@@ -929,7 +929,7 @@ class PopulationBasedSampler():
 
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
-                                    postprocess: bool = True,
+                                    postprocess: bool = False,
                                     compute_diversity_metrics: bool = False, save_every_generation: bool = False):
         step_iter = range(num_steps)
         if should_tqdm:
@@ -966,7 +966,7 @@ class PopulationBasedSampler():
             self.generation_index += 1
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
-                                             inner_tqdm: bool = False, postprocess: bool = True,
+                                             inner_tqdm: bool = False, postprocess: bool = False,
                                              compute_diversity_metrics: bool = False, save_every_generation: bool = False,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
@@ -1181,6 +1181,12 @@ class MAPElitesSampler(PopulationBasedSampler):
         key = fitness_values_and_keys[-top_index][1]
         self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
         return key
+
+    def _best_individual(self):
+        fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
+        fitness_values_and_keys.sort(key=lambda x: x[0])
+        key = fitness_values_and_keys[-1][1]
+        return self.population[key]
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -1531,12 +1537,12 @@ def main(args):
     # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
     # evosampler.set_population(game_asts[:4])
 
-    profile = None
+    tracer = None
 
     try:
         if args.profile:
-            profile = cProfile.Profile()
-            profile.enable()
+            tracer = VizTracer()
+            tracer.start()
 
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
@@ -1555,8 +1561,8 @@ def main(args):
                 save_every_generation=args.save_every_generation,
                 )
 
-        print('Best individual:')
-        evosampler._print_game(evosampler._best_individual())
+        # print('Best individual:')
+        # evosampler._print_game(evosampler._best_individual())
 
     except Exception as e:
         exception_caught = True
@@ -1572,11 +1578,11 @@ def main(args):
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
 
-        if profile is not None:
-            profile.disable()
+        if tracer is not None:
+            tracer.stop()
             profile_output_path = os.path.join(args.profile_output_folder, args.profile_output_file)
             logger.info(f'Saving profile to {profile_output_path}')
-            profile.dump_stats(profile_output_path)
+            tracer.save(profile_output_path)
 
 
 if __name__ == '__main__':

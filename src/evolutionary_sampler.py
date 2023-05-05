@@ -1129,8 +1129,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make this threshold a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 75]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 85]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 89.5]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1187,6 +1187,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         fitness_values_and_keys.sort(key=lambda x: x[0])
         key = fitness_values_and_keys[-1][1]
         return self.population[key]
+
+    def visualize_top_sample
 
 
 class BeamSearchSampler(PopulationBasedSampler):

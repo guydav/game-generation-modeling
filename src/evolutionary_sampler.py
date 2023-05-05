@@ -124,6 +124,7 @@ parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
+parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
 
 
 DEFAULT_RELATIVE_PATH = '.'
@@ -1549,6 +1550,7 @@ def main(args):
             map_elites_feature_names_or_patterns=FEATURE_NAMES_OR_PATTERNS,  # type: ignore
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
+            previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             args=args,
             population_size=args.population_size,
             verbose=args.verbose,

@@ -28,6 +28,7 @@ class UCBSelector(Selector):
         self.buffer_size = buffer_size
 
         self.reward_map = defaultdict(list)
+        self.reward_sum = defaultdict(int)
         self.count_map = defaultdict(int)
 
         self.n_draws = 0
@@ -38,16 +39,18 @@ class UCBSelector(Selector):
         is full, the oldest reward is removed
         '''
         self.reward_map[key].append(reward)
+        self.reward_sum[key] += reward
         if self.buffer_size is not None and len(self.reward_map[key]) > self.buffer_size:
-            self.reward_map[key].pop(0)
+            out = self.reward_map[key].pop(0)
+            self.reward_sum[key] -= out
 
     def select(self, keys, rng):
         '''
         Given a list of keys, returns the key with the highest UCB score and updates the internal
         counter for the selected key (and overall count)
         '''
-        reward_values = np.array([sum(self.reward_map[key]) / self.count_map[key] if key in self.count_map else float('inf') for key in keys])
-        log_draws = np.log(self.n_draws)
+        reward_values = np.array([self.reward_sum[key] / self.count_map[key] if key in self.count_map else np.inf for key in keys])
+        log_draws = np.log(self.n_draws) if self.n_draws > 0 else 0
         c_values = self.c * np.sqrt(log_draws / np.array([self.count_map[key] if key in self.count_map else 1 for key in keys]))
         ucb_values = reward_values + c_values
 

@@ -874,7 +874,7 @@ class PopulationBasedSampler():
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
         return SingleStepResults([], [], [], None, None)
 
-    def _sample_and_apply_operator_map_wrapper(self, *args):
+    def _sample_and_apply_operator_map_wrapper(self, args):
         return self._sample_and_apply_operator(*args)
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
@@ -1088,7 +1088,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         else:
             logger.info(f'Loading population from {self.previous_sampler_population_seed_path}')
             previous_map_elites = load_data_from_path(self.previous_sampler_population_seed_path)
-            for game in previous_map_elites.population.values():
+            for game in tqdm(previous_map_elites.population.values(), desc='Loading previous population', total=len(previous_map_elites.population)):  # type: ignore
                 game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
                 self._add_to_archive(game, game_fitness, game_key, None)  # type: ignore
 

@@ -714,6 +714,23 @@ class LengthOfThenModals(FitnessTerm):
         return self.then_lengths_found.keys()
 
 
+class AtEndFound(FitnessTerm):
+    at_end_found: bool
+
+    def __init__(self):
+        super().__init__('at_end', 'at_end_found')
+
+    def game_start(self) -> None:
+        self.at_end_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.at_end_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return int(self.at_end_found)
+
+
+
 DEFAULT_MAX_QUANTIFICATION_COUNT = 5
 
 
@@ -1586,7 +1603,7 @@ COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []
 
 
-MODALS = ['once', 'once_measure', 'hold', 'while_hold']  # , 'hold_for']
+MODALS = ['once', 'once_measure', 'hold', 'while_hold', 'at_end']  # , 'hold_for']
 
 
 class PredicateUnderModal(FitnessTerm):
@@ -2164,6 +2181,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     length_of_then_modals = LengthOfThenModals()
     fitness.register(length_of_then_modals)
+
+    at_end_found = AtEndFound()
+    fitness.register(at_end_found)
 
     max_quantification_count = MaxQuantificationCount()
     fitness.register(max_quantification_count)

@@ -1050,7 +1050,7 @@ class PopulationBasedSampler():
                                              compute_diversity_metrics=compute_diversity_metrics,
                                              save_every_generation=save_every_generation)
 
-    def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         if postprocess_sample:
             sample = self.postprocessor(sample)  # type: ignore
 
@@ -1063,10 +1063,10 @@ class PopulationBasedSampler():
             display_game=display_game, min_display_threshold=min_display_threshold,
             )
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         self._visualize_sample(self.population[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
-    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         sample_index = np.argsort(self.fitness_values)[-top_index]
         self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
@@ -1270,7 +1270,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: do we want to do crossover as well?
         return self._randomly_mutate_game
 
-    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         if key not in self.population:
             raise ValueError(f'Key {key} not found in population')
 
@@ -1282,11 +1282,11 @@ class MAPElitesSampler(PopulationBasedSampler):
         self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
         return key
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         population_keys = list(self.population.keys())
         return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
 
-    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         if top_index < 1:
             top_index = 1
 
@@ -1301,7 +1301,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         key = fitness_values_and_keys[-1][1]
         return self.population[key]
 
-    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = False):
+    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
         if any(f not in self.map_elites_feature_names for f in features.keys()):
             raise ValueError(f'Feature names ({list(features.keys())})must be in {self.map_elites_feature_names}')
 

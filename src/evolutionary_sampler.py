@@ -127,6 +127,7 @@ parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GE
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 parser.add_argument('--map-elites-initial-population-as-archive-size', action='store_true')
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
+parser.add_argument('--map-elites-behavioral-features-key', type=str, required=True)
 
 
 DEFAULT_RELATIVE_PATH = '.'
@@ -513,6 +514,11 @@ class PopulationBasedSampler():
         while sample is None:
             try:
                 sample = typing.cast(tuple, self.initial_sampler.sample(global_context=dict(original_game_id=f'evo-{idx}')))
+                if self.sample_filter_func is not None:
+                    sample_fitness, sample_features = self._score_proposal(sample, return_features=True)  # type: ignore
+                    if not self.sample_filter_func(sample_features, sample_fitness):
+                        sample = None
+
             except RecursionError:
                 if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
@@ -879,6 +885,12 @@ class PopulationBasedSampler():
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
+    def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        """
+        Here to enable the MAP-Elites sampler to postprocess features into archive keys
+        """
+        return features
+
     def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]],
                                    parent_info: typing.Dict[str, typing.Any],
                                    generation_index: int, sample_index: int,
@@ -909,12 +921,12 @@ class PopulationBasedSampler():
                     else:
                         fitness, features = retval, None
 
-                    if self.sample_filter_func is not None and not self.sample_filter_func(fitness, features):  # type: ignore
+                    if self.sample_filter_func is not None and not self.sample_filter_func(features, fitness):  # type: ignore
                         continue
 
                     children.append(child)
                     children_fitness_scores.append(fitness)
-                    children_features.append(features)
+                    children_features.append(self._postprocess_features(features))
 
                 if len(children) == 0:
                     raise SamplingException('No children passed the filter func')
@@ -943,6 +955,10 @@ class PopulationBasedSampler():
         return SingleStepResults([], [], [], [], [])
 
     def _sample_and_apply_operator_map_wrapper(self, args):
+        """
+        Here to enable adding other arguments to the parent iterator and param iterator, and
+        to not have ot rely on implementations of starmap existing
+        """
         return self._sample_and_apply_operator(*args[0], *args[1:])
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
@@ -1155,8 +1171,9 @@ class MAPElitesSampler(PopulationBasedSampler):
                 current_population_size = 0
                 while current_population_size < self.population_size:
                     game = self._gen_init_sample(len(self.population))
-                    game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
-                    self._add_to_archive(game, game_fitness, game_key)  # type: ignore
+                    game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+                    game_key = self._features_to_key(game_features)
+                    self._add_to_archive(game, game_fitness, game_key)
                     if len(self.population) > current_population_size:
                         pbar.update(1)
                         current_population_size = len(self.population)
@@ -1180,13 +1197,14 @@ class MAPElitesSampler(PopulationBasedSampler):
             for i, feature_name in enumerate(self.map_elites_feature_names)
         ])
 
-    def _score_proposal(self, proposal: ASTType, return_features: bool = False):
-        retval = super()._score_proposal(proposal, return_features=return_features)  # type: ignore
-        if return_features:
-            score, features = retval  # type: ignore
-            return score, self._features_to_key(features)
+    def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        """
+        Here to enable the MAP-Elites sampler to postprocess features into archive keys
+        """
+        if features is None:
+            return None
 
-        return retval
+        return self._features_to_key(features)
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
@@ -1544,6 +1562,11 @@ class MicrobialGASamplerWithBeamSearch(MicrobialGASampler):
         return self._randomly_mutate_game_beams(winner_game, rng)
 
 
+feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
+def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
+    return any(sample_features[name] for name in feature_names)
+
+
 def main(args):
     if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
         logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
@@ -1616,22 +1639,44 @@ def main(args):
     #     )
 
     elif args.sampler_type == MAP_ELITES:
-        FEATURE_NAMES_OR_PATTERNS = [
-            # re.compile(r'compositionality_structure_.*'),
-            'at_end_found',
-            'length_of_then_modals_2',
-            'length_of_then_modals_3',
-            'section_doesnt_exist_setup',
-            'section_doesnt_exist_terminal',
-            'num_preferences_defined_1',
-            'num_preferences_defined_2',
-            'num_preferences_defined_3',
-            'in_motion_arg_types_balls_constraints',
-            'on_arg_types_blocks_blocks_constraints'
-        ]
+        BEHAVIORAL_FEATURE_SETS = {
+            'compositionality_structures': [
+                re.compile(r'compositionality_structure_.*'),
+            ],
+            'mixture_1': [
+                # re.compile(r'compositionality_structure_.*'),
+                'at_end_found',
+                'length_of_then_modals_2',
+                'length_of_then_modals_3',
+                'section_doesnt_exist_setup',
+                'section_doesnt_exist_terminal',
+                'num_preferences_defined_1',
+                'num_preferences_defined_2',
+                'num_preferences_defined_3',
+                'in_motion_arg_types_balls_constraints',
+                'on_arg_types_blocks_blocks_constraints'
+            ],
+            'filter_func_experiment_features': [
+                'length_of_then_modals_3',
+                'section_doesnt_exist_setup',
+                'section_doesnt_exist_terminal',
+                'num_preferences_defined_1',
+                'num_preferences_defined_2',
+                'num_preferences_defined_3',
+                'in_motion_arg_types_balls_constraints',
+                'on_arg_types_blocks_blocks_constraints',
+                'in_arg_types_receptacles_balls_constraints',
+                'adjacent_arg_types_agent_room_features_constraints',
+                'agent_holds_arg_types_blocks_constraints',
+            ]
+        }
+
+        feature_set_key = args.map_elites_behavioral_features_key
+        if feature_set_key not in BEHAVIORAL_FEATURE_SETS:
+            raise ValueError(f'Unknown behavioral feature set {feature_set_key}, must be one of {list(BEHAVIORAL_FEATURE_SETS.keys())}')
 
         evosampler = MAPElitesSampler(
-            map_elites_feature_names_or_patterns=FEATURE_NAMES_OR_PATTERNS,  # type: ignore
+            map_elites_feature_names_or_patterns=BEHAVIORAL_FEATURE_SETS[feature_set_key],
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             initial_population_as_archive_size=args.map_elites_initial_population_as_archive_size,
@@ -1651,6 +1696,7 @@ def main(args):
             output_name=args.output_name,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
+            sample_filter_func=filter_samples_then_three_or_longer,
             # diversity_scorer_type=args.diversity_scorer_type,
             # diversity_scorer_k=args.diversity_scorer_k,
             # diversity_score_threshold=args.diversity_score_threshold,

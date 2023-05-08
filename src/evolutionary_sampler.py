@@ -1066,12 +1066,23 @@ class PopulationBasedSampler():
                                              compute_diversity_metrics=compute_diversity_metrics,
                                              save_every_generation=save_every_generation)
 
-    def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True,
+                          feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if postprocess_sample:
             sample = self.postprocessor(sample)  # type: ignore
 
         sample_features = self._proposal_to_features(sample)  # type: ignore
         sample_features_tensor = self._features_to_tensor(sample_features)
+
+        if feature_keywords_to_print is not None:
+            print('\nFeatures with keywords:')
+            for keyword in feature_keywords_to_print:
+                keyword_features = [feature for feature, value in sample_features.items() if keyword in feature and value]
+                if len(keyword_features) == 0:
+                    keyword_features = None
+
+                print(f'"{keyword}": {keyword_features}')
+
 
         evaluate_single_game_energy_contributions(
             self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,   # type: ignore
@@ -1079,12 +1090,14 @@ class PopulationBasedSampler():
             display_game=display_game, min_display_threshold=min_display_threshold,
             )
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
-        self._visualize_sample(self.population[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                         postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+        self._visualize_sample(self.population[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
-    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         sample_index = np.argsort(self.fitness_values)[-top_index]
-        self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        self.visualize_sample(sample_index, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
 
 class MAPElitesWeightStrategy(Enum):
@@ -1288,7 +1301,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: do we want to do crossover as well?
         return self._randomly_mutate_game
 
-    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                                 postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if key not in self.population:
             raise ValueError(f'Key {key} not found in population')
 
@@ -1297,21 +1311,23 @@ class MAPElitesSampler(PopulationBasedSampler):
         for feature_name, feature_value in key_dict.items():
             print(f'{feature_name}: {feature_value}')
 
-        self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
         return key
 
-    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def visualize_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                         postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         population_keys = list(self.population.keys())
-        return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
-    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if top_index < 1:
             top_index = 1
 
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
         fitness_values_and_keys.sort(key=lambda x: x[0])
         key = fitness_values_and_keys[-top_index][1]
-        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
     def _best_individual(self):
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
@@ -1319,7 +1335,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         key = fitness_values_and_keys[-1][1]
         return self.population[key]
 
-    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True):
+    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                                           postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if any(f not in self.map_elites_feature_names for f in features.keys()):
             raise ValueError(f'Feature names ({list(features.keys())})must be in {self.map_elites_feature_names}')
 
@@ -1336,7 +1353,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items() if key in filtered_keys]
         fitness_values_and_keys.sort(key=lambda x: x[0])
         key = fitness_values_and_keys[-top_index][1]
-        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample)
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
 
 class BeamSearchSampler(PopulationBasedSampler):

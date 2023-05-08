@@ -33,7 +33,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
     'two_number_operation_found', 'single_argument_multi_operation_found',
     'tautological_expression_found', 'redundant_expression_found',
-    'redundant_scoring_terminal_expression_found',
+    'redundant_scoring_terminal_expression_found', 'at_end_found',
     'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
 ])
 

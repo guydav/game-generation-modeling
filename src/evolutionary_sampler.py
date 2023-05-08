@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import tempfile
+import traceback
 import typing
 
 import numpy as np
@@ -124,6 +125,7 @@ parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
+parser.add_argument('--map-elites-initial-population-as-archive-size', action='store_true')
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
 
 
@@ -201,8 +203,18 @@ class SingleStepResults(typing.NamedTuple):
     samples: typing.List[ASTType]
     fitness_scores: typing.List[float]
     parent_infos: typing.List[typing.Dict[str, typing.Any]]
-    diversity_scores: typing.Optional[typing.List[float]]
-    sample_features: typing.Optional[typing.List[typing.Dict[str, typing.Any]]]
+    diversity_scores: typing.List[float]
+    sample_features: typing.List[typing.Dict[str, typing.Any]]
+
+    def __len__(self):
+        return len(self.samples)
+
+    def accumulate(self, other: 'SingleStepResults'):
+        self.samples.extend(other.samples)
+        self.fitness_scores.extend(other.fitness_scores)
+        if other.parent_infos is not None: self.parent_infos.extend(other.parent_infos)
+        if other.diversity_scores is not None: self.diversity_scores.extend(other.diversity_scores)
+        if other.sample_features is not None: self.sample_features.extend(other.sample_features)
 
 
 
@@ -237,6 +249,7 @@ PARENT_INDEX = 'parent_index'
 
 
 class PopulationBasedSampler():
+    candidates: SingleStepResults
     context_fixers: typing.List[ASTContextFixer]
     counter: ASTRuleValueCounter
     diversity_scorer: typing.Optional[DiversityScorer]
@@ -264,9 +277,11 @@ class PopulationBasedSampler():
     regrowth_samplers: typing.List[RegrowthSampler]
     relative_path: str
     rng: np.random.Generator
+    sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]]
     sample_parallel: bool
     sampler_kwargs: typing.Dict[str, typing.Any]
     samplers: typing.List[ASTSampler]
+    saving: bool
     verbose: int
 
 
@@ -300,6 +315,7 @@ class PopulationBasedSampler():
                  diversity_scorer_k: int = 1,
                  diversity_score_threshold: float = 0.0,
                  diversity_threshold_absolute: bool = False,
+                 sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None
                  ):
 
         self.population_size = population_size
@@ -333,6 +349,8 @@ class PopulationBasedSampler():
         if self.diversity_scorer_type is not None:
             self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
+        self.sample_filter_func = sample_filter_func
+
         # Used to generate the initial population of complete games
         if sampler_kwargs is None:
             sampler_kwargs = {}
@@ -356,6 +374,9 @@ class PopulationBasedSampler():
         # Generate the initial population
         self._initialize_population()
 
+        # Initialize the candidate pools in each genera
+        self.candidates = SingleStepResults([], [], [], [], [])
+
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
         self.fitness_metrics_history = []
@@ -363,6 +384,7 @@ class PopulationBasedSampler():
 
         self.generation_diversity_scores = np.zeros(self.population_size)
         self.generation_diversity_scores_index = -1
+        self.saving = False
 
     def _pre_population_sample_setup(self):
         pass
@@ -411,12 +433,34 @@ class PopulationBasedSampler():
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
 
+    def __getstate__(self):
+        # Copy the object's state from self.__dict__ which contains
+        # all our instance attributes. Always use the dict.copy()
+        # method to avoid modifying the original state.
+        state = self.__dict__.copy()
+        # Remove the unpicklable entries.
+        if not self.saving:
+            del state['population']
+            del state['fitness_values']
+        return state
+
+    # def __setstate__(self, state):
+    #     if 'population' not in state:
+    #         state['population'] = None
+    #     if 'fitness_values' not in state:
+    #         state['fitness_values'] = None
+
+    #     self.__dict__.update(state)
+    #     self.saving = False
+
     def save(self, suffix: typing.Optional[str] = None, log_message: bool = True):
+        self.saving = True
         output_name = self.output_name
         if suffix is not None:
             output_name += f'_{suffix}'
 
         save_data(self, self.output_folder, output_name, self.relative_path, log_message=log_message)
+        self.saving = False
 
     def set_population(self, population: typing.List[typing.Any], fitness_values: typing.Optional[typing.List[float]] = None):
         '''
@@ -784,16 +828,21 @@ class PopulationBasedSampler():
             self.generation_diversity_scores = population_diversity_scores
             self.generation_diversity_scores_index = self.generation_index
 
-    def _select_new_population(self, candidates: typing.List[ASTType],
-                               candidate_scores: typing.List[float],
-                               parent_infos: typing.List[typing.Dict[str, typing.Any]],
-                               candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
-                               candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
+    def _end_single_evolutionary_step(self, results: typing.Optional[SingleStepResults] = None):
         '''
         Returns the new population given the current population, the candidate games, and the
         scores for both the population and the candidate games. As a default, return the top P
         games from the union of the population and the candidates
         '''
+        if results is None:
+            results = self.candidates
+
+        candidates = results.samples
+        candidate_scores = results.fitness_scores
+        # parent_infos = results.parent_infos
+        candidate_diversity_scores = results.diversity_scores
+        # candidate_features = results.sample_features
+
         if candidate_diversity_scores is not None and len(candidate_diversity_scores) > 0:
             diversity_scores = np.array(candidate_diversity_scores)  # type: ignore
 
@@ -838,7 +887,8 @@ class PopulationBasedSampler():
         Given a parent, a generation and sample index (to make sure that the RNG is seeded differently for each generation / individual),
         sample an operator and apply it to the parent. Returns the child or children and their fitness scores
         '''
-        rng = np.random.default_rng(self.random_seed + (self.population_size * generation_index) + sample_index)
+        rng = np.random.default_rng(self.random_seed + (self.population_size * generation_index) + sample_index)  # type: ignore
+        compute_features = return_sample_features or self.sample_filter_func is not None
 
         for _ in range(self.sample_patience):
             try:
@@ -847,18 +897,31 @@ class PopulationBasedSampler():
                 if not isinstance(child_or_children, list):
                     child_or_children = [child_or_children]
 
+                children = []
+                children_fitness_scores = []
+                children_features = []
+
                 for i, child in enumerate(child_or_children):
                     self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
+                    retval = self._score_proposal(child, return_features=compute_features)
+                    if compute_features:
+                        fitness, features = retval  # type: ignore
+                    else:
+                        fitness, features = retval, None
 
-                children_fitness_scores = [self._score_proposal(child, return_features=return_sample_features) for child in child_or_children]
-                children_features = None
-                if return_sample_features:
-                    children_fitness_scores, children_features = zip(*children_fitness_scores)  # type: ignore
-                    children_fitness_scores = list(children_fitness_scores)
-                    children_features = list(children_features)
+                    if self.sample_filter_func is not None and not self.sample_filter_func(fitness, features):  # type: ignore
+                        continue
 
-                child_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
-                return SingleStepResults(child_or_children, children_fitness_scores, itertools.repeat(parent_info, len(child_or_children)), child_diversity_scores, children_features)  # type: ignore
+                    children.append(child)
+                    children_fitness_scores.append(fitness)
+                    children_features.append(features)
+
+                if len(children) == 0:
+                    raise SamplingException('No children passed the filter func')
+
+                children_features = None if not return_sample_features else children_features
+                children_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
+                return SingleStepResults(child_or_children, children_fitness_scores, itertools.repeat(parent_info, len(child_or_children)), children_diversity_scores, children_features)  # type: ignore
 
             except SamplingException as e:
                 # if self.verbose:
@@ -870,18 +933,23 @@ class PopulationBasedSampler():
                 #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
+            except RuntimeError as e:
+                logging.error(traceback.format_exc())
+                raise e
+
+
         # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
-        return SingleStepResults([], [], [], None, None)
+        return SingleStepResults([], [], [], [], [])
 
     def _sample_and_apply_operator_map_wrapper(self, args):
-        return self._sample_and_apply_operator(*args)
+        return self._sample_and_apply_operator(*args[0], *args[1:])
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index)
         '''
-        return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count())
+        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
                           postprocess: bool = False, should_tqdm: bool = False, use_imap: bool = True):
@@ -894,15 +962,9 @@ class PopulationBasedSampler():
 
         param_iterator = self._build_evolutionary_step_param_iterator(self._get_parent_iterator())
 
-        candidates = []
-        candidate_scores = []
-        candidate_parent_infos = []
-        candidate_diversity_scores = []
-        candidate_features = []
-
         if pool is not None:
             if use_imap:
-                children_iter = pool.imap(self._sample_and_apply_operator_map_wrapper, param_iterator, chunksize=chunksize)  # type: ignore
+                children_iter = pool.imap_unordered(self._sample_and_apply_operator_map_wrapper, param_iterator, chunksize=chunksize)  # type: ignore
             else:
                 children_iter = pool.map(self._sample_and_apply_operator_map_wrapper, param_iterator, chunksize=chunksize)  # type: ignore
         else:
@@ -911,19 +973,18 @@ class PopulationBasedSampler():
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        for children, children_fitness_scores, parent_infos, children_diversity_scores, children_features in children_iter:
+        for step_results in children_iter:
             if postprocess:
-                children = [self.postprocessor(c) for c in children]
+                for i in range(len(step_results)):
+                    step_results.samples[i] = self.postprocessor(step_results.samples[i])  # type: ignore
 
-            candidates.extend(children)
-            candidate_scores.extend(children_fitness_scores)
-            candidate_parent_infos.extend(parent_infos)
-            if children_diversity_scores is not None:
-                candidate_diversity_scores.extend(children_diversity_scores)
-            if children_features is not None:
-                candidate_features.extend(children_features)
+            self._handle_single_operator_results(step_results)
 
-        self._select_new_population(candidates, candidate_scores, candidate_parent_infos, candidate_diversity_scores, candidate_features)
+        self._end_single_evolutionary_step()
+
+
+    def _handle_single_operator_results(self, results: SingleStepResults):
+        self.candidates.accumulate(results)
 
     def _create_tqdm_postfix(self) -> typing.Dict[str, str]:
         baseline_postfix = {"Mean": f"{self.mean_fitness:.2f}", "Std": f"{self.std_fitness:.2f}", "Max": f"{self.best_fitness:.2f}"}
@@ -1023,19 +1084,23 @@ PARENT_KEY = 'parent_key'
 
 class MAPElitesSampler(PopulationBasedSampler):
     archive_metrics_history: typing.List[typing.Dict[str, int | float]]
+    fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[int, float]
     generation_size: int
+    initial_population_as_archive_size: bool
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
     population: typing.Dict[int, ASTType]
     previous_sampler_population_seed_path: typing.Optional[str]
     selector: typing.Optional[Selector]
     selector_kwargs: typing.Dict[str, typing.Any]
+    update_fitness_rank_weights: bool
     weight_strategy: MAPElitesWeightStrategy
 
     def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy,
                  map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
+                 initial_population_as_archive_size: bool = False,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  *args, **kwargs):
         self.generation_size = generation_size
@@ -1045,7 +1110,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         if selector_kwargs is None:
             selector_kwargs = {}
 
-        selector_kwargs['generation_size'] = generation_size
+        # selector_kwargs['generation_size'] = generation_size  # no longer passing to do single-sample updating
         self.selector_kwargs = selector_kwargs
         self.selector = None
         if self.weight_strategy == MAPElitesWeightStrategy.UCB:
@@ -1054,7 +1119,9 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.selector = ThompsonSamplingSelector(**selector_kwargs)
 
         self.archive_metrics_history = []
+        self.initial_population_as_archive_size = initial_population_as_archive_size
         self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
+        self.update_fitness_rank_weights = True
 
         super().__init__(*args, **kwargs)
 
@@ -1083,14 +1150,26 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _initialize_population(self):
         if self.previous_sampler_population_seed_path is None:
-            super()._initialize_population()
+            if self.initial_population_as_archive_size:
+                pbar = tqdm(total=self.population_size, desc="Generating initial population")  # type: ignore
+                current_population_size = 0
+                while current_population_size < self.population_size:
+                    game = self._gen_init_sample(len(self.population))
+                    game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
+                    self._add_to_archive(game, game_fitness, game_key)  # type: ignore
+                    if len(self.population) > current_population_size:
+                        pbar.update(1)
+                        current_population_size = len(self.population)
+
+            else:
+                super()._initialize_population()
 
         else:
             logger.info(f'Loading population from {self.previous_sampler_population_seed_path}')
             previous_map_elites = load_data_from_path(self.previous_sampler_population_seed_path)
             for game in tqdm(previous_map_elites.population.values(), desc='Loading previous population', total=len(previous_map_elites.population)):  # type: ignore
                 game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
-                self._add_to_archive(game, game_fitness, game_key, None)  # type: ignore
+                self._add_to_archive(game, game_fitness, game_key)  # type: ignore
 
             self._update_population_statistics()
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
@@ -1114,7 +1193,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index, return_features)
         '''
 
-        return zip(*zip(*parent_iterator), itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
+        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
 
     def _update_population_statistics(self):
         self.population_size = len(self.population)
@@ -1131,38 +1210,33 @@ class MAPElitesSampler(PopulationBasedSampler):
         if keys is None:
             keys = [self._features_to_key(self._proposal_to_features(game)) for game in population]
 
-        self._select_new_population(population, fitness_values, parent_infos=itertools.repeat(None, len(population)), candidate_features=keys)  # type: ignore
+        for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
+            self._add_to_archive(sample, fitness, key)
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]]):
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
         successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
         if successful:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
+            self.update_fitness_rank_weights = True
 
         if self.selector is not None and parent_info is not None:
             self.selector.update(parent_info[PARENT_KEY], int(successful))
 
-    def _select_new_population(self, candidates: typing.List[ASTType],
-                               candidate_scores: typing.List[float],
-                               parent_infos: typing.List[typing.Dict[str, typing.Any]],
-                               candidate_diversity_scores: typing.Optional[typing.List[float]] = None,
-                               candidate_features: typing.Optional[typing.List[typing.Dict[str, float]]] = None):
+    def _handle_single_operator_results(self, results: SingleStepResults):
+        for candidate, fitness_value, key, parent_info in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos):
+            self._add_to_archive(candidate, fitness_value, key, parent_info)   # type: ignore
 
-        if candidate_features is None:
-            raise ValueError('MAPElitesSampler requires candidate_features to be provided')
-
-        for candidate, score, key, parent_info in zip(candidates, candidate_scores, candidate_features, parent_infos):
-            self._add_to_archive(candidate, score, key, parent_info)  # type: ignore
-
+    def _end_single_evolutionary_step(self, samples: typing.Optional[SingleStepResults] = None):
         self._update_population_statistics()
 
     def _custom_tqdm_postfix(self):
-        # TODO: make this threshold a parameter
+        # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 85]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 89.5]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 73]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1173,15 +1247,20 @@ class MAPElitesSampler(PopulationBasedSampler):
             pass
 
         elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
-            fitness_values = np.array(list(self.fitness_values.values()))
-            ranks = len(fitness_values) - np.argsort(fitness_values)
-            weights = 0.5 + (ranks / len(fitness_values))
-            weights /= weights.sum()
+            if self.update_fitness_rank_weights:
+                fitness_values = np.array(list(self.fitness_values.values()))
+                ranks = len(fitness_values) - np.argsort(fitness_values)
+                self.fitness_rank_weights = 0.5 + (ranks / len(fitness_values))
+                self.fitness_rank_weights /= weights.sum()  # type: ignore
+                self.update_fitness_rank_weights = False
+
+            weights = self.fitness_rank_weights
 
         keys = list(self.population.keys())
+
         for _ in range(self.generation_size):
             if self.selector is None:
-                key = self._choice(keys, weights=weights)
+                key = self._choice(keys, weights=weights)  # type: ignore
             else:
                 key = self.selector.select(keys, rng=self.rng)
 
@@ -1258,36 +1337,36 @@ class BeamSearchSampler(PopulationBasedSampler):
         return super()._get_parent_iterator(1, self.k)
 
 
-class WeightedBeamSearchSampler(PopulationBasedSampler):
-    '''
-    Implements a weighted form of beam search where the number of samples generated for each game
-    is dependent on its fitness rank in the population. The most fit game receives (in expectation)
-    2k samples, the median game k samples, and the least fit game 0 samples. This is achieved by
-    running 2 * P "tournaments" where two individuals are randomly sampled from the population and
-    the individual with higher fitness produces a child
-    '''
-    def __init__(self, k, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.k = k
+# class WeightedBeamSearchSampler(PopulationBasedSampler):
+#     '''
+#     Implements a weighted form of beam search where the number of samples generated for each game
+#     is dependent on its fitness rank in the population. The most fit game receives (in expectation)
+#     2k samples, the median game k samples, and the least fit game 0 samples. This is achieved by
+#     running 2 * P "tournaments" where two individuals are randomly sampled from the population and
+#     the individual with higher fitness produces a child
+#     '''
+#     def __init__(self, k, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.k = k
 
-    def _get_operator(self, rng):
+#     def _get_operator(self, rng):
 
-        def weighted_beam_search_sample(games, rng):
-            if not isinstance(games, list) or len(games) != 2:
-                raise ValueError(f'Expected games to be a list of length 2, got {games}')
+#         def weighted_beam_search_sample(games, rng):
+#             if not isinstance(games, list) or len(games) != 2:
+#                 raise ValueError(f'Expected games to be a list of length 2, got {games}')
 
-            p1_idx = self.population.index(games[0])
-            p2_idx = self.population.index(games[1])
+#             p1_idx = self.population.index(games[0])
+#             p2_idx = self.population.index(games[1])
 
-            if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
-                return self._gen_regrowth_sample(games[0], rng)
-            else:
-                return self._gen_regrowth_sample(games[1], rng)
+#             if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
+#                 return self._gen_regrowth_sample(games[0], rng)
+#             else:
+#                 return self._gen_regrowth_sample(games[1], rng)
 
-        return weighted_beam_search_sample
+#         return weighted_beam_search_sample
 
-    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        return super()._get_parent_iterator(2, 2 * self.k)
+#     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+#         return super()._get_parent_iterator(2, 2 * self.k)
 
 
 class InsertDeleteSampler(PopulationBasedSampler):
@@ -1513,43 +1592,49 @@ def main(args):
 
         evosampler = sampler_class(**evo_sampler_kwarsgs)  # type: ignore
 
-    elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
-        evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
-            args=args,
-            population_size=args.population_size,
-            verbose=args.verbose,
-            initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
-            fitness_featurizer_path=args.fitness_featurizer_path,
-            fitness_function_date_id=args.fitness_function_date_id,
-            fitness_function_model_name=args.fitness_function_model_name,
-            flip_fitness_sign=not args.no_flip_fitness_sign,
-            ngram_model_path=args.ngram_model_path,
-            sampler_kwargs=sampler_kwargs,
-            relative_path=args.relative_path,
-            output_folder=args.output_folder,
-            output_name=args.output_name,
-            sample_parallel=args.sample_parallel,
-            n_workers=args.parallel_n_workers,
-            diversity_scorer_type=args.diversity_scorer_type,
-            diversity_scorer_k=args.diversity_scorer_k,
-            diversity_score_threshold=args.diversity_score_threshold,
-            diversity_threshold_absolute=args.diversity_threshold_absolute,
-        )
+    # elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
+    #     evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
+    #         args=args,
+    #         population_size=args.population_size,
+    #         verbose=args.verbose,
+    #         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+    #         fitness_featurizer_path=args.fitness_featurizer_path,
+    #         fitness_function_date_id=args.fitness_function_date_id,
+    #         fitness_function_model_name=args.fitness_function_model_name,
+    #         flip_fitness_sign=not args.no_flip_fitness_sign,
+    #         ngram_model_path=args.ngram_model_path,
+    #         sampler_kwargs=sampler_kwargs,
+    #         relative_path=args.relative_path,
+    #         output_folder=args.output_folder,
+    #         output_name=args.output_name,
+    #         sample_parallel=args.sample_parallel,
+    #         n_workers=args.parallel_n_workers,
+    #         diversity_scorer_type=args.diversity_scorer_type,
+    #         diversity_scorer_k=args.diversity_scorer_k,
+    #         diversity_score_threshold=args.diversity_score_threshold,
+    #         diversity_threshold_absolute=args.diversity_threshold_absolute,
+    #     )
 
     elif args.sampler_type == MAP_ELITES:
         FEATURE_NAMES_OR_PATTERNS = [
-            re.compile(r'compositionality_structure_.*'),
+            # re.compile(r'compositionality_structure_.*'),
+            'at_end_found',
+            'length_of_then_modals_2',
+            'length_of_then_modals_3',
             'section_doesnt_exist_setup',
             'section_doesnt_exist_terminal',
             'num_preferences_defined_1',
             'num_preferences_defined_2',
-            'num_preferences_defined_3'
+            'num_preferences_defined_3',
+            'in_motion_arg_types_balls_constraints',
+            'on_arg_types_blocks_blocks_constraints'
         ]
 
         evosampler = MAPElitesSampler(
             map_elites_feature_names_or_patterns=FEATURE_NAMES_OR_PATTERNS,  # type: ignore
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
+            initial_population_as_archive_size=args.map_elites_initial_population_as_archive_size,
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             args=args,
             population_size=args.population_size,

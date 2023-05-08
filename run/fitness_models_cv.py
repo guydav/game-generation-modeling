@@ -14,7 +14,8 @@ import torch.nn as nn
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
-import ast_parser  # for logging configuration
+import ast_printer  # for logging
+import ast_parser  # for logging
 from src import fitness_energy_utils as utils
 
 logger = logging.getLogger(__name__)

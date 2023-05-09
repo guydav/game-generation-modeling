@@ -1239,11 +1239,15 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def set_population(self, population: typing.List[Any], fitness_values: typing.List[float] | None = None):
         keys = None
+        features = None
         if fitness_values is None:
-            fitness_values, keys = zip(*[self._score_proposal(game, return_features=True) for game in population])   # type: ignore
+            fitness_values, features = zip(*[self._score_proposal(game, return_features=True) for game in population])   # type: ignore
 
-        if keys is None:
+        if features is None:
             keys = [self._features_to_key(self._proposal_to_features(game)) for game in population]
+
+        else:
+            keys = [self._features_to_key(feature) for feature in features]
 
         for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
             self._add_to_archive(sample, fitness, key)
@@ -1286,7 +1290,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                 fitness_values = np.array(list(self.fitness_values.values()))
                 ranks = len(fitness_values) - np.argsort(fitness_values)
                 self.fitness_rank_weights = 0.5 + (ranks / len(fitness_values))
-                self.fitness_rank_weights /= weights.sum()  # type: ignore
+                self.fitness_rank_weights /= self.fitness_rank_weights.sum()  # type: ignore
                 self.update_fitness_rank_weights = False
 
             weights = self.fitness_rank_weights

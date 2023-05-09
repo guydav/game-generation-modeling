@@ -1161,6 +1161,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         if len(names) > 0:
             raise ValueError(f'Could not find the following feature names in the list of feature names: {names}')
 
+        logger.info(f'Using the following features for MAP-Elites: {self.map_elites_feature_names}')
+
         self.population = OrderedDict()
         self.fitness_values = OrderedDict()
 
@@ -1185,8 +1187,9 @@ class MAPElitesSampler(PopulationBasedSampler):
             logger.info(f'Loading population from {self.previous_sampler_population_seed_path}')
             previous_map_elites = load_data_from_path(self.previous_sampler_population_seed_path)
             for game in tqdm(previous_map_elites.population.values(), desc='Loading previous population', total=len(previous_map_elites.population)):  # type: ignore
-                game_fitness, game_key = self._score_proposal(game, return_features=True)  # type: ignore
-                self._add_to_archive(game, game_fitness, game_key)  # type: ignore
+                game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+                game_key = self._features_to_key(game_features)
+                self._add_to_archive(game, game_fitness, game_key)
 
             self._update_population_statistics()
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
@@ -1643,6 +1646,14 @@ def main(args):
             'compositionality_structures': [
                 re.compile(r'compositionality_structure_.*'),
             ],
+            'compositionality_structures_num_preferences_sections': [
+                re.compile(r'compositionality_structure_.*'),
+                'section_doesnt_exist_setup',
+                'section_doesnt_exist_terminal',
+                'num_preferences_defined_1',
+                'num_preferences_defined_2',
+                'num_preferences_defined_3',
+            ],
             'mixture_1': [
                 # re.compile(r'compositionality_structure_.*'),
                 'at_end_found',
@@ -1668,6 +1679,12 @@ def main(args):
                 'in_arg_types_receptacles_balls_constraints',
                 'adjacent_arg_types_agent_room_features_constraints',
                 'agent_holds_arg_types_blocks_constraints',
+            ],
+            'length_and_depth_features': [
+                # re.compile(r'max_depth_[\w\d_]+'),
+                re.compile(r'mean_depth_[\w\d_]+'),
+                # re.compile(r'node_count_[\w\d_]+'),
+                re.compile(r'num_preferences_defined_[123]'),
             ]
         }
 

@@ -1930,6 +1930,7 @@ class SectionNodeCount(SectionCountTerm):
         return self.node_count
 
 
+
 SECTION_COUNT_THRESHOLDS = {
     (SectionMaxDepth, ast_parser.SETUP): [1, 8.5, 17.5, 25.5],
     (SectionMaxDepth, ast_parser.PREFERENCES): [8.5, 15.5, 19.5, 23.5],

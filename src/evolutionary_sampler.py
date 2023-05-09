@@ -548,6 +548,7 @@ class PopulationBasedSampler():
         while not sample_generated:
             try:
                 new_proposal = self._regrowth_sampler().sample(sample_index=0, update_game_id=False, rng=rng)
+                self._context_fixer().fix_contexts(new_proposal)
 
                 if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
                     if self.verbose >= 2: print('Regrowth generated identical games, repeating')

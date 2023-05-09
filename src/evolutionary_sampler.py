@@ -1327,14 +1327,36 @@ class MAPElitesSampler(PopulationBasedSampler):
         population_keys = list(self.population.keys())
         return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
-    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
-                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+    def top_sample_key(self, top_index: int, features: typing.Optional[typing.Dict[str, int]] = None):
         if top_index < 1:
             top_index = 1
 
-        fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
+        if features is not None:
+            if any(f not in self.map_elites_feature_names for f in features.keys()):
+                raise ValueError(f'Feature names ({list(features.keys())}) must be in {self.map_elites_feature_names}')
+
+            keys = list(self.population.keys())
+            feature_to_index = {f: i for i, f in enumerate(self.map_elites_feature_names)}
+            filtered_keys = [key for key in keys if all(feature_value == ((key >> feature_to_index[feature_name]) % 2) for feature_name, feature_value in features.items())]
+            if len(filtered_keys) == 0:
+                print(f'No samples found with features {features}')
+                return
+
+            fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items() if key in filtered_keys]
+
+        else:
+            fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
+
         fitness_values_and_keys.sort(key=lambda x: x[0])
-        key = fitness_values_and_keys[-top_index][1]
+        return fitness_values_and_keys[-top_index][1]
+
+    def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+
+        key = self.top_sample_key(top_index)
+        if key is None:
+            return
+
         return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
     def _best_individual(self):
@@ -1345,22 +1367,10 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
                                            postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
-        if any(f not in self.map_elites_feature_names for f in features.keys()):
-            raise ValueError(f'Feature names ({list(features.keys())})must be in {self.map_elites_feature_names}')
-
-        if top_index < 1:
-            top_index = 1
-
-        keys = list(self.population.keys())
-        feature_to_index = {f: i for i, f in enumerate(self.map_elites_feature_names)}
-        filtered_keys = [key for key in keys if all(feature_value == ((key >> feature_to_index[feature_name]) % 2) for feature_name, feature_value in features.items())]
-        if len(filtered_keys) == 0:
-            print(f'No samples found with features {features}')
+        key = self.top_sample_key(top_index, features)
+        if key is None:
             return
 
-        fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items() if key in filtered_keys]
-        fitness_values_and_keys.sort(key=lambda x: x[0])
-        key = fitness_values_and_keys[-top_index][1]
         return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
 

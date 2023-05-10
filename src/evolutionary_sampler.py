@@ -496,13 +496,19 @@ class PopulationBasedSampler():
         if rng is None:
             rng = self.rng
 
-        if n == 1:
-            idx = rng.choice(len(iterable), p=weights)
-            return iterable[idx]
+        try:
+            if n == 1:
+                idx = rng.choice(len(iterable), p=weights)
+                return iterable[idx]
 
-        else:
-            idxs = rng.choice(len(iterable), size=n, replace=False, p=weights)
-            return [iterable[idx] for idx in idxs]
+            else:
+                idxs = rng.choice(len(iterable), size=n, replace=False, p=weights)
+                return [iterable[idx] for idx in idxs]
+
+        except ValueError as e:
+            logger.error(f'Error in choice: len = {len(iterable)}, {n} = n, weights shape = {weights.shape}: {e}')  # type: ignore
+            logger.error(traceback.format_exc())
+            raise e
 
     def _gen_init_sample(self, idx):
         '''
@@ -1259,26 +1265,42 @@ class MAPElitesSampler(PopulationBasedSampler):
 
             # Create initial population by generating random samples until the archive has at least one sample for each feature value
             elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_EXEMPLARS:
-                pbar = tqdm(total=2 * len(self.map_elites_feature_names), desc="Generating initial population of archive exemplars")  # type: ignore
 
-                feature_value_in_archive = {f"{feature_name}_{value}": False for feature_name in self.map_elites_feature_names for value in (0, 1)}
+                if self.custom_featurizer is not None:
+                    total_feature_count = 1
+                    for feature_name in self.map_elites_feature_names:
+                        feature_term = self.custom_featurizer.header_registry[feature_name]
+                        if hasattr(feature_term, 'bins'):
+                            total_feature_count *= (len(feature_term.bins) + 1)  # type: ignore
+
+                        else:
+                            total_feature_count *= 2
+
+                else:
+                    total_feature_count = 2 * len(self.map_elites_feature_names)
+
+                pbar = tqdm(total=total_feature_count, desc="Generating initial population of archive exemplars")  # type: ignore
+
+                feature_values_in_archive = set()
                 current_population_size = 0
 
                 num_samples_generated = 0
-                while not all(feature_value_in_archive.values()):
+                while len(feature_values_in_archive) < total_feature_count:
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
-
-                    for feature in self.map_elites_feature_names:
-                        feature_value_in_archive[f"{feature}_{game_features[feature]}"] = True
 
                     game_key = self._features_to_key(game, game_features)
                     self._add_to_archive(game, game_fitness, game_key)
 
-                    if sum(feature_value_in_archive.values()) > current_population_size:
-                        pbar.update(1)
+                    for feature in self.map_elites_feature_names:
+                        feature_values_in_archive.add(f"{feature}_{game_features[feature]}")
+
+                    n_feature_values_in = len(feature_values_in_archive)
+
+                    if n_feature_values_in > current_population_size:
+                        pbar.update(n_feature_values_in - current_population_size)
                         num_samples_generated = 0
-                        current_population_size = sum(feature_value_in_archive.values())
+                        current_population_size = n_feature_values_in
 
                     num_samples_generated += 1
                     pbar.set_postfix_str(f"Samples generated: {num_samples_generated}")
@@ -1388,32 +1410,33 @@ class MAPElitesSampler(PopulationBasedSampler):
         return metrics
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
+        keys = list(self.population.keys())
+
         weights = None
         if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
             pass
 
         elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
-            if self.update_fitness_rank_weights:
+            if self.update_fitness_rank_weights or len(keys) != len(self.fitness_rank_weights):
                 fitness_values = np.array(list(self.fitness_values.values()))
-                ranks = len(fitness_values) - np.argsort(fitness_values)
-                self.fitness_rank_weights = 0.5 + (ranks / len(fitness_values))
+                n = len(fitness_values)
+                ranks = n - np.argsort(fitness_values)
+                self.fitness_rank_weights = 0.5 + (ranks / n)
                 self.fitness_rank_weights /= self.fitness_rank_weights.sum()  # type: ignore
                 self.update_fitness_rank_weights = False
 
             weights = self.fitness_rank_weights
 
-        keys = list(self.population.keys())
-
         for _ in range(self.generation_size):
             if self.use_crossover:
-                keys = self._get_next_key(weights, keys, n=2)  # type: ignore
-                yield ([self.population[keys[0]], self.population[keys[1]]], [{PARENT_KEY: keys[0]}, {PARENT_KEY: keys[1]}])  # type: ignore
+                next_keys = self._get_next_key(keys, weights, n=2)  # type: ignore
+                yield ([self.population[next_keys[0]], self.population[next_keys[1]]], [{PARENT_KEY: next_keys[0]}, {PARENT_KEY: next_keys[1]}])  # type: ignore
 
             else:
-                key = self._get_next_key(weights, keys)  # type: ignore
+                key = self._get_next_key(keys, weights)  # type: ignore
                 yield (self.population[key], {PARENT_KEY: key})
 
-    def _get_next_key(self, weights: np.ndarray, keys: typing.List[KeyTypeAnnotation], n: int = 1) -> KeyTypeAnnotation:
+    def _get_next_key(self, keys: typing.List[KeyTypeAnnotation], weights: np.ndarray, n: int = 1) -> KeyTypeAnnotation:
         if self.selector is None:
             key = self._choice(keys, weights=weights, n=n)  # type: ignore
         else:

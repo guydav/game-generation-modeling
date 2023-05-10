@@ -22,6 +22,7 @@ NODE_COUNT_BINS = [55, 85, 103, 117, 129.5, 160, 190, 220, 300]
 
 
 class NodeCount(FitnessTerm):
+    bins: np.ndarray
     count: int = 0
     def __init__(self, bins: typing.List[int] = NODE_COUNT_BINS):
         super().__init__(re.compile('.*'), 'node_count')
@@ -41,6 +42,7 @@ UNIQUE_OBJECT_REFERENCES_BINS = [2, 3, 4, 5, 6, 7, 9, 11, 13]
 
 
 class UniqueObjectsReferenced(SetupObjectsUsed):
+    bins: np.ndarray
     def __init__(self, bins: typing.List[int] = UNIQUE_OBJECT_REFERENCES_BINS, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
         super().__init__(skip_objects=skip_objects, header='unique_objects_referenced')
         self.bins = np.array(bins)
@@ -53,6 +55,7 @@ UNIQUE_PREDICATE_REFERENCES_BINS = [2, 3, 4, 5, 6, 7, 8, 9]
 
 
 class UniquePredicatesReferenced(FitnessTerm):
+    bins: np.ndarray
     predicates_referenced: typing.Set[str] = set()
 
     def __init__(self, bins: typing.List[int] = UNIQUE_PREDICATE_REFERENCES_BINS):

@@ -1612,7 +1612,7 @@ class PredicateUnderModal(FitnessTerm):
     modal_to_predicate_map: typing.Dict[str, typing.Dict[str, bool]]
 
     def __init__(self, modals: typing.Sequence[str], predicates_or_functions: typing.Sequence[str],):
-        super().__init__(('predicate', 'function_eval'), 'predicate_under_modal')
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'predicate_under_modal')
         self.modals = set(modals)
         self.predicates_or_functions = set(predicates_or_functions)
         self.modal_to_predicate_map = {modal: {predicate_or_function: False for predicate_or_function in predicates_or_functions} for modal in modals}

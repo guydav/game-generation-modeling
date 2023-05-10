@@ -1406,19 +1406,18 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         for _ in range(self.generation_size):
             if self.use_crossover:
-                first_key = self._get_next_key(weights, keys)  # type: ignore
-                second_key = self._get_next_key(weights, keys)  # type: ignore
-                yield ([self.population[first_key], self.population[second_key]], [{PARENT_KEY: first_key}, {PARENT_KEY: second_key}])  # type: ignore
+                keys = self._get_next_key(weights, keys, n=2)  # type: ignore
+                yield ([self.population[keys[0]], self.population[keys[1]]], [{PARENT_KEY: keys[0]}, {PARENT_KEY: keys[1]}])  # type: ignore
 
             else:
                 key = self._get_next_key(weights, keys)  # type: ignore
                 yield (self.population[key], {PARENT_KEY: key})
 
-    def _get_next_key(self, weights: np.ndarray, keys: typing.List[KeyTypeAnnotation]) -> KeyTypeAnnotation:
+    def _get_next_key(self, weights: np.ndarray, keys: typing.List[KeyTypeAnnotation], n: int = 1) -> KeyTypeAnnotation:
         if self.selector is None:
-            key = self._choice(keys, weights=weights)  # type: ignore
+            key = self._choice(keys, weights=weights, n=n)  # type: ignore
         else:
-            key = self.selector.select(keys, rng=self.rng)
+            key = self.selector.select(keys, rng=self.rng, n=n)
         return key  #  type: ignore
 
     def _get_operator(self, rng):
@@ -1545,6 +1544,15 @@ def main(args):
                 'num_preferences_defined_1',
                 'num_preferences_defined_2',
                 'num_preferences_defined_3',
+            ],
+            'compositionality_num_prefs_setup_smaller': [
+                # re.compile(r'compositionality_structure_.*'),
+                re.compile(r'compositionality_structure_[01234]'),
+                'section_doesnt_exist_setup',
+                # 'section_doesnt_exist_terminal',
+                'num_preferences_defined_1',
+                'num_preferences_defined_2',
+                # 'num_preferences_defined_3',
             ],
             'mixture_1': [
                 # re.compile(r'compositionality_structure_.*'),

@@ -107,12 +107,19 @@ class ThompsonSamplingSelector(Selector):
         '''
         Given a list of keys, returns the key with the highest sampled mean
         '''
-        if (self.current_sample_key_index) & self.generation_size == 0 or self.pre_computed_sample_key_indices is None:
+        if self.generation_size == 1:
             alpha = np.array([self.alpha[key] for key in keys]) + self.prior_alpha
             beta = np.array([self.beta[key] for key in keys]) + self.prior_beta
-            thompson_values = rng.beta(alpha, beta, (self.generation_size, len(keys)))
-            self.pre_computed_sample_key_indices = np.argmax(thompson_values, axis=1)
+            thompson_values = rng.beta(alpha, beta)
+            max_key = keys[np.argmax(thompson_values)]
 
-        max_key = keys[self.pre_computed_sample_key_indices[self.current_sample_key_index]]
-        self.current_sample_key_index += 1
+        else:
+            if (self.current_sample_key_index) & self.generation_size == 0 or self.pre_computed_sample_key_indices is None:
+                alpha = np.array([self.alpha[key] for key in keys]) + self.prior_alpha
+                beta = np.array([self.beta[key] for key in keys]) + self.prior_beta
+                thompson_values = rng.beta(alpha, beta, (self.generation_size, len(keys)))
+                self.pre_computed_sample_key_indices = np.argmax(thompson_values, axis=1)
+
+            max_key = keys[self.pre_computed_sample_key_indices[self.current_sample_key_index]]
+            self.current_sample_key_index += 1
         return max_key

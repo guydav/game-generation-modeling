@@ -124,6 +124,7 @@ parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 
 DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
+parser.add_argument('--map-elites-key-type', type=int, default=0)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 parser.add_argument('--map-elites-initial-population-as-archive-size', action='store_true')
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
@@ -1109,31 +1110,50 @@ class MAPElitesWeightStrategy(Enum):
     # FITNESS_RANK_AND_UCB = 4
 
 
+class MAPElitesKeyType(Enum):
+    INT = 0
+    TUPLE = 1
+
+
+KeyTypeAnnotation = typing.Union[int, typing.Tuple[int, ...]]
+
+
 PARENT_KEY = 'parent_key'
+
+
+def count_set_bits(n: int) -> int:
+    count = 0
+    while (n):
+        n &= (n-1)
+        count+= 1
+
+    return count
 
 
 class MAPElitesSampler(PopulationBasedSampler):
     archive_metrics_history: typing.List[typing.Dict[str, int | float]]
     fitness_rank_weights: np.ndarray
-    fitness_values: typing.Dict[int, float]
+    fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
     initial_population_as_archive_size: bool
+    key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
-    population: typing.Dict[int, ASTType]
+    population: typing.Dict[KeyTypeAnnotation, ASTType]
     previous_sampler_population_seed_path: typing.Optional[str]
     selector: typing.Optional[Selector]
     selector_kwargs: typing.Dict[str, typing.Any]
     update_fitness_rank_weights: bool
     weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, weight_strategy: MAPElitesWeightStrategy,
+    def __init__(self, generation_size: int, key_type: MAPElitesKeyType, weight_strategy: MAPElitesWeightStrategy,
                  map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  initial_population_as_archive_size: bool = False,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  *args, **kwargs):
         self.generation_size = generation_size
+        self.key_type = key_type
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
 
@@ -1209,10 +1229,17 @@ class MAPElitesSampler(PopulationBasedSampler):
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
 
 
-    def _features_to_key(self, features: typing.Dict[str, float]) -> int:
-        return sum([(2 ** i) * int(features[feature_name])
-            for i, feature_name in enumerate(self.map_elites_feature_names)
-        ])
+    def _features_to_key(self, features: typing.Dict[str, float]) -> typing.Union[int, typing.Tuple[int]]:
+        if self.key_type == MAPElitesKeyType.INT:
+            return sum([(2 ** i) * int(features[feature_name])
+                for i, feature_name in enumerate(self.map_elites_feature_names)
+            ])
+
+        elif self.key_type == MAPElitesKeyType.TUPLE:
+            return tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
+
+        else:
+            raise ValueError(f'Unknown key type {self.key_type}')
 
     def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
         """
@@ -1252,7 +1279,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
             self._add_to_archive(sample, fitness, key)
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: int, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None):
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None):
         # TODO: any thresholding here? or keeping multiple candidates per cell?
         successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
         if successful:
@@ -1309,12 +1336,22 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: do we want to do crossover as well?
         return self._randomly_mutate_game
 
-    def _visualize_sample_by_key(self, key: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+    def _key_to_feature_dict(self, key: KeyTypeAnnotation):
+        if isinstance(key, int):
+            return {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
+
+        elif self.key_type == MAPElitesKeyType.TUPLE:
+            return {f: key[i] for i, f in enumerate(self.map_elites_feature_names)}
+
+        else:
+            raise ValueError(f'Unknown key type {self.key_type}')
+
+    def _visualize_sample_by_key(self, key: KeyTypeAnnotation, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
                                  postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if key not in self.population:
             raise ValueError(f'Key {key} not found in population')
 
-        key_dict = {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
+        key_dict = self._key_to_feature_dict(key)
         print(f'Sample features for key {key}:')
         for feature_name, feature_value in key_dict.items():
             print(f'{feature_name}: {feature_value}')
@@ -1327,7 +1364,14 @@ class MAPElitesSampler(PopulationBasedSampler):
         population_keys = list(self.population.keys())
         return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
-    def top_sample_key(self, top_index: int, features: typing.Optional[typing.Dict[str, int]] = None):
+    def _key_value_at_index(self, key: KeyTypeAnnotation, index: int):
+        if isinstance(key, int):
+            return (key >> index) % 2
+        else:
+            return key[index]
+
+
+    def top_sample_key(self, top_index: int, features: typing.Optional[typing.Dict[str, int]] = None, n_features_on: typing.Optional[int] = None):
         if top_index < 1:
             top_index = 1
 
@@ -1337,23 +1381,35 @@ class MAPElitesSampler(PopulationBasedSampler):
 
             keys = list(self.population.keys())
             feature_to_index = {f: i for i, f in enumerate(self.map_elites_feature_names)}
-            filtered_keys = [key for key in keys if all(feature_value == ((key >> feature_to_index[feature_name]) % 2) for feature_name, feature_value in features.items())]
-            if len(filtered_keys) == 0:
+            relevant_keys = [key for key in keys if all(feature_value == self._key_value_at_index(key, feature_to_index[feature_name]) for feature_name, feature_value in features.items())]
+            if len(relevant_keys) == 0:
                 print(f'No samples found with features {features}')
                 return
 
-            fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items() if key in filtered_keys]
-
         else:
-            fitness_values_and_keys = [(fitness, key) for key, fitness in self.fitness_values.items()]
+            relevant_keys = self.fitness_values.keys()
 
+        if n_features_on is not None:
+            if self.key_type == MAPElitesKeyType.INT:
+                relevant_keys = [key for key in relevant_keys if count_set_bits(key) == n_features_on]  # type: ignore
+            elif self.key_type == MAPElitesKeyType.TUPLE:
+                relevant_keys = [key for key in relevant_keys if sum(k != 0 for k in key) == n_features_on]  # type: ignore
+            else:
+                raise ValueError(f'Unknown key type {self.key_type}')
+
+        if len(relevant_keys) == 0:
+            print(f'No samples found with features {features} and {n_features_on} features on')
+            return
+
+        fitness_values_and_keys = [(self.fitness_values[key], key) for key in relevant_keys]
         fitness_values_and_keys.sort(key=lambda x: x[0])
         return fitness_values_and_keys[-top_index][1]
 
     def visualize_top_sample(self, top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
-                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+                             postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None,
+                             features: typing.Optional[typing.Dict[str, int]] = None, n_features_on: typing.Optional[int] = None):
 
-        key = self.top_sample_key(top_index)
+        key = self.top_sample_key(top_index, features, n_features_on)
         if key is None:
             return
 
@@ -1365,13 +1421,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         key = fitness_values_and_keys[-1][1]
         return self.population[key]
 
-    def visualize_top_sample_with_features(self, features: typing.Dict[str, int], top_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
-                                           postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
-        key = self.top_sample_key(top_index, features)
-        if key is None:
-            return
 
-        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
+
 
 
 class BeamSearchSampler(PopulationBasedSampler):
@@ -1726,6 +1777,7 @@ def main(args):
 
         evosampler = MAPElitesSampler(
             map_elites_feature_names_or_patterns=BEHAVIORAL_FEATURE_SETS[feature_set_key],
+            key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             initial_population_as_archive_size=args.map_elites_initial_population_as_archive_size,

@@ -557,7 +557,7 @@ class NGramASTParser(ast_parser.ASTParser):
 
     def _tokenize_ast_node(self, ast: tatsu.ast.AST, **kwargs) -> typing.Union[str, typing.List[str]]:
         rule = ast.parseinfo.rule  # type: ignore
-        if rule == 'predicate_or_function_term':
+        if rule.startswith('predicate_or_function_') and rule.endswith('term'):
             term = typing.cast(str, ast.term)
             categories = ast_parser.predicate_function_term_to_type_category(
                 term, kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {},  # type: ignore
@@ -770,7 +770,7 @@ def main(args: argparse.Namespace):
 
     model.fit(game_inputs)
 
-    [print(model.score(game)) for game in game_inputs]
+    # [print(model.score(game)) for game in game_inputs]
 
     with open(args.output_path, 'wb') as f:
         pickle.dump(model, f)

@@ -679,7 +679,7 @@ class ASTSamplePostprocessor(ASTParser):
 
                 ast_utils.replace_child(ast, 'var_names', new_var_names)
 
-        if rule == 'predicate_or_function_term':
+        if rule.startswith('predicate_or_function_') and rule.endswith('term'):
             term = ast.term
             if isinstance(term, str) and term.startswith('?'):
                 if term not in self.variable_mapping:

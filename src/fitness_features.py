@@ -398,22 +398,6 @@ class ASTFitnessFeaturizer:
             logger.warn(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
 
 
-class ASTNodeCounter(ast_parser.ASTParser):
-    def __init__(self):
-        self.count = 0
-
-    def __call__(self, ast, **kwargs):
-        if 'zero_count' in kwargs:
-            self.count = 0
-            del kwargs['zero_count']
-        super().__call__(ast, **kwargs)
-        return self.count
-
-    def _handle_ast(self, ast, **kwargs):
-        self.count += 1
-        super()._handle_ast(ast, **kwargs)
-
-
 PREDICATE_OR_FUNCTION_TERM_PATTERN = re.compile(r'predicate_or_function[\w\d_]+term')
 
 

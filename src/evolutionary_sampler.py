@@ -26,18 +26,15 @@ import ast_printer
 import ast_parser
 from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
-from ast_counter_sampler import np, parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH, typing
-from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler, mpp
+from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
+from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
 from ast_utils import *
-from ast_utils import np, typing
+from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS
 from evolutionary_sampler_diversity import *
-from evolutionary_sampler_diversity import np, typing
 from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
-from fitness_features import np, typing
 from fitness_ngram_models import *
-from fitness_ngram_models import np, typing
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -128,8 +125,9 @@ parser.add_argument('--map-elites-key-type', type=int, default=0)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 parser.add_argument('--map-elites-initialization-strategy', type=int, default=0)
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
-parser.add_argument('--map-elites-behavioral-features-key', type=str, required=True)
-
+features_group = parser.add_mutually_exclusive_group(required=True)
+features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
+features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -1136,6 +1134,7 @@ def count_set_bits(n: int) -> int:
 
 class MAPElitesSampler(PopulationBasedSampler):
     archive_metrics_history: typing.List[typing.Dict[str, int | float]]
+    custom_featurizer: typing.Optional[ASTFitnessFeaturizer]
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
@@ -1158,16 +1157,17 @@ class MAPElitesSampler(PopulationBasedSampler):
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
                  map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
+                 custom_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  *args, **kwargs):
 
         self.generation_size = generation_size
         self.key_type = key_type
-        self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
-
         self.initialization_strategy = initialization_strategy
+        self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
+        self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
             selector_kwargs = {}
@@ -1233,7 +1233,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                 while current_population_size < self.population_size:
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
-                    game_key = self._features_to_key(game_features)
+                    game_key = self._features_to_key(game, game_features)
                     self._add_to_archive(game, game_fitness, game_key)
 
                     if len(self.population) > current_population_size:
@@ -1255,7 +1255,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     for feature in self.map_elites_feature_names:
                         feature_value_in_archive[f"{feature}_{game_features[feature]}"] = True
 
-                    game_key = self._features_to_key(game_features)
+                    game_key = self._features_to_key(game, game_features)
                     self._add_to_archive(game, game_fitness, game_key)
 
                     if sum(feature_value_in_archive.values()) > current_population_size:
@@ -1274,14 +1274,17 @@ class MAPElitesSampler(PopulationBasedSampler):
             previous_map_elites = load_data_from_path(self.previous_sampler_population_seed_path)
             for game in tqdm(previous_map_elites.population.values(), desc='Loading previous population', total=len(previous_map_elites.population)):  # type: ignore
                 game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
-                game_key = self._features_to_key(game_features)
+                game_key = self._features_to_key(game, game_features)
                 self._add_to_archive(game, game_fitness, game_key)
 
             self._update_population_statistics()
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
 
 
-    def _features_to_key(self, features: typing.Dict[str, float]) -> typing.Union[int, typing.Tuple[int]]:
+    def _features_to_key(self, game: ASTType, features: typing.Dict[str, float]) -> typing.Union[int, typing.Tuple[int]]:
+        if self.custom_featurizer is not None:
+            features = self.custom_featurizer.parse(game, return_row=True)  # type: ignore
+
         if self.key_type == MAPElitesKeyType.INT:
             return sum([(2 ** i) * int(features[feature_name])
                 for i, feature_name in enumerate(self.map_elites_feature_names)
@@ -1296,11 +1299,11 @@ class MAPElitesSampler(PopulationBasedSampler):
     def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
         """
         Here to enable the MAP-Elites sampler to postprocess features into archive keys
-        """
-        if features is None:
-            return None
 
-        return self._features_to_key(features)
+        2023-05-09: passing through here to pass the basic features, so `_handle_single_operator_results` can parse the key from the features or game if need be
+        """
+        return features
+        # return self._features_to_key(features)
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
@@ -1323,10 +1326,10 @@ class MAPElitesSampler(PopulationBasedSampler):
             fitness_values, features = zip(*[self._score_proposal(game, return_features=True) for game in population])   # type: ignore
 
         if features is None:
-            keys = [self._features_to_key(self._proposal_to_features(game)) for game in population]
+            keys = [self._features_to_key(game, self._proposal_to_features(game)) for game in population]
 
         else:
-            keys = [self._features_to_key(feature) for feature in features]
+            keys = [self._features_to_key(game, feature) for (game, feature) in zip(population, features)]
 
         for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
             self._add_to_archive(sample, fitness, key)
@@ -1348,7 +1351,8 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _handle_single_operator_results(self, results: SingleStepResults):
-        for candidate, fitness_value, key, parent_info in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos):
+        for candidate, fitness_value, features, parent_info in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos):
+            key = self._features_to_key(candidate, features)
             self._add_to_archive(candidate, fitness_value, key, parent_info)   # type: ignore
 
     def _end_single_evolutionary_step(self, samples: typing.Optional[SingleStepResults] = None):
@@ -1479,232 +1483,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         return self.population[key]
 
 
-
-
-
-class BeamSearchSampler(PopulationBasedSampler):
-    '''
-    Implements 'beam search' by, at each generation, expanding every game in the population out k times
-    and then restricting the population to the top P games
-    '''
-    def __init__(self, k, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.k = k
-
-    def _get_operator(self, rng):
-        return self._gen_regrowth_sample
-
-    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        return super()._get_parent_iterator(1, self.k)
-
-
-# class WeightedBeamSearchSampler(PopulationBasedSampler):
-#     '''
-#     Implements a weighted form of beam search where the number of samples generated for each game
-#     is dependent on its fitness rank in the population. The most fit game receives (in expectation)
-#     2k samples, the median game k samples, and the least fit game 0 samples. This is achieved by
-#     running 2 * P "tournaments" where two individuals are randomly sampled from the population and
-#     the individual with higher fitness produces a child
-#     '''
-#     def __init__(self, k, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.k = k
-
-#     def _get_operator(self, rng):
-
-#         def weighted_beam_search_sample(games, rng):
-#             if not isinstance(games, list) or len(games) != 2:
-#                 raise ValueError(f'Expected games to be a list of length 2, got {games}')
-
-#             p1_idx = self.population.index(games[0])
-#             p2_idx = self.population.index(games[1])
-
-#             if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx]:
-#                 return self._gen_regrowth_sample(games[0], rng)
-#             else:
-#                 return self._gen_regrowth_sample(games[1], rng)
-
-#         return weighted_beam_search_sample
-
-#     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-#         return super()._get_parent_iterator(2, 2 * self.k)
-
-
-class InsertDeleteSampler(PopulationBasedSampler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def _get_operator(self, rng):
-        def insert_delete_operator(game, rng):
-            try:
-                new_game = self._insert(game, rng)
-                new_game = self._delete(new_game, rng)
-                return new_game
-
-            except SamplingException as e:
-                if self.verbose >=2: print(f"Failed to insert/delete: {e}")
-                return game
-
-        return insert_delete_operator
-
-
-MONITOR_FEATURES = ['all_variables_defined', 'all_variables_used', 'all_preferences_used']
-
-
-class CrossoverOnlySampler(PopulationBasedSampler):
-    def __init__(self, args: argparse.Namespace,
-                 k: int = 1, max_attempts: int = 100,
-                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                 monitor_feature_keys: typing.List[str] = MONITOR_FEATURES,
-                 *addl_args, **kwargs):
-
-        super().__init__(args, *addl_args, **kwargs)
-        self.k = k
-        self.max_attempts = max_attempts
-        self.crossover_type = crossover_type
-        self.monitor_feature_keys = monitor_feature_keys
-
-    def _extract_monitor_features(self, game):
-        if self.fitness_featurizer is not None:
-            return {k: v for k, v in self.fitness_featurizer.parse(game, return_row=True).items() if k in self.monitor_feature_keys}  # type: ignore
-        else:
-            return {}
-
-    def _get_operator(self, rng):
-        def crossover_two_random_games(games, rng):
-            for _ in range(self.max_attempts):
-                try:
-                    if len(games) > 2:
-                        games = self._choice(games, 2)
-
-                    before_feature_values = [self._extract_monitor_features(g) for g in games]
-                    post_crossover_games = self._crossover(games, self.crossover_type, rng=rng)
-                    after_feature_values = [self._extract_monitor_features(g) for g in post_crossover_games]
-
-                    for i, (before_features, after_features) in enumerate(zip(before_feature_values, after_feature_values)):
-                        for k, v in before_features.items():
-                            if v != after_features[k]:
-                                print(f'In game #{i + 1}, feature {k} changed from {v} to {after_features[k]}')
-
-                    return post_crossover_games
-                except SamplingException as e:
-                    if self.verbose >= 2:
-                        print(f'Failed to crossover: {e}')
-
-            raise SamplingException('Failed to crossover after max attempts')
-
-        return crossover_two_random_games
-
-    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        return super()._get_parent_iterator(2, self.k)
-
-
-class MicrobialGASampler(PopulationBasedSampler):
-    crossover_full_sections: bool
-    crossover_type: CrossoverType
-    min_n_loser_crossovers: int
-    max_n_loser_crossovers: int
-
-    def __init__(self,
-                 args: argparse.Namespace,
-                 crossover_full_sections: bool = False,
-                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                 min_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS,
-                 max_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS,
-                 *addl_args, **kwargs):
-
-        super().__init__(args, *addl_args, **kwargs)
-        if max_n_loser_crossovers <= min_n_loser_crossovers:
-            raise ValueError(f'max_n_loser_crossovers must be greater than min_n_loser_crossovers, got {max_n_loser_crossovers} <= {min_n_loser_crossovers}')
-
-        self.crossover_full_sections = crossover_full_sections
-        self.crossover_type = crossover_type
-        self.min_n_loser_crossovers = min_n_loser_crossovers
-        self.max_n_loser_crossovers = max_n_loser_crossovers
-
-    def _mutate_loser(self, loser_game, rng):
-        return self._randomly_mutate_game(loser_game, rng)
-
-    def _mutate_winner(self, winner_game, rng):
-        return None
-
-    def _get_operator(self, rng):
-        '''
-        Implements the classic "Microbial GA" operator, which operates as follows:
-            1. fitness of the two individuals is compared, "winner" and "loser" assigned
-            2. winner "infects" loser by randomly replacing a subtree in loser with a subtree from winner (crossover)
-            3. loser is mutated (randomly selected from regrowth, insertion, and deletion)
-            4. winner and loser re-enter population
-        '''
-        def microbial_ga_operator(games, rng):
-            if len(games) > 2:
-                games = self._choice(games, 2, rng=rng)
-
-            p1_idx = self.population.index(games[0])
-            p2_idx = self.population.index(games[1])
-
-            winner, loser = (games[0], games[1]) if self.fitness_values[p1_idx] >= self.fitness_values[p2_idx] else (games[1], games[0])
-
-            if self.crossover_full_sections:
-                _, loser = self._crossover_full_sections([winner, loser], rng=rng, crossover_first_game=False)
-
-            else:
-                n_crossovers = rng.integers(self.min_n_loser_crossovers, self.max_n_loser_crossovers + 1)
-                for _ in range(n_crossovers):
-                    _, loser = self._crossover([winner, loser], self.crossover_type, rng=rng, crossover_first_game=False)
-
-            # Optionally, apply a randomly selected mutation operator to the loser
-            mutated_loser = self._mutate_loser(loser, rng)
-            if mutated_loser is None:
-                mutated_loser = []
-            elif not isinstance(mutated_loser, list):
-                mutated_loser = [mutated_loser]
-
-            # and to the winer
-            mutated_winner = self._mutate_winner(winner, rng)
-            if mutated_winner is None:
-                mutated_winner = []
-            elif not isinstance(mutated_winner, list):
-                mutated_winner = [mutated_winner]
-
-            return mutated_loser + mutated_winner
-
-        return microbial_ga_operator
-
-    def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        return super()._get_parent_iterator(n_parents_per_sample=2)
-
-
-class MicrobialGASamplerWithBeamSearch(MicrobialGASampler):
-    beam_search_k: int
-
-    def __init__(self,
-                 args: argparse.Namespace,
-                 beam_search_k: int = 1,
-                 crossover_full_sections: bool = False,
-                 crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                 min_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS,
-                 max_n_loser_crossovers: int = DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS,
-                 *addl_args, **kwargs):
-
-        super().__init__(
-            args=args,
-            crossover_full_sections=crossover_full_sections, crossover_type=crossover_type,
-            min_n_loser_crossovers=min_n_loser_crossovers, max_n_loser_crossovers=max_n_loser_crossovers,
-            *addl_args, **kwargs)
-
-        self.beam_search_k = beam_search_k
-
-    def _randomly_mutate_game_beams(self, game, rng):
-        return [self._randomly_mutate_game(game, rng=rng) for _ in range(self.beam_search_k)]
-
-    def _mutate_loser(self, loser_game, rng):
-        return self._randomly_mutate_game_beams(loser_game, rng)
-
-    def _mutate_winner(self, winner_game, rng):
-        return self._randomly_mutate_game_beams(winner_game, rng)
-
-
 feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
 def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
     return any(sample_features[name] for name in feature_names)
@@ -1724,64 +1502,7 @@ def main(args):
         omit_tokens=args.omit_tokens,
     )
 
-    if args.sampler_type in (MICROBIAL_GA, MICROBIAL_GA_WITH_BEAM_SEARCH):
-        evo_sampler_kwarsgs = dict(
-            crossover_full_sections=args.microbial_ga_crossover_full_sections, crossover_type=CrossoverType(args.microbial_ga_crossover_type),
-            min_n_loser_crossovers=args.microbial_ga_n_min_loser_crossovers, max_n_loser_crossovers=args.microbial_ga_n_max_loser_crossovers,
-            args=args,
-            population_size=args.population_size,
-            verbose=args.verbose,
-            initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
-            fitness_featurizer_path=args.fitness_featurizer_path,
-            fitness_function_date_id=args.fitness_function_date_id,
-            fitness_function_model_name=args.fitness_function_model_name,
-            flip_fitness_sign=not args.no_flip_fitness_sign,
-            ngram_model_path=args.ngram_model_path,
-            sampler_kwargs=sampler_kwargs,
-            relative_path=args.relative_path,
-            output_folder=args.output_folder,
-            output_name=args.output_name,
-            sample_parallel=args.sample_parallel,
-            n_workers=args.parallel_n_workers,
-            diversity_scorer_type=args.diversity_scorer_type,
-            diversity_scorer_k=args.diversity_scorer_k,
-            diversity_score_threshold=args.diversity_score_threshold,
-            diversity_threshold_absolute=args.diversity_threshold_absolute,
-        )
-
-        if args.sampler_type == MICROBIAL_GA:
-            sampler_class = MicrobialGASampler
-
-        elif args.sampler_type == MICROBIAL_GA_WITH_BEAM_SEARCH:
-            sampler_class = MicrobialGASamplerWithBeamSearch
-            evo_sampler_kwarsgs['beam_search_k'] = args.beam_search_k
-
-        evosampler = sampler_class(**evo_sampler_kwarsgs)  # type: ignore
-
-    # elif args.sampler_type == WEIGHTED_BEAM_SEARCH:
-    #     evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
-    #         args=args,
-    #         population_size=args.population_size,
-    #         verbose=args.verbose,
-    #         initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
-    #         fitness_featurizer_path=args.fitness_featurizer_path,
-    #         fitness_function_date_id=args.fitness_function_date_id,
-    #         fitness_function_model_name=args.fitness_function_model_name,
-    #         flip_fitness_sign=not args.no_flip_fitness_sign,
-    #         ngram_model_path=args.ngram_model_path,
-    #         sampler_kwargs=sampler_kwargs,
-    #         relative_path=args.relative_path,
-    #         output_folder=args.output_folder,
-    #         output_name=args.output_name,
-    #         sample_parallel=args.sample_parallel,
-    #         n_workers=args.parallel_n_workers,
-    #         diversity_scorer_type=args.diversity_scorer_type,
-    #         diversity_scorer_k=args.diversity_scorer_k,
-    #         diversity_score_threshold=args.diversity_score_threshold,
-    #         diversity_threshold_absolute=args.diversity_threshold_absolute,
-    #     )
-
-    elif args.sampler_type == MAP_ELITES:
+    if args.sampler_type == MAP_ELITES:
         BEHAVIORAL_FEATURE_SETS = {
             'compositionality_structures': [
                 re.compile(r'compositionality_structure_.*'),
@@ -1828,12 +1549,22 @@ def main(args):
             ]
         }
 
-        feature_set_key = args.map_elites_behavioral_features_key
-        if feature_set_key not in BEHAVIORAL_FEATURE_SETS:
-            raise ValueError(f'Unknown behavioral feature set {feature_set_key}, must be one of {list(BEHAVIORAL_FEATURE_SETS.keys())}')
+        if args.map_elites_behavioral_features_key is not None:
+            feature_set_key = args.map_elites_behavioral_features_key
+            if feature_set_key not in BEHAVIORAL_FEATURE_SETS:
+                raise ValueError(f'Unknown behavioral feature set {feature_set_key}, must be one of {list(BEHAVIORAL_FEATURE_SETS.keys())}')
+
+            features = BEHAVIORAL_FEATURE_SETS[feature_set_key]
+            custom_featurizer = None
+
+        else:  # args.map_elites_custom_behavioral_features_key is not None:
+            feature_set = args.map_elites_custom_behavioral_features_key
+            custom_featurizer = build_behavioral_features_featurizer(feature_set)
+            features = custom_featurizer.headers[4:]
+
 
         evosampler = MAPElitesSampler(
-            map_elites_feature_names_or_patterns=BEHAVIORAL_FEATURE_SETS[feature_set_key],
+            map_elites_feature_names_or_patterns=features,  # type: ignore
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),

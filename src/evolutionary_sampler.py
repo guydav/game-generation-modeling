@@ -1297,6 +1297,8 @@ class MAPElitesSampler(PopulationBasedSampler):
             self._update_population_statistics()
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
 
+        logger.info(f'Initialized population with {len(self.population)} games in the archive')
+
 
     def _features_to_key(self, game: ASTType, features: typing.Dict[str, float]) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:
@@ -1590,6 +1592,9 @@ def main(args):
             feature_set = args.map_elites_custom_behavioral_features_key
             custom_featurizer = build_behavioral_features_featurizer(feature_set)
             features = custom_featurizer.headers[4:]
+            if args.map_elites_key_type != 1:
+                logger.info('Setting key type to tuple because custom behavioral features are used')
+                args.map_elites_key_type = 1
 
         if args.map_elites_use_crossover:
             logger.info('Using crossover in MAP-Elites => emitting two samples at a time => halving generation and chunk sizes')
@@ -1630,22 +1635,6 @@ def main(args):
 
     else:
         raise ValueError(f'Unknown sampler type {args.sampler_type}')
-
-    # evosampler = CrossoverOnlySampler(
-    # evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
-    # evosampler = WeightedBeamSearchSampler(k=args.beam_search_k,
-    # evosampler = MicrobialGASampler(n_loser_crossovers=args.microbial_ga_n_loser_crossovers,
-    #     args=args, fitness_function=EnergyFunctionFitnessWrapper(fitness_featurizer, trained_fitness_function, feature_names, flip_sign=True),  # type: ignore
-    #     population_size=args.population_size,
-    #     verbose=args.verbose,
-    #     initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
-    #     ngram_model_path=args.ngram_model_path,
-    #     sample_parallel=args.sample_parallel,
-    #     n_workers=args.parallel_n_workers,
-    # )
-
-    # game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', evosampler.grammar_parser, False, relative_path='.'))
-    # evosampler.set_population(game_asts[:4])
 
     tracer = None
 

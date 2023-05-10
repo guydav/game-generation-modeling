@@ -126,7 +126,7 @@ DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
 parser.add_argument('--map-elites-key-type', type=int, default=0)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
-parser.add_argument('--map-elites-initial-population-as-archive-size', action='store_true')
+parser.add_argument('--map-elites-initialization-strategy', type=int, default=0)
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
 parser.add_argument('--map-elites-behavioral-features-key', type=str, required=True)
 
@@ -1117,6 +1117,10 @@ class MAPElitesKeyType(Enum):
 
 KeyTypeAnnotation = typing.Union[int, typing.Tuple[int, ...]]
 
+class MAPElitesInitializationStrategy(Enum):
+    FIXED_SIZE = 0
+    ARCHIVE_SIZE = 1
+    ARCHIVE_EXEMPLARS = 2
 
 PARENT_KEY = 'parent_key'
 
@@ -1136,6 +1140,7 @@ class MAPElitesSampler(PopulationBasedSampler):
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
     initial_population_as_archive_size: bool
+    initialization_strategy: MAPElitesInitializationStrategy
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
@@ -1146,30 +1151,37 @@ class MAPElitesSampler(PopulationBasedSampler):
     update_fitness_rank_weights: bool
     weight_strategy: MAPElitesWeightStrategy
 
-    def __init__(self, generation_size: int, key_type: MAPElitesKeyType, weight_strategy: MAPElitesWeightStrategy,
+
+    def __init__(self,
+                 generation_size: int,
+                 key_type: MAPElitesKeyType,
+                 weight_strategy: MAPElitesWeightStrategy,
+                 initialization_strategy: MAPElitesInitializationStrategy,
                  map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
-                 initial_population_as_archive_size: bool = False,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  *args, **kwargs):
+
         self.generation_size = generation_size
         self.key_type = key_type
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.weight_strategy = weight_strategy
 
+        self.initialization_strategy = initialization_strategy
+
         if selector_kwargs is None:
             selector_kwargs = {}
 
         # selector_kwargs['generation_size'] = generation_size  # no longer passing to do single-sample updating
-        self.selector_kwargs = selector_kwargs
         self.selector = None
+        self.selector_kwargs = selector_kwargs
+
         if self.weight_strategy == MAPElitesWeightStrategy.UCB:
             self.selector = UCBSelector(**selector_kwargs)
         elif self.weight_strategy == MAPElitesWeightStrategy.THOMPSON:
             self.selector = ThompsonSamplingSelector(**selector_kwargs)
 
         self.archive_metrics_history = []
-        self.initial_population_as_archive_size = initial_population_as_archive_size
         self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
         self.update_fitness_rank_weights = True
 
@@ -1201,21 +1213,61 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.fitness_values = OrderedDict()
 
     def _initialize_population(self):
+        '''
+        Creates the initial population of the archive by either:
+        - randomly sampling from the initial sampler until a specified number of samples are added to the archive (i.e. number of cells are filled)
+        - loading a previous population from a file
+        '''
         if self.previous_sampler_population_seed_path is None:
-            if self.initial_population_as_archive_size:
-                pbar = tqdm(total=self.population_size, desc="Generating initial population")  # type: ignore
+
+            # Create initial population by generating self.population_size random samples
+            if self.initialization_strategy == MAPElitesInitializationStrategy.FIXED_SIZE:
+                super()._initialize_population()
+
+            # Create initial population by generating random samples until the archive has self.population_size samples
+            elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_SIZE:
+
+                pbar = tqdm(total=self.population_size, desc="Generating initial population of fixed archive size")  # type: ignore
                 current_population_size = 0
+
                 while current_population_size < self.population_size:
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
                     game_key = self._features_to_key(game_features)
                     self._add_to_archive(game, game_fitness, game_key)
+
                     if len(self.population) > current_population_size:
                         pbar.update(1)
                         current_population_size = len(self.population)
 
+            # Create initial population by generating random samples until the archive has at least one sample for each feature value
+            elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_EXEMPLARS:
+                pbar = tqdm(total=2 * len(self.map_elites_feature_names), desc="Generating initial population of archive exemplars")  # type: ignore
+
+                feature_value_in_archive = {f"{feature_name}_{value}": False for feature_name in self.map_elites_feature_names for value in (0, 1)}
+                current_population_size = 0
+
+                num_samples_generated = 0
+                while not all(feature_value_in_archive.values()):
+                    game = self._gen_init_sample(len(self.population))
+                    game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+
+                    for feature in self.map_elites_feature_names:
+                        feature_value_in_archive[f"{feature}_{game_features[feature]}"] = True
+
+                    game_key = self._features_to_key(game_features)
+                    self._add_to_archive(game, game_fitness, game_key)
+
+                    if sum(feature_value_in_archive.values()) > current_population_size:
+                        pbar.update(1)
+                        num_samples_generated = 0
+                        current_population_size = sum(feature_value_in_archive.values())
+
+                    num_samples_generated += 1
+                    pbar.set_postfix_str(f"Samples generated: {num_samples_generated}")
+
             else:
-                super()._initialize_population()
+                raise ValueError(f'Invalid initialization strategy: {self.initialization_strategy}')
 
         else:
             logger.info(f'Loading population from {self.previous_sampler_population_seed_path}')
@@ -1280,6 +1332,11 @@ class MAPElitesSampler(PopulationBasedSampler):
             self._add_to_archive(sample, fitness, key)
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        '''
+        Determines whether a provided candidate should be added to the archive. By default, this happens if the candidate is in a previously unoccupied
+        cell or if the candidate has a higher fitness than the candidate already in the cell. If the candidate is added to the archive, the fitness rank
+        of each cell is updated. If a selector is provided, the selector is also updated with the parent information (i.e. the cell that produced the candidate)
+        '''
         # TODO: any thresholding here? or keeping multiple candidates per cell?
         successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
         if successful:
@@ -1780,7 +1837,7 @@ def main(args):
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
-            initial_population_as_archive_size=args.map_elites_initial_population_as_archive_size,
+            initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             args=args,
             population_size=args.population_size,

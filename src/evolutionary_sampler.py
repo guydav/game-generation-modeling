@@ -40,7 +40,7 @@ from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEAT
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
-import src
+import src  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -99,25 +99,26 @@ parser.add_argument('--n-steps', type=int, default=DEFAULT_N_STEPS)
 # DEFAULT_ACCEPTANCE_TEMPERATURE = 1.0
 # parser.add_argument('--acceptance-temperature', type=float, default=DEFAULT_ACCEPTANCE_TEMPERATURE)
 
-MICROBIAL_GA = 'microbial_ga'
-MICROBIAL_GA_WITH_BEAM_SEARCH = 'microbial_ga_with_beam_search'
-WEIGHTED_BEAM_SEARCH = 'weighted_beam_search'
+# MICROBIAL_GA = 'microbial_ga'
+# MICROBIAL_GA_WITH_BEAM_SEARCH = 'microbial_ga_with_beam_search'
+# WEIGHTED_BEAM_SEARCH = 'weighted_beam_search'
 MAP_ELITES = 'map_elites'
-SAMPLER_TYPES = [MICROBIAL_GA, MICROBIAL_GA_WITH_BEAM_SEARCH, WEIGHTED_BEAM_SEARCH, MAP_ELITES]
+# SAMPLER_TYPES = [MICROBIAL_GA, MICROBIAL_GA_WITH_BEAM_SEARCH, WEIGHTED_BEAM_SEARCH, MAP_ELITES]
+SAMPLER_TYPES = [MAP_ELITES]
 parser.add_argument('--sampler-type', type=str, required=True, choices=SAMPLER_TYPES)
-parser.add_argument('--diversity-scorer-type', type=str, required=False, choices=DIVERSITY_SCORERS)
-parser.add_argument('--diversity-scorer-k', type=int, default=1)
-parser.add_argument('--diversity-score-threshold', type=float, default=0.0)
-parser.add_argument('--diversity-threshold-absolute', action='store_true')
+# parser.add_argument('--diversity-scorer-type', type=str, required=False, choices=DIVERSITY_SCORERS)
+# parser.add_argument('--diversity-scorer-k', type=int, default=1)
+# parser.add_argument('--diversity-score-threshold', type=float, default=0.0)
+# parser.add_argument('--diversity-threshold-absolute', action='store_true')
 
-parser.add_argument('--microbial-ga-crossover-full-sections', action='store_true')
-parser.add_argument('--microbial-ga-crossover-type', type=int, default=2)
-DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS = 1
-parser.add_argument('--microbial-ga-n-min-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS)
-DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS = 5
-parser.add_argument('--microbial-ga-n-max-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS)
-DEFAULT_BEAM_SEARCH_K = 10
-parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
+# parser.add_argument('--microbial-ga-crossover-full-sections', action='store_true')
+# parser.add_argument('--microbial-ga-crossover-type', type=int, default=2)
+# DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS = 1
+# parser.add_argument('--microbial-ga-n-min-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MIN_N_CROSSOVERS)
+# DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS = 5
+# parser.add_argument('--microbial-ga-n-max-loser-crossovers', type=int, default=DEFAULT_MICROBIAL_GA_MAX_N_CROSSOVERS)
+# DEFAULT_BEAM_SEARCH_K = 10
+# parser.add_argument('--beam-search-k', type=int, default=DEFAULT_BEAM_SEARCH_K)
 
 DEFAULT_GENERATION_SIZE = 1024
 parser.add_argument('--map-elites-generation-size', type=int, default=DEFAULT_GENERATION_SIZE)
@@ -128,6 +129,7 @@ parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
 features_group = parser.add_mutually_exclusive_group(required=True)
 features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
 features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
+parser.add_argument('--map-elites-use-crossover', action='store_true')
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -525,11 +527,15 @@ class PopulationBasedSampler():
 
         return sample
 
-    def _sample_mutation(self, rng) -> typing.Callable[[ASTType, np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
-        return self._choice([self._gen_regrowth_sample, self._insert, self._delete], rng=rng)  # type: ignore
+    def _sample_mutation(self, rng: np.random.Generator, operators: typing.Optional[typing.List[typing.Callable]] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
+        if operators is None:
+            operators = [self._gen_regrowth_sample, self._insert, self._delete]
 
-    def _randomly_mutate_game(self, game, rng):
-        return self._sample_mutation(rng)(game, rng)
+        return self._choice(operators, rng=rng)  # type: ignore
+
+    def _randomly_mutate_game(self, game: typing.Union[ASTType, typing.List[ASTType]], rng: np.random.Generator,
+                              operators: typing.Optional[typing.List[typing.Callable]] = None) -> typing.Union[ASTType, typing.List[ASTType]]:
+        return self._sample_mutation(rng, operators)(game, rng)
 
     @handle_multiple_inputs
     def _gen_regrowth_sample(self, game: ASTType, rng: np.random.Generator):
@@ -664,8 +670,10 @@ class PopulationBasedSampler():
 
         return new_game
 
-    def _crossover(self, games: typing.Union[ASTType, typing.List[ASTType]], crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
-                   rng: typing.Optional[np.random.Generator] = None, crossover_first_game: bool = True, crossover_second_game: bool = True):
+    def _crossover(self, games: typing.Union[ASTType, typing.List[ASTType]],
+                   rng: typing.Optional[np.random.Generator] = None,
+                   crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                   crossover_first_game: bool = True, crossover_second_game: bool = True):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
         how nodes in the game are categorized (i.e. by rule, by parent rule, etc.). The crossover
@@ -933,7 +941,11 @@ class PopulationBasedSampler():
 
                 children_features = None if not return_sample_features else children_features
                 children_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
-                return SingleStepResults(child_or_children, children_fitness_scores, itertools.repeat(parent_info, len(child_or_children)), children_diversity_scores, children_features)  # type: ignore
+
+                if not isinstance(parent_info, list) or len(parent_info) != len(child_or_children):
+                    parent_info = itertools.repeat(parent_info)  # type: ignore
+
+                return SingleStepResults(child_or_children, children_fitness_scores, parent_info, children_diversity_scores, children_features)  # type: ignore
 
             except SamplingException as e:
                 # if self.verbose:
@@ -1148,6 +1160,7 @@ class MAPElitesSampler(PopulationBasedSampler):
     selector: typing.Optional[Selector]
     selector_kwargs: typing.Dict[str, typing.Any]
     update_fitness_rank_weights: bool
+    use_crossover: bool = False
     weight_strategy: MAPElitesWeightStrategy
 
 
@@ -1160,6 +1173,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  custom_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
+                 use_crossover: bool = False,
                  *args, **kwargs):
 
         self.generation_size = generation_size
@@ -1183,6 +1197,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         self.archive_metrics_history = []
         self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
+        self.use_crossover = use_crossover
         self.update_fitness_rank_weights = True
 
         super().__init__(*args, **kwargs)
@@ -1193,7 +1208,9 @@ class MAPElitesSampler(PopulationBasedSampler):
         names = set([name for name in self.map_elites_feature_names_or_patterns if isinstance(name, str)])
         patterns = [pattern for pattern in self.map_elites_feature_names_or_patterns if isinstance(pattern, re.Pattern)]
 
-        for feature_name in self.feature_names:
+        all_feature_names = self.feature_names if self.custom_featurizer is None else self.custom_featurizer.headers
+
+        for feature_name in all_feature_names:
             if feature_name in names:
                 self.map_elites_feature_names.append(feature_name)
                 names.remove(feature_name)
@@ -1362,8 +1379,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 73]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 90]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 94]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1386,15 +1403,28 @@ class MAPElitesSampler(PopulationBasedSampler):
         keys = list(self.population.keys())
 
         for _ in range(self.generation_size):
-            if self.selector is None:
-                key = self._choice(keys, weights=weights)  # type: ignore
-            else:
-                key = self.selector.select(keys, rng=self.rng)
+            if self.use_crossover:
+                first_key = self._get_next_key(weights, keys)  # type: ignore
+                second_key = self._get_next_key(weights, keys)  # type: ignore
+                yield ([self.population[first_key], self.population[second_key]], [{PARENT_KEY: first_key}, {PARENT_KEY: second_key}])  # type: ignore
 
-            yield (self.population[key], {PARENT_KEY: key})  #  type: ignore
+            else:
+                key = self._get_next_key(weights, keys)  # type: ignore
+                yield (self.population[key], {PARENT_KEY: key})
+
+    def _get_next_key(self, weights: np.ndarray, keys: typing.List[KeyTypeAnnotation]) -> KeyTypeAnnotation:
+        if self.selector is None:
+            key = self._choice(keys, weights=weights)  # type: ignore
+        else:
+            key = self.selector.select(keys, rng=self.rng)
+        return key  #  type: ignore
 
     def _get_operator(self, rng):
-        # TODO: do we want to do crossover as well?
+        # TODO: custom operators? non-uniform weights?
+
+        if self.use_crossover:
+            return self._choice([self._gen_regrowth_sample, self._insert, self._delete, self._crossover])
+
         return self._randomly_mutate_game
 
     def _key_to_feature_dict(self, key: KeyTypeAnnotation):
@@ -1430,7 +1460,6 @@ class MAPElitesSampler(PopulationBasedSampler):
             return (key >> index) % 2
         else:
             return key[index]
-
 
     def top_sample_key(self, top_index: int, features: typing.Optional[typing.Dict[str, int]] = None, n_features_on: typing.Optional[int] = None):
         if top_index < 1:
@@ -1489,13 +1518,13 @@ def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], 
 
 
 def main(args):
-    if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
-        logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
-        args.postprocess = True
+    # if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
+    #     logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
+    #     args.postprocess = True
 
-    if not args.diversity_threshold_absolute and args.diversity_score_threshold <= 1.0:
-        logger.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
-        args.diversity_score_threshold = args.diversity_score_threshold * 100
+    # if not args.diversity_threshold_absolute and 0 < args.diversity_score_threshold <= 1.0:
+    #     logger.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
+    #     args.diversity_score_threshold = args.diversity_score_threshold * 100
 
     sampler_kwargs = dict(
         omit_rules=args.omit_rules,
@@ -1562,14 +1591,21 @@ def main(args):
             custom_featurizer = build_behavioral_features_featurizer(feature_set)
             features = custom_featurizer.headers[4:]
 
+        if args.map_elites_use_crossover:
+            logger.info('Using crossover in MAP-Elites => emitting two samples at a time => halving generation and chunk sizes')
+            args.map_elites_generation_size = args.map_elites_generation_size // 2
+            args.parallel_chunksize = args.parallel_chunksize // 2
+            logger.info(f'New generation size: {args.map_elites_generation_size}, new chunksize: {args.parallel_chunksize}')
 
         evosampler = MAPElitesSampler(
             map_elites_feature_names_or_patterns=features,  # type: ignore
+            custom_featurizer=custom_featurizer,
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
+            use_crossover=args.map_elites_use_crossover,
             args=args,
             population_size=args.population_size,
             verbose=args.verbose,

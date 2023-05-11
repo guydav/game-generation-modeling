@@ -234,7 +234,7 @@ class NewPreferenceNameSampler:
         pref_name = posterior_dict_sample(global_context['rng'], filtered_posteior)
 
         if isinstance(global_context['preference_names'], dict):
-            global_context['preference_names'][pref_name] += 1
+            global_context['preference_names'][pref_name] = 1
         else:
             global_context['preference_names'].add(pref_name)
         return pref_name

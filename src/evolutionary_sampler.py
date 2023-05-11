@@ -1,7 +1,6 @@
 import argparse
 from collections import OrderedDict
 from functools import wraps
-import gzip
 import logging
 import multiprocessing
 from multiprocessing import pool as mpp
@@ -12,6 +11,7 @@ import tempfile
 import traceback
 import typing
 
+from git.repo import Repo
 import numpy as np
 import tatsu
 import tatsu.ast
@@ -26,7 +26,7 @@ import ast_printer
 import ast_parser
 from ast_context_fixer import ASTContextFixer
 from ast_counter_sampler import *
-from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH
+from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH, PRIOR_COUNT, LENGTH_PRIOR
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
 from ast_utils import *
 from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS
@@ -151,6 +151,8 @@ parser.add_argument('--compute-diversity-metrics', action='store_true')
 parser.add_argument('--save-every-generation', action='store_true')
 parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
+parser.add_argument('--sampler-prior-count', action='append', type=int, default=[])
+parser.add_argument('--sampler-filter-func-key', type=str)
 
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
@@ -251,12 +253,14 @@ PARENT_INDEX = 'parent_index'
 
 
 class PopulationBasedSampler():
+    args: argparse.Namespace
     candidates: SingleStepResults
     context_fixers: typing.List[ASTContextFixer]
     counter: ASTRuleValueCounter
     diversity_scorer: typing.Optional[DiversityScorer]
     diversity_scorer_type: typing.Optional[str]
     feature_names: typing.List[str]
+    first_sampler_key: str
     fitness_featurizer: ASTFitnessFeaturizer
     fitness_featurizer_path: str
     fitness_function: typing.Callable[[ASTType], float]
@@ -281,8 +285,10 @@ class PopulationBasedSampler():
     rng: np.random.Generator
     sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]]
     sample_parallel: bool
+    sampler_keys: typing.List[str]
     sampler_kwargs: typing.Dict[str, typing.Any]
-    samplers: typing.List[ASTSampler]
+    sampler_prior_count: typing.List[int]
+    samplers: typing.List[typing.Dict[str, ASTSampler]]
     saving: bool
     verbose: int
 
@@ -317,9 +323,11 @@ class PopulationBasedSampler():
                  diversity_scorer_k: int = 1,
                  diversity_score_threshold: float = 0.0,
                  diversity_threshold_absolute: bool = False,
-                 sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None
+                 sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None,
+                 sampler_prior_count: typing.List[int] = [PRIOR_COUNT],
                  ):
 
+        self.args = args
         self.population_size = population_size
         self.verbose = verbose
         self.sample_patience = sample_patience
@@ -352,24 +360,32 @@ class PopulationBasedSampler():
             self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
         self.sample_filter_func = sample_filter_func
+        self.sampler_prior_count = sampler_prior_count
+        self.random_seed = args.random_seed
+        self.rng = np.random.default_rng(self.random_seed)
 
         # Used to generate the initial population of complete games
         if sampler_kwargs is None:
             sampler_kwargs = {}
         self.sampler_kwargs = sampler_kwargs
-        self.samplers = [ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i, **sampler_kwargs)  # type: ignore
-                         for i in range(self.n_workers)]  # type: ignore
-        self.random_seed = args.random_seed
-        self.rng = self.samplers[0].rng
+        self.sampler_keys = [f'prior{pc}' for pc in sampler_prior_count]
+
+        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i,   # type: ignore
+                                                   prior_rule_count=pc, prior_token_count=pc, length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
+                                                   **sampler_kwargs) for pc in sampler_prior_count}
+                         for i in range(self.n_workers)]
+
+        self.first_sampler_key = list(self.samplers[0].keys())[0]
 
         self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self.samplers[0], ngram_model_path, section_sampler_kwargs)  # type: ignore
+            initial_proposal_type, self.samplers[0][self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
+
 
         # Used as the mutation operator to modify existing games
-        self.regrowth_samplers = [RegrowthSampler(sampler, seed=args.random_seed + i, rng=sampler.rng) for i, sampler in enumerate(self.samplers)]
+        self.regrowth_samplers = [RegrowthSampler(samplers, seed=args.random_seed + i, rng=samplers[self.first_sampler_key].rng) for i, samplers in enumerate(self.samplers)]
 
         # Used to fix the AST context after crossover / mutation
-        self.context_fixers = [ASTContextFixer(sampler, sampler.rng) for sampler in self.samplers]
+        self.context_fixers = [ASTContextFixer(samplers[self.first_sampler_key], samplers[self.first_sampler_key].rng) for samplers in self.samplers]
 
         self._pre_population_sample_setup()
 
@@ -423,13 +439,13 @@ class PopulationBasedSampler():
 
         return (identity[0] - 1) % self.n_workers
 
-    def _sampler(self):
-        return self.samplers[self._process_index()]
+    def _sampler(self, rng: np.random.Generator) -> ASTSampler:
+        return self.samplers[self._process_index()][self._choice(self.sampler_keys, rng=rng)]  # type: ignore
 
-    def _regrowth_sampler(self):
+    def _regrowth_sampler(self) -> RegrowthSampler:
         return self.regrowth_samplers[self._process_index()]
 
-    def _context_fixer(self):
+    def _context_fixer(self) -> ASTContextFixer:
         return self.context_fixers[self._process_index()]
 
     def _rename_game(self, game: ASTType, name: str) -> None:
@@ -616,7 +632,7 @@ class PopulationBasedSampler():
         parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
 
         parent_rule = parent.parseinfo.rule # type: ignore
-        parent_rule_posterior_dict = self._sampler().rules[parent_rule][selector]
+        parent_rule_posterior_dict = self._sampler(rng).rules[parent_rule][selector]
         assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
         # Sample a new rule from the parent rule posterior (parent_rule_posterior_dict['rule_posterior'])
@@ -628,7 +644,7 @@ class PopulationBasedSampler():
         new_node = None
         while new_node is None:
             try:
-                new_node = self._sampler().sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
+                new_node = self._sampler(rng).sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
 
             except RecursionError:
                 if self.verbose >= 2: print('Recursion error, skipping sample')
@@ -662,7 +678,7 @@ class PopulationBasedSampler():
         parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
 
         parent_rule = parent.parseinfo.rule # type: ignore
-        parent_rule_posterior_dict = self._sampler().rules[parent_rule][selector]
+        parent_rule_posterior_dict = self._sampler(rng).rules[parent_rule][selector]
         assert "length_posterior" in parent_rule_posterior_dict, f"Rule {parent_rule} does not have a length posterior"
 
         # Delete a random node from the parent
@@ -1538,22 +1554,34 @@ class MAPElitesSampler(PopulationBasedSampler):
 
 feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
 def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
-    return any(sample_features[name] for name in feature_names)
+    return any(sample_features[name] for name in feature_names) or bool(sample_features['at_end_found'])
+
+
+SAMPLE_FILTER_FUNCS = {
+    'then_three_or_longer': filter_samples_then_three_or_longer,
+}
+
 
 
 def main(args):
-    # if args.diversity_scorer_type is not None and EDIT_DISTANCE in args.diversity_scorer_type:
-    #     logger.debug('Setting postprocess to True because diversity scorer uses edit distance')
-    #     args.postprocess = True
-
-    # if not args.diversity_threshold_absolute and 0 < args.diversity_score_threshold <= 1.0:
-    #     logger.debug(f'Multiplying diversity score threshold by 100 because it is a percentage, {args.diversity_score_threshold} => {args.diversity_score_threshold * 100}')
-    #     args.diversity_score_threshold = args.diversity_score_threshold * 100
-
     sampler_kwargs = dict(
         omit_rules=args.omit_rules,
         omit_tokens=args.omit_tokens,
     )
+
+    if len(args.sampler_prior_count) == 0:
+        logging.info(f'No prior count specified, using default of {PRIOR_COUNT}')
+        args.sampler_prior_count = [PRIOR_COUNT]
+
+    vars_args = vars(args)
+    vars_args['sample_filter_func'] = None
+    if args.sampler_filter_func_key is not None:
+        if args.sampler_filter_func_key not in SAMPLE_FILTER_FUNCS:
+            raise ValueError(f'Unknown sample filter function {args.sampler_filter_func_key}, must be one of {list(SAMPLE_FILTER_FUNCS.keys())}')
+
+        vars_args['sample_filter_func'] = SAMPLE_FILTER_FUNCS[args.sampler_filter_func_key]
+
+    vars_args['commit_hash'] = Repo(search_parent_directories=True).head.object.hexsha
 
     if args.sampler_type == MAP_ELITES:
         BEHAVIORAL_FEATURE_SETS = {
@@ -1657,11 +1685,8 @@ def main(args):
             output_name=args.output_name,
             sample_parallel=args.sample_parallel,
             n_workers=args.parallel_n_workers,
-            sample_filter_func=filter_samples_then_three_or_longer,
-            # diversity_scorer_type=args.diversity_scorer_type,
-            # diversity_scorer_k=args.diversity_scorer_k,
-            # diversity_score_threshold=args.diversity_score_threshold,
-            # diversity_threshold_absolute=args.diversity_threshold_absolute,
+            sample_filter_func=args.sample_filter_func,
+            sampler_prior_count=args.sampler_prior_count,
         )
 
     else:

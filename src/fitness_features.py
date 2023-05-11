@@ -1930,7 +1930,6 @@ SECTION_COUNT_THRESHOLDS = {
     (SectionNodeCount, ast_parser.PREFERENCES): [30, 70, 135, 200],
     (SectionNodeCount, ast_parser.TERMINAL): [1, 5, 25, 55],
     (SectionNodeCount, ast_parser.SCORING): [6, 18, 33, 60],
-
 }
 
 

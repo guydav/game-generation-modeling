@@ -102,9 +102,14 @@ class MeanNodeDepth(FitnessTerm):
 
 BASIC_BINNED = 'basic_binned'
 BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
+NODE_COUNT_OBJECTS = 'node_count_objects'
+NODE_COUNT_PREDICATES = 'node_count_predicates'
+
 FEATURE_SETS = [
     BASIC_BINNED,
     BASIC_WITH_NODE_DEPTH,
+    NODE_COUNT_OBJECTS,
+    NODE_COUNT_PREDICATES
 ]
 
 
@@ -124,6 +129,14 @@ def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturiz
         featurizer.register(UniqueObjectsReferenced())
         featurizer.register(UniquePredicatesReferenced())
         featurizer.register(MeanNodeDepth())
+
+    elif feature_set == NODE_COUNT_OBJECTS:
+        featurizer.register(NodeCount())
+        featurizer.register(UniqueObjectsReferenced())
+
+    elif feature_set == NODE_COUNT_PREDICATES:
+        featurizer.register(NodeCount())
+        featurizer.register(UniquePredicatesReferenced())
 
     else:
         raise ValueError(f'Unimplemented feature set: {feature_set}')

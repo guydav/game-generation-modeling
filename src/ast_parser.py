@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import copy
 import itertools
 import logging
@@ -110,9 +110,9 @@ class ASTParser:
 
         if rule == 'preference':
             if 'preference_names' not in kwargs['global_context']:
-                kwargs['global_context']['preference_names'] = set()
+                kwargs['global_context']['preference_names'] = defaultdict(int)
 
-            kwargs['global_context']['preference_names'].add(ast.pref_name)
+            kwargs['global_context']['preference_names'][ast.pref_name] += 1
 
         elif rule == 'variable_list':
             if isinstance(ast.variables, tatsu.ast.AST):

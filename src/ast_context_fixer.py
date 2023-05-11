@@ -26,6 +26,7 @@ REPLACEMENT_MAPPINGS_CONTEXT_KEY = 'replacement_mappings'
 FORCED_REMAPPINGS_CONTEXT_KEY = 'forced_remappings'
 LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY = 'local_variable_ref_counts'
 
+
 class ASTDefinedPreferenceNamesFinder(ASTParser):
     def __init__(self):
         super().__init__()
@@ -84,6 +85,7 @@ class ASTContextFixer(ASTParentMapper):
             PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_remove,
             REPLACEMENT_MAPPINGS_CONTEXT_KEY: dict(),
             LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY: defaultdict(dict),
+            'rng': self.rng,
         })
 
         # If any preference names still remain unadded, we need to add them to the game
@@ -195,6 +197,17 @@ class ASTContextFixer(ASTParentMapper):
                 for var_def in ast.variables:  # type: ignore
                     self._single_variable_def_context_update(var_def, local_context, global_context)
 
+        elif rule == 'preference':
+            if 'preference_names' not in global_context:
+                raise SamplingException('No preference names found in global context when updating a preference node')
+
+            preference_names = global_context['preference_names']
+            if preference_names[ast.pref_name] > 1:
+                new_pref_name = self.sampler.rules[rule]['pref_name']['samplers']['preference_name'](global_context, local_context)
+                replace_child(ast, ['pref_name'], new_pref_name)
+                global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].add(new_pref_name)
+                preference_names[ast.pref_name] -= 1
+
         elif rule.startswith('predicate_or_function_'):
             term = ast.term
             term_type = rule.split('_')[3]
@@ -299,6 +312,15 @@ if __name__ == '__main__':
     )
 ))
 (:constraints (and
+    (preference binKnockedOver
+        (exists (?h - hexagonal_bin ?b - ball)
+            (then
+                (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
+                (once (not (object_orientation ?h upright)))
+            )
+        )
+    )
+
     (preference binKnockedOver
         (exists (?h - hexagonal_bin ?b - ball)
             (then

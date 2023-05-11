@@ -8,7 +8,7 @@ import tatsu.ast
 
 import ast_parser
 import ast_printer
-from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES
+from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -79,9 +79,32 @@ class UniquePredicatesReferenced(FitnessTerm):
         return _bin_number(len(self.predicates_referenced), self.bins)
 
 
+class MeanNodeDepth(FitnessTerm):
+    node_count: int = 0
+    total_depth: int = 0
+
+    def __init__(self):
+        super().__init__(re.compile('.*'), 'mean_node_depth')
+        self.node_count = 0
+
+    def game_start(self) -> None:
+        self.node_count = 0
+        self.total_depth = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if DEPTH_CONTEXT_KEY in context:
+            self.total_depth += context[DEPTH_CONTEXT_KEY]  # type: ignore
+            self.node_count += 1
+
+    def game_end(self) -> float:
+        return self.total_depth / self.node_count if self.node_count > 0 else 0
+
+
 BASIC_BINNED = 'basic_binned'
+BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
 FEATURE_SETS = [
     BASIC_BINNED,
+    BASIC_WITH_NODE_DEPTH,
 ]
 
 
@@ -95,6 +118,12 @@ def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturiz
         featurizer.register(NodeCount())
         featurizer.register(UniqueObjectsReferenced())
         featurizer.register(UniquePredicatesReferenced())
+
+    elif feature_set == BASIC_WITH_NODE_DEPTH:
+        featurizer.register(NodeCount())
+        featurizer.register(UniqueObjectsReferenced())
+        featurizer.register(UniquePredicatesReferenced())
+        featurizer.register(MeanNodeDepth())
 
     else:
         raise ValueError(f'Unimplemented feature set: {feature_set}')

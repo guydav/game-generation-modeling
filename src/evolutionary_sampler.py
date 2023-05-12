@@ -153,6 +153,7 @@ parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
 parser.add_argument('--sampler-prior-count', action='append', type=int, default=[])
 parser.add_argument('--sampler-filter-func-key', type=str)
+parser.add_argument('--no-weight-insert-delete-nodes-by-length')
 
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
@@ -291,6 +292,7 @@ class PopulationBasedSampler():
     samplers: typing.List[typing.Dict[str, ASTSampler]]
     saving: bool
     verbose: int
+    weight_insert_delete_nodes_by_length: bool
 
 
     '''
@@ -325,6 +327,7 @@ class PopulationBasedSampler():
                  diversity_threshold_absolute: bool = False,
                  sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None,
                  sampler_prior_count: typing.List[int] = [PRIOR_COUNT],
+                 weight_insert_delete_nodes_by_length: bool = True,
                  ):
 
         self.args = args
@@ -361,6 +364,7 @@ class PopulationBasedSampler():
 
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
+        self.weight_insert_delete_nodes_by_length = weight_insert_delete_nodes_by_length
         self.random_seed = args.random_seed
         self.rng = np.random.default_rng(self.random_seed)
 
@@ -590,7 +594,10 @@ class PopulationBasedSampler():
 
         return new_proposal
 
-    def _get_valid_insert_or_delete_nodes(self, game: ASTType, min_length: int = 1) -> typing.List[typing.Tuple[tatsu.ast.AST, typing.List[typing.Union[str, int]], str, typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]]:
+    def _get_valid_insert_or_delete_nodes(
+            self, game: ASTType, min_length: int = 1,
+            weigh_nodes_by_length: bool = True, shortest_weight_maximal: bool = False
+            ) -> typing.Tuple[typing.List[typing.Tuple[tatsu.ast.AST, typing.List[typing.Union[str, int]], str, typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]], np.ndarray]:
         '''
         Returns a list of every node in the game which is a valid candidate for insertion or deletion
         (i.e. can have more than one child). Each entry in the list is of the form:
@@ -610,13 +617,26 @@ class PopulationBasedSampler():
             raise SamplingException('No valid nodes found for insertion or deletion')
 
         # Dedupe valid nodes based on their parent and selector
-        valid_node_dict = {}
+        valid_node_keys = set()
+        valid_nodes = []
+        valid_node_weights = []
         for parent, selector, section, global_context, local_context in valid_nodes:
             key = (*self._regrowth_sampler()._ast_key(parent), selector)
-            if key not in valid_node_dict:
-                valid_node_dict[key] = (parent, selector, section, global_context, local_context)
+            if key not in valid_node_keys:
+                valid_node_keys.add(key)
+                valid_nodes.append((parent, selector, section, global_context, local_context))
+                valid_node_weights.append(len(parent[selector]))
 
-        return list(valid_node_dict.values())
+        if not weigh_nodes_by_length:
+            valid_node_weights = np.ones(len(valid_nodes)) / len(valid_nodes)
+
+        else:
+            valid_node_weights = np.array(valid_node_weights, dtype=float)
+            if shortest_weight_maximal:
+                valid_node_weights = valid_node_weights.max() + valid_node_weights.min() - valid_node_weights
+            valid_node_weights /= valid_node_weights.sum()
+
+        return valid_nodes, valid_node_weights
 
     @handle_multiple_inputs
     def _insert(self, game: ASTType, rng: np.random.Generator):
@@ -626,10 +646,11 @@ class PopulationBasedSampler():
         '''
         # Make a copy of the game
         new_game = copy.deepcopy(game)
-        valid_nodes = self._get_valid_insert_or_delete_nodes(new_game)
+        valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
+            new_game, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=True)
 
         # Select a random node from the list of valid nodes
-        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng, weights=valid_node_weights)  # type: ignore
 
         parent_rule = parent.parseinfo.rule # type: ignore
         parent_rule_posterior_dict = self._sampler(rng).rules[parent_rule][selector]
@@ -672,10 +693,11 @@ class PopulationBasedSampler():
         # Make a copy of the game
         new_game = copy.deepcopy(game)
 
-        valid_nodes = self._get_valid_insert_or_delete_nodes(new_game, min_length=2)
+        valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
+            new_game, min_length=2, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=False)
 
         # Select a random node from the list of valid nodes
-        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng)
+        parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng, weights=valid_node_weights)  # type: ignore
 
         parent_rule = parent.parseinfo.rule # type: ignore
         parent_rule_posterior_dict = self._sampler(rng).rules[parent_rule][selector]
@@ -694,7 +716,7 @@ class PopulationBasedSampler():
 
     def _crossover(self, games: typing.Union[ASTType, typing.List[ASTType]],
                    rng: typing.Optional[np.random.Generator] = None,
-                   crossover_type: CrossoverType = CrossoverType.SAME_PARENT_RULE,
+                   crossover_type: typing.Optional[CrossoverType] = None,
                    crossover_first_game: bool = True, crossover_second_game: bool = True):
         '''
         Attempts to perform a crossover between the two given games. The crossover type determines
@@ -708,6 +730,9 @@ class PopulationBasedSampler():
 
         if rng is None:
             rng = self.rng
+
+        if crossover_type is None:
+            crossover_type = typing.cast(CrossoverType, self._choice(list(CrossoverType), rng=rng))
 
         game_2 = None
         if isinstance(games, list):
@@ -1687,6 +1712,7 @@ def main(args):
             n_workers=args.parallel_n_workers,
             sample_filter_func=args.sample_filter_func,
             sampler_prior_count=args.sampler_prior_count,
+            weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
         )
 
     else:

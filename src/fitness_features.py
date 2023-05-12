@@ -548,6 +548,12 @@ class SetupObjectsUsed(FitnessTerm):
                  header: str = 'setup_objects_used'):
         if rules is None:
             rules = list(TYPE_RULES.keys())
+        else:
+            rules = list(rules)
+
+        if 'pref_name_and_types' in rules:  # to avoid counting scoring references
+            rules.remove('pref_name_and_types')
+
         super().__init__(rules, header)
         self.skip_objects = skip_objects
 
@@ -1183,7 +1189,7 @@ class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
         if len(self.count_once_per_external_objects_prefs.intersection(self.pref_forall_prefs)) == len(self.count_once_per_external_objects_prefs):
             return 1
 
-        return -1
+        return - len(self.pref_forall_prefs.symmetric_difference(self.count_once_per_external_objects_prefs))
 
 
 class ExternalForallUsedCorrectly(PrefForallTerm):
@@ -1213,7 +1219,7 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
         if len(self.external_forall_positions.intersection(self.external_forall_used_with_forall_pref_positions)) == len(self.external_forall_positions):
             return 1
 
-        return -1
+        return - len(self.external_forall_positions.symmetric_difference(self.external_forall_used_with_forall_pref_positions))
 
 
 class PrefForallUsed(PrefForallTerm):
@@ -1234,20 +1240,26 @@ class PrefForallUsed(PrefForallTerm):
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
             return 0
 
+        n_unused_prefs = 0
+
         # for set of preferences defined as a forall pref
         for pos_prefs in self.pref_forall_prefs_by_position.values():
             # if none of them were used as a forall pref, return -1
-            if len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs)) == 0:
-                return -1
+            n_pos_prefs_used_as_forall = len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs))
+            if n_pos_prefs_used_as_forall == 0:
+                n_unused_prefs += len(pos_prefs)
 
             # remove the preferences that were used as a forall pref
             self.prefs_used_as_pref_forall_prefs.difference_update(pos_prefs)
 
         # if there are any preferences left that were used as a forall pref, return -1, since they were not defined as forall prefs
         if len(self.prefs_used_as_pref_forall_prefs) > 0:
-            return -1
+            n_unused_prefs += len(self.prefs_used_as_pref_forall_prefs)
 
-        return 1
+        if n_unused_prefs == 0:
+            return 1
+
+        return -n_unused_prefs
 
 class PrefForallCorrectArity(PrefForallTerm):
     correct_usage_count: int = 0
@@ -1299,19 +1311,19 @@ class PrefForallCorrectArity(PrefForallTerm):
         if total_usage_count == 0:
             return 0
 
-        return 1 if self.incorrect_usage_count == 0 else -1
+        return 1 if self.incorrect_usage_count == 0 else -self.incorrect_usage_count
 
 
 class PrefForallCorrectTypes(PrefForallTerm):
     pref_forall_prefs_to_types: typing.Dict[str, typing.Dict[str, VariableDefinition]] = defaultdict(dict)
-    prefs_with_correct_types: typing.List[float] = list()
+    n_incorrect_types_per_pref: typing.List[float] = list()
 
     def __init__(self):
         super().__init__('pref_forall_correct_types')
 
     def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_types = defaultdict(dict)
-        self.prefs_with_correct_types = list()
+        self.n_incorrect_types_per_pref = list()
 
     def _update_pref_forall_def(self, ast: tatsu.ast.AST, context: ContextDict):
         preferences = ast.forall_pref.preferences  # type: ignore
@@ -1345,13 +1357,14 @@ class PrefForallCorrectTypes(PrefForallTerm):
             if obj in var_types or (obj in room_and_object_types.TYPE_TO_META_TYPE and room_and_object_types.TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
                 count_correct += 1
 
-        self.prefs_with_correct_types.append(count_correct / len(object_types))
+        self.n_incorrect_types_per_pref.append(len(object_types) - count_correct)
 
     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if len(self.pref_forall_prefs_to_types) == 0 or len(self.prefs_with_correct_types) == 0:
+        if len(self.pref_forall_prefs_to_types) == 0 or len(self.n_incorrect_types_per_pref) == 0:
             return 0
 
-        return 1 if np.isclose(np.mean(self.prefs_with_correct_types), 1) else -1  # type: ignore
+        total_incorrect_types = sum(self.n_incorrect_types_per_pref)
+        return 1 if total_incorrect_types == 0 else -total_incorrect_types
 
 
 TOTAL_TERMINALS = ('(total-time)', '(total-score)')

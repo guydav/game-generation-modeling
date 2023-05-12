@@ -944,8 +944,36 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if self.total_logicals == 0:
-            # TODO: should this return a NaN? If so, we should think about how to handle them
-            # assuming that games with no logicals are rare enough that this is fine
+            return 0
+
+        return self.identical_children != 0
+
+
+class NoIdenticalChildrenInScoringExpressions(FitnessTerm):
+    total_scoring_multi_expressions: int = 0
+    identical_children: int = 0
+
+    def __init__(self):
+        super().__init__(('scoring_equals_comp', 'scoring_multi_expr'), 'identical_scoring_children_found')
+
+    def game_start(self) -> None:
+        self.total_scoring_multi_expressions = 0
+        self.identical_children = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            children = ast.expr
+            if isinstance(children, tatsu.ast.AST) or len(children) < 2:  # type: ignore
+                return
+
+            self.total_scoring_multi_expressions += 1
+
+            children_strs = [ast_printer.ast_section_to_string(child, ast_parser.SCORING) for child in children]  # type: ignore
+            if len(set(children_strs)) != len(children_strs):
+                self.identical_children += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if self.total_scoring_multi_expressions == 0:
             return 0
 
         return self.identical_children != 0
@@ -1154,11 +1182,11 @@ class PrefForallTerm(FitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return_value = dict(correct=0, incorrect=0)
 
-        inner_value = self._inner_game_end()
-        if inner_value == 1:
+        inner_value = float(self._inner_game_end())  # type: ignore
+        if inner_value > 0:
             return_value['correct'] = 1
-        elif inner_value == -1:
-            return_value['incorrect'] = 1
+        elif inner_value < 0:
+            return_value['incorrect'] = abs(inner_value)  # type: ignore
 
         return return_value  # type: ignore
 
@@ -1851,8 +1879,6 @@ class SectionCountTerm(FitnessTerm):
         super().__init__(section, header.replace('(:', ''))
         if thresholds is not None:
             thresholds = list(thresholds)
-            thresholds.insert(0, float('-inf'))
-            thresholds.append(float('inf'))
 
         self.thresholds = thresholds
 
@@ -1861,14 +1887,16 @@ class SectionCountTerm(FitnessTerm):
         if self.thresholds is None:
             return result
 
-        return {i: 1 if self.thresholds[i] <= result < self.thresholds[i + 1] else 0 for i in range(len(self.thresholds) - 1)}
+        output = {i: 0 for i in range(len(self.thresholds) + 1)}
+        output[np.digitize(result, self.thresholds)] = 1
+        return output  # type: ignore
 
     @abstractmethod
     def _inner_game_end(self) -> Number:
         pass
 
     def _get_all_inner_keys(self):
-        return range(len(self.thresholds) - 1) if self.thresholds is not None else None
+        return range(len(self.thresholds) + 1) if self.thresholds is not None else None
 
 
 class SectionMaxDepth(SectionCountTerm):
@@ -1927,35 +1955,62 @@ class SectionNodeCount(SectionCountTerm):
         return self.node_count
 
 
+class SectionMaxWidth(SectionCountTerm):
+    max_width: int = 0
+
+    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+        super().__init__(section, f'max_width_{section}', thresholds)
+        self.max_width = 0
+
+    def game_start(self) -> None:
+        self.max_width = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            for child_key in ast:
+                if isinstance(ast[child_key], list):
+                    self.max_width = max(self.max_width, len(ast[child_key]))  # type: ignore
+
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.max_width
+
 
 SECTION_COUNT_THRESHOLDS = {
-    (SectionMaxDepth, ast_parser.SETUP): [1, 8.5, 17.5, 25.5],
-    (SectionMaxDepth, ast_parser.PREFERENCES): [8.5, 15.5, 19.5, 23.5],
-    (SectionMaxDepth, ast_parser.TERMINAL): [1, 4.5, 8.5, 11.5],
-    (SectionMaxDepth, ast_parser.SCORING): [2.5, 4.5, 8.5, 12.5],
-
-    (SectionMeanDepth, ast_parser.SETUP): [1, 4, 9, 12],
-    (SectionMeanDepth, ast_parser.PREFERENCES): [6.5, 8, 10, 12],
-    (SectionMeanDepth, ast_parser.TERMINAL): [1, 2, 3.8, 5.5],
-    (SectionMeanDepth, ast_parser.SCORING): [1.5, 2.75, 4, 6],
-
-    (SectionNodeCount, ast_parser.SETUP): [1, 10, 30, 100],
-    (SectionNodeCount, ast_parser.PREFERENCES): [30, 70, 135, 200],
-    (SectionNodeCount, ast_parser.TERMINAL): [1, 5, 25, 55],
-    (SectionNodeCount, ast_parser.SCORING): [6, 18, 33, 60],
+    SectionMaxDepth: {
+        ast_parser.SETUP: [1, 8.5, 17.5, 25.5],
+        ast_parser.PREFERENCES: [8.5, 15.5, 19.5, 23.5],
+        ast_parser.TERMINAL: [1, 4.5, 8.5, 11.5],
+        ast_parser.SCORING: [2.5, 4.5, 8.5, 12.5],
+    },
+    SectionMeanDepth: {
+        ast_parser.SETUP: [1, 4, 9, 12],
+        ast_parser.PREFERENCES: [6.5, 8, 10, 12],
+        ast_parser.TERMINAL: [1, 2, 3.8, 5.5],
+        ast_parser.SCORING: [1.5, 2.75, 4, 6],
+    },
+    SectionNodeCount: {
+        ast_parser.SETUP: [1, 10, 30, 100],
+        ast_parser.PREFERENCES: [30, 70, 135, 200],
+        ast_parser.TERMINAL: [1, 5, 25, 55],
+        ast_parser.SCORING: [6, 18, 33, 60],
+    },
+    SectionMaxWidth: {
+        ast_parser.SETUP: [1, 2, 3, 7],
+        ast_parser.PREFERENCES: [2.5, 3.5, 4.5, 7.5],
+        ast_parser.TERMINAL: [1, 2, 3, 4],
+        ast_parser.SCORING: [1, 2, 3, 8],
+    }
 }
 
 
 def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parser.SECTION_KEYS,
-    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount),
-    thresholds: typing.Optional[typing.Dict[typing.Tuple[typing.Callable, str], typing.Sequence[float]]] = SECTION_COUNT_THRESHOLDS,
+    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount, SectionMaxWidth),
+    thresholds: typing.Optional[typing.Dict[typing.Callable, typing.Dict[str, typing.Sequence[float]]]] = SECTION_COUNT_THRESHOLDS,
     ) -> typing.Sequence[FitnessTerm]:
+    if thresholds is None:
+        thresholds = {}
 
-    if thresholds is not None:
-        return [term_class(section, thresholds[(term_class, section)]) for term_class in term_classes for section in sections]
-    else:
-        return [term_class(section) for term_class in term_classes for section in sections]
-
+    return [term_class(section, thresholds[term_class][section] if term_class in thresholds else None) for term_class in term_classes for section in sections]
 
 SECTION_EXISTS_SECTIONS = (ast_parser.SETUP, ast_parser.TERMINAL)
 
@@ -2196,6 +2251,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     no_identical_logical_children = NoIdenticalChildrenInLogicals()
     fitness.register(no_identical_logical_children)
+
+    no_identical_scoring_expression_children = NoIdenticalChildrenInScoringExpressions()
+    fitness.register(no_identical_scoring_expression_children)
 
     tautological_boolean_expression = TautologicalBooleanExpression()
     fitness.register(tautological_boolean_expression)

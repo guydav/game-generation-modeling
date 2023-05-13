@@ -1,5 +1,5 @@
 import argparse
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 from functools import wraps
 import logging
 import multiprocessing
@@ -153,7 +153,7 @@ parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
 parser.add_argument('--sampler-prior-count', action='append', type=int, default=[])
 parser.add_argument('--sampler-filter-func-key', type=str)
-parser.add_argument('--no-weight-insert-delete-nodes-by-length')
+parser.add_argument('--no-weight-insert-delete-nodes-by-length', action='store_true')
 
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
@@ -516,19 +516,19 @@ class PopulationBasedSampler():
         if rng is None:
             rng = self.rng
 
-        try:
-            if n == 1:
-                idx = rng.choice(len(iterable), p=weights)
-                return iterable[idx]
+        # try:
+        if n == 1:
+            idx = rng.choice(len(iterable), p=weights)
+            return iterable[idx]
 
-            else:
-                idxs = rng.choice(len(iterable), size=n, replace=False, p=weights)
-                return [iterable[idx] for idx in idxs]
+        else:
+            idxs = rng.choice(len(iterable), size=n, replace=False, p=weights)
+            return [iterable[idx] for idx in idxs]
 
-        except ValueError as e:
-            logger.error(f'Error in choice: len = {len(iterable)}, {n} = n, weights shape = {weights.shape}: {e}')  # type: ignore
-            logger.error(traceback.format_exc())
-            raise e
+        # except ValueError as e:
+        #     logger.error(f'Error in choice: len = {len(iterable)}, {n} = n, weights shape = {weights.shape}: {e}')  # type: ignore
+        #     logger.error(traceback.format_exc())
+        #     raise e
 
     def _gen_init_sample(self, idx):
         '''
@@ -627,14 +627,18 @@ class PopulationBasedSampler():
                 valid_nodes.append((parent, selector, section, global_context, local_context))
                 valid_node_weights.append(len(parent[selector]))
 
-        if not weigh_nodes_by_length:
-            valid_node_weights = np.ones(len(valid_nodes)) / len(valid_nodes)
+        if len(valid_nodes) > 0:
+            if not weigh_nodes_by_length:
+                valid_node_weights = np.ones(len(valid_nodes)) / len(valid_nodes)
+
+            else:
+                valid_node_weights = np.array(valid_node_weights, dtype=float)
+                if shortest_weight_maximal:
+                    valid_node_weights = valid_node_weights.max() + valid_node_weights.min() - valid_node_weights
+                valid_node_weights /= valid_node_weights.sum()
 
         else:
-            valid_node_weights = np.array(valid_node_weights, dtype=float)
-            if shortest_weight_maximal:
-                valid_node_weights = valid_node_weights.max() + valid_node_weights.min() - valid_node_weights
-            valid_node_weights /= valid_node_weights.sum()
+            valid_node_weights = np.array([])
 
         return valid_nodes, valid_node_weights
 
@@ -648,6 +652,9 @@ class PopulationBasedSampler():
         new_game = copy.deepcopy(game)
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
             new_game, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=True)
+
+        if len(valid_nodes) == 0:
+            raise SamplingException('No valid nodes found for insertion')
 
         # Select a random node from the list of valid nodes
         parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng, weights=valid_node_weights)  # type: ignore
@@ -695,6 +702,9 @@ class PopulationBasedSampler():
 
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
             new_game, min_length=2, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=False)
+
+        if len(valid_nodes) == 0:
+            raise SamplingException('No valid nodes found for deletion')
 
         # Select a random node from the list of valid nodes
         parent, selector, section, global_context, local_context = self._choice(valid_nodes, rng=rng, weights=valid_node_weights)  # type: ignore
@@ -1004,6 +1014,10 @@ class PopulationBasedSampler():
                 #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
 
+            except ValueError as e:
+                logging.error(traceback.format_exc())
+                raise e
+
             except RuntimeError as e:
                 logging.error(traceback.format_exc())
                 raise e
@@ -1197,7 +1211,6 @@ class MAPElitesSampler(PopulationBasedSampler):
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
-    initial_population_as_archive_size: bool
     initialization_strategy: MAPElitesInitializationStrategy
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
@@ -1255,7 +1268,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         names = set([name for name in self.map_elites_feature_names_or_patterns if isinstance(name, str)])
         patterns = [pattern for pattern in self.map_elites_feature_names_or_patterns if isinstance(pattern, re.Pattern)]
 
-        all_feature_names = self.feature_names if self.custom_featurizer is None else self.custom_featurizer.headers
+        all_feature_names = self.feature_names if self.custom_featurizer is None else extract_custom_featurizer_feature_names(self.custom_featurizer)
 
         for feature_name in all_feature_names:
             if feature_name in names:
@@ -1306,31 +1319,43 @@ class MAPElitesSampler(PopulationBasedSampler):
 
             # Create initial population by generating random samples until the archive has at least one sample for each feature value
             elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_EXEMPLARS:
-
                 if self.custom_featurizer is not None:
-                    total_feature_count = 1
+                    feature_to_term_mapping = self.custom_featurizer.get_column_to_term_mapping()
+                    total_feature_count = 0
+                    n_values_by_feature = {}
                     for feature_name in self.map_elites_feature_names:
-                        feature_term = self.custom_featurizer.header_registry[feature_name]
+                        feature_term = feature_to_term_mapping[feature_name]
                         if hasattr(feature_term, 'bins'):
-                            total_feature_count *= (len(feature_term.bins) + 1)  # type: ignore
+                            n_values = (len(feature_term.bins) + 1)  # type: ignore
 
                         else:
-                            total_feature_count *= 2
+                            n_values = 2
+
+                        total_feature_count += n_values
+                        n_values_by_feature[feature_name] = n_values
 
                 else:
+                    n_values_by_feature = {feature_name: 2 for feature_name in self.map_elites_feature_names}
                     total_feature_count = 2 * len(self.map_elites_feature_names)
 
-                pbar = tqdm(total=total_feature_count, desc="Generating initial population of archive exemplars")  # type: ignore
+                pbar = tqdm(total=total_feature_count, desc="Initial archive")  # type: ignore
 
                 feature_values_in_archive = set()
                 current_population_size = 0
+
+                postfix = {}
 
                 num_samples_generated = 0
                 while len(feature_values_in_archive) < total_feature_count:
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
 
-                    game_key = self._features_to_key(game, game_features)
+                    if self.custom_featurizer is not None:
+                        game_key, game_features = self._features_to_key(game, game_features, return_features=True)  # type: ignore
+
+                    else:
+                        game_key = self._features_to_key(game, game_features)
+
                     self._add_to_archive(game, game_fitness, game_key)
 
                     for feature in self.map_elites_feature_names:
@@ -1343,8 +1368,26 @@ class MAPElitesSampler(PopulationBasedSampler):
                         num_samples_generated = 0
                         current_population_size = n_feature_values_in
 
+                        postfix = {
+                            feature_name if len(feature_name) <= 12 else feature_name[:12] + '...': f'{sum([1 for feature_value in feature_values_in_archive if feature_value.startswith(feature_name)])}/{n_values_by_feature[feature_name]}'
+                            for feature_name in self.map_elites_feature_names
+                        }
+
                     num_samples_generated += 1
-                    pbar.set_postfix_str(f"Samples generated: {num_samples_generated}")
+                    postfix['Current'] = num_samples_generated  # type: ignore
+                    pbar.set_postfix(postfix)
+
+                logger.info(f'Generating random samples to fill the rest of the population (current population size: {current_population_size}), required population size: {self.population_size}')
+
+                while current_population_size < self.population_size:
+                    game = self._gen_init_sample(len(self.population))
+                    game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+                    game_key = self._features_to_key(game, game_features)
+                    self._add_to_archive(game, game_fitness, game_key)
+
+                    if len(self.population) > current_population_size:
+                        pbar.update(1)
+                        current_population_size = len(self.population)
 
             else:
                 raise ValueError(f'Invalid initialization strategy: {self.initialization_strategy}')
@@ -1360,23 +1403,36 @@ class MAPElitesSampler(PopulationBasedSampler):
             self._update_population_statistics()
             logger.info(f'Loaded {len(self.population)} games from {self.previous_sampler_population_seed_path} with mean fitness {self.mean_fitness:.2f} and std {self.std_fitness:.2f}')
 
+        feature_value_counters = {feature_name: Counter() for feature_name in self.map_elites_feature_names}
+        for key in self.population:
+            for i, feature_name in enumerate(self.map_elites_feature_names):
+                feature_value_counters[feature_name][self._key_value_at_index(key, i)] += 1
+
         logger.info(f'Initialized population with {len(self.population)} games in the archive')
+        logger.info('With the following feature-value occupancy:')
+        for feature_name in self.map_elites_feature_names:
+            logger.info(f'\t{feature_name}: {feature_value_counters[feature_name]}')
 
 
-    def _features_to_key(self, game: ASTType, features: typing.Dict[str, float]) -> typing.Union[int, typing.Tuple[int]]:
+    def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:
             features = self.custom_featurizer.parse(game, return_row=True)  # type: ignore
 
         if self.key_type == MAPElitesKeyType.INT:
-            return sum([(2 ** i) * int(features[feature_name])
+            key =  sum([(2 ** i) * int(features[feature_name])
                 for i, feature_name in enumerate(self.map_elites_feature_names)
             ])
 
         elif self.key_type == MAPElitesKeyType.TUPLE:
-            return tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
+            key = tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
 
         else:
             raise ValueError(f'Unknown key type {self.key_type}')
+
+        if return_features:
+            return key, features  # type: ignore
+
+        return key
 
     def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
         """
@@ -1444,8 +1500,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 90]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 94]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 70]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 73]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1577,6 +1633,11 @@ class MAPElitesSampler(PopulationBasedSampler):
         return self.population[key]
 
 
+def extract_custom_featurizer_feature_names(featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
+    #  [4:] to remove the first few automatically-added columns
+    return featurizer.get_all_column_keys()[4:]
+
+
 feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
 def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
     return any(sample_features[name] for name in feature_names) or bool(sample_features['at_end_found'])
@@ -1675,7 +1736,7 @@ def main(args):
         else:  # args.map_elites_custom_behavioral_features_key is not None:
             feature_set = args.map_elites_custom_behavioral_features_key
             custom_featurizer = build_behavioral_features_featurizer(feature_set)
-            features = custom_featurizer.headers[4:]
+            features = extract_custom_featurizer_feature_names(custom_featurizer)
             if args.map_elites_key_type != 1:
                 logger.info('Setting key type to tuple because custom behavioral features are used')
                 args.map_elites_key_type = 1

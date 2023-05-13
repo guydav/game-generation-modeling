@@ -8,7 +8,7 @@ import tatsu.ast
 
 import ast_parser
 import ast_printer
-from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY
+from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -104,12 +104,16 @@ BASIC_BINNED = 'basic_binned'
 BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
 NODE_COUNT_OBJECTS = 'node_count_objects'
 NODE_COUNT_PREDICATES = 'node_count_predicates'
+NODE_COUNT_OBJECTS_SETUP = 'node_count_objects_setup'
+NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
 
 FEATURE_SETS = [
     BASIC_BINNED,
     BASIC_WITH_NODE_DEPTH,
     NODE_COUNT_OBJECTS,
-    NODE_COUNT_PREDICATES
+    NODE_COUNT_PREDICATES,
+    NODE_COUNT_OBJECTS_SETUP,
+    NODE_COUNT_PREDICATES_SETUP
 ]
 
 
@@ -137,6 +141,16 @@ def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturiz
     elif feature_set == NODE_COUNT_PREDICATES:
         featurizer.register(NodeCount())
         featurizer.register(UniquePredicatesReferenced())
+
+    elif feature_set == NODE_COUNT_OBJECTS_SETUP:
+        featurizer.register(NodeCount())
+        featurizer.register(UniqueObjectsReferenced())
+        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+    elif feature_set == NODE_COUNT_PREDICATES_SETUP:
+        featurizer.register(NodeCount())
+        featurizer.register(UniquePredicatesReferenced())
+        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
     else:
         raise ValueError(f'Unimplemented feature set: {feature_set}')

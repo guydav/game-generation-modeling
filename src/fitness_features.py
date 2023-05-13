@@ -130,6 +130,7 @@ COUNT_RULE_PATTERN = re.compile('count.*')
 COMPUTE_REAL_MIN_MAX_FEATURE_PATTERNS = [NGRAM_SCORE_PATTERN]
 
 class ASTFitnessFeaturizer:
+    columns_to_terms: typing.Dict[str, FitnessTerm]
     full_text_registry: typing.List[FitnessTerm]
     headers: typing.List[str]
     header_registry: typing.Dict[str, FitnessTerm]
@@ -171,6 +172,7 @@ class ASTFitnessFeaturizer:
         self.df_keys_set = set()
         self.df_keys = []
         self.all_column_keys = None
+        self.columns_to_terms = None
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -259,13 +261,24 @@ class ASTFitnessFeaturizer:
             previous_index = self.df_keys.index(previous_key)
             self.df_keys.insert(previous_index + 1, key)
 
+    def get_column_to_term_mapping(self):
+        if self.columns_to_terms is not None:
+            return self.columns_to_terms
+
+        self.get_all_column_keys()
+        return self.columns_to_terms
+
     def get_all_column_keys(self):
         if self.all_column_keys is not None:
             return self.all_column_keys
 
         self.all_column_keys = list(self.default_headers)
+        self.columns_to_terms = {}
         for _, term in self.header_registry.items():
-            self.all_column_keys.extend(term.get_all_keys())
+            term_keys = term.get_all_keys()
+            self.all_column_keys.extend(term_keys)
+            for key in term_keys:
+                self.columns_to_terms[key] = term
 
         return self.all_column_keys
 

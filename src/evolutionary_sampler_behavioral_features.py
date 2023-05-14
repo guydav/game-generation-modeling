@@ -9,6 +9,7 @@ import tatsu.ast
 import ast_parser
 import ast_printer
 from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
+import room_and_object_types
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -100,12 +101,69 @@ class MeanNodeDepth(FitnessTerm):
         return self.total_depth / self.node_count if self.node_count > 0 else 0
 
 
+SPECIFIC_PREDICATES =  ['adjacent', 'agent_holds', 'between', 'in', 'in_motion', 'on', 'touch']
+
+
+class PredicateUsed(FitnessTerm):
+    predicates_used: typing.Set[str]
+
+    def __init__(self, predicates: typing.List[str] = SPECIFIC_PREDICATES):
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'predicate_used')
+        self.predicates = predicates
+
+    def game_start(self) -> None:
+        self.predicates_used = set()
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            if rule == 'predicate':
+                pred = ast.pred.parseinfo.rule.replace('predicate_', '')  # type: ignore
+
+            else:
+                pred = ast.func.parseinfo.rule.replace('function_', '')  # type: ignore
+
+            self.predicates_used.add(pred)
+
+    def game_end(self):
+        return {pred: int(pred in self.predicates_used) for pred in self.predicates}
+
+    def _get_all_inner_keys(self):
+        return self.predicates
+
+
+SPECIFIC_CATEGORIES = [room_and_object_types.BALLS, room_and_object_types.BLOCKS,
+                       room_and_object_types.FURNITURE, room_and_object_types.LARGE_OBJECTS,
+                       room_and_object_types.RAMPS, room_and_object_types.RECEPTACLES,
+                       room_and_object_types.SMALL_OBJECTS,
+                       ]
+
+class ObjectCategoryUsed(SetupObjectsUsed):
+    def __init__(self, categories: typing.List[str] = SPECIFIC_CATEGORIES, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
+        super().__init__(skip_objects=skip_objects, header='object_category_used')
+        self.categories = categories
+
+    def game_end(self):
+        categories_used = set()
+        for object_set in [self.setup_objects, self.used_objects]:
+            for obj in object_set:
+                if obj in room_and_object_types.TYPES_TO_CATEGORIES:
+                    categories_used.add(room_and_object_types.TYPES_TO_CATEGORIES[obj])
+
+        return {cat: int(cat in categories_used) for cat in self.categories}
+
+    def _get_all_inner_keys(self):
+        return self.categories
+
+
 BASIC_BINNED = 'basic_binned'
 BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
 NODE_COUNT_OBJECTS = 'node_count_objects'
 NODE_COUNT_PREDICATES = 'node_count_predicates'
 NODE_COUNT_OBJECTS_SETUP = 'node_count_objects_setup'
 NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
+SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
+SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
+
 
 FEATURE_SETS = [
     BASIC_BINNED,
@@ -113,7 +171,9 @@ FEATURE_SETS = [
     NODE_COUNT_OBJECTS,
     NODE_COUNT_PREDICATES,
     NODE_COUNT_OBJECTS_SETUP,
-    NODE_COUNT_PREDICATES_SETUP
+    NODE_COUNT_PREDICATES_SETUP,
+    SPECIFIC_PREDICATES_SETUP,
+    SPECIFIC_CATEGORIES_SETUP
 ]
 
 
@@ -150,6 +210,14 @@ def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturiz
     elif feature_set == NODE_COUNT_PREDICATES_SETUP:
         featurizer.register(NodeCount())
         featurizer.register(UniquePredicatesReferenced())
+        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+    elif feature_set == SPECIFIC_PREDICATES_SETUP:
+        featurizer.register(PredicateUsed())
+        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+    elif feature_set == SPECIFIC_CATEGORIES_SETUP:
+        featurizer.register(ObjectCategoryUsed())
         featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
     else:

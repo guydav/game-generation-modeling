@@ -319,6 +319,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
     df_key_to_index: typing.Dict[str, int]
     dropped_keys: typing.Set[str]
     feature_suffixes: typing.Sequence[str]
+    forced_output_keys: typing.Optional[typing.Set[str]]
     keys_to_drop: typing.List[str]
     merge_function: typing.Callable
     merged_column_suffix: str
@@ -329,7 +330,8 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
 
     def __init__(self, predicates: typing.Sequence[str], threshold_proportion: float = DEFAULT_MERGE_THRESHOLD_PROPORTION,
                  merge_function: typing.Callable = np.logical_or, merged_column_suffix: str = DEFAULT_MERGE_COLUMN_SUFFIX,
-                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0):
+                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0,
+                 forced_output_keys: typing.Optional[typing.Set[str]] = None):
 
         self.predicates = predicates
         self.threshold_proportion = threshold_proportion
@@ -337,6 +339,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         self.merged_column_suffix = merged_column_suffix
         self.feature_suffixes = feature_suffixes
         self.default_value = default_value
+        self.forced_output_keys = None
 
         self.dropped_keys = set()
         self.keys_to_drop = []
@@ -365,11 +368,25 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
                 insert_index = df.columns.get_loc(merge_insert_feature_name)
 
             counts = df[prefix_feature_names].sum()
-            keys_to_merge = counts.index[counts < self.threshold_proportion * df.shape[0]]  # type: ignore
+            keys_to_merge = list(counts.index[counts < self.threshold_proportion * df.shape[0]])  # type: ignore
+
+            if self.forced_output_keys is not None:
+                fixed_keys_to_merge = []
+                for k in keys_to_merge:
+                    if k not in self.forced_output_keys:
+                        fixed_keys_to_merge.append(k)
+
+                for k in prefix_feature_names:
+                    if k not in self.forced_output_keys and k not in fixed_keys_to_merge:
+                        fixed_keys_to_merge.append(k)
+
+                keys_to_merge = fixed_keys_to_merge
+
             if len(keys_to_merge) == 0:
                 logging.info(f'No features to merge for prefix {feature_prefix} and suffix {feature_suffix}')
                 return
 
+            print(f'Merging {len(keys_to_merge)} features for prefix {feature_prefix} and suffix {feature_suffix}')
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
 
 

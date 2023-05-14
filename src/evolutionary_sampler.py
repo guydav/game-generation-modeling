@@ -168,7 +168,7 @@ parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettem
 
 class CrossoverType(Enum):
     SAME_RULE = 0
-    SAME_PARENT = 1
+    SAME_PARENT_SELECTOR = 1
     SAME_PARENT_RULE = 2
     SAME_PARENT_RULE_SELECTOR = 3
 
@@ -187,8 +187,8 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
     if crossover_type == CrossoverType.SAME_RULE:
         return _get_node_key(node_info[0])
 
-    elif crossover_type == CrossoverType.SAME_PARENT:
-        return _get_node_key(node_info[1])
+    elif crossover_type == CrossoverType.SAME_PARENT_SELECTOR:
+        return '_'.join([_get_node_key(node_info[1]),  *[str(s) for s in node_info[2]]])
 
     elif crossover_type == CrossoverType.SAME_PARENT_RULE:
         return '_'.join([_get_node_key(node_info[1]), _get_node_key(node_info[0])])

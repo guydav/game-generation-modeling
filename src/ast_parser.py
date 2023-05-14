@@ -18,6 +18,8 @@ logging.basicConfig(
     level=logging.DEBUG,
     datefmt='%Y-%m-%d %H:%M:%S')
 
+logger = logging.getLogger(__name__)
+
 
 SETUP = '(:setup'
 PREFERENCES = '(:constraints'
@@ -137,7 +139,9 @@ class ASTParser:
         if key not in kwargs['local_context']:
             kwargs['local_context'][key] = dict()
 
-        kwargs['local_context'][key].update(self._extract_variable_def_variables(ast))
+        update = self._extract_variable_def_variables(ast)
+        update.update(kwargs['local_context'][key])
+        kwargs['local_context'][key] = update
 
     def _extract_variable_def_variables(self, ast):
         var_names = ast.var_names
@@ -336,6 +340,11 @@ VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types',
 
 def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]]) -> None:
     variables = ast[vars_key].variables  # type: ignore
+
+    if variables is None:
+        logger.warning(f'No variables found in {ast}')
+        return
+
     if isinstance(variables, tatsu.ast.AST):
         variables = [variables]
 
@@ -600,7 +609,9 @@ class ASTBooleanParser(ASTParser):
                 expr = self(ast[keys.pop()], **kwargs)  # type: ignore
 
         if expr is None:
-            raise ValueError(f'No expression found for rule {rule}')
+            # TODO: debug how/why I get here
+            logger.warn(f'No expression found for rule {rule}, using "{key}"')
+            expr = boolean.Symbol(key)
 
         expr = typing.cast(boolean.Expression, expr)
         self.str_to_expression_mapping[key] = expr

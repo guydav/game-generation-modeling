@@ -110,8 +110,10 @@ class ASTContextFixer(ASTParentMapper):
             single_variable = True
 
         for i, var_name in enumerate(var_names):  # type: ignore
+            var_name = var_name[1:]
             variables_key = self._variable_type_def_rule_to_context_key(rule)
-            global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][var_name[1:]] = 0
+            if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key]:
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][var_name] = 0
 
             if var_name in local_context[variables_key]:
                 if local_context[variables_key][var_name] == ast.parseinfo.pos:  # type: ignore
@@ -125,6 +127,7 @@ class ASTContextFixer(ASTParentMapper):
 
                     new_var = new_variable_sampler(global_context, local_context)
                     new_var_name = new_var[1:]
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][new_var_name] = 0
 
                     # TODO: this assumes we want to consistenly map each missing variable to a new variable, which may or may not be the case -- we should discsuss
                     global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][var_name] = new_var_name
@@ -132,7 +135,7 @@ class ASTContextFixer(ASTParentMapper):
                     replace_child(ast, ['var_names'] if single_variable else ['var_names', i], new_var)
 
             else:
-                local_context[variables_key][var_name[1:]] = ast.parseinfo.pos  # type: ignore
+                local_context[variables_key][var_name] = ast.parseinfo.pos  # type: ignore
 
     def _should_rehandle_current_node(self, ast: tatsu.ast.AST, **kwargs):
         should_rehandle = False
@@ -308,7 +311,9 @@ if __name__ == '__main__':
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
 (:setup (and
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
-        (game-conserved (< (distance ?h ?r) 1))
+        (exists (?h - block)
+            (game-conserved (< (distance ?h ?r) 1))
+        )
     )
 ))
 (:constraints (and

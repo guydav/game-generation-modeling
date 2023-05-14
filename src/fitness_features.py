@@ -226,7 +226,7 @@ class ASTFitnessFeaturizer:
     def combine_featurizers(self, *others: 'ASTFitnessFeaturizer') -> None:
         self.rows.extend(itertools.chain.from_iterable(other.rows for other in others))
 
-    def to_df(self, use_prior_values: bool = False, preprocess: bool = True) -> pd.DataFrame:
+    def to_df(self, use_prior_values: typing.Union[bool, typing.List[bool]] = False, preprocess: bool = True) -> pd.DataFrame:
         if self.rows_df is not None:
             df = self.rows_df
         else:
@@ -244,8 +244,11 @@ class ASTFitnessFeaturizer:
                             real_min_max_values[column] = (df.loc[df.real, column].min(), df.loc[df.real, column].max())
 
         if preprocess and self.preprocessors is not None:
-            for preprocessor in self.preprocessors:
-                df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values, min_max_values=real_min_max_values)
+            if isinstance(use_prior_values, bool):
+                use_prior_values = [use_prior_values] * len(self.preprocessors)  # type: ignore
+
+            for i, preprocessor in enumerate(self.preprocessors):
+                df = preprocessor.preprocess_df(df, use_prior_values=use_prior_values[i], min_max_values=real_min_max_values)
 
         return df
 

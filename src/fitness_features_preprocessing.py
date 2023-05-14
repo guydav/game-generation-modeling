@@ -148,6 +148,9 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
                 min_val, max_val = series.min(), series.max()
                 self.scale_series_min_max_values[c] = (min_val, max_val)
 
+            if min_val == max_val:
+                return np.clip(series, 0, 1)
+
             return np.clip((series - min_val) / (max_val - min_val), 0, 1)
 
         if any([p.match(c) for p in BINRARIZE_NONZERO_PATTERNS]):
@@ -386,7 +389,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
                 logging.info(f'No features to merge for prefix {feature_prefix} and suffix {feature_suffix}')
                 return
 
-            print(f'Merging {len(keys_to_merge)} features for prefix {feature_prefix} and suffix {feature_suffix}')
+            # print(f'Merging {len(keys_to_merge)} features for prefix {feature_prefix} and suffix {feature_suffix}')
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
 
 
@@ -401,6 +404,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         if merged_column_key in self.merged_key_indices:
             insert_index = self.merged_key_indices[merged_column_key]
             keys_to_merge = self.merged_key_to_original_keys[merged_column_key]
+            keys_to_merge = [k for k in keys_to_merge if k in df.columns]
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
             df.insert(insert_index, merged_column_key, new_series_values)
 

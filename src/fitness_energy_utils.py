@@ -48,6 +48,10 @@ def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_fitness_data(path: str = LATEST_FITNESS_FEATURES) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
+    return process_fitness_df(fitness_df)
+
+
+def process_fitness_df(fitness_df: pd.DataFrame) -> pd.DataFrame:
     fitness_df = _add_original_game_name_column(fitness_df)
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
     fitness_df = fitness_df.assign(**{c: fitness_df[c].astype('int') for c in fitness_df.columns if fitness_df.dtypes[c] == bool})
@@ -128,20 +132,34 @@ def train_test_split_by_game_name(df: pd.DataFrame, training_prop: float = DEFAU
 
 
 def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
-    positive_column: str = 'real', positive_value: typing.Any = True):
+    positive_column: str = 'real', positive_value: typing.Any = 1, ignore_original_game: bool = False):
 
     if df[positive_column].any():
-        return torch.tensor(
-            np.stack([
-                np.concatenate((
-                    df.loc[df[positive_column] & (df.original_game_name == game_name), feature_columns].to_numpy(),
-                    df.loc[(~df[positive_column]) & (df.original_game_name == game_name), feature_columns].to_numpy()
-                ))
-                for game_name
-                in df[df[positive_column] == positive_value].original_game_name.unique()
-            ]),
-            dtype=torch.float
-        )
+        if ignore_original_game:
+            positives = df.loc[df[positive_column] == positive_value, feature_columns].to_numpy()
+            positives = np.expand_dims(positives, axis=1)
+            negatives = df.loc[df[positive_column] != positive_value, feature_columns].to_numpy()
+            n_positives = positives.shape[0]
+            n_negatives_per_positive = negatives.shape[0] // n_positives
+            negatives = negatives[:n_positives * n_negatives_per_positive]
+
+            return torch.tensor(
+                np.concatenate([positives, negatives.reshape(n_positives, n_negatives_per_positive, -1)], axis=1),
+                dtype=torch.float
+            )
+
+        else:
+            return torch.tensor(
+                np.stack([
+                    np.concatenate((
+                        df.loc[df[positive_column] & (df.original_game_name == game_name), feature_columns].to_numpy(),
+                        df.loc[(~df[positive_column]) & (df.original_game_name == game_name), feature_columns].to_numpy()
+                    ))
+                    for game_name
+                    in df[df[positive_column] == positive_value].original_game_name.unique()
+                ]),
+                dtype=torch.float
+            )
 
     else:
         return torch.tensor(df.loc[:, feature_columns].to_numpy(), dtype=torch.float)
@@ -1389,7 +1407,8 @@ def _input_data_to_train_test_tensors(
     feature_columns: typing.Optional[typing.List[str]],
     split_test_set: bool = True,
     random_seed: int = DEFAULT_RANDOM_SEED,
-    train_prop: float = DEFAULT_TRAINING_PROP) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
+    train_prop: float = DEFAULT_TRAINING_PROP,
+    ignore_original_game: bool = False) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
 
     test_tensor = None
 
@@ -1399,10 +1418,10 @@ def _input_data_to_train_test_tensors(
 
         if split_test_set:
             input_data, test_data = train_test_split_by_game_name(input_data, random_seed=random_seed)
-            test_tensor = df_to_tensor(test_data, feature_columns)
+            test_tensor = df_to_tensor(test_data, feature_columns, ignore_original_game=ignore_original_game)
 
         input_data = typing.cast(pd.DataFrame, input_data)
-        train_tensor = df_to_tensor(input_data, feature_columns)
+        train_tensor = df_to_tensor(input_data, feature_columns, ignore_original_game=ignore_original_game)
 
     else:
         if isinstance(input_data, (list, tuple)):

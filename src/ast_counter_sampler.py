@@ -1238,7 +1238,7 @@ class RegrowthSampler(ASTParentMapper):
     @_regrowth_sampler_state_wrapper
     def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
         external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True,
-        rng: typing.Optional[np.random.Generator] = None) -> typing.Union[tatsu.ast.AST, tuple]:
+        rng: typing.Optional[np.random.Generator] = None, node_key_to_regrow: typing.Optional[typing.Hashable] = None) -> typing.Union[tatsu.ast.AST, tuple]:
 
         if rng is None:
             rng = self.rng
@@ -1246,7 +1246,14 @@ class RegrowthSampler(ASTParentMapper):
         new_source = typing.cast(tuple, copy.deepcopy(self.source_ast))
         self.set_source_ast(new_source)
 
-        node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
+        if node_key_to_regrow is not None:
+            if node_key_to_regrow not in self.parent_mapping:
+                raise ValueError(f'Node key to regrow not found: {node_key_to_regrow}')
+
+            node, parent, selector, node_depth, section, global_context, local_context = self.parent_mapping[node_key_to_regrow]
+
+        else:
+            node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
 
         if section is None: section = ''
 

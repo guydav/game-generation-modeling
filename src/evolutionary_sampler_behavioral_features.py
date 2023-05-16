@@ -20,6 +20,7 @@ def _bin_number(number: int, bins: np.ndarray) -> int:
 
 
 NODE_COUNT_BINS = [55, 85, 103, 117, 129.5, 160, 190, 220, 300]
+NODE_COUNT_BINS_8 = [61, 93, 113, 129, 168, 205, 263]
 
 
 class NodeCount(FitnessTerm):
@@ -27,7 +28,10 @@ class NodeCount(FitnessTerm):
     count: int = 0
     def __init__(self, bins: typing.List[int] = NODE_COUNT_BINS):
         super().__init__(re.compile('.*'), 'node_count')
-        self.bins = np.array(bins)
+        if bins is None:
+            self.bins = None  # type: ignore
+        else:
+            self.bins = np.array(bins)
 
     def game_start(self) -> None:
         self.count = 0
@@ -36,7 +40,10 @@ class NodeCount(FitnessTerm):
         self.count += 1
 
     def game_end(self) -> int:
-        return _bin_number(self.count, self.bins)
+        if self.bins is not None:
+            return _bin_number(self.count, self.bins)
+        else:
+            return self.count
 
 
 UNIQUE_OBJECT_REFERENCES_BINS = [2, 3, 4, 5, 6, 7, 9, 11, 13]
@@ -163,6 +170,7 @@ NODE_COUNT_OBJECTS_SETUP = 'node_count_objects_setup'
 NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
 SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
 SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
+NODE_COUNT_SPECIFIC_PREDICATES = 'node_count_specific_predicates'
 
 
 FEATURE_SETS = [
@@ -173,7 +181,8 @@ FEATURE_SETS = [
     NODE_COUNT_OBJECTS_SETUP,
     NODE_COUNT_PREDICATES_SETUP,
     SPECIFIC_PREDICATES_SETUP,
-    SPECIFIC_CATEGORIES_SETUP
+    SPECIFIC_CATEGORIES_SETUP,
+    NODE_COUNT_SPECIFIC_PREDICATES
 ]
 
 
@@ -219,6 +228,10 @@ def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturiz
     elif feature_set == SPECIFIC_CATEGORIES_SETUP:
         featurizer.register(ObjectCategoryUsed())
         featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+    elif feature_set == NODE_COUNT_SPECIFIC_PREDICATES:
+        featurizer.register(NodeCount(NODE_COUNT_BINS_8))
+        featurizer.register(PredicateUsed())
 
     else:
         raise ValueError(f'Unimplemented feature set: {feature_set}')

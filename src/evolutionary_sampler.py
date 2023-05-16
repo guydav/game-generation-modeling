@@ -130,6 +130,7 @@ features_group = parser.add_mutually_exclusive_group(required=True)
 features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
 features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
 parser.add_argument('--map-elites-use-crossover', action='store_true')
+parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -148,7 +149,7 @@ parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
 parser.add_argument('--postprocess', action='store_true')
 parser.add_argument('--compute-diversity-metrics', action='store_true')
-parser.add_argument('--save-every-generation', action='store_true')
+parser.add_argument('--save-interval', type=int, default=0)
 parser.add_argument('--omit-rules', type=str, nargs='*')
 parser.add_argument('--omit-tokens', type=str, nargs='*')
 parser.add_argument('--sampler-prior-count', action='append', type=int, default=[])
@@ -569,22 +570,26 @@ class PopulationBasedSampler():
         Helper function for generating a new sample from an existing game (repeating until one is generated
         without errors)
         '''
-
         # Set the source AST of the regrowth sampler to the current game
         self._regrowth_sampler().set_source_ast(game)
 
+        return self._regrowth(rng)
+
+    def _regrowth(self, rng: np.random.Generator, node_key_to_regrow: typing.Optional[typing.Hashable] = None) -> ASTType:
         new_proposal = None
         sample_generated = False
 
         while not sample_generated:
             try:
-                new_proposal = self._regrowth_sampler().sample(sample_index=0, update_game_id=False, rng=rng)
+                new_proposal = self._regrowth_sampler().sample(sample_index=0, update_game_id=False, rng=rng, node_key_to_regrow=node_key_to_regrow)
                 self._context_fixer().fix_contexts(new_proposal)
+                sample_generated = True
 
-                if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
-                    if self.verbose >= 2: print('Regrowth generated identical games, repeating')
-                else:
-                    sample_generated = True
+                # In this context I don't need this expensive check for identical samples, as it's just a noop
+                # if ast_printer.ast_to_string(new_proposal) == ast_printer.ast_to_string(game):  # type: ignore
+                #     if self.verbose >= 2: print('Regrowth generated identical games, repeating')
+                # else:
+                #     sample_generated = True
 
             except RecursionError:
                 if self.verbose >= 2: print('Recursion error, skipping sample')
@@ -592,7 +597,7 @@ class PopulationBasedSampler():
             except SamplingException:
                 if self.verbose >= 2: print('Sampling exception, skipping sample')
 
-        return new_proposal
+        return new_proposal  # type: ignore
 
     def _get_valid_insert_or_delete_nodes(
             self, game: ASTType, min_length: int = 1,
@@ -866,6 +871,157 @@ class PopulationBasedSampler():
 
         return [game_1, game_2]
 
+    def _resample_variable_types(self, game: ASTType, rng: np.random.Generator):
+        return self._cognitive_inspired_mutate_preference(game, rng, resample_variable_types=True)
+
+    def _resample_first_condition(self, game: ASTType, rng: np.random.Generator):
+        return self._cognitive_inspired_mutate_preference(game, rng, mutate_first_condition=True)
+
+    def _resample_last_condition(self, game: ASTType, rng: np.random.Generator):
+        return self._cognitive_inspired_mutate_preference(game, rng, mutate_last_condition=True)
+
+    def _resample_variable_types_and_first_condition(self, game: ASTType, rng: np.random.Generator):
+        return self._cognitive_inspired_mutate_preference(game, rng, mutate_first_condition=True, resample_variable_types=True)
+
+    def _resample_variable_types_and_last_condition(self, game: ASTType, rng: np.random.Generator):
+        return self._cognitive_inspired_mutate_preference(game, rng, mutate_last_condition=True, resample_variable_types=True)
+
+    @handle_multiple_inputs
+    def _cognitive_inspired_mutate_preference(self, game: ASTType, rng: np.random.Generator, mutate_first_condition: bool = False,
+                                    mutate_last_condition: bool = False, resample_variable_types: bool = False,
+                                    mutated_preference_as_new: typing.Optional[bool] = None) -> ASTType:
+        game = copy.deepcopy(game)
+
+        if mutated_preference_as_new is None:
+            mutated_preference_as_new = rng.uniform() < 0.5
+
+        # if we're adding the preference, we should check that the preferences are a list
+        preferences_node = None
+        if mutated_preference_as_new:
+            preferences_node = [section_tuple for section_tuple in game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
+
+            if isinstance(preferences_node.preferences, tatsu.ast.AST):
+                replace_child(preferences_node, ['preferences'], [preferences_node.preferences])  # type: ignore
+
+        self._regrowth_sampler().set_source_ast(game)
+        preference_node_keys = []
+        for node_key in self._regrowth_sampler().node_keys:
+            node_info = self._regrowth_sampler().parent_mapping[node_key]
+            if node_info[0].parseinfo.rule == 'preference':  # type: ignore
+                preference_node_keys.append(node_key)
+
+        if len(preference_node_keys) == 0:
+            raise SamplingException('No preference nodes found for mutation')
+
+        preference_node_key = self._choice(preference_node_keys, rng=rng)
+        preference_node = self._regrowth_sampler().parent_mapping[preference_node_key][0]  # type: ignore
+
+        # if we're adding the mutated preference, we should keep a copy of the original
+        original_preference = None
+        if mutated_preference_as_new:
+            original_preference = copy.deepcopy(preference_node)
+
+        pref_body = preference_node.pref_body.body  # type: ignore
+        if pref_body.parseinfo.rule == 'pref_body_exists':
+            if resample_variable_types:
+                variables = pref_body.exists_vars.variables
+                if isinstance(variables, tatsu.ast.AST):
+                    type_def_node = variables.var_type
+                    type_def_node_key = self._regrowth_sampler()._ast_key(type_def_node)
+                    global_context, local_context = self._regrowth_sampler().parent_mapping[type_def_node_key][-2:]  # type: ignore
+                    replace_child(variables, ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
+
+                else:
+                    variables_to_resample = rng.uniform(size=len(variables)) < 0.5
+                    if not variables_to_resample.any():
+                        variables_to_resample[rng.integers(len(variables))] = True
+
+                    for i, resample in enumerate(variables_to_resample):
+                        if resample:
+                            type_def_node = variables[i].var_type
+                            type_def_node_key = self._regrowth_sampler()._ast_key(type_def_node)
+                            global_context, local_context = self._regrowth_sampler().parent_mapping[type_def_node_key][-2:]  # type: ignore
+                            replace_child(variables[i], ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
+
+            pref_body = pref_body.exists_args
+
+        if mutate_first_condition or mutate_last_condition:
+            if pref_body.parseinfo.rule == 'then':
+                seq_funcs = pref_body.then_funcs
+                seq_func = seq_funcs[0 if mutate_first_condition else -1].seq_func
+                if seq_func.parseinfo.rule == 'once':
+                    pred = seq_func.once_pred
+
+                elif seq_func.parseinfo.rule == 'once_measure':
+                    pred = seq_func.once_measure_pred
+
+                elif seq_func.parseinfo.rule in ('hold', 'while_hold'):
+                    pred = seq_func.hold_pred
+
+                else:
+                    raise ValueError(f'Unexpected sequence function rule: {seq_func.parseinfo.rule}')
+
+            elif pref_body.parseinfo.rule == 'at_end':
+                pred = pref_body.at_end_pred
+
+            else:
+                raise ValueError(f'Unexpected preference body rule: {pref_body.parseinfo.rule}')
+
+            pred_key = self._regrowth_sampler()._ast_key(pred)
+
+            mutated_game = self._regrowth(rng, node_key_to_regrow=pred_key)
+
+            if mutated_preference_as_new:
+                mutated_game_preferences_node = [section_tuple for section_tuple in mutated_game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
+                mutated_game_preferences_node['preferences'].insert(rng.integers(len(mutated_game_preferences_node['preferences']) + 1), original_preference)  # type: ignore
+
+            return mutated_game
+
+        else:
+            return game
+
+    @handle_multiple_inputs
+    def _sample_or_resample_setup(self, game: ASTType, rng: np.random.Generator):
+        new_setup = None
+        global_context = dict(rng=rng)
+        while new_setup is None:
+            try:
+                new_setup = self._sampler(rng).sample('setup', global_context=global_context)[0]
+            except SamplingException as e:
+                if self.verbose > 1:
+                    print(f'Failed to sample setup with global context {global_context}: {e}')
+                continue
+
+        new_setup_tuple = (ast_parser.SETUP, new_setup)
+
+        new_game = copy.deepcopy(game)
+        return self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
+
+    @handle_multiple_inputs
+    def _sample_or_resample_terminal(self, game: ASTType, rng: np.random.Generator):
+        new_terminal = None
+
+        base_scoring_node = game[-2][1]  # type: ignore
+        self._regrowth_sampler().set_source_ast(game)
+        base_scoring_node_key = self._regrowth_sampler()._ast_key(base_scoring_node)
+        global_context = self._regrowth_sampler().parent_mapping[base_scoring_node_key][-2]  # type: ignore
+        global_context['rng'] = rng
+
+        while new_terminal is None:
+            try:
+                new_terminal = self._sampler(rng).sample('terminal', global_context=global_context)[0]
+            except SamplingException as e:
+                if self.verbose > 1:
+                    print(f'Failed to sample terminal with global context {global_context}: {e}')
+                continue
+
+        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal)
+
+        new_game = copy.deepcopy(game)
+        replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore
+        index = len(new_game) - 2 if not replace else len(new_game) - 3
+        return self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
+
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
@@ -1091,7 +1247,7 @@ class PopulationBasedSampler():
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
                                     postprocess: bool = False, use_imap: bool = True,
-                                    compute_diversity_metrics: bool = False, save_every_generation: bool = False):
+                                    compute_diversity_metrics: bool = False, save_interval: int = 0):
         step_iter = range(num_steps)
         if should_tqdm:
             pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
@@ -1121,14 +1277,16 @@ class PopulationBasedSampler():
 
             self.fitness_metrics_history.append({'mean': self.mean_fitness, 'std': self.std_fitness, 'max': self.best_fitness})
 
-            if save_every_generation:
+            self.generation_index += 1
+
+            if save_interval > 0 and ((self.generation_index % save_interval) == 0):
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
 
-            self.generation_index += 1
+
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, postprocess: bool = False, use_imap: bool = True,
-                                             compute_diversity_metrics: bool = False, save_every_generation: bool = False,
+                                             compute_diversity_metrics: bool = False, save_interval: int = 0,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
         logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
@@ -1137,7 +1295,7 @@ class PopulationBasedSampler():
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess,  use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
-                                             save_every_generation=save_every_generation)
+                                             save_interval=save_interval)
 
     def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True,
                           feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
@@ -1215,12 +1373,15 @@ class MAPElitesSampler(PopulationBasedSampler):
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
     map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]]
+    operators: typing.List[typing.Callable]
+    operator_weights: np.ndarray
     population: typing.Dict[KeyTypeAnnotation, ASTType]
     previous_sampler_population_seed_path: typing.Optional[str]
     selector: typing.Optional[Selector]
     selector_kwargs: typing.Dict[str, typing.Any]
     update_fitness_rank_weights: bool
     use_crossover: bool = False
+    use_cognitive_operators: bool = False
     weight_strategy: MAPElitesWeightStrategy
 
 
@@ -1234,6 +1395,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  use_crossover: bool = False,
+                 use_cognitive_operators: bool = False,
                  *args, **kwargs):
 
         self.generation_size = generation_size
@@ -1258,7 +1420,11 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.archive_metrics_history = []
         self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
         self.use_crossover = use_crossover
+        self.use_cognitive_operators = use_cognitive_operators
         self.update_fitness_rank_weights = True
+
+        self.operators = None  # type: ignore
+        self.operator_weights = None  # type: ignore
 
         super().__init__(*args, **kwargs)
 
@@ -1413,7 +1579,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         for feature_name in self.map_elites_feature_names:
             logger.info(f'\t{feature_name}: {feature_value_counters[feature_name]}')
 
-
     def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:
             features = self.custom_featurizer.parse(game, return_row=True)  # type: ignore
@@ -1541,12 +1706,30 @@ class MAPElitesSampler(PopulationBasedSampler):
         return key  #  type: ignore
 
     def _get_operator(self, rng):
-        # TODO: custom operators? non-uniform weights?
+        if self.operators is None:
+            basic_operators = [self._gen_regrowth_sample, self._insert, self._delete]
 
-        if self.use_crossover:
-            return self._choice([self._gen_regrowth_sample, self._insert, self._delete, self._crossover])
+            if self.use_crossover:
+                basic_operators.append(self._crossover)  # type: ignore
 
-        return self._randomly_mutate_game
+            if not self.use_cognitive_operators:
+                self.operators = basic_operators
+                self.operator_weights = np.ones(len(self.operators)) / len(self.operators)
+
+            else:
+                cognitive_operators = [self._resample_variable_types, self._resample_first_condition, self._resample_last_condition,
+                                    self._resample_variable_types_and_first_condition, self._resample_variable_types_and_last_condition]
+                section_resample_operators = [self._sample_or_resample_setup, self._sample_or_resample_terminal]
+
+                basic_operator_weights = [0.5 / len(basic_operators)] * len(basic_operators)
+                cognitive_operator_weights = [0.4 / len(cognitive_operators)] * len(cognitive_operators)
+                section_resample_operator_weights = [0.1 / len(section_resample_operators)] * len(section_resample_operators)
+
+                self.operators = basic_operators + cognitive_operators + section_resample_operators
+                self.operator_weights = np.array(basic_operator_weights + cognitive_operator_weights + section_resample_operator_weights)
+                self.operator_weights /= self.operator_weights.sum()
+
+        return self._choice(self.operators, rng=rng, weights=self.operator_weights)  # type: ignore
 
     def _key_to_feature_dict(self, key: KeyTypeAnnotation):
         if isinstance(key, int):
@@ -1756,6 +1939,7 @@ def main(args):
             initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             use_crossover=args.map_elites_use_crossover,
+            use_cognitive_operators=args.map_elites_use_cognitive_operators,
             args=args,
             population_size=args.population_size,
             verbose=args.verbose,
@@ -1793,7 +1977,7 @@ def main(args):
                 n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
                 maxtasksperchild=args.parallel_maxtasksperchild,
                 compute_diversity_metrics=args.compute_diversity_metrics,
-                save_every_generation=args.save_every_generation,
+                save_interval=args.save_interval,
                 )
 
         else:
@@ -1801,7 +1985,7 @@ def main(args):
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm,
                 inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
                 compute_diversity_metrics=args.compute_diversity_metrics,
-                save_every_generation=args.save_every_generation,
+                save_interval=args.save_interval,
                 )
 
         # print('Best individual:')

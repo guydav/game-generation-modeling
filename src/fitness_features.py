@@ -677,7 +677,7 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
         self.total_prefs += 1
         if isinstance(ast.then_funcs, list):  # type: ignore
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
-            if len(func_rules) >= 3 and func_rules[0] == func_rules[-1] == 'once':
+            if len(func_rules) >= 2 and func_rules[0] == func_rules[-1] == 'once':
                 self.prefs_start_and_end_with_once += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -685,6 +685,25 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
             return 0
 
         return self.prefs_start_and_end_with_once / self.total_prefs
+
+
+class OnceInMiddleOfPref(FitnessTerm):
+    prefs_with_once_in_middle: int = 0
+
+    def __init__(self):
+        super().__init__('then', 'once_in_middle_of_pref_found')
+
+    def game_start(self) -> None:
+        self.prefs_with_once_in_middle = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
+            if any(rule == 'once' for rule in func_rules[1:-1]):
+                self.prefs_with_once_in_middle += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.prefs_with_once_in_middle > 0
 
 
 DEFAULT_LENGTH_OF_THEN_MIN_LENGTH = 1
@@ -2246,6 +2265,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()
     fitness.register(pref_starts_and_ends_with_once)
+
+    once_in_middle_of_pref = OnceInMiddleOfPref()
+    fitness.register(once_in_middle_of_pref)
 
     length_of_then_modals = LengthOfThenModals()
     fitness.register(length_of_then_modals)

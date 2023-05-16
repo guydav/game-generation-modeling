@@ -861,6 +861,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_1_sections, game_2_section)
             section_copy = copy.deepcopy(game_2[3 + game_2_section_index])
             self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
+            self._context_fixer().fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
 
         if crossover_second_game:
             game_1_section_index = rng.integers(len(game_1_sections))
@@ -868,6 +869,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_2_sections, game_1_section)
             section_copy = copy.deepcopy(game_1[3 + game_1_section_index])
             self._insert_section_to_game(game_2, section_copy, index, replace)  # type: ignore
+            self._context_fixer().fix_contexts(game_2, crossover_child=section_copy[1])  # type: ignore
 
         return [game_1, game_2]
 
@@ -975,10 +977,11 @@ class PopulationBasedSampler():
                 mutated_game_preferences_node = [section_tuple for section_tuple in mutated_game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
                 mutated_game_preferences_node['preferences'].insert(rng.integers(len(mutated_game_preferences_node['preferences']) + 1), original_preference)  # type: ignore
 
-            return mutated_game
+            game = mutated_game
 
-        else:
-            return game
+        self._context_fixer().fix_contexts(game)  # type: ignore
+
+        return game
 
     @handle_multiple_inputs
     def _sample_or_resample_setup(self, game: ASTType, rng: np.random.Generator):
@@ -995,7 +998,9 @@ class PopulationBasedSampler():
         new_setup_tuple = (ast_parser.SETUP, new_setup)
 
         new_game = copy.deepcopy(game)
-        return self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
+        new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
+        self._context_fixer().fix_contexts(new_game)  # type: ignore
+        return new_game
 
     @handle_multiple_inputs
     def _sample_or_resample_terminal(self, game: ASTType, rng: np.random.Generator):
@@ -1020,7 +1025,10 @@ class PopulationBasedSampler():
         new_game = copy.deepcopy(game)
         replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore
         index = len(new_game) - 2 if not replace else len(new_game) - 3
-        return self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
+        new_game = self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
+
+        self._context_fixer().fix_contexts(new_game)  # type: ignore
+        return new_game
 
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''

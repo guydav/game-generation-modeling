@@ -586,8 +586,10 @@
         (preference blockInTowerKnockedByDodgeball (exists (?l - block ?d - dodgeball)
             (then
                 (once (and (in ?b ?l) (agent_holds ?d)))
-                (hold (and (in ?b ?l) (not (agent_holds ?d)) (in_motion ?d)))
-                (once (and (in ?b ?l) (touch ?d ?b)))
+                (hold-while
+                    (and (in ?b ?l) (not (agent_holds ?d)) (in_motion ?d))
+                    (touch ?d ?b)
+                )
                 (hold (in_motion ?l))
                 (once (not (in_motion ?l)))
             )
@@ -1693,7 +1695,6 @@
             (hold (agent_holds ?o))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (in ?h ?o)))
-            (hold (not (agent_holds ?o)))
         )
     ))
 ))
@@ -2793,7 +2794,7 @@
         (then
             (once (agent_holds ?d))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
-            (once (touch floor ?d))
+            (hold (and (in_motion ?d) (not (agent_holds ?d)) (touch floor ?d)))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
             (once (and (not (in_motion ?d)) (on ?b ?d)))
         )

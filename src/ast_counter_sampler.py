@@ -1,8 +1,19 @@
 import argparse
 from collections import namedtuple, defaultdict, Counter
+import copy
 from dataclasses import dataclass
 from functools import reduce, wraps
+import gzip
+import itertools
 import logging
+import multiprocessing
+from multiprocessing import pool as mpp
+import pickle
+import re
+import typing
+
+import numpy as np
+import pandas as pd
 import tatsu
 import tatsu.ast
 import tatsu.exceptions
@@ -10,24 +21,14 @@ import tatsu.infos
 import tatsu.grammars
 from tatsu import grammars
 import tqdm
-import pandas as pd
-import numpy as np
-import pickle
-import copy
-import re
-import typing
-import string
-import sys
 
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
 from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping
 import room_and_object_types
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -64,13 +65,39 @@ parser.add_argument('--section-sample-weights-key', type=str, default=None)
 parser.add_argument('--depth-weight-function-key', type=str, default=None)
 parser.add_argument('--prior-count', action='append', type=int, default=[])
 
+parser.add_argument('--sample-parallel', action='store_true')
+parser.add_argument('--parallel-n-workers', type=int, default=8)
+parser.add_argument('--parallel-chunksize', type=int, default=1)
+parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
+
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
 MCMC_REGRWOTH = 'mcmc-regrowth'
 parser.add_argument('--sampling-method', choices=[MLE_SAMPLING, REGROWTH_SAMPLING, MCMC_REGRWOTH], required=True)
 
 
+def istarmap(self, func, iterable, chunksize=1):
+    """starmap-version of imap
+    """
+    self._check_running()
+    if chunksize < 1:
+        raise ValueError(
+            "Chunksize must be 1+, not {0:n}".format(
+                chunksize))
 
+    task_batches = mpp.Pool._get_tasks(func, iterable, chunksize)  # type: ignore
+    result = mpp.IMapIterator(self)
+    self._taskqueue.put(
+        (
+            self._guarded_task_generation(result._job,  # type: ignore
+                                          mpp.starmapstar,  # type: ignore
+                                          task_batches),
+            result._set_length  # type: ignore
+        ))
+    return (item for chunk in result for item in chunk)
+
+
+mpp.Pool.istarmap = istarmap  # type: ignore
 
 
 class SamplingException(Exception):
@@ -661,7 +688,7 @@ class ASTSampler:
         rule_counts = sum(field_prior[RULE_POSTERIOR].values()) if RULE_POSTERIOR in field_prior else 0
         token_counts = sum(field_prior[TOKEN_POSTERIOR].values()) if TOKEN_POSTERIOR in field_prior else 0
         type_posterior = {RULE: rule_counts, TOKEN: token_counts}
-        field_prior[TYPE_POSTERIOR] = self._normalize_posterior_dict(type_posterior)
+        field_prior[TYPE_POSTERIOR] = self._normalize_posterior_dict(type_posterior)  # type: ignore
 
         # Normalize the rule and token posteriors
         if RULE_POSTERIOR in field_prior:
@@ -688,7 +715,7 @@ class ASTSampler:
 
         if field_counter is not None:
             if len(field_counter.length_counts) == 0:
-                logging.warning(f'No length counts for {rule_name}.{field_name} which has a min length, filling in with 1')
+                logger.warning(f'No length counts for {rule_name}.{field_name} which has a min length, filling in with 1')
 
             length_posterior.update(field_counter.length_counts)
             total_lengths = sum(field_counter.length_counts)
@@ -1132,6 +1159,12 @@ def _regrowth_sampler_state_wrapper(func: typing.Callable) -> typing.Callable:
     return wrapper
 
 
+def _update_game_id(ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None) -> tuple:
+    new_game_name = f'{ast[1].game_name}-{sample_index}{"-" + str(suffix) if suffix else ""}'  # type: ignore
+    replace_child(ast[1], ['game_name'], new_game_name)  # type: ignore
+    return ast  # type: ignore
+
+
 # TODO: move this class to a separate module?
 class RegrowthSampler(ASTParentMapper):
     depth_parser: ASTDepthParser
@@ -1194,14 +1227,6 @@ class RegrowthSampler(ASTParentMapper):
     def _parse_current_node(self, ast, **kwargs):
         if ast.parseinfo.rule == 'game_def':
             self.original_game_id = ast.game_name
-
-    def _update_game_id(self, ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, suffix: typing.Optional[typing.Any] = None) -> tuple:
-        new_game_name = f'{self.original_game_id}-{sample_index}{"-" + str(suffix) if suffix else ""}'
-        game_key = [p for p in self.parent_mapping.keys() if p.rule == 'game_def'][0]
-        game_node, _, game_selector, _, _, _, _ = self.parent_mapping[game_key]
-
-        new_game_node = tatsu.ast.AST(dict(game_name=new_game_name, parseinfo=game_node.parseinfo))
-        return replace_child(ast, game_selector, new_game_node)  # type: ignore
 
     def _sample_node_to_update(self, rng: np.random.Generator):
         if self.section_sample_weights is not None:
@@ -1272,27 +1297,27 @@ class RegrowthSampler(ASTParentMapper):
         sampler = self.samplers[sampler_key]
 
         try:
-            new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]
+            new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
 
             if update_game_id:
                 regrwoth_depth = self.depth_parser(node)
-                new_source = self._update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
+                new_source = _update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
 
             replace_child(parent, selector, new_node)
 
             return new_source
 
         except IndexError as e:
-            logging.error(f'Caught IndexError in RegrowthSampler.sample:')
-            logging.error(f'  node: {node}')
-            logging.error(f'  parent: {parent}')
-            logging.error(f'  selector: {selector}')
-            logging.error(f'  len(parent[selector[0]]): {len(parent[selector[0]])}')  # type: ignore
-            logging.error(f'  node_depth: {node_depth}')
-            logging.error(f'  section: {section}')
-            logging.error(f'  global_context: {global_context}')
-            logging.error(f'  local_context: {local_context}')
-            logging.error(f'  sampler_key: {sampler_key}')
+            logger.error(f'Caught IndexError in RegrowthSampler.sample:')
+            logger.error(f'  node: {node}')
+            logger.error(f'  parent: {parent}')
+            logger.error(f'  selector: {selector}')
+            logger.error(f'  len(parent[selector[0]]): {len(parent[selector[0]])}')  # type: ignore
+            logger.error(f'  node_depth: {node_depth}')
+            logger.error(f'  section: {section}')
+            logger.error(f'  global_context: {global_context}')
+            logger.error(f'  local_context: {local_context}')
+            logger.error(f'  sampler_key: {sampler_key}')
             raise e
 
 
@@ -1344,7 +1369,10 @@ def test_and_stringify_ast_sample(ast, args: argparse.Namespace, grammar_parser:
     return first_print_out
 
 
-def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, ASTSampler], grammar_parser: tatsu.grammars.Grammar):
+def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Union[typing.Dict[str, ASTSampler], typing.List[typing.Dict[str, ASTSampler]]], grammar_parser: tatsu.grammars.Grammar):
+    if args.sample_parallel:
+        raise ValueError('MLE sampling not supported with parallel sampling')
+
     sample_iter = range(args.num_samples)
     if args.sample_tqdm:
         sample_iter = tqdm.tqdm(sample_iter, desc='Samples')
@@ -1352,7 +1380,7 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, A
     rng = np.random.default_rng(args.random_seed)
 
     for sample_id in sample_iter:
-        sampler_key = rng.choice(list(samplers.keys()))
+        sampler_key = rng.choice(list(samplers.keys()))  # type: ignore
         sampler = samplers[sampler_key]
         generated_sample = False
         while not generated_sample:
@@ -1368,7 +1396,41 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Dict[str, A
                 print(f'SamplingException while sampling, repeating: {e}')
 
 
-def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[str, ASTSampler], grammar_parser: tatsu.grammars.Grammar):
+def regrow_single_sample(regrowth_sampler: RegrowthSampler, sample_index: int, grammar_parser: tatsu.grammars.Grammar, args: argparse.Namespace):
+    while True:
+        try:
+            sample_ast = regrowth_sampler.sample(sample_index)
+            sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
+            sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
+            return sample_str + '\n\n', sample_hash
+
+        except RecursionError:
+            if args.verbose: print('Recursion error, skipping sample')
+
+        except SamplingException:
+            if args.verbose: print('Sampling exception, skipping sample')
+
+
+def _process_index(n_workers: int):
+    identity = multiprocessing.current_process()._identity
+    if identity is None or len(identity) == 0:
+        return 0
+
+    return (identity[0] - 1) % n_workers
+
+
+def regrow_sample_parallel(regrowth_samplers: typing.List[RegrowthSampler], sample_index: int, grammar_parsers: typing.List[tatsu.grammars.Grammar], args: argparse.Namespace):
+    process_index = _process_index(args.parallel_n_workers)
+    return regrow_single_sample(regrowth_samplers[process_index], sample_index, grammar_parsers[process_index], args)
+
+
+def regrow_sample_parallel_map_wrapper(args):
+    return regrow_sample_parallel(*args)
+
+
+
+def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[typing.Dict[str, ASTSampler], typing.List[typing.Dict[str, ASTSampler]]],
+                               grammar_parser: typing.Union[tatsu.grammars.Grammar, typing.List[tatsu.grammars.Grammar]]):
     section_sample_weights = None
     if args.section_sample_weights_key is not None:
         section_sample_weights = SECTION_SAMPLE_WEIGHTS[args.section_sample_weights_key]
@@ -1377,50 +1439,107 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Dict[s
     if args.depth_weight_function_key is not None:
         depth_weight_function = DEPTH_WEIGHT_FUNCTIONS[args.depth_weight_function_key]
 
-    regrowth_sampler = RegrowthSampler(samplers, section_sample_weights, depth_weight_function, args.random_seed)
+    gp = grammar_parser if not isinstance(grammar_parser, list) else grammar_parser[0]
+    real_games = [sample_ast for test_file in args.test_files for sample_ast
+                  in cached_load_and_parse_games_from_file(test_file, gp, not args.dont_tqdm)]
 
-    real_games = [sample_ast for test_file in args.test_files for sample_ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm)]
     if args.regrowth_end_index == -1:
         args.regrowth_end_index = len(real_games)
 
     else:
         args.regrowth_end_index = min(args.regrowth_end_index, len(real_games))
 
-
     game_iter = iter(real_games[args.regrowth_start_index:args.regrowth_end_index])
     if args.sample_tqdm:
         game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=args.regrowth_end_index - args.regrowth_start_index)
 
-    for real_game in game_iter:
-        regrowth_sampler.set_source_ast(real_game)  # type: ignore
-        real_game_str = ast_printer.ast_to_string(real_game, line_delimiter='\n')  # type: ignore
-        sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
+    if args.sample_parallel:
+        regrowth_samplers = [RegrowthSampler(samplers[worker_id], section_sample_weights, depth_weight_function, args.random_seed + worker_id)  # type: ignore
+                             for worker_id in range(args.parallel_n_workers)]
+        if not isinstance(grammar_parser, list):
+            grammar_parser = [copy.deepcopy(grammar_parser) for _ in range(args.parallel_n_workers)]
 
-        sample_iter = range(args.num_samples)
-        if args.inner_sample_tqdm:
-            sample_iter = tqdm.tqdm(sample_iter, total=args.num_samples, desc='Samples')
+        game_start = '(game '
+        single_chunk_total = args.parallel_chunksize * args.parallel_n_workers
 
-        for sample_index in sample_iter:
-            sample_generated = False
+        logger.debug(f'Parallel regrowth sampling with {args.parallel_n_workers} workers and max tasks per child {args.parallel_maxtasksperchild}')
 
-            while not sample_generated:
-                try:
-                    sample_ast = regrowth_sampler.sample(sample_index)
-                    sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
-                    sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
+        with mpp.Pool(args.parallel_n_workers, maxtasksperchild=args.parallel_maxtasksperchild) as pool:
+            for real_game in game_iter:
+                for regrowth_sampler in regrowth_samplers:
+                    regrowth_sampler.set_source_ast(real_game)   # type: ignore
+
+                real_game_str = ast_printer.ast_to_string(real_game, line_delimiter='\n')  # type: ignore
+                sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
+                sample_index = 0
+                n_maps = 0
+
+                while len(sample_hashes) < args.num_samples + 1:
+                    # This is required because the changes to the rng state happen in the pickled copies in the worker processes
+                    # and don't get propagated back here -- so we have to provide a different state for each map call
+                    for worker_id, regrowth_sampler in enumerate(regrowth_samplers):
+                        regrowth_sampler.rng = np.random.default_rng(args.random_seed + worker_id + sample_index)  # type: ignore
+
+                    param_iterator = zip(
+                        itertools.repeat(regrowth_samplers, single_chunk_total),
+                        itertools.count(single_chunk_total * n_maps),
+                        itertools.repeat(grammar_parser, single_chunk_total),
+                        itertools.repeat(args, single_chunk_total),
+                    )
+                    samples_iter = pool.imap_unordered(regrow_sample_parallel_map_wrapper, param_iterator, chunksize=args.parallel_chunksize)
+
+                    for sample_str, sample_hash in samples_iter:
+                        if sample_hash not in sample_hashes:
+                            game_name_start_index = sample_str.find(game_start) + len(game_start)
+                            game_name_end_index = sample_str.find(')', game_name_start_index)
+                            game_name = sample_str[game_name_start_index:game_name_end_index]
+
+                            game_id, game_index, _, game_name_suffix = game_name.split('-', 3)
+                            new_game_name = '-'.join([game_id, game_index, str(sample_index), game_name_suffix])
+                            sample_str = sample_str[:game_name_start_index] + new_game_name + sample_str[game_name_end_index:]
+
+                            sample_hashes.add(sample_hash)
+                            sample_index += 1
+
+                            yield sample_str + '\n\n'
+
+                            if sample_index >= args.num_samples:
+                                break
+
+                    n_maps += 1
+                    if args.sample_tqdm:
+                        game_iter.set_postfix({'Samples': sample_index, 'Sample Hashes': len(sample_hashes), 'Maps': n_maps})  # type: ignore
+
+    else:
+        regrowth_sampler = RegrowthSampler(samplers, section_sample_weights, depth_weight_function, args.random_seed)  # type: ignore
+
+        for real_game in game_iter:
+            regrowth_sampler.set_source_ast(real_game)  # type: ignore
+            real_game_str = ast_printer.ast_to_string(real_game, line_delimiter='\n')  # type: ignore
+            sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
+
+            sample_iter = range(args.num_samples)
+            if args.inner_sample_tqdm:
+                sample_iter = tqdm.tqdm(sample_iter, total=args.num_samples, desc='Samples')
+
+            attempts = 0
+            for sample_index in sample_iter:
+                new_sample_generated = False
+
+                while not new_sample_generated:
+                    attempts += 1
+                    sample_str, sample_hash = regrow_single_sample(regrowth_sampler, sample_index, grammar_parser, args)  # type: ignore
 
                     if sample_hash in sample_hashes:
                         if args.verbose: print('Regrowth generated identical games, repeating')
                     else:
-                        sample_generated = True
+                        new_sample_generated = True
                         sample_hashes.add(sample_hash)
+
                         yield sample_str + '\n\n'
 
-                except RecursionError:
-                    if args.verbose: print('Recursion error, skipping sample')
-
-                except SamplingException:
-                    if args.verbose: print('Sampling exception, skipping sample')
+                        if args.sample_tqdm:
+                            game_iter.set_postfix({'Samples': sample_index, 'Attempts': attempts})  # type: ignore
 
 
 def main(args):
@@ -1431,18 +1550,30 @@ def main(args):
     grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
     counter = parse_or_load_counter(args, grammar_parser)
 
+    if args.sample_parallel:
+        samplers = []
+        grammar_parser = [tatsu.compile(grammar) for _ in range(args.parallel_n_workers)]
+        for worker_id in range(args.parallel_n_workers):
+            worker_samplers = {}
+            for pc in args.prior_count:
+                length_prior = {n: pc for n in LENGTH_PRIOR}
+                worker_samplers[f'prior{pc}'] = ASTSampler(grammar_parser[worker_id], counter, seed=args.random_seed + worker_id,  # type: ignore
+                                                    prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)     # type: ignore
 
-    samplers = {}
-    for pc in args.prior_count:
-        length_prior = {n: pc for n in LENGTH_PRIOR}
-        samplers[f'prior{pc}'] = ASTSampler(grammar_parser, counter, seed=args.random_seed,
-                                            prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)
+            samplers.append(worker_samplers)
+
+    else:
+        samplers = {}
+        for pc in args.prior_count:
+            length_prior = {n: pc for n in LENGTH_PRIOR}
+            samplers[f'prior{pc}'] = ASTSampler(grammar_parser, counter, seed=args.random_seed,  # type: ignore
+                                                prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)  # type: ignore
 
 
     if args.sampling_method == MLE_SAMPLING:
-        sample_iter = _generate_mle_samples(args, samplers, grammar_parser)
+        sample_iter = _generate_mle_samples(args, samplers, grammar_parser)  # type: ignore
     elif args.sampling_method == REGROWTH_SAMPLING:
-        sample_iter = _generate_regrowth_samples(args, samplers, grammar_parser)
+        sample_iter = _generate_regrowth_samples(args, samplers, grammar_parser)  # type: ignore
     else:
         raise ValueError(f'Unknown sampling method: {args.sampling_method}')
 
@@ -1456,7 +1587,8 @@ def main(args):
     # sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
-        with open(args.samples_output_path, args.file_open_mode) as out_file:
+        open_method = gzip.open if args.samples_output_path.endswith('.gz') else open
+        with open_method(args.samples_output_path, args.file_open_mode) as out_file:
             buffer = []
             i = 0
             for sample in sample_iter:

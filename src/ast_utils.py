@@ -57,7 +57,9 @@ def load_games_from_file(path: str, start_token: str='(define',
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS
 
-    with open(path) as f:
+    open_method = gzip.open if path.endswith('.gz') else open
+
+    with open_method(path) as f:
         lines = f.readlines()
         # new_lines = []
         # for l in lines:

@@ -41,7 +41,7 @@ DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 DEFAULT_TEST_FILES = (
     './dsl/interactive-beta.pddl',
-    './dsl/ast-real-regrowth-samples-1024.pddl',
+    './dsl/ast-real-regrowth-samples-1024.pddl.gz',
     # './dsl/ast-real-regrowth-samples.pddl',
     # './dsl/ast-mle-samples-large.pddl',
 

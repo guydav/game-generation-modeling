@@ -536,7 +536,6 @@ class PopulationBasedSampler():
         Helper function for generating an initial sample (repeating until one is generated
         without errors)
         '''
-
         sample = None
 
         while sample is None:
@@ -1287,10 +1286,20 @@ class PopulationBasedSampler():
 
             self.generation_index += 1
 
+            # This is required because the changes to the rng state happen in the pickled copies in the worker processes
+            # and (potentially?) don't get propagated back here -- so we have to provide a different state for each map call
+            for i, sampler_dict in enumerate(self.samplers):
+                for sampler in sampler_dict.values():
+                    sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
+
+            for i, regrowth_sampler in enumerate(self.regrowth_samplers):
+                regrowth_sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
+
+            for i, context_fixer in enumerate(self.context_fixers):
+                context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
+
             if save_interval > 0 and ((self.generation_index % save_interval) == 0):
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
-
-
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, postprocess: bool = False, use_imap: bool = True,
@@ -1321,7 +1330,6 @@ class PopulationBasedSampler():
                     keyword_features = None
 
                 print(f'"{keyword}": {keyword_features}')
-
 
         evaluate_single_game_energy_contributions(
             self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,   # type: ignore

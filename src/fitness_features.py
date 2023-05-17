@@ -2371,7 +2371,7 @@ def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
 
 def game_iterator():
     for src_file in args.test_files:
-        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False):  # type: ignore
+        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False, log_every_change=False):  # type: ignore
             yield game, src_file
 
 

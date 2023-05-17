@@ -59,7 +59,7 @@ def load_games_from_file(path: str, start_token: str='(define',
 
     open_method = gzip.open if path.endswith('.gz') else open
 
-    with open_method(path) as f:
+    with open_method(path, 'rt') as f:
         lines = f.readlines()
         # new_lines = []
         # for l in lines:
@@ -156,9 +156,9 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
         if CACHE_DSL_HASH_KEY not in cache:
-            logger.debug('No cached DSL hash found')
+            logger.info('No cached DSL hash found')
         else:
-            logger.debug('Grammar changed, clearing cache')
+            logger.info('Grammar changed, clearing cache')
 
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
@@ -193,7 +193,6 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
             cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
                 CACHE_DSL_HASH_KEY: grammar_hash}
             n_cache_updates = 0
-            logger.debug(f'Done updating cache, returning to parsing')
 
     if n_cache_updates > 0:
         logger.debug(f'Updating cache with {n_cache_updates} new games')

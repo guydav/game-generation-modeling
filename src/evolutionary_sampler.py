@@ -1298,7 +1298,7 @@ class PopulationBasedSampler():
             for i, context_fixer in enumerate(self.context_fixers):
                 context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
 
-            if save_interval > 0 and ((self.generation_index % save_interval) == 0):
+            if save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps:
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,

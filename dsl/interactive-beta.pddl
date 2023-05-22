@@ -21,6 +21,7 @@
     (preference binKnockedOver
         (exists (?h - hexagonal_bin)
             (then
+                (once (object_orientation ?h upright))
                 (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
                 (once (not (object_orientation ?h upright)))
             )
@@ -2113,13 +2114,14 @@
                     (touch ?b ?l)
                     (in_motion ?l)
                 )
+                (once (not (in_motion ?b)))
             )
         ))
         (preference throwAttempt
             (then
                 (once (and (agent_holds ?b) (on rug agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (not (in_motion ?b))))
+                (once (not (in_motion ?b)))
             )
         )
     ))
@@ -3186,6 +3188,7 @@
                     (touch ?b ?c)
                     (in_motion ?c)
                 )
+                (once (not (in_motion ?b)))
             )
         ))
     )

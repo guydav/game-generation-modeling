@@ -1586,7 +1586,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     test_tensor: typing.Optional[torch.Tensor] = None,
     results: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = None,
     display_metric_correlation_table: bool = True,
-    display_by_ecdf: bool = True, display_by_game_rank: bool = True,
+    display_results_by_metric: bool = True,
     display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
     title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
     dispaly_weights_histogram: bool = True, weights_histogram_title_base: str = 'Energy model weights',
@@ -1653,12 +1653,13 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         else:
             logging.info(f'Metric correlation table:\n{table}')
 
-    for name in scoring_names:
-        if notebook:
-            display(Markdown(f'### CV results by {name}:'))
-            display(cv_df.sort_values(by=f'{name}_rank').head(10))
-        else:
-            logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
+    if display_results_by_metric:
+        for name in scoring_names:
+            if notebook:
+                display(Markdown(f'### CV results by {name}:'))
+                display(cv_df.sort_values(by=f'{name}_rank').head(10))
+            else:
+                logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
 
     # else:
     #     if display_by_ecdf:

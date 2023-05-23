@@ -23,5 +23,6 @@ samples/every_gen
 
 .vscode/sftp.json
 run/profile_evo_sampler.sh
-run/lightning_logs/
-run/lightning_logs/**/*
+**/lightning_logs/
+**/lightning_logs/*
+**/lightning_logs/**/*

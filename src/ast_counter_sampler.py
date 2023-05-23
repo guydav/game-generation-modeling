@@ -58,7 +58,7 @@ parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 DEFAULT_RECURSION_LIMIT = 3000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--verbose', action='store_true')
-parser.add_argument('--file-open-mode', default='w')
+parser.add_argument('--file-open-mode', default='wt')
 parser.add_argument('--regrowth-start-index', type=int, default=0)
 parser.add_argument('--regrowth-end-index', type=int, default=-1)
 parser.add_argument('--section-sample-weights-key', type=str, default=None)

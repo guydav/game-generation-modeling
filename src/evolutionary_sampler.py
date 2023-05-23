@@ -1681,8 +1681,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 93]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 96.5]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 115]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 118.5]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics

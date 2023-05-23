@@ -984,34 +984,24 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
         return self.identical_children != 0
 
 
-class NoIdenticalChildrenInScoringExpressions(FitnessTerm):
-    total_scoring_multi_expressions: int = 0
-    identical_children: int = 0
+class NoIdenticalScoringExpressions(FitnessTerm):
+    expression_strings: typing.List[str]
 
     def __init__(self):
-        super().__init__(('scoring_equals_comp', 'scoring_multi_expr'), 'identical_scoring_children_found')
+        super().__init__(COUNT_RULE_PATTERN, 'identical_scoring_expressions_found')
 
     def game_start(self) -> None:
-        self.total_scoring_multi_expressions = 0
-        self.identical_children = 0
+        self.expression_strings = []
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            children = ast.expr
-            if isinstance(children, tatsu.ast.AST) or len(children) < 2:  # type: ignore
-                return
-
-            self.total_scoring_multi_expressions += 1
-
-            children_strs = [ast_printer.ast_section_to_string(child, ast_parser.SCORING) for child in children]  # type: ignore
-            if len(set(children_strs)) != len(children_strs):
-                self.identical_children += 1
+        if isinstance(ast, tatsu.ast.AST) and context[SECTION_CONTEXT_KEY] == ast_parser.SCORING:
+            self.expression_strings.append(ast_printer.ast_section_to_string(ast, ast_parser.SCORING))
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if self.total_scoring_multi_expressions == 0:
+        if len(self.expression_strings) == 0:
             return 0
 
-        return self.identical_children != 0
+        return len(self.expression_strings) - len(set(self.expression_strings))
 
 
 BOOLEAN_PARSER = ast_parser.ASTBooleanParser()
@@ -1231,28 +1221,33 @@ class PrefForallTerm(FitnessTerm):
 
 class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
     pref_forall_prefs: typing.Set[str] = set()
-    count_once_per_external_objects_prefs: typing.Set[str] = set()
+    count_once_per_external_objects_prefs: typing.Dict[str, int]
 
     def __init__(self):
         super().__init__('count_once_per_external_objects_used')
 
     def _inner_game_start(self) -> None:
-        self.count_once_per_external_objects_prefs = set()
+        self.count_once_per_external_objects_prefs = defaultdict(int)
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
 
         if rule == 'count_once_per_external_objects':
-            self.count_once_per_external_objects_prefs.add(pref_name)
+            self.count_once_per_external_objects_prefs[pref_name] += 1
 
     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.count_once_per_external_objects_prefs) == 0:
             return 0
 
-        if len(self.count_once_per_external_objects_prefs.intersection(self.pref_forall_prefs)) == len(self.count_once_per_external_objects_prefs):
+        count_once_per_external_objects_pref_names = set(self.count_once_per_external_objects_prefs.keys())
+
+        if len(count_once_per_external_objects_pref_names.intersection(self.pref_forall_prefs)) == len(self.count_once_per_external_objects_prefs):
             return 1
 
-        return - len(self.pref_forall_prefs.symmetric_difference(self.count_once_per_external_objects_prefs))
+        return - sum([
+            self.count_once_per_external_objects_prefs[pref_name] if pref_name in self.count_once_per_external_objects_prefs else 1
+            for pref_name in count_once_per_external_objects_pref_names.symmetric_difference(self.pref_forall_prefs)
+        ])
 
 
 class ExternalForallUsedCorrectly(PrefForallTerm):
@@ -1286,18 +1281,18 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
 
 
 class PrefForallUsed(PrefForallTerm):
-    prefs_used_as_pref_forall_prefs: typing.Set[str] = set()
+    prefs_used_as_pref_forall_prefs: typing.Dict[str, int]
 
     def __init__(self):
         super().__init__('used')
 
     def _inner_game_start(self) -> None:
-        self.prefs_used_as_pref_forall_prefs = set()
+        self.prefs_used_as_pref_forall_prefs = defaultdict(int)
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
         if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context or rule == 'count_once_per_external_objects':
-            self.prefs_used_as_pref_forall_prefs.add(pref_name)
+            self.prefs_used_as_pref_forall_prefs[pref_name] += 1
 
     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.pref_forall_prefs) == 0 and len(self.prefs_used_as_pref_forall_prefs) == 0:
@@ -1305,19 +1300,21 @@ class PrefForallUsed(PrefForallTerm):
 
         n_unused_prefs = 0
 
+        prefs_used_as_pref_forall_prefs_names = set(self.prefs_used_as_pref_forall_prefs.keys())
+
         # for set of preferences defined as a forall pref
         for pos_prefs in self.pref_forall_prefs_by_position.values():
             # if none of them were used as a forall pref, return -1
-            n_pos_prefs_used_as_forall = len(pos_prefs.intersection(self.prefs_used_as_pref_forall_prefs))
+            n_pos_prefs_used_as_forall = len(pos_prefs.intersection(prefs_used_as_pref_forall_prefs_names))
             if n_pos_prefs_used_as_forall == 0:
                 n_unused_prefs += len(pos_prefs)
 
             # remove the preferences that were used as a forall pref
-            self.prefs_used_as_pref_forall_prefs.difference_update(pos_prefs)
+            prefs_used_as_pref_forall_prefs_names.difference_update(pos_prefs)
 
         # if there are any preferences left that were used as a forall pref, return -1, since they were not defined as forall prefs
-        if len(self.prefs_used_as_pref_forall_prefs) > 0:
-            n_unused_prefs += len(self.prefs_used_as_pref_forall_prefs)
+        if len(prefs_used_as_pref_forall_prefs_names) > 0:
+            n_unused_prefs += sum(self.prefs_used_as_pref_forall_prefs[pref_name] for pref_name in prefs_used_as_pref_forall_prefs_names)
 
         if n_unused_prefs == 0:
             return 1
@@ -2290,7 +2287,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_identical_logical_children = NoIdenticalChildrenInLogicals()
     fitness.register(no_identical_logical_children)
 
-    no_identical_scoring_expression_children = NoIdenticalChildrenInScoringExpressions()
+    no_identical_scoring_expression_children = NoIdenticalScoringExpressions()
     fitness.register(no_identical_scoring_expression_children)
 
     tautological_boolean_expression = TautologicalBooleanExpression()

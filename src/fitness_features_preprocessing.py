@@ -32,7 +32,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
     'adjacent_once_found', 'once_in_middle_of_pref_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
-    'identical_scoring_children_found',
+    'identical_scoring_children_found', 'identical_scoring_expressions_found',
     'two_number_operation_found', 'single_argument_multi_operation_found',
     'tautological_expression_found', 'redundant_expression_found',
     'redundant_scoring_terminal_expression_found', 'at_end_found',

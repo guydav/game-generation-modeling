@@ -984,24 +984,34 @@ class NoIdenticalChildrenInLogicals(FitnessTerm):
         return self.identical_children != 0
 
 
-class NoIdenticalScoringExpressions(FitnessTerm):
-    expression_strings: typing.List[str]
+class NoIdenticalChildrenInScoringExpressions(FitnessTerm):
+    total_scoring_multi_expressions: int = 0
+    identical_children: int = 0
 
     def __init__(self):
-        super().__init__(COUNT_RULE_PATTERN, 'identical_scoring_expressions_found')
+        super().__init__(('scoring_equals_comp', 'scoring_multi_expr'), 'identical_scoring_children_found')
 
     def game_start(self) -> None:
-        self.expression_strings = []
+        self.total_scoring_multi_expressions = 0
+        self.identical_children = 0
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST) and context[SECTION_CONTEXT_KEY] == ast_parser.SCORING:
-            self.expression_strings.append(ast_printer.ast_section_to_string(ast, ast_parser.SCORING))
+        if isinstance(ast, tatsu.ast.AST):
+            children = ast.expr
+            if isinstance(children, tatsu.ast.AST) or len(children) < 2:  # type: ignore
+                return
+
+            self.total_scoring_multi_expressions += 1
+
+            children_strs = [ast_printer.ast_section_to_string(child, ast_parser.SCORING) for child in children]  # type: ignore
+            if len(set(children_strs)) != len(children_strs):
+                self.identical_children += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if len(self.expression_strings) == 0:
+        if self.total_scoring_multi_expressions == 0:
             return 0
 
-        return len(self.expression_strings) - len(set(self.expression_strings))
+        return self.identical_children != 0
 
 
 BOOLEAN_PARSER = ast_parser.ASTBooleanParser()
@@ -2287,7 +2297,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_identical_logical_children = NoIdenticalChildrenInLogicals()
     fitness.register(no_identical_logical_children)
 
-    no_identical_scoring_expression_children = NoIdenticalScoringExpressions()
+    no_identical_scoring_expression_children = NoIdenticalChildrenInScoringExpressions()
     fitness.register(no_identical_scoring_expression_children)
 
     tautological_boolean_expression = TautologicalBooleanExpression()

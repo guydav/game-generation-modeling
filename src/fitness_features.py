@@ -706,6 +706,25 @@ class OnceInMiddleOfPref(FitnessTerm):
         return self.prefs_with_once_in_middle > 0
 
 
+class PrefWithoutHold(FitnessTerm):
+    prefs_without_hold: int = 0
+
+    def __init__(self):
+        super().__init__('then', 'pref_without_hold_found')
+
+    def game_start(self) -> None:
+        self.prefs_without_hold = 0
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast.then_funcs, list):  # type: ignore
+            func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
+            if not any(rule == 'hold' or rule == 'while_hold' for rule in func_rules):
+                self.prefs_without_hold += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.prefs_without_hold > 0
+
+
 DEFAULT_LENGTH_OF_THEN_MIN_LENGTH = 1
 DEFAULT_LENGTH_OF_THEN_MAX_LENGTH = 7
 
@@ -1012,6 +1031,27 @@ class NoIdenticalChildrenInScoringExpressions(FitnessTerm):
             return 0
 
         return self.identical_children != 0
+
+
+class ScoringCountExpressionRepetitions(FitnessTerm):
+    scoring_expression_to_count: typing.Dict[str, int] = {}
+
+    def __init__(self):
+        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions')
+
+    def game_start(self) -> None:
+        self.scoring_expression_to_count = defaultdict(int)
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            self.scoring_expression_to_count[ast_printer.ast_section_to_string(ast, ast_parser.SCORING)] += 1
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.scoring_expression_to_count) == 0:
+            return 0
+
+        values = [v - 1 for v in self.scoring_expression_to_count.values()]
+        return dict(mean=np.mean(values), max=max(values))  # type: ignore
 
 
 BOOLEAN_PARSER = ast_parser.ASTBooleanParser()
@@ -2276,6 +2316,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     once_in_middle_of_pref = OnceInMiddleOfPref()
     fitness.register(once_in_middle_of_pref)
 
+    pref_without_hold = PrefWithoutHold()
+    fitness.register(pref_without_hold)
+
     length_of_then_modals = LengthOfThenModals()
     fitness.register(length_of_then_modals)
 
@@ -2299,6 +2342,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     no_identical_scoring_expression_children = NoIdenticalChildrenInScoringExpressions()
     fitness.register(no_identical_scoring_expression_children)
+
+    scoring_expression_repetitions = ScoringCountExpressionRepetitions()
+    fitness.register(scoring_expression_repetitions)
 
     tautological_boolean_expression = TautologicalBooleanExpression()
     fitness.register(tautological_boolean_expression)

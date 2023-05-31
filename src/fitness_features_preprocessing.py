@@ -30,7 +30,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'starts_and_ends_once', 'all_preferences_used',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
-    'adjacent_once_found', 'once_in_middle_of_pref_found',
+    'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
     'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
     'identical_scoring_children_found', 'identical_scoring_expressions_found',
     'two_number_operation_found', 'single_argument_multi_operation_found',
@@ -63,6 +63,7 @@ ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
     re.compile(r'pref_forall_[\w\d_]+_incorrect$'),  # since I now allow these to return a number, it might as well be scaled
+    re.compile(r'scoring_count_expression_repetitions_\w+'),
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [

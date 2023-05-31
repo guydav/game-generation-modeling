@@ -1037,7 +1037,7 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
     scoring_expression_to_count: typing.Dict[str, int] = {}
 
     def __init__(self):
-        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions')
+        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions_max')
 
     def game_start(self) -> None:
         self.scoring_expression_to_count = defaultdict(int)
@@ -1051,7 +1051,8 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
             return 0
 
         values = [v - 1 for v in self.scoring_expression_to_count.values()]
-        return dict(mean=np.mean(values), max=max(values))  # type: ignore
+        return max(values)  # type: ignore
+
 
 
 BOOLEAN_PARSER = ast_parser.ASTBooleanParser()

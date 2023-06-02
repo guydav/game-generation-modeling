@@ -273,6 +273,7 @@ class FitnessEnergyModel(nn.Module):
     def __init__(self, n_features: int, hidden_size: typing.Optional[int] = None,
         hidden_activation: typing.Callable = torch.relu,
         output_activation: typing.Optional[typing.Callable] = None,
+        output_scaling: float = 1.0,
         n_outputs: int = 1):
         super().__init__()
         self.n_features = n_features
@@ -280,6 +281,7 @@ class FitnessEnergyModel(nn.Module):
         if output_activation is None:
             output_activation = nn.Identity()
         self.output_activation = output_activation
+        self.output_scaling = output_scaling
 
         if hidden_size is None:
             self.fc1 = nn.Linear(self.n_features, self.n_outputs)
@@ -296,6 +298,8 @@ class FitnessEnergyModel(nn.Module):
         if self.hidden_activation is not None:
             x = self.hidden_activation(x)
             x = self.fc2(x)
+
+        x = self.output_scaling * x
 
         if self.n_outputs == 1 and activate and self.output_activation is not None:
             x = self.output_activation(x)
@@ -451,7 +455,7 @@ DEFAULT_MODEL_KWARGS = {
     'hidden_activation': torch.relu,
     'n_outputs': 1,
     'output_activation': None,
-
+    'output_scaling': 1.0,
 }
 
 DEFAULT_TRAIN_KWARGS = {

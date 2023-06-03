@@ -44,7 +44,8 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'mean_depth_[\w\d_]+'),
     re.compile(r'node_count_[\w\d_]+'),
     re.compile(r'max_width_[\w\d_]+'),
-    re.compile(r'pref_forall_[\w\d_]+_correct$'),
+    # re.compile(r'pref_forall_[\w\d_]+_correct$'),
+    re.compile(r'pref_forall_[\w\d_]+'),
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
@@ -62,7 +63,7 @@ ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
-    re.compile(r'pref_forall_[\w\d_]+_incorrect$'),  # since I now allow these to return a number, it might as well be scaled
+    # re.compile(r'pref_forall_[\w\d_]+_incorrect$'),  # since I now allow these to return a number, it might as well be scaled
     re.compile(r'scoring_count_expression_repetitions_\w+'),
 ]
 

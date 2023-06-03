@@ -3165,7 +3165,11 @@
 (:constraints (and
     (preference agentLeavesDogbedOrNoMoreBalls (exists (?d - doggie_bed)
         (then
-            (hold (<= (distance ?d agent) 1))
+            (once (> (distance ?d agent) 1))
+            (hold-while
+                (<= (distance ?d agent) 1)
+                (exists (?b - ball) (agent_holds ?b))
+            )
             (once (or
                 (> (distance ?d agent) 1)
                 (forall (?b - ball) (and

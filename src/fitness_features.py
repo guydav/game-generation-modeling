@@ -1262,7 +1262,7 @@ class PrefForallTerm(FitnessTerm):
         if inner_value > 0:
             return_value['correct'] = 1
         elif inner_value < 0:
-            return_value['incorrect'] = abs(inner_value)  # type: ignore
+            return_value['incorrect'] = 1  # abs(inner_value)  # type: ignore
 
         return return_value  # type: ignore
 

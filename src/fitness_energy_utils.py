@@ -292,6 +292,11 @@ class FitnessEnergyModel(nn.Module):
             self.fc2 = nn.Linear(hidden_size, self.n_outputs)
             self.hidden_activation = hidden_activation
 
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if not hasattr(self, 'output_scaling'):
+            self.output_scaling = 1.0
+
     def forward(self, x, activate: bool = True):
         x = self.fc1(x)
 

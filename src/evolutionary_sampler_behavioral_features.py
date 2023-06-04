@@ -1,3 +1,5 @@
+import abc
+import argparse
 import logging
 import numpy as np
 import typing
@@ -5,9 +7,13 @@ import re
 
 import tatsu
 import tatsu.ast
+import tatsu.grammars
+from sklearn.decomposition import PCA
+import umap
 
 import ast_parser
 import ast_printer
+from ast_utils import cached_load_and_parse_games_from_file
 from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
 import room_and_object_types
 
@@ -186,54 +192,180 @@ FEATURE_SETS = [
 ]
 
 
-def build_behavioral_features_featurizer(feature_set: str) -> ASTFitnessFeaturizer:
-    if feature_set not in FEATURE_SETS:
-        raise ValueError(f'Invalid feature set: {feature_set}')
+class BehavioralFeaturizer(abc.ABC):
+    @abc.abstractmethod
+    def get_feature_names(self) -> typing.List[str]:
+        pass
 
-    featurizer = ASTFitnessFeaturizer()
+    @abc.abstractmethod
+    def get_feature_value_counts(self) -> typing.Dict[str, int]:
+        pass
 
-    if feature_set == BASIC_BINNED:
-        featurizer.register(NodeCount())
-        featurizer.register(UniqueObjectsReferenced())
-        featurizer.register(UniquePredicatesReferenced())
+    @abc.abstractmethod
+    def get_game_features(self) -> typing.Dict[str, typing.Any]:
+        pass
 
-    elif feature_set == BASIC_WITH_NODE_DEPTH:
-        featurizer.register(NodeCount())
-        featurizer.register(UniqueObjectsReferenced())
-        featurizer.register(UniquePredicatesReferenced())
-        featurizer.register(MeanNodeDepth())
 
-    elif feature_set == NODE_COUNT_OBJECTS:
-        featurizer.register(NodeCount())
-        featurizer.register(UniqueObjectsReferenced())
+class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeaturizer):
+    def get_feature_names(self) -> typing.List[str]:
+        #  [4:] to remove the first few automatically-added columns
+        return self.get_all_column_keys()[4:]
 
-    elif feature_set == NODE_COUNT_PREDICATES:
-        featurizer.register(NodeCount())
-        featurizer.register(UniquePredicatesReferenced())
+    def get_feature_value_counts(self) -> typing.Dict[str, int]:
+        feature_to_term_mapping = self.get_column_to_term_mapping()
+        n_values_by_feature = {}
+        for feature_name in self.get_feature_names():
+            feature_term = feature_to_term_mapping[feature_name]
+            if hasattr(feature_term, 'bins'):
+                n_values = (len(feature_term.bins) + 1)  # type: ignore
 
-    elif feature_set == NODE_COUNT_OBJECTS_SETUP:
-        featurizer.register(NodeCount())
-        featurizer.register(UniqueObjectsReferenced())
-        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            else:
+                n_values = 2
 
-    elif feature_set == NODE_COUNT_PREDICATES_SETUP:
-        featurizer.register(NodeCount())
-        featurizer.register(UniquePredicatesReferenced())
-        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            n_values_by_feature[feature_name] = n_values
 
-    elif feature_set == SPECIFIC_PREDICATES_SETUP:
-        featurizer.register(PredicateUsed())
-        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+        return n_values_by_feature
 
-    elif feature_set == SPECIFIC_CATEGORIES_SETUP:
-        featurizer.register(ObjectCategoryUsed())
-        featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+        return self.parse(game, return_row=True)  # type: ignore
 
-    elif feature_set == NODE_COUNT_SPECIFIC_PREDICATES:
-        featurizer.register(NodeCount(NODE_COUNT_BINS_8))
-        featurizer.register(PredicateUsed())
 
-    else:
-        raise ValueError(f'Unimplemented feature set: {feature_set}')
+DEFAULT_N_COMPONENTS = 20
+DEFAULT_RANDOM_SEED = 33
 
-    return featurizer
+
+class PCABehavioralFeaturizer(BehavioralFeaturizer):
+    def __init__(self, feature_indices: typing.List[int], bins_per_feature: int,
+                 ast_file_path: str, grammar_parser: tatsu.grammars.Grammar,  # type: ignore
+                 fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str],
+                 n_components: int = DEFAULT_N_COMPONENTS, random_seed: int = DEFAULT_RANDOM_SEED):
+        self.feature_indices = feature_indices
+        self.bins_per_feature = bins_per_feature
+        self.ast_file_path = ast_file_path
+        self.grammar_parser = grammar_parser
+        self.fitness_featurizer = fitness_featurizer
+        self.feature_names = feature_names
+        self.n_components = n_components
+        self.random_seed = random_seed
+
+        self._init_pca()
+
+    def _game_to_feature_vector(self, game) -> np.ndarray:
+        game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
+        return np.array([game_features[name] for name in feature_names])  # type: ignore
+
+    def _init_pca(self):
+        game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
+        game_features = []
+        for game in game_asts:
+            game_features.append(self._game_to_feature_vector(game))
+
+        features_array = np.stack(game_features)
+
+        self.pca = PCA(n_components=self.n_components, random_state=self.random_seed)
+        projections = self.pca.fit_transform(features_array)
+
+        self.bins_by_feature_index = {}
+        for feature_index in self.feature_indices:
+            feature_values = projections[:, feature_index]
+            quantiles = np.quantile(feature_values, np.linspace(1 / (self.bins_per_feature - 1), 1, self.bins_per_feature - 1))
+            digits = np.digitize(feature_values, quantiles)
+            self.bins_by_feature_index[feature_index] = digits
+
+    def _feature_name(self, feature_index: int):
+        return f'pca_{feature_index}'
+
+    def get_feature_names(self) -> typing.List[str]:
+        return [self._feature_name(i) for i in self.feature_indices]
+
+    def get_feature_value_counts(self) -> typing.Dict[str, int]:
+        return {self._feature_name(i): self.bins_per_feature for i in self.feature_indices}
+
+    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+        game_vector = self._game_to_feature_vector(game)
+        game_projection = self.pca.transform(game_vector.reshape(1, -1))[0]
+        return {self._feature_name(i): np.digitize(game_projection[i], self.bins_by_feature_index[i]) for i in self.feature_indices}
+
+
+def build_behavioral_features_featurizer(
+        args: argparse.Namespace,
+        grammar_parser: tatsu.grammars.Grammar,  # type: ignore
+        fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str]
+        ) -> BehavioralFeaturizer:
+
+    feature_set = args.map_elites_custom_behavioral_features_key
+
+    if feature_set is not None:
+        if feature_set not in FEATURE_SETS:
+            raise ValueError(f'Invalid feature set: {feature_set}')
+
+        featurizer = FitnessFeaturesBehavioralFeaturizer()
+
+        if feature_set == BASIC_BINNED:
+            featurizer.register(NodeCount())
+            featurizer.register(UniqueObjectsReferenced())
+            featurizer.register(UniquePredicatesReferenced())
+
+        elif feature_set == BASIC_WITH_NODE_DEPTH:
+            featurizer.register(NodeCount())
+            featurizer.register(UniqueObjectsReferenced())
+            featurizer.register(UniquePredicatesReferenced())
+            featurizer.register(MeanNodeDepth())
+
+        elif feature_set == NODE_COUNT_OBJECTS:
+            featurizer.register(NodeCount())
+            featurizer.register(UniqueObjectsReferenced())
+
+        elif feature_set == NODE_COUNT_PREDICATES:
+            featurizer.register(NodeCount())
+            featurizer.register(UniquePredicatesReferenced())
+
+        elif feature_set == NODE_COUNT_OBJECTS_SETUP:
+            featurizer.register(NodeCount())
+            featurizer.register(UniqueObjectsReferenced())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+        elif feature_set == NODE_COUNT_PREDICATES_SETUP:
+            featurizer.register(NodeCount())
+            featurizer.register(UniquePredicatesReferenced())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+        elif feature_set == SPECIFIC_PREDICATES_SETUP:
+            featurizer.register(PredicateUsed())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+        elif feature_set == SPECIFIC_CATEGORIES_SETUP:
+            featurizer.register(ObjectCategoryUsed())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+        elif feature_set == NODE_COUNT_SPECIFIC_PREDICATES:
+            featurizer.register(NodeCount(NODE_COUNT_BINS_8))
+            featurizer.register(PredicateUsed())
+
+        else:
+            raise ValueError(f'Unimplemented feature set: {feature_set}')
+
+        return featurizer
+
+    indices = args.map_elites_pca_behavioral_features_indices
+    bins_per_feature = args.map_elites_pca_behavioral_features_bins_per_feature
+
+    if bins_per_feature is None:
+        raise ValueError('Must specify bins per feature for PCA featurizer')
+
+    ast_file_path = args.map_elites_pca_behavioral_features_ast_file_path
+    n_components = args.map_elites_pca_behavioral_features_n_components
+    random_seed = args.map_elites_pca_behavioral_features_random_seed
+
+    pca_featurizer = PCABehavioralFeaturizer(
+        feature_indices=indices,
+        bins_per_feature=bins_per_feature,
+        ast_file_path=ast_file_path,
+        grammar_parser=grammar_parser,
+        fitness_featurizer=fitness_featurizer,
+        feature_names=feature_names,
+        n_components=n_components,
+        random_seed=random_seed
+    )
+
+    return pca_featurizer

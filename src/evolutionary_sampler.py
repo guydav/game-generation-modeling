@@ -29,13 +29,13 @@ from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH, PRIOR_COUNT, LENGTH_PRIOR
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
 from ast_utils import *
-from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS
+from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS, BehavioralFeaturizer, DEFAULT_N_COMPONENTS
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
-from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
@@ -131,6 +131,11 @@ features_group.add_argument('--map-elites-behavioral-features-key', type=str, de
 features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
 parser.add_argument('--map-elites-use-crossover', action='store_true')
 parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
+
+parser.add_argument('--map-elites-pca-behavioral-features-indices', nargs='+', type=int, default=None)
+parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=str, default=LATEST_REAL_GAMES_PATH)
+parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=DEFAULT_N_COMPONENTS)
+parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=DEFAULT_N_COMPONENTS)
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -392,11 +397,6 @@ class PopulationBasedSampler():
         # Used to fix the AST context after crossover / mutation
         self.context_fixers = [ASTContextFixer(samplers[self.first_sampler_key], samplers[self.first_sampler_key].rng) for samplers in self.samplers]
 
-        self._pre_population_sample_setup()
-
-        # Generate the initial population
-        self._initialize_population()
-
         # Initialize the candidate pools in each genera
         self.candidates = SingleStepResults([], [], [], [], [])
 
@@ -408,11 +408,24 @@ class PopulationBasedSampler():
         self.generation_diversity_scores = np.zeros(self.population_size)
         self.generation_diversity_scores_index = -1
         self.saving = False
+        self.population_initialized = False
+
+    def initialize_population(self):
+        """
+        Separated to a second function that must be alled seaprately to allow for subclasses to initialize further
+        """
+        self.population_initialized = True
+
+        # Do any preliminary initialization
+        self._pre_population_sample_setup()
+
+        # Generate the initial population
+        self._inner_initialize_population()
 
     def _pre_population_sample_setup(self):
         pass
 
-    def _initialize_population(self):
+    def _inner_initialize_population(self):
         self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
@@ -1212,6 +1225,9 @@ class PopulationBasedSampler():
         # 4. score the candidates
         # 5. pass the initial population and the candidates to the "selector" which will return the new population
 
+        if hasattr(self, 'population_initialized') and not self.population_initialized:
+            raise ValueError('Cannot run evolutionary steps in parallel without initializing the population first')
+
         param_iterator = self._build_evolutionary_step_param_iterator(self._get_parent_iterator())
 
         if pool is not None:
@@ -1255,6 +1271,10 @@ class PopulationBasedSampler():
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
                                     postprocess: bool = False, use_imap: bool = True,
                                     compute_diversity_metrics: bool = False, save_interval: int = 0):
+
+        if hasattr(self, 'population_initialized') and not self.population_initialized:
+            raise ValueError('Cannot run multiple evolutionary steps without initializing the population first')
+
         step_iter = range(num_steps)
         if should_tqdm:
             pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
@@ -1305,6 +1325,9 @@ class PopulationBasedSampler():
                                              inner_tqdm: bool = False, postprocess: bool = False, use_imap: bool = True,
                                              compute_diversity_metrics: bool = False, save_interval: int = 0,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
+
+        if hasattr(self, 'population_initialized') and not self.population_initialized:
+            raise ValueError('Cannot run multiple evolutionary steps in parallel without initializing the population first')
 
         logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
@@ -1381,7 +1404,7 @@ def count_set_bits(n: int) -> int:
 
 class MAPElitesSampler(PopulationBasedSampler):
     archive_metrics_history: typing.List[typing.Dict[str, int | float]]
-    custom_featurizer: typing.Optional[ASTFitnessFeaturizer]
+    custom_featurizer: typing.Optional[BehavioralFeaturizer]
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
@@ -1406,8 +1429,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  key_type: MAPElitesKeyType,
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
-                 map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
-                 custom_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
+                 custom_featurizer: typing.Optional[BehavioralFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
                  use_crossover: bool = False,
@@ -1418,7 +1440,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.key_type = key_type
         self.weight_strategy = weight_strategy
         self.initialization_strategy = initialization_strategy
-        self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
         self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
@@ -1444,13 +1465,32 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         super().__init__(*args, **kwargs)
 
+        argparse_args = kwargs['args']
+
+        if argparse_args.map_elites_behavioral_features_key is not None:
+            feature_set_key = argparse_args.map_elites_behavioral_features_key
+            if feature_set_key not in BEHAVIORAL_FEATURE_SETS:
+                raise ValueError(f'Unknown behavioral feature set {feature_set_key}, must be one of {list(BEHAVIORAL_FEATURE_SETS.keys())}')
+
+            features = BEHAVIORAL_FEATURE_SETS[feature_set_key]
+            custom_featurizer = None
+
+        else:  # args.map_elites_custom_behavioral_features_key is not None:
+            custom_featurizer = build_behavioral_features_featurizer(feature_set)
+            features = custom_featurizer.get_feature_names()
+            if self.key_type != MAPElitesKeyType.TUPLE:
+                logger.info('Setting key type to tuple because custom behavioral features are used')
+                self.map_elites_key_type = MAPElitesKeyType.TUPLE
+
+        self.map_elites_feature_names_or_patterns = features  # type: ignore
+
     def _pre_population_sample_setup(self):
         self.map_elites_feature_names = []
 
         names = set([name for name in self.map_elites_feature_names_or_patterns if isinstance(name, str)])
         patterns = [pattern for pattern in self.map_elites_feature_names_or_patterns if isinstance(pattern, re.Pattern)]
 
-        all_feature_names = self.feature_names if self.custom_featurizer is None else extract_custom_featurizer_feature_names(self.custom_featurizer)
+        all_feature_names = self.feature_names if self.custom_featurizer is None else self.custom_featurizer.get_feature_names()
 
         for feature_name in all_feature_names:
             if feature_name in names:
@@ -1471,7 +1511,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.population = OrderedDict()
         self.fitness_values = OrderedDict()
 
-    def _initialize_population(self):
+    def _inner_initialize_population(self):
         '''
         Creates the initial population of the archive by either:
         - randomly sampling from the initial sampler until a specified number of samples are added to the archive (i.e. number of cells are filled)
@@ -1481,7 +1521,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
             # Create initial population by generating self.population_size random samples
             if self.initialization_strategy == MAPElitesInitializationStrategy.FIXED_SIZE:
-                super()._initialize_population()
+                super()._inner_initialize_population()
 
             # Create initial population by generating random samples until the archive has self.population_size samples
             elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_SIZE:
@@ -1502,23 +1542,12 @@ class MAPElitesSampler(PopulationBasedSampler):
             # Create initial population by generating random samples until the archive has at least one sample for each feature value
             elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_EXEMPLARS:
                 if self.custom_featurizer is not None:
-                    feature_to_term_mapping = self.custom_featurizer.get_column_to_term_mapping()
-                    total_feature_count = 0
-                    n_values_by_feature = {}
-                    for feature_name in self.map_elites_feature_names:
-                        feature_term = feature_to_term_mapping[feature_name]
-                        if hasattr(feature_term, 'bins'):
-                            n_values = (len(feature_term.bins) + 1)  # type: ignore
-
-                        else:
-                            n_values = 2
-
-                        total_feature_count += n_values
-                        n_values_by_feature[feature_name] = n_values
+                    n_values_by_feature = self.custom_featurizer.get_feature_value_counts()
 
                 else:
                     n_values_by_feature = {feature_name: 2 for feature_name in self.map_elites_feature_names}
-                    total_feature_count = 2 * len(self.map_elites_feature_names)
+
+                total_feature_count = sum(n_values_by_feature.values())
 
                 pbar = tqdm(total=total_feature_count, desc="Initial archive")  # type: ignore
 
@@ -1629,7 +1658,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         Given an iterator over parents, return an iterator over tuples of (parent, generation_index, sample_index, return_features)
         '''
 
-        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))
+        return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count(), itertools.repeat(True))  # type: ignore
 
     def _update_population_statistics(self):
         self.population_size = len(self.population)
@@ -1832,11 +1861,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         return self.population[key]
 
 
-def extract_custom_featurizer_feature_names(featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
-    #  [4:] to remove the first few automatically-added columns
-    return featurizer.get_all_column_keys()[4:]
-
-
 feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
 def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
     return any(sample_features[name] for name in feature_names) or bool(sample_features['at_end_found'])
@@ -1847,29 +1871,7 @@ SAMPLE_FILTER_FUNCS = {
 }
 
 
-
-def main(args):
-    sampler_kwargs = dict(
-        omit_rules=args.omit_rules,
-        omit_tokens=args.omit_tokens,
-    )
-
-    if len(args.sampler_prior_count) == 0:
-        logging.info(f'No prior count specified, using default of {PRIOR_COUNT}')
-        args.sampler_prior_count = [PRIOR_COUNT]
-
-    vars_args = vars(args)
-    vars_args['sample_filter_func'] = None
-    if args.sampler_filter_func_key is not None:
-        if args.sampler_filter_func_key not in SAMPLE_FILTER_FUNCS:
-            raise ValueError(f'Unknown sample filter function {args.sampler_filter_func_key}, must be one of {list(SAMPLE_FILTER_FUNCS.keys())}')
-
-        vars_args['sample_filter_func'] = SAMPLE_FILTER_FUNCS[args.sampler_filter_func_key]
-
-    vars_args['commit_hash'] = Repo(search_parent_directories=True).head.object.hexsha
-
-    if args.sampler_type == MAP_ELITES:
-        BEHAVIORAL_FEATURE_SETS = {
+BEHAVIORAL_FEATURE_SETS = {
             'compositionality_structures': [
                 re.compile(r'compositionality_structure_.*'),
             ],
@@ -1924,21 +1926,29 @@ def main(args):
             ]
         }
 
-        if args.map_elites_behavioral_features_key is not None:
-            feature_set_key = args.map_elites_behavioral_features_key
-            if feature_set_key not in BEHAVIORAL_FEATURE_SETS:
-                raise ValueError(f'Unknown behavioral feature set {feature_set_key}, must be one of {list(BEHAVIORAL_FEATURE_SETS.keys())}')
 
-            features = BEHAVIORAL_FEATURE_SETS[feature_set_key]
-            custom_featurizer = None
+def main(args):
+    sampler_kwargs = dict(
+        omit_rules=args.omit_rules,
+        omit_tokens=args.omit_tokens,
+    )
 
-        else:  # args.map_elites_custom_behavioral_features_key is not None:
-            feature_set = args.map_elites_custom_behavioral_features_key
-            custom_featurizer = build_behavioral_features_featurizer(feature_set)
-            features = extract_custom_featurizer_feature_names(custom_featurizer)
-            if args.map_elites_key_type != 1:
-                logger.info('Setting key type to tuple because custom behavioral features are used')
-                args.map_elites_key_type = 1
+    if len(args.sampler_prior_count) == 0:
+        logging.info(f'No prior count specified, using default of {PRIOR_COUNT}')
+        args.sampler_prior_count = [PRIOR_COUNT]
+
+    vars_args = vars(args)
+    vars_args['sample_filter_func'] = None
+    if args.sampler_filter_func_key is not None:
+        if args.sampler_filter_func_key not in SAMPLE_FILTER_FUNCS:
+            raise ValueError(f'Unknown sample filter function {args.sampler_filter_func_key}, must be one of {list(SAMPLE_FILTER_FUNCS.keys())}')
+
+        vars_args['sample_filter_func'] = SAMPLE_FILTER_FUNCS[args.sampler_filter_func_key]
+
+    vars_args['commit_hash'] = Repo(search_parent_directories=True).head.object.hexsha
+
+    if args.sampler_type == MAP_ELITES:
+
 
         if args.map_elites_use_crossover:
             logger.info('Using crossover in MAP-Elites => emitting two samples at a time => halving generation and chunk sizes')
@@ -1947,8 +1957,6 @@ def main(args):
             logger.info(f'New generation size: {args.map_elites_generation_size}, new chunksize: {args.parallel_chunksize}')
 
         evosampler = MAPElitesSampler(
-            map_elites_feature_names_or_patterns=features,  # type: ignore
-            custom_featurizer=custom_featurizer,
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),

@@ -742,10 +742,6 @@ class ASTSampler:
 
         field_prior[LENGTH_POSTERIOR] = self._normalize_posterior_dict(length_posterior)  # type: ignore
 
-        if rule_name == 'then':
-            print(f'Length posterior for {rule_name}.{field_name}: {field_prior[LENGTH_POSTERIOR]}')
-
-
     def _create_value_posterior(self, rule_name: str, field_name: str,
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
         value_type: str, field_counter: typing.Optional[RuleKeyValueCounter], rule_hybrird: bool = False):

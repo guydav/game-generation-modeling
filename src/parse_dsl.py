@@ -1,33 +1,40 @@
 import argparse
+import sys
 import tatsu
+import tatsu.exceptions
 import tqdm
 
 import ast_printer
-from ast_utils import load_tests_from_file
+from ast_utils import cached_load_and_parse_games_from_file
+
 
 parser = argparse.ArgumentParser()
-DEFAULT_GRAMMAR_FILE = './dsl.ebnf'
+DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('-s', '--stop-tokens', action='append')
-parser.add_argument('-t', '--test-file', default='./problems-few-objects.pddl')
+parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')
 parser.add_argument('-p', '--pretty-print', action='store_true')
 parser.add_argument('-v', '--validate', action='store_true')
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
+DEFAULT_RECURSION_LIMIT = 2000
+parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 
 
-    
 def main(args):
+    original_recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(args.recursion_limit)
+
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = load_tests_from_file(args.test_file, stop_tokens=args.stop_tokens)
+    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, True, # type: ignore
+                                                       '.', 1024, False)
     if not args.dont_tqdm:
         test_cases = tqdm.tqdm(test_cases)
 
-    for test_case in test_cases:
+    for ast in test_cases:
         ast_printer.BUFFER = None
         try:
-            ast = grammar_parser.parse(test_case)
             if args.pretty_print:
                 ast_printer.pretty_print_ast(ast)
             if args.validate:
@@ -45,21 +52,19 @@ def main(args):
 
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
-            print(test_case[:test_case.find('(:domain')])
-            print(f'Parse failed: at position {e.pos} expected {e.item}:')
-            print(test_case[e.pos:])
-            break
+            raise e
+            # print(test_case[:test_case.find('(:domain')])
+            # print(f'Parse failed: at position {e.pos} expected {e.item}')
+            # print(test_case[e.pos:])
+            # break
 
         finally:
             pass
         # pprint(ast, width=20, depth=4)
 
+    sys.setrecursionlimit(original_recursion_limit)
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
     main(args)
-
-
-
-
-

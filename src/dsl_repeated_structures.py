@@ -1,13 +1,16 @@
 import argparse
 from collections import namedtuple, defaultdict
 import tatsu
+import tatsu.ast
+import tatsu.infos
+import typing
 import tqdm
 import pandas as pd
 import numpy as np
 import os
 import re
 
-from parse_dsl import load_tests_from_file
+from parse_dsl import load_games_from_file
 from ast_parser import ASTParser
 from ast_utils import update_ast
 import ast_printer
@@ -34,6 +37,9 @@ TEMPORAL_OPERATOR_STRUCTURE_STARTS = ('once', 'hold', 'hold-while')
 DEFAULT_HEADERS = ('structure_start', 'structure', 'count')
 
 
+# TODO: rewrite this to support the latest DSL
+
+
 class RepeatedStructureExtractor(ASTParser):
     def __init__(self, structure_starts, headers=DEFAULT_HEADERS):
         self.structure_starts = structure_starts
@@ -45,7 +51,7 @@ class RepeatedStructureExtractor(ASTParser):
         self.rule_registry = defaultdict(list)
         self.tuple_registry = defaultdict(list)
         self.regex_rules = []
-        self.whitespace_re = re.compile('\s+')
+        self.whitespace_re = re.compile(r'\s+')
 
     def _register(self, rule, replacer, tuple_rule=False):
         if tuple_rule:
@@ -63,7 +69,7 @@ class RepeatedStructureExtractor(ASTParser):
             else:
                 for rule in rule_or_pattern:
                     self._register(rule, replacer, tuple_rule)
-        
+
     def to_df(self):
         rows = []
         for start, struct_to_count_dict in self.observed_structures.items():
@@ -80,6 +86,8 @@ class RepeatedStructureExtractor(ASTParser):
             for structure_start_match in structure_start_matches:
                 structure_start_index = structure_start_match.start()
                 n_open_parens = 0
+
+                end_index = 0
 
                 for end_index in range(structure_start_index, len(ast_str)):
                     if ast_str[end_index] == ')':
@@ -105,14 +113,12 @@ class RepeatedStructureExtractor(ASTParser):
         super().__call__(ast, **kwargs)
 
         if is_root:
-            # TODO: think about how to do the second part, of actually extracting the motifs
-
             ast_printer.reset_buffers(True)
             ast_printer.pretty_print_ast(ast)
-            ast_str = ''.join(ast_printer.BUFFER)
+            ast_str = ''.join(ast_printer.BUFFER)  # type: ignore
             self._extract_structures_from_str(ast_str)
 
-        return 
+        return
 
     def _handle_tuple(self, ast, **kwargs):
         if ast[0].startswith('(:'):
@@ -133,7 +139,7 @@ class RepeatedStructureExtractor(ASTParser):
 
 
 def _build_fake_predicate(old_parseinfo):
-    fake_parseinfo = tatsu.infos.ParseInfo(old_parseinfo.tokenizer, 'predicate', 
+    fake_parseinfo = tatsu.infos.ParseInfo(old_parseinfo.tokenizer, 'predicate',
         old_parseinfo.pos, old_parseinfo.endpos, old_parseinfo.line, old_parseinfo.endline)
 
     return tatsu.ast.AST(pred_name='predicate', pred_args=[], parseinfo=fake_parseinfo)
@@ -153,15 +159,27 @@ def build_preference_body_level_extractor(args):
     return build_variables_and_objects_extractor(args, PREFERENCE_BODY_STRUCTURE_STARTS)
 
 
-def build_variables_and_objects_extractor(args, structure_starts, replace_predicate_names=False, 
+def _extract_predicate_terms(ast: tatsu.ast.AST) -> typing.List[str]:
+    args = ast.pred_args
+
+    if args is None:
+        return []
+
+    if isinstance(args, tatsu.ast.AST):
+        args = [args]
+
+    return [str(arg.term) for arg in args]
+
+
+def build_variables_and_objects_extractor(args, structure_starts, replace_predicate_names=False,
     replace_non_variable_args=True, variable_replacement='?x', non_variable_replacement='?x',
-    replace_comparison_numbers=True, number_replacement='0', type_replacement='object_type'):
+    replace_comparison_numbers=True, number_replacement='0', type_replacement='object'):
 
     if args.replace_predicate_names:
         replace_predicate_names = args.replace_predicate_names
 
     extractor = RepeatedStructureExtractor(structure_starts)
-    
+
     def handle_predicate(ast, **kwargs):
         if replace_predicate_names and 'pred_name' in ast:
             update_ast(ast, 'pred_name', 'predicate')
@@ -185,7 +203,7 @@ def build_variables_and_objects_extractor(args, structure_starts, replace_predic
                 update_ast(ast, 'comp_arg', variable_replacement)
             elif replace_non_variable_args:
                 update_ast(ast, 'comp_arg', type_replacement)
-            
+
 
     extractor.register('function_comparison', handle_function_comparison)
 
@@ -241,7 +259,7 @@ def build_variables_and_objects_extractor(args, structure_starts, replace_predic
 
 def build_oversimplified_structure_extractor(args):
     extractor = RepeatedStructureExtractor(PREFERENCE_BODY_STRUCTURE_STARTS)
-    
+
     # def handle_predicate(ast, **kwargs):
     #     if 'pred_name' in ast:
     #         update_ast(ast, 'pred_name', 'predicate')
@@ -299,12 +317,12 @@ def main(args):
 
     if args.build_function in globals():
         extractor = globals()[args.build_function](args)
-    
+
     else:
         raise ValueError(f'Unknown build function: {args.build_function}')
 
     for test_file in args.test_files:
-        test_cases = load_tests_from_file(test_file)
+        test_cases = load_games_from_file(test_file)
 
         if not args.dont_tqdm:
             test_cases = tqdm.tqdm(test_cases)
@@ -319,12 +337,12 @@ def main(args):
         args.output_path = args.output_path.replace('.csv', '_pred_names_replaced.csv')
 
 
-    df.to_csv(args.output_path, index_label='Index')    
+    df.to_csv(args.output_path, index_label='Index')
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
-    
+
     main(args)

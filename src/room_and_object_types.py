@@ -3,7 +3,7 @@ import argparse
 
 from pandas import options
 
-# -- CATEGOTIES -- 
+# -- CATEGOTIES --
 
 AGENT = 'agent'
 ANY_OBJECT = 'any_object'
@@ -15,13 +15,15 @@ EMPTY_OBJECT = 'empty_object'
 FURNITURE = 'furniture'
 LARGE_OBJECTS = 'large_objects'
 MEDIUM_OBJECTS = 'medium_objects'
-OTHER_OBJECTS = 'other_objects'
+ORIENTATIONS = 'orientations'
 RAMPS = 'ramps'
 RECEPTACLES = 'receptacles'
 ROOM_FEATURES = 'room_features'
+SIDES = 'sides'
 SMALL_OBJECTS = 'small_objects'
 
-# -- OBJECT TYPES -- 
+
+# -- OBJECT TYPES --
 
 # AGENT
 AGENT = 'agent'
@@ -108,6 +110,7 @@ HEXAGONAL_BIN = 'hexagonal_bin'
 # ROOM_FEATURES
 DOOR = 'door'
 FLOOR = 'floor'
+ROOM_CENTER = 'room_center'
 RUG = 'rug'
 SHELF = 'shelf'
 BOTTOM_SHELF = 'bottom_shelf'
@@ -132,6 +135,28 @@ PEN = 'pen'
 PENCIL = 'pencil'
 WATCH = 'watch'
 
+# SIDES
+BACK = 'back'
+FRONT = 'front'
+FRONT_LEFT_CORNER = 'front_left_corner'
+LEFT = 'left'
+RIGHT = 'right'
+
+#  ORIENTATIONS
+DIAGONAL = 'diagonal'
+SIDEWAYS = 'sideways'
+UPRIGHT = 'upright'
+UPSIDE_DOWN = 'upside_down'
+
+
+# -- MAPPINGS --
+DIRECTLY_REFERRED_OBJECTS = [
+    AGENT, BED, BOTTOM_SHELF, DESK, DESKTOP,
+    DOOR, EAST_SLIDING_DOOR, FLOOR, GREEN_GOLFBALL,
+    MAIN_LIGHT_SWITCH, NORTH_WALL, PINK_DODGEBALL,
+    ROOM_CENTER, RUG, SIDE_TABLE, SOUTH_WALL,
+    SOUTH_WEST_CORNER, TOP_DRAWER, TOP_SHELF, WEST_WALL
+]
 
 # -- MAPPINGS --
 
@@ -152,33 +177,39 @@ CATEGORIES_TO_TYPES = {
         BLUE_CUBE_BLOCK, BLUE_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, YELLOW_CUBE_BLOCK,
     ),
     COLORS: (
-        COLOR, BLUE, BROWN, GRAY, GREEN, 
-        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED, 
+        COLOR, BLUE, BROWN, GRAY, GREEN,
+        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED,
         TAN, WHITE, YELLOW,
     ),
     EMPTY_OBJECT: (
         EMPTY_OBJECT_OBJ,
     ),
     FURNITURE: (
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF,  # TODO: does chair qualify as funiture? since it's movable
-        DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, TOP_DRAWER, SIDE_TABLE,
+        BED, BLINDS, DESK, DESK_SHELF,
+        DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, SIDE_TABLE,
     ),
     BUILDING: (
         BUILDING,
     ),
     LARGE_OBJECTS: (
-        BOOK, LAPTOP, PILLOW, TEDDY_BEAR,
+        BOOK, CHAIR, LAPTOP, PILLOW, TEDDY_BEAR,
+    ),
+    ORIENTATIONS: (
+        DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
     ),
     RAMPS: (
         CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, GREEN_TRIANGULAR_RAMP,
     ),
     RECEPTACLES: (
-        DOGGIE_BED, HEXAGONAL_BIN,
+        DOGGIE_BED, HEXAGONAL_BIN, TOP_DRAWER,
     ),
     ROOM_FEATURES: (
-        DOOR, FLOOR, RUG, SHELF, BOTTOM_SHELF,
+        DOOR, FLOOR, RUG, ROOM_CENTER, SHELF, BOTTOM_SHELF,
         TOP_SHELF, SLIDING_DOOR, EAST_SLIDING_DOOR, SOUTH_WEST_CORNER, WALL,
         NORTH_WALL, SOUTH_WALL, WEST_WALL,
+    ),
+    SIDES: (
+        BACK, FRONT, FRONT_LEFT_CORNER, LEFT, RIGHT,
     ),
     SMALL_OBJECTS: (
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN,
@@ -196,16 +227,18 @@ ROOM_NAMES = (FEW, MEDIUM, MANY)
 
 FULL_ROOMS_UNCATEGORIZED_OBJECTS = 'uncategorized_objects'
 
-
+ABSTRACT_OBJECTS_IN_ALL_ROOMS = {
+    AGENT: 1,
+    GAME_OBJECT: 1,
+    BUILDING: 1,
+    EMPTY_OBJECT_OBJ: 1,
+    **{type_name: 1 for type_name in CATEGORIES_TO_TYPES[ORIENTATIONS]},
+    **{type_name: 1 for type_name in CATEGORIES_TO_TYPES[SIDES]},
+}
 
 FULL_ROOMS_TO_OBJECTS = {
     FEW: {
-        FULL_ROOMS_UNCATEGORIZED_OBJECTS: {
-            AGENT: 1, 
-            GAME_OBJECT: 1,
-            BUILDING: 1,
-            EMPTY_OBJECT_OBJ: 1,
-        },
+        FULL_ROOMS_UNCATEGORIZED_OBJECTS: ABSTRACT_OBJECTS_IN_ALL_ROOMS,
         BALLS: {
             BALL: 1,
             DODGEBALL: {BLUE: 1, PINK: 1},
@@ -237,7 +270,6 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -249,6 +281,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
         RECEPTACLES: {
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,
@@ -256,6 +289,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 4,
             SLIDING_DOOR: 2,
@@ -279,12 +313,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
     },
     MEDIUM: {
-        FULL_ROOMS_UNCATEGORIZED_OBJECTS: {
-            AGENT: 1, 
-            GAME_OBJECT: 1,
-            BUILDING: 1,
-            EMPTY_OBJECT_OBJ: 1,
-        },
+        FULL_ROOMS_UNCATEGORIZED_OBJECTS: ABSTRACT_OBJECTS_IN_ALL_ROOMS,
         BALLS: {
             BALL: 1,
             BASKETBALL: 1,
@@ -325,8 +354,7 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
-            
+
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -340,6 +368,7 @@ FULL_ROOMS_TO_OBJECTS = {
         RECEPTACLES: {
             DOGGIE_BED: 1,
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,
@@ -347,6 +376,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 2,
             SLIDING_DOOR: 2,
@@ -370,12 +400,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
     },
     MANY: {
-        FULL_ROOMS_UNCATEGORIZED_OBJECTS: {
-            AGENT: 1, 
-            GAME_OBJECT: 1,
-            BUILDING: 1,
-            EMPTY_OBJECT_OBJ: 1,
-        },
+        FULL_ROOMS_UNCATEGORIZED_OBJECTS: ABSTRACT_OBJECTS_IN_ALL_ROOMS,
         BALLS: {
             BALL: 1,
             BEACHBALL: 1,
@@ -418,7 +443,7 @@ FULL_ROOMS_TO_OBJECTS = {
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-            TOP_DRAWER: 1,
+
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -432,6 +457,7 @@ FULL_ROOMS_TO_OBJECTS = {
         },
         RECEPTACLES: {
             HEXAGONAL_BIN: 1,
+            TOP_DRAWER: 1,
         },
         ROOM_FEATURES: {
             BOTTOM_SHELF: 1,
@@ -439,6 +465,7 @@ FULL_ROOMS_TO_OBJECTS = {
             EAST_SLIDING_DOOR: 1,
             FLOOR: 1,
             NORTH_WALL: 1,
+            ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 2,
             SLIDING_DOOR: 2,
@@ -467,22 +494,22 @@ FULL_ROOMS_TO_OBJECTS = {
 # ROOMS_TO_AVAILABLE_OBJECTS = {
 #     FEW: set([
 #         'agent',
-#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 
+#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball',
 #         'block', 'cube_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'curved_wooden_ramp', 'hexagonal_bin',
-#         'laptop', 'pillow', 
+#         'laptop', 'pillow',
 #         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
 #         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',
 #     ]),
 #     MEDIUM: set([
 #         'agent',
 #         'ball', 'basketball', 'beachball', 'dodgeball', 'red_dodgeball',
-#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 
+#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block',
 #         'yellow_pyramid_block', 'red_pyramid_block', 'yellow_cube_block', 'blue_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'doggie_bed', 'hexagonal_bin',  'triangular_ramp',
@@ -495,7 +522,7 @@ FULL_ROOMS_TO_OBJECTS = {
 #         'ball', 'beachball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 'red_dodgeball', 'golfball', 'green_golfball',
 #         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 'triangle_block',
 #         'yellow_pyramid_block', 'red_pyramid_block', 'blue_pyramid_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow', 
+#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
 #         'curved_wooden_ramp', 'doggie_bed', 'green_triangular_ramp', 'hexagonal_bin',  'triangular_ramp',
@@ -507,7 +534,7 @@ FULL_ROOMS_TO_OBJECTS = {
 
 ROOMS_TO_AVAILABLE_OBJECTS = {
     FEW: set([
-        EMPTY_OBJECT_OBJ, AGENT, BUILDING, GAME_OBJECT,
+        *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
         BALL, DODGEBALL, BLUE_DODGEBALL, PINK_DODGEBALL,
         BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
@@ -519,7 +546,7 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
     MEDIUM: set([
-        EMPTY_OBJECT_OBJ, AGENT, BUILDING, GAME_OBJECT,
+        *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
         BALL, BASKETBALL, BEACHBALL, DODGEBALL, RED_DODGEBALL,
         BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, YELLOW_CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
@@ -531,7 +558,7 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
     MANY: set([
-        EMPTY_OBJECT_OBJ, AGENT, BUILDING, GAME_OBJECT,
+        *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
         BALL, BEACHBALL, DODGEBALL, BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL, GOLFBALL, GREEN_GOLFBALL,
         BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TRIANGLE_BLOCK,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
@@ -543,6 +570,18 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
 }
+
+
+# Copied from `reward_machines/config.py`
+META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],
+              BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK,
+                      PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TALL_RECTANGULAR_BLOCK, TRIANGLE_BLOCK],
+              COLOR: CATEGORIES_TO_TYPES[COLORS],
+              CUBE_BLOCK: [BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK],
+              DODGEBALL: [BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL],
+              PYRAMID_BLOCK: [ BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK]}
+
+TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
 
 
 # print('FULL_ROOMS_TO_OBJECTS = {')
@@ -576,8 +615,8 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
 #         for obj, count in sorted(room_types_to_categories[key].items(), key=lambda x: x[0]):
 
 #             if isinstance (count, list):
-#                 count = f'{{]{", ".join([c.upper() + ": 1" for c in sorted(count)])}, }}' 
-            
+#                 count = f'{{]{", ".join([c.upper() + ": 1" for c in sorted(count)])}, }}'
+
 #             print(f'{" " * 12}{obj.upper()}: {count},')
 
 #         print(f'{" " * 8}}},')
@@ -600,10 +639,21 @@ ROOMS_TO_AVAILABLE_OBJECTS = {
 #                 category_objects.extend([f'{color}_{key}'.upper() for color in value])
 
 #         print(f'{" " * 8}{", ".join(category_objects)},')
-            
+
 #     print('    ]),')
 
 # print('}')
+
+parser = argparse.ArgumentParser()
+DEFAULT_START_TOKEN = '[CONTENTS]'
+parser.add_argument('-s', '--start-token', default=DEFAULT_START_TOKEN)
+DEFAULT_CATEGORIES_TO_SKIP = (FULL_ROOMS_UNCATEGORIZED_OBJECTS, COLORS)
+parser.add_argument('-c', '--skip-categories', nargs='+', default=DEFAULT_CATEGORIES_TO_SKIP)
+DEFAULT_TYPES_TO_SKIP = (BALL, BLOCK)
+parser.add_argument('-t', '--skip-types', nargs='+', default=DEFAULT_TYPES_TO_SKIP)
+parser.add_argument('--separator', default=', ')
+parser.add_argument('-b', '--break-after-category', action='store_true', default=False)
+parser.add_argument('-v', '--verbose', action='store_true')
 
 
 def get_room_objects_naive(start_token, skip_categories, skip_types, separator, break_after_category=False, verbose=False):
@@ -650,7 +700,7 @@ def get_room_objects_naive(start_token, skip_categories, skip_types, separator, 
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[f"{room.lower()}_objects"] = room_str
+        room_object_strs[room] = room_str
 
     return room_object_strs
 
@@ -699,7 +749,7 @@ def get_room_objects_categories(start_token, skip_categories, skip_types, separa
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[f"{room.lower()}_objects"] = room_str
+        room_object_strs[room] = room_str
 
     return room_object_strs
 
@@ -729,7 +779,7 @@ def get_room_objects_colors(start_token, skip_categories, skip_types, separator,
                 elif isinstance(count, dict):
                     type_buffer = []
                     for color, color_count in count.items():
-                        
+
                         if color_count == 1:
                             type_buffer.append(color)
                         else:
@@ -751,7 +801,7 @@ def get_room_objects_colors(start_token, skip_categories, skip_types, separator,
 
         room_str = f'{start_token}: {" ".join(total_buffer)}'
         if verbose: print(room_str)
-        room_object_strs[f"{room.lower()}_objects"] = room_str
+        room_object_strs[room] = room_str
 
     return room_object_strs
 
@@ -764,32 +814,14 @@ MODES_TO_FUNCTIONS = {
     CATEGORY_MODE: get_room_objects_categories,
     COLOR_MODE: get_room_objects_colors,
 }
-DEFAULT_START_TOKEN = '[CONTENTS]'
-DEFAULT_CATEGORIES_TO_SKIP = (FULL_ROOMS_UNCATEGORIZED_OBJECTS, COLORS)
-DEFAULT_TYPES_TO_SKIP = (BALL, BLOCK)
-    
-def get_room_contents(mode, start_token=DEFAULT_START_TOKEN, skip_categories=DEFAULT_CATEGORIES_TO_SKIP, 
-                      skip_types=DEFAULT_TYPES_TO_SKIP, separator=', ', break_after_category=False, verbose=False):
-
-    out = MODES_TO_FUNCTIONS[mode](start_token, skip_categories, skip_types, separator, break_after_category, verbose)
-
-    return out
+parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
 
 
 def foo(**kwargs):
     print(kwargs)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--start-token', default=DEFAULT_START_TOKEN)
-    parser.add_argument('-m', '--mode', choices=list(MODES_TO_FUNCTIONS.keys()))
-    parser.add_argument('-c', '--skip-categories', nargs='+', default=DEFAULT_CATEGORIES_TO_SKIP)
-    parser.add_argument('-t', '--skip-types', nargs='+', default=DEFAULT_TYPES_TO_SKIP)
-    parser.add_argument('--separator', default=', ')
-    parser.add_argument('-b', '--break-after-category', action='store_true', default=False)
-    parser.add_argument('-v', '--verbose', action='store_true')
-
     args = parser.parse_args()
-
-    get_room_contents(**args.__dict__)
-
+    mode = args.mode
+    delattr(args, 'mode')
+    out = MODES_TO_FUNCTIONS[mode](**args.__dict__)

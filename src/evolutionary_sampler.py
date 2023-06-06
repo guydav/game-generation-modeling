@@ -1490,7 +1490,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             features = custom_featurizer.get_feature_names()
             if self.key_type != MAPElitesKeyType.TUPLE:
                 logger.info('Setting key type to tuple because custom behavioral features are used')
-                self.map_elites_key_type = MAPElitesKeyType.TUPLE
+                self.key_type = MAPElitesKeyType.TUPLE
 
         self.map_elites_feature_names_or_patterns = features  # type: ignore
         self.custom_featurizer = custom_featurizer

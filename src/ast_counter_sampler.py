@@ -24,7 +24,7 @@ import tqdm
 
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
-from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping
+from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping, LOCAL_CONTEXT_PROPAGATING_RULES
 import room_and_object_types
 
 logger = logging.getLogger(__name__)
@@ -534,7 +534,6 @@ PATTERN_TYPE_MAPPINGS = {
     'preference_name': 'name',
 }
 
-LOCAL_CONTEXT_PROPAGATING_RULES = set(['variable_type_def', 'variable_list'])
 
 PRIOR_COUNT = 5
 LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(1, 5)}

@@ -167,9 +167,11 @@ class ASTNodeInfo(typing.NamedTuple):
 ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
 
 VARIABLE_OWNER_CONTEXT_KEY_PREFIX = 'owner'
+LOCAL_CONTEXT_PROPAGATING_RULES = set(['variable_type_def', 'color_variable_type_def', 'orientation_variable_type_def', 'side_variable_type_def', 'variable_list'])
+
 
 class ASTParentMapper(ASTParser):
-    def __init__(self, root_node='root', local_context_propagating_rules: typing.Optional[typing.Set[str]] = None):
+    def __init__(self, root_node='root', local_context_propagating_rules: typing.Set[str] = LOCAL_CONTEXT_PROPAGATING_RULES):
         self.root_node = root_node
         self.local_context_propagating_rules = local_context_propagating_rules
         self.parent_mapping = {}

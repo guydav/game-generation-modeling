@@ -1203,12 +1203,18 @@ class DisjointSeqFuncPredicateTerm(FitnessTerm):
 
 
 class PrefForallTerm(FitnessTerm):
+    keys: typing.List[str]
     pref_forall_found: bool = False
     pref_forall_prefs: typing.Set[str] = set()
     pref_forall_prefs_by_position: typing.Dict[int, typing.Set[str]] = {}
+    return_incorrect_count: bool = False
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, return_incorrect_count: bool = False):
         super().__init__(('scoring_external_maximize', 'scoring_external_minimize', 'pref_forall', COUNT_RULE_PATTERN), f'pref_forall_{name}')
+        self.return_incorrect_count = return_incorrect_count
+        self.keys = ['correct', 'incorrect']
+        if self.return_incorrect_count:
+            self.keys.append('incorrect_count')
 
     def game_start(self) -> None:
         self.pref_forall_found = False
@@ -1256,18 +1262,20 @@ class PrefForallTerm(FitnessTerm):
         pass
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return_value = dict(correct=0, incorrect=0)
+        return_value = {k: 0 for k in self.keys}
 
         inner_value = float(self._inner_game_end())  # type: ignore
         if inner_value > 0:
             return_value['correct'] = 1
         elif inner_value < 0:
-            return_value['incorrect'] = 1  # abs(inner_value)  # type: ignore
+            return_value['incorrect'] = 1  # abs(inner_value)
+            if self.return_incorrect_count:
+                return_value['incorrect_count'] = abs(inner_value)  # type: ignore
 
         return return_value  # type: ignore
 
     def _get_all_inner_keys(self):
-        return ['correct', 'incorrect']
+        return self.keys
 
 
 class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
@@ -1275,7 +1283,7 @@ class CountOncePerExternalObjectsUsedCorrectly(PrefForallTerm):
     count_once_per_external_objects_prefs: typing.Dict[str, int]
 
     def __init__(self):
-        super().__init__('count_once_per_external_objects_used')
+        super().__init__('count_once_per_external_objects_used', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.count_once_per_external_objects_prefs = defaultdict(int)
@@ -1307,7 +1315,7 @@ class ExternalForallUsedCorrectly(PrefForallTerm):
     external_forall_used_with_forall_pref_positions: typing.Set[int] = set()
 
     def __init__(self):
-        super().__init__('external_forall_used')
+        super().__init__('external_forall_used', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.external_forall_positions = set()
@@ -1335,7 +1343,7 @@ class PrefForallUsed(PrefForallTerm):
     prefs_used_as_pref_forall_prefs: typing.Dict[str, int]
 
     def __init__(self):
-        super().__init__('used')
+        super().__init__('used', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.prefs_used_as_pref_forall_prefs = defaultdict(int)
@@ -1378,7 +1386,7 @@ class PrefForallCorrectArity(PrefForallTerm):
     pref_forall_prefs_to_counts: typing.Dict[str, int] = dict()
 
     def __init__(self):
-        super().__init__('pref_forall_correct_arity')
+        super().__init__('pref_forall_correct_arity', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_counts = dict()
@@ -1430,7 +1438,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
     n_incorrect_types_per_pref: typing.List[float] = list()
 
     def __init__(self):
-        super().__init__('pref_forall_correct_types')
+        super().__init__('pref_forall_correct_types', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_types = defaultdict(dict)
@@ -1958,12 +1966,14 @@ class CompositionalityStructureCounter(FitnessTerm):
 
 
 class SectionCountTerm(FitnessTerm):
-    def __init__(self, section: str, header: str, thresholds: typing.Optional[typing.Sequence[float]]):
+    def __init__(self, section: str, header: str, thresholds: typing.Optional[typing.Sequence[float]],
+                 right: bool = True):
         super().__init__(section, header.replace('(:', ''))
         if thresholds is not None:
             thresholds = list(thresholds)
 
         self.thresholds = thresholds
+        self.right = right
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         result = self._inner_game_end()
@@ -1971,7 +1981,7 @@ class SectionCountTerm(FitnessTerm):
             return result
 
         output = {i: 0 for i in range(len(self.thresholds) + 1)}
-        output[np.digitize(result, self.thresholds)] = 1
+        output[np.digitize(result, self.thresholds, self.right)] = 1
         return output  # type: ignore
 
     @abstractmethod
@@ -2060,28 +2070,28 @@ class SectionMaxWidth(SectionCountTerm):
 
 SECTION_COUNT_THRESHOLDS = {
     SectionMaxDepth: {
-        ast_parser.SETUP: [1, 8.5, 17.5, 25.5],
-        ast_parser.PREFERENCES: [8.5, 15.5, 19.5, 23.5],
-        ast_parser.TERMINAL: [1, 4.5, 8.5, 11.5],
-        ast_parser.SCORING: [2.5, 4.5, 8.5, 12.5],
+        ast_parser.SETUP: [0.0, 12.0, 13.0, 26.0],
+        ast_parser.PREFERENCES: [9.0, 15.0, 17.0, 23.0],
+        ast_parser.TERMINAL: [0.0, 0.6, 9.0, 12.0],  # [0.0, 0.0, 7.0, 12.0]
+        ast_parser.SCORING: [3.0, 7.5, 10.0, 17.0],  # [3.0, 3.0, 10.0, 17.0]
     },
     SectionMeanDepth: {
-        ast_parser.SETUP: [1, 4, 9, 12],
-        ast_parser.PREFERENCES: [6.5, 8, 10, 12],
-        ast_parser.TERMINAL: [1, 2, 3.8, 5.5],
-        ast_parser.SCORING: [1.5, 2.75, 4, 6],
+        ast_parser.SETUP: [0.0, 6.3, 7.5, 14.7],
+        ast_parser.PREFERENCES: [5.1, 9.2, 10.3, 14.0],
+        ast_parser.TERMINAL: [0.0, 1.6, 3.3, 6.0],
+        ast_parser.SCORING: [1.5, 4.9, 5.6, 8.4],  # [1.5, 1.5, 5.2, 8.4]
     },
     SectionNodeCount: {
-        ast_parser.SETUP: [1, 10, 30, 100],
-        ast_parser.PREFERENCES: [30, 70, 135, 200],
-        ast_parser.TERMINAL: [1, 5, 25, 55],
-        ast_parser.SCORING: [6, 18, 33, 60],
+        ast_parser.SETUP: [0.0, 19.0, 36.5, 131.0],
+        ast_parser.PREFERENCES: [14.0, 64.0, 110.0, 565.0],
+        ast_parser.TERMINAL: [0.0, 9.0, 11.0, 50.0],  # [0.0, 0.0, 10.0, 50.0]
+        ast_parser.SCORING: [4.0, 16.0, 32.0, 134.0],  # [4.0, 4.0, 28.0, 134.0]
     },
     SectionMaxWidth: {
-        ast_parser.SETUP: [1, 2, 3, 7],
-        ast_parser.PREFERENCES: [2.5, 3.5, 4.5, 7.5],
-        ast_parser.TERMINAL: [1, 2, 3, 4],
-        ast_parser.SCORING: [1, 2, 3, 8],
+        ast_parser.SETUP: [0.0, 1.0, 3.0, 10.0],
+        ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
+        ast_parser.TERMINAL: [0.0, 2.0, 3.0, 4.0],  # [0.0, 0.0, 0.0, 4.0]
+        ast_parser.SCORING: [0.0, 2.0, 3.0, 12.0],
     }
 }
 

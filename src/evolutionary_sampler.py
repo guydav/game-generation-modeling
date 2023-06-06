@@ -1,7 +1,6 @@
 import argparse
 from collections import OrderedDict, Counter
 from functools import wraps
-import logging
 import multiprocessing
 from multiprocessing import pool as mpp
 import os
@@ -10,6 +9,10 @@ import sys
 import tempfile
 import traceback
 import typing
+
+import logging
+logging.getLogger('git').setLevel(logging.WARNING)
+logging.getLogger('numba').setLevel(logging.WARNING)
 
 from git.repo import Repo
 import numpy as np
@@ -126,16 +129,18 @@ parser.add_argument('--map-elites-key-type', type=int, default=0)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 parser.add_argument('--map-elites-initialization-strategy', type=int, default=0)
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
-features_group = parser.add_mutually_exclusive_group(required=True)
-features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
-features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
+
 parser.add_argument('--map-elites-use-crossover', action='store_true')
 parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
 
-parser.add_argument('--map-elites-pca-behavioral-features-indices', nargs='+', type=int, default=None)
+features_group = parser.add_mutually_exclusive_group(required=True)
+features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
+features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
+features_group.add_argument('--map-elites-pca-behavioral-features-indices', nargs='+', type=int, default=None)
+
 parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=str, default=LATEST_REAL_GAMES_PATH)
-parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=DEFAULT_N_COMPONENTS)
-parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=DEFAULT_N_COMPONENTS)
+parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=None)
+parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=None)
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -1475,14 +1480,20 @@ class MAPElitesSampler(PopulationBasedSampler):
             features = BEHAVIORAL_FEATURE_SETS[feature_set_key]
             custom_featurizer = None
 
-        else:  # args.map_elites_custom_behavioral_features_key is not None:
-            custom_featurizer = build_behavioral_features_featurizer(feature_set)
+        else:  # args.map_elites_custom_behavioral_features_key is not None, or using PCA features
+            custom_featurizer = build_behavioral_features_featurizer(
+                argparse_args,
+                self.grammar_parser,
+                self.fitness_featurizer,
+                self.feature_names
+                )
             features = custom_featurizer.get_feature_names()
             if self.key_type != MAPElitesKeyType.TUPLE:
                 logger.info('Setting key type to tuple because custom behavioral features are used')
                 self.map_elites_key_type = MAPElitesKeyType.TUPLE
 
         self.map_elites_feature_names_or_patterns = features  # type: ignore
+        self.custom_featurizer = custom_featurizer
 
     def _pre_population_sample_setup(self):
         self.map_elites_feature_names = []
@@ -1626,7 +1637,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:
-            features = self.custom_featurizer.parse(game, return_row=True)  # type: ignore
+            features = self.custom_featurizer.get_game_features(game)
 
         if self.key_type == MAPElitesKeyType.INT:
             key =  sum([(2 ** i) * int(features[feature_name])
@@ -1710,8 +1721,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 117]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 121.7]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 87]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 92]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1948,8 +1959,6 @@ def main(args):
     vars_args['commit_hash'] = Repo(search_parent_directories=True).head.object.hexsha
 
     if args.sampler_type == MAP_ELITES:
-
-
         if args.map_elites_use_crossover:
             logger.info('Using crossover in MAP-Elites => emitting two samples at a time => halving generation and chunk sizes')
             args.map_elites_generation_size = args.map_elites_generation_size // 2
@@ -1983,6 +1992,8 @@ def main(args):
             sampler_prior_count=args.sampler_prior_count,
             weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
         )
+
+        evosampler.initialize_population()
 
     else:
         raise ValueError(f'Unknown sampler type {args.sampler_type}')

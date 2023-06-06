@@ -1,5 +1,6 @@
 import abc
 import argparse
+from collections import Counter
 import logging
 import numpy as np
 import typing
@@ -248,11 +249,13 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.n_components = n_components
         self.random_seed = random_seed
 
+        self.output_feature_names = [self._feature_name(i) for i in self.feature_indices]
+
         self._init_pca()
 
     def _game_to_feature_vector(self, game) -> np.ndarray:
         game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
-        return np.array([game_features[name] for name in feature_names])  # type: ignore
+        return np.array([game_features[name] for name in self.feature_names])
 
     def _init_pca(self):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
@@ -268,15 +271,24 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.bins_by_feature_index = {}
         for feature_index in self.feature_indices:
             feature_values = projections[:, feature_index]
-            quantiles = np.quantile(feature_values, np.linspace(1 / (self.bins_per_feature - 1), 1, self.bins_per_feature - 1))
+            step = 1 / self.bins_per_feature
+            quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
+            self.bins_by_feature_index[feature_index] = quantiles
+
             digits = np.digitize(feature_values, quantiles)
-            self.bins_by_feature_index[feature_index] = digits
+            counts = Counter(digits)
+            logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
+
+        all_game_features = [self.get_game_features(game) for game in game_asts]
+        all_game_feature_tuples = [tuple(game_features[name] for name in self.output_feature_names) for game_features in all_game_features]
+        all_game_feature_tuples = set(all_game_feature_tuples)
+        logger.debug(f'The real games have {len(all_game_feature_tuples)} unique feature tuples')
 
     def _feature_name(self, feature_index: int):
         return f'pca_{feature_index}'
 
     def get_feature_names(self) -> typing.List[str]:
-        return [self._feature_name(i) for i in self.feature_indices]
+        return self.output_feature_names
 
     def get_feature_value_counts(self) -> typing.Dict[str, int]:
         return {self._feature_name(i): self.bins_per_feature for i in self.feature_indices}
@@ -354,8 +366,8 @@ def build_behavioral_features_featurizer(
         raise ValueError('Must specify bins per feature for PCA featurizer')
 
     ast_file_path = args.map_elites_pca_behavioral_features_ast_file_path
-    n_components = args.map_elites_pca_behavioral_features_n_components
-    random_seed = args.map_elites_pca_behavioral_features_random_seed
+    n_components = args.map_elites_pca_behavioral_features_n_components if args.map_elites_pca_behavioral_features_n_components is not None else max(indices) + 1
+    random_seed = args.random_seed
 
     pca_featurizer = PCABehavioralFeaturizer(
         feature_indices=indices,

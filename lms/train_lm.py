@@ -1,212 +1,138 @@
-import os
-import json
-import torch
-import wandb
-import shutil
 import argparse
+import json
+import os
+os.environ["BITSANDBYTES_NOWELCOME"] = "true"
+
+import torch
 from tqdm import tqdm
-from datetime import datetime
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from evaluator import Evaluator
-from lm_datasets import GameDescriptionGPT2Dataset, DomainSpecificLanguageLMDataset, DescriptionToDSLDataset
+from transformers import DataCollatorForSeq2Seq, PrinterCallback, Trainer, TrainingArguments, TrainerCallback, set_seed
 
-from transformers import pipeline
-from transformers import get_linear_schedule_with_warmup
-from transformers import DataCollatorForLanguageModeling
-from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM, AutoModelForSeq2SeqLM
-
-def train_loop(model, tokenizer, optimizer, data_loader, output_dir, evaluator, args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    is_seq_to_seq = (args.model in ["codet5"])
-
-    # Map the model to the available device
-    model.to(device)
-
-    # Initialize the log writer
-    log_writer = SummaryWriter(output_dir, flush_secs=100)
-
-    # Calculate the total number of training steps to initialize the scheduler
-    num_train_steps = (len(data_loader) // args.batch_size) * args.epochs
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=int(args.warmup_proportion * num_train_steps),
-        num_training_steps=num_train_steps)
-
-    # Set up for training
-    model.train()
-    global_step = 0
-    progress_bar = tqdm(total=num_train_steps, desc=f"Training {args.model} model")
-
-    try:
-        for epoch in range(args.epochs):
-            for batch in data_loader:
-                global_step += 1
-
-                if is_seq_to_seq:
-                    token_ids, labels = torch.split(batch["input_ids"], 1, dim=1)
-
-                    token_ids = token_ids.squeeze(1).to(device)
-                    labels = labels.squeeze(1).detach()
-
-                else:
-                    token_ids = batch["input_ids"].to(device)
-                    labels = token_ids.clone().detach()
-
-                # By default, the ignore index is -100, and we want to ignore all of the pad tokens
-                labels[labels == tokenizer.pad_token_id] = -100
-
-                loss = model(token_ids, labels=labels)[0]
-                perplexity = torch.exp(loss).item()
-
-                # Clear some memory before the expensive gradient computation
-                del token_ids
-                del labels
-
-                # Perform optimization and update the scheduler
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-                scheduler.step()
-
-                if not args.no_log: 
-                    log_writer.add_scalar("train/loss", loss, global_step)
-                    log_writer.add_scalar("train/perplexity", perplexity, global_step)
-
-                    # wandb.log({"train_loss": loss})
-
-                progress_bar.update(1)
-                progress_bar.set_postfix({"loss": loss.item()})
-
-                if global_step%args.gen_freq == 0:
-                    inputs = tokenizer(args.gen_context, return_tensors="pt").input_ids
-                    inputs = inputs.to(device)
-
-                    outputs = model.generate(inputs, max_length=args.gen_len, num_beams=args.gen_beams,
-                                             temperature=args.gen_temp, pad_token_id=tokenizer.eos_token_id)[0]
-                    
-                    sample = tokenizer.decode(outputs, skip_special_tokens=True)
-                    if not args.no_log: log_writer.add_text("eval/random_sample", sample, global_step)
-                    print("\nSample:", sample, "\n")
-
-                if global_step%args.eval_freq == 0:
-                    if args.dataset == "dsl":
-                        prop_novel, prop_valid, prop_novel_valid, novel_valid_samples = evaluator.evaluate_dsl_generation(
-                            model, tokenizer, args.num_eval_samples, args.gen_len, args.gen_beams, args.gen_temp, 
-                            args.gen_top_k, args.gen_top_p, args.gen_typical_p, True, args.eval_sim_threshold)
-
-                        log_writer.add_scalar("eval/prop_novel", prop_novel, global_step)
-                        log_writer.add_scalar("eval/prop_valid", prop_valid, global_step)
-                        log_writer.add_scalar("eval/prop_novel_valid", prop_novel_valid, global_step)
-
-                        for sample in novel_valid_samples:
-                            log_writer.add_text("eval/novel_valid_sample", sample, global_step)
-
-                if global_step%args.save_freq == 0:
-                    torch.save(model.state_dict(), os.path.join(output_dir_name, f"model_weights_{global_step}.pth"))
+from utils import *
 
 
-    except KeyboardInterrupt:
-        print("Stopping early due to user input!")
-        progress_bar.close()
-        exit()
+class CustomTQDMCallback(TrainerCallback):
+    def __init__(self, model_name):
+        self.model_name = model_name
+    
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.progress_bar = tqdm(total=state.max_steps, desc=f"Training {self.model_name}")
+        self.progress_bar.update(state.global_step)
 
-    print("Finished training.")
-    progress_bar.close()
-    torch.save(model.state_dict(), os.path.join(output_dir_name, f"model_weights_{global_step}.pth"))
+    def on_step_end(self, args, state, control, **kwargs):
+        self.progress_bar.update(1)
+
+        if len(state.log_history) > 0:
+            most_recent_logs = state.log_history[-1].copy()
+            most_recent_logs.pop("step", None)
+            most_recent_logs["GPU"] = f"{gpu_utilization()}MB"
+
+            self.progress_bar.set_postfix(most_recent_logs)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model', type=str, default="CodeBERTa", choices=["CodeBERTa", "gpt2", "codeparrot", "java-gpt2", "codet5",
-                                                                           "incoder-1B", "incoder-6B"])
-    parser.add_argument('--dataset', type=str, default="dsl", choices=["dsl", "descs", "seq2seq"])
-    parser.add_argument('--seed', type=int, default=42, help="Random seed for reproducibility.")
-    parser.add_argument('--chunk_size', type=int, default=512)
-    parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--warmup_proportion', type=float, default=0.0002)
-    parser.add_argument('--weight_decay', type=float, default=0.01)
-    parser.add_argument('--max_grad_norm', type=int, default=1)
-    parser.add_argument('--learning_rate', type=float, default=1e-4)
-    parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--save_freq', type=int, default=1000)
-    parser.add_argument('--eval_freq', type=int, default=500)
-    parser.add_argument('--num_eval_samples', type=int, default=20)
-    parser.add_argument('--eval_sim_threshold', type=float, default=0.9)
-    parser.add_argument('--room_mode', type=str, default="naive", choices=["naive", "categories", "colors"])
-    parser.add_argument('--gen_freq', type=int, default=500)
-    parser.add_argument('--gen_len', type=int, default=1024)
-    parser.add_argument('--gen_context', type=str, default="(define")
-    parser.add_argument('--gen_temp', type=float, default=1)
-    parser.add_argument('--gen_beams', type=int, default=5)
-    parser.add_argument('--gen_top_k', type=int, default=50)
-    parser.add_argument('--gen_top_p', type=float, default=1.0)
-    parser.add_argument('--gen_typical_p', type=float, default=1.0)
-    parser.add_argument('--no-log', action='store_true')
+    # Model arguments
+    parser.add_argument('--model', type=str, default='gpt2', help="The name of the model to use")
+    parser.add_argument('--int_8', action='store_true', help="Whether to use 8-bit training")
+    parser.add_argument('--jit', action='store_true', help="Whether to compile the model before training")
+    parser.add_argument('--lora', action='store_true', help="Whether to use low-rank adpatation for finetuning")
+    parser.add_argument('--mixed_precision', type=str, default='no', choices=['no', 'fp16', 'bf16'])
+    parser.add_argument('--accelerate', action='store_true', help="Whether to use the accelerate library for distributed training")
+    parser.add_argument('--trust_remote', action='store_true', help="Whether to trust remote models (necessary for some models)")
+
+    # LoRA arguments
+    parser.add_argument('--lora_alpha', type=int, default=16, help="The alpha parameter for LoRA")
+    parser.add_argument('--lora_dropout', type=float, default=0.05, help="The dropout rate for LoRA")
+    parser.add_argument('--lora_r', type=int, default=8, help="The r parameter for LoRA")
+    parser.add_argument('--lora_target_modules', type=str, nargs='+', default=['q_proj', 'v_proj'], help="The modules to apply LoRA to")
+
+    # Training arguments
+    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--block_size', type=int, default=256)
+    parser.add_argument('--gradient_checkpointing', action='store_true')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument("--learning_rate", type=float, default=3e-4, help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument('--optimizer_type', type=str, default='adamw', choices=['adamw', 'adafactor', 'adamw_8bit'])
+    parser.add_argument('--warmup_steps', type=int, default=100, help="Number of steps to warm up the learning rate for")
+
+    # Dataset arguments
+    parser.add_argument("--dataset", type=str, default="fitm", choices=["fitm"])
+    parser.add_argument("--data_categories", type=str, nargs='+', default=["board"])
+    parser.add_argument("--data_subcategories", type=str, nargs='+', default="")
+    parser.add_argument("--keep_formatting", action='store_true', help="Whether to keep the formatting of the dataset")
+    parser.add_argument("--section_exclude_keywords", type=str, nargs='+', default=["(metadata", "(option"], help="Keywords to exclude sections by")
+
+    # Run arguments
+    parser.add_argument("--gen_freq", type=int, default=100, help="How often to generate text during training")
+    parser.add_argument("--loss_window", type=int, default=100, help="Number of steps to average reported loss over")
+    parser.add_argument('--num_epochs', type=int, default=10, help="Number of epochs to train for (unless num_train_steps is set)")
+    parser.add_argument('--num_train_steps', type=int, default=-1, help="Number of training steps to perform. If -1, will run for num_epochs")
+    parser.add_argument('--resume', action='store_true', help="Whether to resume training from a checkpoint")
+    parser.add_argument('--save_dir', type=str, default='./logs/llm_test', help="Directory to save the model (or load, if resuming training)")
+    parser.add_argument('--save_freq', type=int, default=100, help="How often to save the model during training")
+    parser.add_argument('--no_save', action='store_true', help="Whether to save the model during training")
+    parser.add_argument('--seed', type=int, default=42, help="Random seed to use")
 
     args = parser.parse_args()
 
-    datetime_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    run_name = f"{datetime_str}-{args.model}-{args.dataset}"
+    assert torch.cuda.is_available(), "CUDA is not available"
 
-    # wandb.init(project="game-generation-modeling", entity="gdrtodd", config={}, name=run_name)
-    # wandb.config.update(args)
+    # Set parallelism to false to silence tokenizer deadlock warnings
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"    
 
-    if args.model == "codet5": assert args.dataset == "seq2seq"
+    # Load the model / tokenizer, and update args if resuming from checkpoint
+    model, tokenizer, args = load_model_and_tokenizer(args)
 
-    # Map from model names to the load string transformers expects
-    model_mapping = {"CodeBERTa": "huggingface/CodeBERTa-small-v1",
-                     "gpt2": "gpt2",
-                     "codeparrot": "lvwerra/codeparrot",
-                     "java-gpt2": "microsoft/CodeGPT-small-java-adaptedGPT2",
-                     "codet5": "Salesforce/codet5-base",
-                     "incoder-1B": "facebook/incoder-1B",
-                     "incoder-6B": "facebook/incoder-6B"}
+    # Set the random seed
+    set_seed(args.seed)
 
-    # Map from dataset names to the class for that dataset
-    dataset_mapping = {"dsl": DomainSpecificLanguageLMDataset,
-                       "descs": GameDescriptionGPT2Dataset,
-                       "seq2seq": DescriptionToDSLDataset}
+    # Save the run args
+    if not args.no_save:
+        os.makedirs(args.save_dir, exist_ok=True)
+        json.dump(args.__dict__, open(os.path.join(args.save_dir, "args.json"), "w"))
 
-    # Set parallelism to false to silence deadlock warnings
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    print(f"GPU utilization after model load: {gpu_utilization()} MB")
+    if args.lora:
+        model.print_trainable_parameters()
 
-    # Instantiate the tokenizer and dataset based on the model's name
-    model_name = model_mapping[args.model]
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.add_special_tokens({"pad_token": "PAD"})
+    # Set the training arguments
+    training_args=TrainingArguments(
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        warmup_steps=args.warmup_steps,
+        num_train_epochs=args.num_epochs,
+        learning_rate=args.learning_rate,
+        fp16=(args.mixed_precision == 'fp16'),
+        logging_steps=1,
+        optim="adamw_torch",
+        save_strategy="steps" if not args.no_save else "no",
+        save_steps=args.save_freq,
+        output_dir=args.save_dir,
+        save_total_limit=3,
+        disable_tqdm=True,
+        group_by_length=True,
+    )
 
-    dataset = dataset_mapping[args.dataset](tokenizer, args.chunk_size)
+    # Set the dataset
+    if args.dataset == "fitm":
+        pass
 
-    # Instantiate the model and data collator depending on whether the model uses masked or causal LMs
-    uses_mlm = (args.model in ["CodeBERTa"])
-    is_seq_to_seq = (args.model in ["codet5"])
-
-    if uses_mlm:
-        model = AutoModelForMaskedLM.from_pretrained(model_name)
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
-    elif is_seq_to_seq:
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     else:
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        model.resize_token_embeddings(len(tokenizer))
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+        raise ValueError(f"Dataset {args.dataset} not recognized")
 
-    data_loader = DataLoader(dataset, collate_fn=data_collator, batch_size=args.batch_size, shuffle=True, num_workers=4)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    trainer = Trainer(
+        model=model,
+        train_dataset=dataset,
+        args=training_args,
+        callbacks=[CustomTQDMCallback(model_name=args.model)],
+        data_collator=DataCollatorForSeq2Seq(tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True),
+    )
 
-    # Instantiate the model evaluator
-    evaluator = Evaluator()
+    # Remove the default PrinterCallback (since we're rolling its functionality into our CustomTQDMCallback)
+    trainer.remove_callback(PrinterCallback)
 
-    # Create the output directory
-    output_dir_name = None
-    if not args.no_log:
-        output_dir_name = f"./logs/{run_name}"
-        if not os.path.exists(output_dir_name):
-            os.mkdir(output_dir_name)
+    trainer.train(resume_from_checkpoint=args.resume)
 
-        with open(os.path.join(output_dir_name, "config.json"), "w") as file:
-            json.dump(vars(args), file)
-
-    train_loop(model, tokenizer, optimizer, data_loader, output_dir_name, evaluator, args)
+    if not args.no_save:
+        model.save_pretrained(args.save_dir)

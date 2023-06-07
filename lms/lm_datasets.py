@@ -6,14 +6,26 @@ import pandas
 import numpy as np
 import torch.nn as nn
 
+import re
+import typing
+import tatsu
+import tatsu.ast
+import tatsu.grammars
+
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from transformers import GPT2Tokenizer
+from transformers import AutoTokenizer
+
+sys.path.insert(1, os.path.join(sys.path[0], '../src'))
+from ast_utils import load_games_from_file, cached_load_and_parse_games_from_file
+from ast_parser import ASTParentMapper
+
 
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
-sys.path.insert(1, os.path.join(sys.path[0], '../src'))
-from room_and_object_types import get_room_contents
-from ast_utils import load_tests_from_file
+# sys.path.insert(1, os.path.join(sys.path[0], '../src'))
+# from room_and_object_types import get_room_contents
+# from ast_utils import load_tests_from_file
 
 class GameDescriptionGPT2Dataset(Dataset):
     def __init__(self,
@@ -163,11 +175,82 @@ class DescriptionToDSLDataset(Dataset):
         return combined_tensor
 
 
+class FitMDataset():
+    def __init__(self,
+                 tokenizer,
+                 chunk_size=1024,
+                 grammar_path="../dsl/dsl.ebnf",
+                 game_file_path="../dsl/interactive-beta.pddl"):
+        
+        self.grammar = open(grammar_path).read()
+        self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
+
+        games = [game for game in load_games_from_file(game_file_path)]
+        game_asts = list(cached_load_and_parse_games_from_file(game_file_path, self.grammar_parser, False, relative_path='..'))
+
+        parent_mapper = ASTParentMapper()
+
+        self.data = []
+        for game, ast in tqdm(zip(games, game_asts), total=len(games), desc="Preprocessing games"):
+            parent_mapper(ast)
+            
+            node_keys = list(
+                key for key, node_info
+                in parent_mapper.parent_mapping.items()
+                if isinstance(node_info.parent, tatsu.ast.AST)
+            )
+
+            for idx, node_key in enumerate(node_keys):
+                node = parent_mapper.parent_mapping[node_key]
+                info = node.ast.parseinfo
+
+                prefix = game[:info.pos]
+                node_str = game[info.pos:info.endpos]
+                suffix = game[info.endpos:]
+
+                data_point = {
+                    "full_ast": ast,
+                    "node_key": node_key,
+                    "rule": info.rule,
+                    "prefix": f"<fim_prefix>{self._preprocess(prefix)}",
+                    "suffix": f"<fim_suffix>{self._preprocess(suffix)}",
+                    "middle": f"<fim_middle>{self._preprocess(node_str)}",
+                }
+
+                self.data.append(data_point)
+
+
+    def _preprocess(self, ast_str):
+        '''
+        Clean a string representation of an AST to make it more amenable to tokenization
+        '''
+        ast_str = re.sub(r"\s+", " ", ast_str)
+        ast_str = re.sub(r"\s(?=[\)}])", "", ast_str)     # remove whitespace before closing brackets
+        ast_str = re.sub(r"(?<=[\({])\s", "", ast_str)
+
+        return ast_str
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx] 
+
 if __name__ == "__main__":
-    from transformers import AutoTokenizer
-    t = AutoTokenizer.from_pretrained("huggingface/CodeBERTa-small-v1")
-    d = DescriptionToDSLDataset(t)
-    # dataset = GameDescriptionGPT2Dataset("colors")
-    # ids = dataset[22]
-    # decode = dataset.decode_ids(ids)
-    # print(decode)
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    tok = AutoTokenizer.from_pretrained("bigcode/starcoder", use_auth_token="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")
+    model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder", use_auth_token="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").to(device)
+    dataset = FitMDataset(tok)
+
+    input_text = dataset[0]["prefix"] + dataset[0]["suffix"]
+    input_ids = tok.encode(input_text, return_tensors="pt").to(device)
+
+    outputs = model.generate(input_ids)
+    output_text = tok.decode(outputs[0], skip_special_tokens=True)
+    print(f"Prefix: {dataset[0]['prefix']}")
+    print(f"Suffix: {dataset[0]['suffix']}")
+    print(f"Generated: {output_text}")
+    print(f"Original: {dataset[0]['middle']}") 

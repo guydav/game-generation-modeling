@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import tatsu
@@ -6,9 +7,11 @@ import torch
 from tqdm import tqdm
 from fuzzywuzzy import fuzz
 
+from utils import load_model_and_tokenizer
+
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
-from ast_utils import load_tests_from_file
+from ast_utils import load_games_from_file
 
 class Evaluator():
     def __init__(self,
@@ -18,10 +21,20 @@ class Evaluator():
 
         grammar = open(grammar_path).read()
         self.grammar_parser = tatsu.compile(grammar)
-        self.programs = load_tests_from_file(dsl_info_path)
+        self.programs = load_games_from_file(dsl_info_path)
 
-    def evaluate_dsl_generation(self, model, tokenizer, num_evals, max_length, num_beams, temperature,
-                                top_k, top_p, typical_p, do_sample=True, similarity_threshold=0.9, 
+    def evaluate_dsl_generation(self, 
+                                model,
+                                tokenizer,
+                                num_evals,
+                                max_length,
+                                num_beams,
+                                temperature,
+                                top_k,
+                                top_p,
+                                typical_p,
+                                do_sample=True,
+                                similarity_threshold=0.9, 
                                 verbose=False):
         '''
         Generate a number of samples from the model and evaluate their grammaticality and 
@@ -87,35 +100,13 @@ class Evaluator():
 
 
 if __name__ == "__main__":
-    test = '''(define (game id-1) (:domain medium-objects-room-v1)
-(:setup (and
-    (exists (?h - hexagonal_bin)
-        (game-conserved (< (distance?h room_center) 1))
-    )
-))
-(:constraints (and
-    (preference throwToRampToBin
-        (exists (?r - triangular_ramp?d - dodgeball?h - hexagonal_bin)
-            (then
-                (once (and (agent_holds?d) (adjacent agent door) (agent_crouches)))
-                (hold-while
-                   (and (not (agent_holds?d)) (in_motion?d))
-                   (touch?r?d)
-                )
-                (once  (and (in?h?d) (not (in_motion?d))))
-           )
-        )
-    )
-))
-(:scoring maximize
-    (count-unique-positions throwToRampToBin)
-))
-'''
-    evaluator = Evaluator()
-    evaluator.grammar_parser.parse(test)
+    parser = argparse.ArgumentParser()
 
-    # for program in evaluator.programs:
-    #     try:
-    #         evaluator.grammar_parser.parse(program + "!!!")
-    #     except:
-    #         print("Error!")
+    # Generation Arguments
+    parser.add_argument('--save_dir', type=str, default='./logs/llm_test', help="Directory to load the model from")
+
+    args = parser.parse_args()
+    args.resume = True
+
+    # Load the model / tokenizer
+    model, tokenizer, _ = load_model_and_tokenizer(args)

@@ -3,6 +3,7 @@ import os
 import sys
 import tatsu
 import torch
+os.environ["BITSANDBYTES_NOWELCOME"] = "true"
 
 from tqdm import tqdm
 from fuzzywuzzy import fuzz
@@ -12,6 +13,8 @@ from utils import load_model_and_tokenizer
 # Add src/ to our path so we can import from the scripts in room_and_object_types.py
 sys.path.insert(1, os.path.join(sys.path[0], '../src'))
 from ast_utils import load_games_from_file
+
+from lm_datasets import FitMDataset
 
 class Evaluator():
     def __init__(self,
@@ -110,3 +113,5 @@ if __name__ == "__main__":
 
     # Load the model / tokenizer
     model, tokenizer, _ = load_model_and_tokenizer(args)
+
+    dataset = FitMDataset(tokenizer)

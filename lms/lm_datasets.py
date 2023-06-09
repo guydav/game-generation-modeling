@@ -1,4 +1,6 @@
 import os
+import pickle
+import random
 import re
 import sys
 import torch
@@ -178,47 +180,79 @@ class DescriptionToDSLDataset(Dataset):
 class FitMDataset():
     def __init__(self,
                  tokenizer,
+                 split="train",
                  chunk_size=1024,
+                 train_split=0.8,
+                 fim_prefix_token="<fim_prefix>",
+                 fim_suffix_token="<fim_suffix>",
+                 fim_middle_token="<fim_middle>",
+                 cache_dir="./caches",
                  grammar_path="../dsl/dsl.ebnf",
                  game_file_path="../dsl/interactive-beta.pddl"):
         
+        self.tokenizer = tokenizer
+        self.split = split
+        self.chunk_size = chunk_size
+
         self.grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
 
-        games = [game for game in load_games_from_file(game_file_path)]
-        game_asts = list(cached_load_and_parse_games_from_file(game_file_path, self.grammar_parser, False, relative_path='..'))
+        save_filename = os.path.join(cache_dir, f"fitm_dataset.pkl")
 
-        parent_mapper = ASTParentMapper()
+        if os.path.exists(save_filename):
+            print("Loading cached dataset...")
+            with open(save_filename, "rb") as f:
+                all_data = pickle.load(f)
 
-        self.data = []
-        for game, ast in tqdm(zip(games, game_asts), total=len(games), desc="Preprocessing games"):
-            parent_mapper(ast)
-            
-            node_keys = list(
-                key for key, node_info
-                in parent_mapper.parent_mapping.items()
-                if isinstance(node_info.parent, tatsu.ast.AST)
-            )
+        else:
+            games = [game for game in load_games_from_file(game_file_path)]
+            game_asts = list(cached_load_and_parse_games_from_file(game_file_path, self.grammar_parser, False, relative_path='..'))
 
-            for idx, node_key in enumerate(node_keys):
-                node = parent_mapper.parent_mapping[node_key]
-                info = node.ast.parseinfo
+            parent_mapper = ASTParentMapper()
 
-                prefix = game[:info.pos]
-                node_str = game[info.pos:info.endpos]
-                suffix = game[info.endpos:]
+            all_data = []
+            for game, ast in tqdm(zip(games, game_asts), total=len(games), desc="Preprocessing games"):
+                parent_mapper(ast)
+                
+                node_keys = list(
+                    key for key, node_info
+                    in parent_mapper.parent_mapping.items()
+                    if isinstance(node_info.parent, tatsu.ast.AST)
+                )
 
-                data_point = {
-                    "full_ast": ast,
-                    "node_key": node_key,
-                    "rule": info.rule,
-                    "prefix": f"<fim_prefix>{self._preprocess(prefix)}",
-                    "suffix": f"<fim_suffix>{self._preprocess(suffix)}",
-                    "middle": f"<fim_middle>{self._preprocess(node_str)}",
-                }
+                for idx, node_key in enumerate(node_keys):
+                    node = parent_mapper.parent_mapping[node_key]
+                    info = node.ast.parseinfo
 
-                self.data.append(data_point)
+                    prefix = game[:info.pos]
+                    node_str = game[info.pos:info.endpos]
+                    suffix = game[info.endpos:]
 
+                    data_point = {
+                        "full_ast": ast,
+                        "node_key": node_key,
+                        "rule": info.rule,
+                        "prefix": f"{fim_prefix_token}{self._preprocess(prefix)}",
+                        "suffix": f"{fim_suffix_token}{self._preprocess(suffix)}",
+                        "middle": f"{fim_middle_token}{self._preprocess(node_str)}",
+                    }
+
+                    tokenized = tokenizer(data_point["prefix"] + data_point["suffix"] + data_point["middle"], max_length=chunk_size, truncation=True, padding="max_length", return_tensors=None)
+                    tokenized["labels"] = tokenized["input_ids"].copy()
+                    tokenized["labels"][tokenized["labels"] == tokenizer.pad_token_id] = -100
+
+                    data_point.update(tokenized)
+
+                    all_data.append(data_point)
+
+            with open(save_filename, "wb") as f:
+                pickle.dump(all_data, f)
+
+        random.shuffle(all_data)
+        split_idx = int(len(all_data) * train_split)
+
+        self.train_data = all_data[:split_idx]
+        self.test_data = all_data[split_idx:]
 
     def _preprocess(self, ast_str):
         '''
@@ -231,10 +265,10 @@ class FitMDataset():
         return ast_str
 
     def __len__(self):
-        return len(self.data)
+        return len(self.train_data) if self.split == "train" else len(self.test_data)
 
     def __getitem__(self, idx):
-        return self.data[idx] 
+        return self.train_data[idx] if self.split == "train" else self.test_data[idx] 
 
 if __name__ == "__main__":
     from transformers import AutoTokenizer, AutoModelForCausalLM

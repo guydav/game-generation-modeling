@@ -8,6 +8,7 @@ from tqdm import tqdm
 from transformers import DataCollatorForSeq2Seq, PrinterCallback, Trainer, TrainingArguments, TrainerCallback, set_seed
 
 from utils import *
+from lm_datasets import FitMDataset
 
 
 class CustomTQDMCallback(TrainerCallback):
@@ -116,7 +117,7 @@ if __name__ == "__main__":
 
     # Set the dataset
     if args.dataset == "fitm":
-        pass
+        dataset = FitMDataset(tokenizer)
 
     else:
         raise ValueError(f"Dataset {args.dataset} not recognized")

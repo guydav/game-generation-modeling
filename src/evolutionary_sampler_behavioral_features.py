@@ -10,7 +10,6 @@ import tatsu
 import tatsu.ast
 import tatsu.grammars
 from sklearn.decomposition import PCA
-import umap
 
 import ast_parser
 import ast_printer

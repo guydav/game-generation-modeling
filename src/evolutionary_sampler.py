@@ -12,7 +12,7 @@ import typing
 
 import logging
 logging.getLogger('git').setLevel(logging.WARNING)
-logging.getLogger('numba').setLevel(logging.WARNING)
+# logging.getLogger('numba').setLevel(logging.WARNING)
 
 from git.repo import Repo
 import numpy as np
@@ -46,8 +46,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 import src  # type: ignore
 
 
+multiprocessing.set_start_method('spawn', force=True)
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -149,6 +156,7 @@ parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_
 DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
 parser.add_argument('--initial-proposal-type', type=int, default=0)
+parser.add_argument('--sample-patience', type=int, default=100)
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
@@ -565,9 +573,9 @@ class PopulationBasedSampler():
                         sample = None
 
             except RecursionError:
-                if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
-                if self.verbose >= 2: print(f'Sampling exception in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Sampling exception in sample {idx} -- skipping')
 
         return sample
 
@@ -608,11 +616,11 @@ class PopulationBasedSampler():
                 # else:
                 #     sample_generated = True
 
-            except RecursionError:
-                if self.verbose >= 2: print('Recursion error, skipping sample')
+            except RecursionError as e:
+                if self.verbose >= 2: logger.info(f'Recursion error in regrowth, skipping sample: {e.args}')
 
-            except SamplingException:
-                if self.verbose >= 2: print('Sampling exception, skipping sample')
+            except SamplingException as e:
+                if self.verbose >= 2: logger.info(f'Sampling exception in regrowth, skipping sample: {e.args}')
 
         return new_proposal  # type: ignore
 
@@ -696,11 +704,11 @@ class PopulationBasedSampler():
             try:
                 new_node = self._sampler(rng).sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
 
-            except RecursionError:
-                if self.verbose >= 2: print('Recursion error, skipping sample')
+            except RecursionError as e:
+                if self.verbose >= 2: logger.info(f'Recursion error in insert, skipping sample: {e.args}')
 
-            except SamplingException:
-                if self.verbose >= 2: print('Sampling exception, skipping sample')
+            except SamplingException as e:
+                if self.verbose >= 2: logger.info(f'Sampling exception in insert, skipping sample: {e.args}')
 
         if isinstance(new_node, tuple):
             new_node = new_node[0]
@@ -1009,7 +1017,7 @@ class PopulationBasedSampler():
                 new_setup = self._sampler(rng).sample('setup', global_context=global_context)[0]
             except SamplingException as e:
                 if self.verbose > 1:
-                    print(f'Failed to sample setup with global context {global_context}: {e}')
+                    logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
                 continue
 
         new_setup_tuple = (ast_parser.SETUP, new_setup)
@@ -1034,7 +1042,7 @@ class PopulationBasedSampler():
                 new_terminal = self._sampler(rng).sample('terminal', global_context=global_context)[0]
             except SamplingException as e:
                 if self.verbose > 1:
-                    print(f'Failed to sample terminal with global context {global_context}: {e}')
+                    logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
                 continue
 
         new_terminal_tuple = (ast_parser.TERMINAL, new_terminal)
@@ -1305,7 +1313,7 @@ class PopulationBasedSampler():
                 pbar.set_postfix(postfix)  # type: ignore
 
             elif self.verbose:
-                print(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
+                logger.info(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
 
             self.fitness_metrics_history.append({'mean': self.mean_fitness, 'std': self.std_fitness, 'max': self.best_fitness})
 
@@ -1991,6 +1999,7 @@ def main(args):
             sample_filter_func=args.sample_filter_func,
             sampler_prior_count=args.sampler_prior_count,
             weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
+            sample_patience=args.sample_patience,
         )
 
         evosampler.initialize_population()

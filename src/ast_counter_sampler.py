@@ -537,7 +537,7 @@ PATTERN_TYPE_MAPPINGS = {
 LOCAL_CONTEXT_PROPAGATING_RULES = set(['variable_type_def', 'variable_list'])
 
 PRIOR_COUNT = 5
-LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(4)}
+LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(1, 5)}
 
 PRODUCTION = 'production'
 OPTIONS = 'options'
@@ -558,6 +558,10 @@ MIN_LENGTH = '_min_length'
 OPTIONAL_VOID = 'void'
 EMPTY_CLOSURE = 'empty_closure'
 EMPTY_LIST = 'empty_list'
+
+DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD = {
+    ('then', 'then_funcs'): 3,
+}
 
 HARDCODED_RULES = {
     EMPTY_CLOSURE: {
@@ -611,7 +615,9 @@ class ASTSampler:
                  omit_rules: typing.Optional[typing.Sequence[str]] = None,
                  omit_tokens: typing.Optional[typing.Sequence[str]] = None,
                  prior_rule_count: int = PRIOR_COUNT, prior_token_count: int = PRIOR_COUNT,
-                 length_prior: typing.Dict[int, int] = LENGTH_PRIOR, hardcoded_rules: typing.Dict[str, dict]=HARDCODED_RULES,
+                 length_prior: typing.Dict[int, int] = LENGTH_PRIOR,
+                 min_length_by_rule_and_field: typing.Optional[typing.Dict[typing.Tuple[str, str], int]] = DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD,
+                 hardcoded_rules: typing.Dict[str, dict] = HARDCODED_RULES,
                  verbose: bool = False, rng: typing.Optional[np.random.Generator] = None, seed: int = DEFAULT_RANDOM_SEED):
 
         self.grammar_parser = grammar_parser
@@ -633,6 +639,11 @@ class ASTSampler:
         self.prior_rule_count = prior_rule_count
         self.prior_token_count = prior_token_count
         self.length_prior = length_prior
+        if min_length_by_rule_and_field is None:
+            min_length_by_rule_and_field = {}
+
+        self.min_length_by_rule_and_field = min_length_by_rule_and_field
+
         self.verbose = verbose
 
         if rng is None:
@@ -710,7 +721,7 @@ class ASTSampler:
         field_prior: typing.Dict[str, typing.Union[str, typing.Sequence[str], typing.Dict[str, float]]],
         field_counter: typing.Optional[RuleKeyValueCounter]):
 
-        min_length = typing.cast(int, field_prior[MIN_LENGTH])
+        min_length = self.min_length_by_rule_and_field.get((rule_name, field_name), typing.cast(int, field_prior[MIN_LENGTH]))
         length_posterior = Counter({k: v for k, v in self.length_prior.items() if k >= min_length})
 
         if field_counter is not None:
@@ -720,7 +731,7 @@ class ASTSampler:
             length_posterior.update(field_counter.length_counts)
             total_lengths = sum(field_counter.length_counts)
             total_obs = sum(field_counter.rule_counts.values()) + sum(field_counter.value_counts.values())
-                # TODO: is there a prior over lengths?
+
             if total_lengths > total_obs:
                 raise ValueError(f'Length counts for {rule_name}.{field_name} are too high: {total_lengths} > {total_obs}')
 

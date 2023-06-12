@@ -180,9 +180,12 @@ class DescriptionToDSLDataset(Dataset):
 class FitMDataset():
     def __init__(self,
                  tokenizer,
-                 split="train",
                  chunk_size=1024,
+                 split="train",
                  train_split=0.8,
+                 section_restriction=None,
+                 min_depth=None,
+                 max_depth=None,
                  fim_prefix_token="<fim_prefix>",
                  fim_suffix_token="<fim_suffix>",
                  fim_middle_token="<fim_middle>",
@@ -194,15 +197,26 @@ class FitMDataset():
         self.split = split
         self.chunk_size = chunk_size
 
+        if isinstance(section_restriction, str):
+            section_restriction = [section_restriction]
+
         self.grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(self.grammar))
 
-        save_filename = os.path.join(cache_dir, f"fitm_dataset.pkl")
+        filename_info = f"chunksize-{chunk_size}_required-sections-{'-'.join(section_restriction)}_min-{min_depth}_max-{max_depth}"
 
-        if os.path.exists(save_filename):
+        train_filename = os.path.join(cache_dir, f"fitm_train_{filename_info}_dataset.pkl")
+        test_filename = os.path.join(cache_dir, f"fitm_test_{filename_info}_dataset.pkl")
+
+        print(train_filename)
+
+        if os.path.exists(train_filename) and os.path.exists(test_filename):
             print("Loading cached dataset...")
-            with open(save_filename, "rb") as f:
-                all_data = pickle.load(f)
+            with open(train_filename, "rb") as f:
+                self.train_data = pickle.load(f)
+
+            with open(test_filename, "rb") as f:
+                self.test_data = pickle.load(f)
 
         else:
             games = [game for game in load_games_from_file(game_file_path)]
@@ -223,6 +237,17 @@ class FitMDataset():
                 for idx, node_key in enumerate(node_keys):
                     node = parent_mapper.parent_mapping[node_key]
                     info = node.ast.parseinfo
+
+                    # Skip nodes that are too deep or not deep enough
+                    if min_depth is not None and node.depth < min_depth:
+                        continue
+
+                    if max_depth is not None and node.depth > max_depth:
+                        continue
+
+                    # Skip nodes that are not in the specified section
+                    if section_restriction is not None and node.section[2:] not in section_restriction:
+                        continue
 
                     prefix = game[:info.pos]
                     node_str = game[info.pos:info.endpos]
@@ -245,14 +270,19 @@ class FitMDataset():
 
                     all_data.append(data_point)
 
-            with open(save_filename, "wb") as f:
-                pickle.dump(all_data, f)
+            random.shuffle(all_data)
+            split_idx = int(len(all_data) * train_split)
 
-        random.shuffle(all_data)
-        split_idx = int(len(all_data) * train_split)
+            self.train_data = all_data[:split_idx]
+            self.test_data = all_data[split_idx:]
 
-        self.train_data = all_data[:split_idx]
-        self.test_data = all_data[split_idx:]
+            with open(train_filename, "wb") as f:
+                pickle.dump(self.train_data, f)
+
+            with open(test_filename, "wb") as f:
+                pickle.dump(self.test_data, f)
+
+        
 
     def _preprocess(self, ast_str):
         '''
@@ -276,15 +306,17 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     tok = AutoTokenizer.from_pretrained("bigcode/starcoder", use_auth_token="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")
-    model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder", use_auth_token="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").to(device)
-    dataset = FitMDataset(tok)
+    tok.add_special_tokens({'pad_token': '[PAD]'})
+    # model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder", use_auth_token="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").to(device)
+    dataset = FitMDataset(tok, section_restriction=["setup", "terminal"])
+    print(f"Length of dataset: {len(dataset)}")
 
     input_text = dataset[0]["prefix"] + dataset[0]["suffix"]
     input_ids = tok.encode(input_text, return_tensors="pt").to(device)
 
-    outputs = model.generate(input_ids)
-    output_text = tok.decode(outputs[0], skip_special_tokens=True)
+    # outputs = model.generate(input_ids)
+    # output_text = tok.decode(outputs[0], skip_special_tokens=True)
     print(f"Prefix: {dataset[0]['prefix']}")
     print(f"Suffix: {dataset[0]['suffix']}")
-    print(f"Generated: {output_text}")
+    # print(f"Generated: {output_text}")
     print(f"Original: {dataset[0]['middle']}") 

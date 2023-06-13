@@ -11,6 +11,9 @@ import tempfile
 import traceback
 import typing
 
+logging.getLogger('git').setLevel(logging.WARNING)
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 from git.repo import Repo
 import numpy as np
 import tatsu
@@ -131,6 +134,9 @@ features_group.add_argument('--map-elites-behavioral-features-key', type=str, de
 features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
 parser.add_argument('--map-elites-use-crossover', action='store_true')
 parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
+
+parser.add_argument('--map-elites-good-threshold', type=float, required=True)
+parser.add_argument('--map-elites-great-threshold', type=float, required=True)
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -1385,6 +1391,8 @@ class MAPElitesSampler(PopulationBasedSampler):
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
+    good_threshold: float
+    great_threshold: float
     initialization_strategy: MAPElitesInitializationStrategy
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
@@ -1407,6 +1415,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
                  map_elites_feature_names_or_patterns: typing.List[typing.Union[str, re.Pattern]],
+                 good_threshold: float, great_threshold: float,
                  custom_featurizer: typing.Optional[ASTFitnessFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
@@ -1419,6 +1428,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.weight_strategy = weight_strategy
         self.initialization_strategy = initialization_strategy
         self.map_elites_feature_names_or_patterns = map_elites_feature_names_or_patterns
+        self.good_threshold = good_threshold
+        self.great_threshold = great_threshold
         self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
@@ -1681,8 +1692,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 117]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 121.7]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > self.good_threshold]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > self.great_threshold]),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1956,6 +1967,8 @@ def main(args):
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             use_crossover=args.map_elites_use_crossover,
             use_cognitive_operators=args.map_elites_use_cognitive_operators,
+            good_threshold=args.map_elites_good_threshold,
+            great_threshold=args.map_elites_great_threshold,
             args=args,
             population_size=args.population_size,
             verbose=args.verbose,

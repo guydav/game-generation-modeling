@@ -468,6 +468,7 @@ DEFAULT_TRAIN_KWARGS = {
     'lr': 1e-2,
     'loss_function': fitness_nce_loss,
     'should_print': False,
+    'should_tqdm': False,
     'print_interval': 10,
     'n_epochs': 1000,
     'patience_epochs': 20,
@@ -880,7 +881,8 @@ def train_and_validate_model_weighted_sampling(
     val_loss_function: typing.Callable = fitness_sofmin_loss_positive_negative_split,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
-    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+    should_print: bool = True, should_tqdm: bool = False,
+    should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
     batch_size: int = 8, k: int = 4,
     dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
@@ -983,7 +985,7 @@ def train_and_validate_model_weighted_sampling(
             if should_print:
                 print(f'Epoch {epoch}: new best model with loss {epoch_loss:.4f}')
             min_loss = epoch_loss
-            best_model = copy.deepcopy(model).cpu()
+            x = copy.deepcopy(model).cpu()
 
         if epoch_loss < patience_loss - patience_threshold:
             if should_print:
@@ -1042,7 +1044,8 @@ def train_and_validate_model(model: nn.Module,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
-    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+    should_print: bool = False, should_tqdm: bool = False,
+    should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
     shuffle_negatives: bool = False, shuffle_validation_negatives: typing.Optional[bool] = None,
     evaluate_opposite_shuffle_mode: bool = False, split_validation_from_train: bool = False,
@@ -1131,6 +1134,23 @@ def train_and_validate_model(model: nn.Module,
     best_model = model
     losses = defaultdict(list)
 
+    if validate:
+        pre_val_losses = []
+        model.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:    # type: ignore
+                loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
+                if regularizer is not None:
+                    loss += regularization_weight * regularizer(model)
+                pre_val_losses.append(loss.item())
+
+        patience_loss = np.mean(pre_val_losses)
+        min_loss = patience_loss
+
+    pbar = None
+    if should_tqdm:
+        pbar = tqdm(total=n_epochs)
+
     epoch = 0
     for epoch in range(n_epochs):
         model.train()
@@ -1192,6 +1212,19 @@ def train_and_validate_model(model: nn.Module,
                 print(f'Epoch {epoch}: updating patience loss from {patience_loss:.4f} to {epoch_loss:.4f}')
             patience_loss = epoch_loss
             patience_update_epoch = epoch
+
+        if pbar is not None:
+            pbar.update(1)
+            postfix = dict()
+            if validate:
+                postfix['train_loss'] = epoch_train_loss
+                postfix['val_loss'] = epoch_loss
+            else:
+                postfix['loss'] = epoch_loss
+
+            postfix['min_loss'] = min_loss
+            postfix['patience_update_epoch'] = patience_update_epoch
+            pbar.set_postfix(postfix)
 
         if epoch - patience_update_epoch >= patience_epochs:
             if should_print:

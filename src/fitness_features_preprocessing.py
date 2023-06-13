@@ -359,8 +359,15 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         prefix_feature_names = [str(c) for c in df.columns if str(c).startswith(feature_prefix) and str(c).endswith(feature_suffix)]
         if len(prefix_feature_names) == 0:
             logging.info(f'No features found for prefix {feature_prefix} and suffix {feature_suffix}')
-            last_prefix_feature = [c for c in df.columns if str(c).startswith(feature_prefix)][-1]
-            insert_index = df.columns.get_loc(last_prefix_feature) + 1
+            prefix_feature_names = [c for c in df.columns if str(c).startswith(feature_prefix)]
+            if len(prefix_feature_names) > 0:
+                last_prefix_feature = prefix_feature_names[-1]
+                insert_index = df.columns.get_loc(last_prefix_feature) + 1
+
+            else:
+                all_arg_type_columns = [c for c in df.columns if 'arg_types' in str(c)]
+                insert_index = df.columns.get_loc(all_arg_type_columns[-1]) + 1
+
             new_series_values = pd.Series(np.ones(df.shape[0]) * self.default_value, name=merged_column_key)
             keys_to_merge = []
 

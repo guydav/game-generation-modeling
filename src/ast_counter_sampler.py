@@ -23,7 +23,7 @@ from tatsu import grammars
 import tqdm
 
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy
+from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy, deepcopy_ast
 from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping, LOCAL_CONTEXT_PROPAGATING_RULES
 import room_and_object_types
 
@@ -536,7 +536,7 @@ PATTERN_TYPE_MAPPINGS = {
 
 
 PRIOR_COUNT = 5
-LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(1, 5)}
+LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(5)}
 
 PRODUCTION = 'production'
 OPTIONS = 'options'
@@ -1280,7 +1280,7 @@ class RegrowthSampler(ASTParentMapper):
         if rng is None:
             rng = self.rng
 
-        new_source = typing.cast(tuple, copy.deepcopy(self.source_ast))
+        new_source = typing.cast(tuple, deepcopy_ast(self.source_ast))
         self.set_source_ast(new_source)
 
         if node_key_to_regrow is not None:

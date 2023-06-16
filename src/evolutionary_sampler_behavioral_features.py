@@ -202,7 +202,7 @@ class BehavioralFeaturizer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_game_features(self) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
         pass
 
 

@@ -10,7 +10,6 @@ import tatsu
 import tatsu.ast
 import tatsu.grammars
 from sklearn.decomposition import PCA
-import umap
 
 import ast_parser
 import ast_printer
@@ -203,7 +202,7 @@ class BehavioralFeaturizer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_game_features(self) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
         pass
 
 
@@ -255,7 +254,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
 
     def _game_to_feature_vector(self, game) -> np.ndarray:
         game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
-        return np.array([game_features[name] for name in self.feature_names])
+        return np.array([game_features[name] for name in self.feature_names])  # type: ignore
 
     def _init_pca(self):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))

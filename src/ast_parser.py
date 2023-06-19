@@ -645,7 +645,7 @@ class ASTSamplePostprocessor(ASTParser):
             kwargs['inner_call'] = True
             self._new_parse()
 
-            ast = copy.deepcopy(ast)
+            ast = ast_utils.deepcopy_ast(ast)
 
         super().__call__(ast, **kwargs)
 

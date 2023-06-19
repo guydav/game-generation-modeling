@@ -1,5 +1,7 @@
 import argparse
-from collections import namedtuple
+from collections import namedtuple, deque
+from itertools import chain
+import enum
 import gzip
 import hashlib
 import logging
@@ -13,6 +15,9 @@ import tatsu.grammars
 import tempfile
 import tqdm
 import typing
+import sys
+
+import msgpack
 
 import ast_printer
 
@@ -130,9 +135,22 @@ def fixed_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
 
+class NoParseinfoTokenizerModelContext(tatsu.grammars.ModelContext):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _get_parseinfo(self, name, pos):
+        parseinfo = super()._get_parseinfo(name, pos)
+        if parseinfo is not None:
+            parseinfo = parseinfo._replace(tokenizer=None)
+
+        return parseinfo
+
+
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
     use_tqdm: bool, relative_path: typing.Optional[str] = None,
-    save_updates_every: int = -1, log_every_change: bool = True):
+    save_updates_every: int = -1, log_every_change: bool = True,
+    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
     grammar_hash = fixed_hash(grammar_parser._to_str())
@@ -167,14 +185,21 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         game_id = _extract_game_id(game)
         game_hash = fixed_hash(game)
 
-        if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
-            if not grammar_changed and log_every_change:
+        if force_rebuild or grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
+            if not force_rebuild and not grammar_changed and log_every_change:
                 if game_id not in cache[CACHE_HASHES_KEY]:
                     logger.debug(f'Game not found in cache: {game_id}')
                 else:
                     logger.debug(f'Game changed: {game_id}')
             cache_updated = True
-            ast = grammar_parser.parse(game)
+
+            config = None
+            ctx = None
+            if remove_parseinfo_tokenizers:
+                config = grammar_parser.config.replace_config(None)
+                ctx = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=config)
+
+            ast = grammar_parser.parse(game, config=config, ctx=ctx)
             cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
             cache_updates[CACHE_ASTS_KEY][game_id] = ast
             n_cache_updates += 1
@@ -292,3 +317,82 @@ def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[
             raise ValueError(f'Unexpected value type: {v}, {type(v)}')
 
     return context_new
+
+
+class ASTCopyType(enum.Enum):
+    FULL = 0
+    SECTION = 1
+    NODE = 2
+
+
+def msgpack_ast_restore(obj, copy_type: ASTCopyType = ASTCopyType.FULL, depth: int = 0):
+    if depth == 0 and copy_type in (ASTCopyType.FULL, ASTCopyType.SECTION):
+        return tuple([msgpack_ast_restore(item, copy_type, depth + 1) for item in obj])
+
+    if isinstance(obj, list):
+        out = [msgpack_ast_restore(item, copy_type, depth + 1) for item in obj]
+        if depth == 1 and copy_type == ASTCopyType.FULL:
+            return tuple(out)
+
+        return out
+
+    if isinstance(obj, dict):
+        out = {}
+        for key, val in obj.items():
+            if key == 'parseinfo':
+                val = tatsu.infos.ParseInfo(*val)
+
+            out[key] = msgpack_ast_restore(val, copy_type, depth + 1)
+
+        return tatsu.ast.AST(out)
+
+    return obj
+
+
+T = typing.TypeVar('T')
+
+
+def deepcopy_ast(ast: T, copy_type: ASTCopyType = ASTCopyType.FULL) -> T:
+    # return pickle.loads(pickle.dumps(ast, pickle.HIGHEST_PROTOCOL))
+    return msgpack_ast_restore(msgpack.unpackb(msgpack.packb(ast)), copy_type=copy_type)  # type: ignore
+
+
+def object_total_size(o, handlers={}, verbose=False):
+    """ Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {tuple: iter,
+                    list: iter,
+                    deque: iter,
+                    dict: dict_handler,
+                    set: iter,
+                    frozenset: iter,
+                   }
+    all_handlers.update(handlers)     # user handlers take precedence
+    seen = set()                      # track which object id's have already been seen
+    default_size = sys.getsizeof(0)       # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:       # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = sys.getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=sys.stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)

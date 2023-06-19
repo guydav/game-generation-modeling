@@ -1,8 +1,9 @@
 import argparse
 from collections import OrderedDict, Counter
+from datetime import datetime
 from functools import wraps
-import multiprocessing
-from multiprocessing import pool as mpp
+import multiprocess as multiprocessing
+from multiprocess import pool as mpp
 import os
 import re
 import sys
@@ -13,6 +14,8 @@ import typing
 import logging
 logging.getLogger('git').setLevel(logging.WARNING)
 logging.getLogger('numba').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 from git.repo import Repo
 import numpy as np
@@ -22,6 +25,7 @@ import tatsu.grammars
 import torch
 from tqdm import tqdm, trange
 from viztracer import VizTracer
+import wandb
 
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
@@ -45,9 +49,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
 import src  # type: ignore
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -142,6 +149,9 @@ parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=s
 parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=None)
 parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=None)
 
+parser.add_argument('--map-elites-good-threshold', type=float, required=True)
+parser.add_argument('--map-elites-great-threshold', type=float, required=True)
+
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
 DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
@@ -149,7 +159,11 @@ parser.add_argument('--ngram-model-path', type=str, default=DEFAULT_NGRAM_MODEL_
 DEFUALT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFUALT_RANDOM_SEED)
 parser.add_argument('--initial-proposal-type', type=int, default=0)
+parser.add_argument('--sample-patience', type=int, default=100)
 parser.add_argument('--sample-parallel', action='store_true')
+
+DEFAULT_START_METHOD = 'spawn'
+parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
@@ -166,11 +180,21 @@ parser.add_argument('--sampler-prior-count', action='append', type=int, default=
 parser.add_argument('--sampler-filter-func-key', type=str)
 parser.add_argument('--no-weight-insert-delete-nodes-by-length', action='store_true')
 
+DEFAULT_MAX_SAMPLE_TOTAL_SIZE = 1024 * 1024 * 5   # ~20x larger than the largest game in the real dataset
+parser.add_argument('--max-sample-total-size', type=int, default=DEFAULT_MAX_SAMPLE_TOTAL_SIZE)
+DEFAULT_MAX_SAMPLE_DEPTH = 40  # 2x deeper than the deepest game, which has depth 23
+parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
 DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
+
+parser.add_argument('--wandb', action='store_true')
+DEFAULT_WANDB_PROJECT = 'game-generation-map-elites'
+parser.add_argument('--wandb-project', type=str, default=DEFAULT_WANDB_PROJECT)
+DEFAULT_WANDB_ENTITY = 'guy'
+parser.add_argument('--wandb-entity', type=str, default=DEFAULT_WANDB_ENTITY)
 
 parser.add_argument('--profile', action='store_true')
 parser.add_argument('--profile-output-file', type=str, default='tracer.json')
@@ -261,6 +285,15 @@ def handle_multiple_inputs(operator):
     return wrapped_operator
 
 
+# def msgpack_function_outputs(function):
+#     @wraps(function)
+#     def wrapped_function(*args, **kwargs):
+#         outputs = function(*args, **kwargs)
+#         return msgpack.packb(outputs)
+
+#     return wrapped_function
+
+
 PARENT_INDEX = 'parent_index'
 
 
@@ -285,6 +318,8 @@ class PopulationBasedSampler():
     grammar: str
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
     initial_sampler: typing.Callable[[], ASTType]
+    max_sample_depth: int
+    max_sample_total_size: int
     n_workers: int
     output_folder: str
     output_name: str
@@ -339,6 +374,8 @@ class PopulationBasedSampler():
                  sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None,
                  sampler_prior_count: typing.List[int] = [PRIOR_COUNT],
                  weight_insert_delete_nodes_by_length: bool = True,
+                 max_sample_total_size: int = DEFAULT_MAX_SAMPLE_TOTAL_SIZE,
+                 max_sample_depth: int = DEFAULT_MAX_SAMPLE_DEPTH,
                  ):
 
         self.args = args
@@ -376,6 +413,9 @@ class PopulationBasedSampler():
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
         self.weight_insert_delete_nodes_by_length = weight_insert_delete_nodes_by_length
+        self.max_sample_total_size = max_sample_total_size
+        self.max_sample_depth = max_sample_depth
+
         self.random_seed = args.random_seed
         self.rng = np.random.default_rng(self.random_seed)
 
@@ -385,8 +425,10 @@ class PopulationBasedSampler():
         self.sampler_kwargs = sampler_kwargs
         self.sampler_keys = [f'prior{pc}' for pc in sampler_prior_count]
 
-        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter, seed=args.random_seed + i,   # type: ignore
-                                                   prior_rule_count=pc, prior_token_count=pc, length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
+        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter, max_sample_depth=self.max_sample_depth,
+                                                   seed=args.random_seed + i,   # type: ignore
+                                                   prior_rule_count=pc, prior_token_count=pc,
+                                                   length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
                                                    **sampler_kwargs) for pc in sampler_prior_count}
                          for i in range(self.n_workers)]
 
@@ -427,6 +469,12 @@ class PopulationBasedSampler():
         # Generate the initial population
         self._inner_initialize_population()
 
+        pop = self.population
+        if isinstance(pop, dict):
+            pop = pop.values()
+
+        logger.debug(f'Mean initial population_size: {np.mean([object_total_size(p) for p in pop]):.3f}')
+
     def _pre_population_sample_setup(self):
         pass
 
@@ -456,7 +504,7 @@ class PopulationBasedSampler():
         return proposal_fitness
 
     def _process_index(self):
-        identity = multiprocessing.current_process()._identity
+        identity = multiprocessing.current_process()._identity  # type: ignore
         if identity is None or len(identity) == 0:
             return 0
 
@@ -565,9 +613,9 @@ class PopulationBasedSampler():
                         sample = None
 
             except RecursionError:
-                if self.verbose >= 2: print(f'Recursion error in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
-                if self.verbose >= 2: print(f'Sampling exception in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Sampling exception in sample {idx} -- skipping')
 
         return sample
 
@@ -608,11 +656,11 @@ class PopulationBasedSampler():
                 # else:
                 #     sample_generated = True
 
-            except RecursionError:
-                if self.verbose >= 2: print('Recursion error, skipping sample')
+            except RecursionError as e:
+                if self.verbose >= 2: logger.info(f'Recursion error in regrowth, skipping sample: {e.args}')
 
-            except SamplingException:
-                if self.verbose >= 2: print('Sampling exception, skipping sample')
+            except SamplingException as e:
+                if self.verbose >= 2: logger.info(f'Sampling exception in regrowth, skipping sample: {e.args}')
 
         return new_proposal  # type: ignore
 
@@ -671,7 +719,7 @@ class PopulationBasedSampler():
         children and inserting a new node into it. The new node is selected using the initial sampler
         '''
         # Make a copy of the game
-        new_game = copy.deepcopy(game)
+        new_game = deepcopy_ast(game)
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
             new_game, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=True)
 
@@ -696,11 +744,11 @@ class PopulationBasedSampler():
             try:
                 new_node = self._sampler(rng).sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
 
-            except RecursionError:
-                if self.verbose >= 2: print('Recursion error, skipping sample')
+            except RecursionError as e:
+                if self.verbose >= 2: logger.info(f'Recursion error in insert, skipping sample: {e.args}')
 
-            except SamplingException:
-                if self.verbose >= 2: print('Sampling exception, skipping sample')
+            except SamplingException as e:
+                if self.verbose >= 2: logger.info(f'Sampling exception in insert, skipping sample: {e.args}')
 
         if isinstance(new_node, tuple):
             new_node = new_node[0]
@@ -720,7 +768,7 @@ class PopulationBasedSampler():
         children and deleting one of them
         '''
         # Make a copy of the game
-        new_game = copy.deepcopy(game)
+        new_game = deepcopy_ast(game)
 
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
             new_game, min_length=2, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=False)
@@ -779,10 +827,10 @@ class PopulationBasedSampler():
             game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
 
         if crossover_first_game:
-            game_1 = copy.deepcopy(game_1)
+            game_1 = deepcopy_ast(game_1)
 
         if crossover_second_game:
-            game_2 = copy.deepcopy(game_2)
+            game_2 = deepcopy_ast(game_2)
 
         # Create a map from crossover_type keys to lists of nodeinfos for each game
         self._regrowth_sampler().set_source_ast(game_1)
@@ -815,12 +863,12 @@ class PopulationBasedSampler():
 
         # Perform the crossover and fix the contexts of the new games
         if crossover_first_game:
-            game_2_crossover_node = copy.deepcopy(g2_node)
+            game_2_crossover_node = deepcopy_ast(g2_node, copy_type=ASTCopyType.NODE)
             replace_child(g1_parent, g1_selector, game_2_crossover_node) # type: ignore
             self._context_fixer().fix_contexts(game_1, g1_node, game_2_crossover_node)  # type: ignore
 
         if crossover_second_game:
-            game_1_crossover_node = copy.deepcopy(g1_node)
+            game_1_crossover_node = deepcopy_ast(g1_node, copy_type=ASTCopyType.NODE)
             replace_child(g2_parent, g2_selector, game_1_crossover_node) # type: ignore
             self._context_fixer().fix_contexts(game_2, g2_node, game_1_crossover_node)  # type: ignore
 
@@ -864,10 +912,10 @@ class PopulationBasedSampler():
             game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
 
         if crossover_first_game:
-            game_1 = copy.deepcopy(game_1)
+            game_1 = deepcopy_ast(game_1)
 
         if crossover_second_game:
-            game_2 = copy.deepcopy(game_2)
+            game_2 = deepcopy_ast(game_2)
 
         game_1_sections = [t[0] for t in game_1[3:-1]]  # type: ignore
         game_2_sections = [t[0] for t in game_2[3:-1]]  # type: ignore
@@ -876,7 +924,7 @@ class PopulationBasedSampler():
             game_2_section_index = rng.integers(len(game_2_sections))
             game_2_section = game_2_sections[game_2_section_index]
             index, replace = self._find_index_for_section(game_1_sections, game_2_section)
-            section_copy = copy.deepcopy(game_2[3 + game_2_section_index])
+            section_copy = deepcopy_ast(game_2[3 + game_2_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
             self._context_fixer().fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
 
@@ -884,7 +932,7 @@ class PopulationBasedSampler():
             game_1_section_index = rng.integers(len(game_1_sections))
             game_1_section = game_1_sections[game_1_section_index]
             index, replace = self._find_index_for_section(game_2_sections, game_1_section)
-            section_copy = copy.deepcopy(game_1[3 + game_1_section_index])
+            section_copy = deepcopy_ast(game_1[3 + game_1_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_2, section_copy, index, replace)  # type: ignore
             self._context_fixer().fix_contexts(game_2, crossover_child=section_copy[1])  # type: ignore
 
@@ -909,7 +957,7 @@ class PopulationBasedSampler():
     def _cognitive_inspired_mutate_preference(self, game: ASTType, rng: np.random.Generator, mutate_first_condition: bool = False,
                                     mutate_last_condition: bool = False, resample_variable_types: bool = False,
                                     mutated_preference_as_new: typing.Optional[bool] = None) -> ASTType:
-        game = copy.deepcopy(game)
+        game = deepcopy_ast(game)  # type: ignore
 
         if mutated_preference_as_new is None:
             mutated_preference_as_new = rng.uniform() < 0.5
@@ -938,7 +986,7 @@ class PopulationBasedSampler():
         # if we're adding the mutated preference, we should keep a copy of the original
         original_preference = None
         if mutated_preference_as_new:
-            original_preference = copy.deepcopy(preference_node)
+            original_preference = deepcopy_ast(preference_node, copy_type=ASTCopyType.NODE)
 
         pref_body = preference_node.pref_body.body  # type: ignore
         if pref_body.parseinfo.rule == 'pref_body_exists':
@@ -1009,12 +1057,12 @@ class PopulationBasedSampler():
                 new_setup = self._sampler(rng).sample('setup', global_context=global_context)[0]
             except SamplingException as e:
                 if self.verbose > 1:
-                    print(f'Failed to sample setup with global context {global_context}: {e}')
+                    logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
                 continue
 
         new_setup_tuple = (ast_parser.SETUP, new_setup)
 
-        new_game = copy.deepcopy(game)
+        new_game = deepcopy_ast(game)
         new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
         self._context_fixer().fix_contexts(new_game)  # type: ignore
         return new_game
@@ -1034,12 +1082,12 @@ class PopulationBasedSampler():
                 new_terminal = self._sampler(rng).sample('terminal', global_context=global_context)[0]
             except SamplingException as e:
                 if self.verbose > 1:
-                    print(f'Failed to sample terminal with global context {global_context}: {e}')
+                    logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
                 continue
 
         new_terminal_tuple = (ast_parser.TERMINAL, new_terminal)
 
-        new_game = copy.deepcopy(game)
+        new_game = deepcopy_ast(game)
         replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore
         index = len(new_game) - 2 if not replace else len(new_game) - 3
         new_game = self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
@@ -1160,6 +1208,14 @@ class PopulationBasedSampler():
                 children_features = []
 
                 for i, child in enumerate(child_or_children):
+                    child_size = object_total_size(child)
+                    if child_size > self.max_sample_total_size:
+                        # TODO: move this to be only if verbose at some point in the future
+                        parent_size = [object_total_size(p) for p in parent] if isinstance(parent, list) else object_total_size(parent)
+                        section_sizes = [object_total_size(s) for s in child[3:-1]]  # type: ignore
+                        logger.info(f'Sample size {child_size} ({section_sizes}) exceeds max size {self.max_sample_total_size} from parent with size {parent_size}, skipping')
+                        continue
+
                     self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
                     retval = self._score_proposal(child, return_features=compute_features)
                     if compute_features:
@@ -1299,13 +1355,19 @@ class PopulationBasedSampler():
                     'min': self.generation_diversity_scores.min()
                 })
 
-            if should_tqdm:
-                pbar.update(1)  # type: ignore
+            if should_tqdm or args.wandb:
                 postfix = self._create_tqdm_postfix()
-                pbar.set_postfix(postfix)  # type: ignore
+                if should_tqdm:
+                    pbar.update(1)  # type: ignore
+                    pbar.set_postfix(postfix)  # type: ignore
+
+                if args.wandb:
+                    wandb_update = {k: float(v) if isinstance(v, str) else v for k, v in postfix.items() if k != 'Timestamp'}
+                    wandb_update['step'] = self.generation_index
+                    wandb.log(wandb_update)
 
             elif self.verbose:
-                print(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
+                logger.info(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
 
             self.fitness_metrics_history.append({'mean': self.mean_fitness, 'std': self.std_fitness, 'max': self.best_fitness})
 
@@ -1336,7 +1398,7 @@ class PopulationBasedSampler():
 
         logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
-            self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
+            self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,  # type: ignore
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess,  use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
@@ -1413,6 +1475,8 @@ class MAPElitesSampler(PopulationBasedSampler):
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
+    good_threshold: float
+    great_threshold: float
     initialization_strategy: MAPElitesInitializationStrategy
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
@@ -1434,6 +1498,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  key_type: MAPElitesKeyType,
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
+                 good_threshold: float, great_threshold: float,
                  custom_featurizer: typing.Optional[BehavioralFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
@@ -1445,6 +1510,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.key_type = key_type
         self.weight_strategy = weight_strategy
         self.initialization_strategy = initialization_strategy
+        self.good_threshold = good_threshold
+        self.great_threshold = great_threshold
         self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
@@ -1721,8 +1788,9 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 87]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 92]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > self.good_threshold]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > self.great_threshold]),
+            'Timestamp': datetime.now().strftime('%H:%M:%S'),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
         return metrics
@@ -1970,6 +2038,8 @@ def main(args):
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
+            good_threshold=args.map_elites_good_threshold,
+            great_threshold=args.map_elites_great_threshold,
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             use_crossover=args.map_elites_use_crossover,
             use_cognitive_operators=args.map_elites_use_cognitive_operators,
@@ -1991,12 +2061,22 @@ def main(args):
             sample_filter_func=args.sample_filter_func,
             sampler_prior_count=args.sampler_prior_count,
             weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
+            sample_patience=args.sample_patience,
         )
 
         evosampler.initialize_population()
 
     else:
         raise ValueError(f'Unknown sampler type {args.sampler_type}')
+
+    if args.wandb:
+        wandb.init(
+            name=args.output_name,
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            config=vars(args),
+            dir=os.environ.get('WANDB_CACHE_DIR', '.wandb'),
+        )
 
     tracer = None
 
@@ -2046,9 +2126,15 @@ def main(args):
             logger.info(f'Saving profile to {profile_output_path}')
             tracer.save(profile_output_path)
 
+        if args.wandb:
+            wandb.finish()
+
 
 if __name__ == '__main__':
+    # torch.set_num_threads(1)
+
     args = parser.parse_args()
+    multiprocessing.set_start_method(args.parallel_start_method, force=True)
 
     args.grammar_file = os.path.join(args.relative_path, args.grammar_file)
     args.counter_output_path = os.path.join(args.relative_path, args.counter_output_path)

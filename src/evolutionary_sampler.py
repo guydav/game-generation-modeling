@@ -14,6 +14,8 @@ import typing
 import logging
 logging.getLogger('git').setLevel(logging.WARNING)
 logging.getLogger('numba').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 from git.repo import Repo
 import numpy as np
@@ -23,6 +25,7 @@ import tatsu.grammars
 import torch
 from tqdm import tqdm, trange
 from viztracer import VizTracer
+import wandb
 
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
@@ -146,6 +149,9 @@ parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=s
 parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=None)
 parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=None)
 
+parser.add_argument('--map-elites-good-threshold', type=float, required=True)
+parser.add_argument('--map-elites-great-threshold', type=float, required=True)
+
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
 DEFAULT_NGRAM_MODEL_PATH = LATEST_AST_N_GRAM_MODEL_PATH
@@ -179,11 +185,16 @@ parser.add_argument('--max-sample-total-size', type=int, default=DEFAULT_MAX_SAM
 DEFAULT_MAX_SAMPLE_DEPTH = 40  # 2x deeper than the deepest game, which has depth 23
 parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
 
-
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
 DEFAULT_OUTPUT_FOLDER = './samples'
 parser.add_argument('--output-folder', type=str, default=DEFAULT_OUTPUT_FOLDER)
+
+parser.add_argument('--wandb', action='store_true')
+DEFAULT_WANDB_PROJECT = 'game-generation-map-elites'
+parser.add_argument('--wandb-project', type=str, default=DEFAULT_WANDB_PROJECT)
+DEFAULT_WANDB_ENTITY = 'guy'
+parser.add_argument('--wandb-entity', type=str, default=DEFAULT_WANDB_ENTITY)
 
 parser.add_argument('--profile', action='store_true')
 parser.add_argument('--profile-output-file', type=str, default='tracer.json')
@@ -1344,10 +1355,16 @@ class PopulationBasedSampler():
                     'min': self.generation_diversity_scores.min()
                 })
 
-            if should_tqdm:
-                pbar.update(1)  # type: ignore
+            if should_tqdm or args.wandb:
                 postfix = self._create_tqdm_postfix()
-                pbar.set_postfix(postfix)  # type: ignore
+                if should_tqdm:
+                    pbar.update(1)  # type: ignore
+                    pbar.set_postfix(postfix)  # type: ignore
+
+                if args.wandb:
+                    wandb_update = {k: float(v) if isinstance(v, str) else v for k, v in postfix.items() if k != 'Timestamp'}
+                    wandb_update['step'] = self.generation_index
+                    wandb.log(wandb_update)
 
             elif self.verbose:
                 logger.info(f"Average fitness: {self.mean_fitness:.2f} +/- {self.std_fitness:.2f}, Best fitness: {self.best_fitness:.2f}")
@@ -1381,7 +1398,7 @@ class PopulationBasedSampler():
 
         logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
-            self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,
+            self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,  # type: ignore
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              postprocess=postprocess,  use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
@@ -1458,6 +1475,8 @@ class MAPElitesSampler(PopulationBasedSampler):
     fitness_rank_weights: np.ndarray
     fitness_values: typing.Dict[KeyTypeAnnotation, float]
     generation_size: int
+    good_threshold: float
+    great_threshold: float
     initialization_strategy: MAPElitesInitializationStrategy
     key_type: MAPElitesKeyType
     map_elites_feature_names: typing.List[str]
@@ -1479,6 +1498,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                  key_type: MAPElitesKeyType,
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
+                 good_threshold: float, great_threshold: float,
                  custom_featurizer: typing.Optional[BehavioralFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
@@ -1490,6 +1510,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.key_type = key_type
         self.weight_strategy = weight_strategy
         self.initialization_strategy = initialization_strategy
+        self.good_threshold = good_threshold
+        self.great_threshold = great_threshold
         self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
@@ -1766,8 +1788,8 @@ class MAPElitesSampler(PopulationBasedSampler):
         # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
-            '# Good': len([True for fitness in self.fitness_values.values() if fitness > 84]),
-            '# Great': len([True for fitness in self.fitness_values.values() if fitness > 89]),
+            '# Good': len([True for fitness in self.fitness_values.values() if fitness > self.good_threshold]),
+            '# Great': len([True for fitness in self.fitness_values.values() if fitness > self.great_threshold]),
             'Timestamp': datetime.now().strftime('%H:%M:%S'),
         }
         self.archive_metrics_history.append(metrics)  # type: ignore
@@ -2016,6 +2038,8 @@ def main(args):
             generation_size=args.map_elites_generation_size,
             weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
             initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
+            good_threshold=args.map_elites_good_threshold,
+            great_threshold=args.map_elites_great_threshold,
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
             use_crossover=args.map_elites_use_crossover,
             use_cognitive_operators=args.map_elites_use_cognitive_operators,
@@ -2044,6 +2068,15 @@ def main(args):
 
     else:
         raise ValueError(f'Unknown sampler type {args.sampler_type}')
+
+    if args.wandb:
+        wandb.init(
+            name=args.output_name,
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            config=vars(args),
+            dir=os.environ.get('WANDB_CACHE_DIR', '.wandb'),
+        )
 
     tracer = None
 
@@ -2092,6 +2125,9 @@ def main(args):
             profile_output_path = os.path.join(args.profile_output_folder, args.profile_output_file)
             logger.info(f'Saving profile to {profile_output_path}')
             tracer.save(profile_output_path)
+
+        if args.wandb:
+            wandb.finish()
 
 
 if __name__ == '__main__':

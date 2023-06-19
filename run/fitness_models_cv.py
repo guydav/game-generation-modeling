@@ -139,8 +139,8 @@ def main(args: argparse.Namespace):
     logger.info(f'Best params: {cv.best_params_}')
 
     utils.visualize_cv_outputs(cv, train_tensor, test_tensor, results, notebook=False)
-    cv.scorer_ = None
-    cv.scoring = None
+    cv.scorer_ = None  # type: ignore
+    cv.scoring = None  # type: ignore
 
     output_data = dict(cv=cv, train_tensor=train_tensor, test_tensor=test_tensor, results=results, feature_columns=feature_columns)
     utils.save_data(output_data, folder=args.output_folder, name=args.output_name, relative_path=args.output_relative_path)
@@ -153,6 +153,14 @@ def main(args: argparse.Namespace):
             cv.best_estimator_['fitness'].train_kwargs['split_validation_from_train'] = False  # type: ignore
             cv.best_estimator_.fit(full_tensor)  # type: ignore
             print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
+
+            full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
+            real_game_scores = full_tensor_scores[:, 0]
+            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, max = {real_game_scores.max():.4f}')
+
+            negatives_scores = full_tensor_scores[:, 1:].ravel()
+            print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))
+            print(torch.quantile(negatives_scores, 0.2))
 
         model_name = args.output_name
         if 'fitness_sweep_' in model_name:

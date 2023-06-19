@@ -254,7 +254,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
 
     def _game_to_feature_vector(self, game) -> np.ndarray:
         game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
-        return np.array([game_features[name] for name in self.feature_names])
+        return np.array([game_features[name] for name in self.feature_names])  # type: ignore
 
     def _init_pca(self):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))

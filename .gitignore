@@ -26,3 +26,4 @@ run/profile_evo_sampler.sh
 **/lightning_logs/
 **/lightning_logs/*
 **/lightning_logs/**/*
+wandb/*

@@ -393,23 +393,47 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
     return context
 
 
-def predicate_function_term_to_type_category(term: str,
+def predicate_function_term_to_types(term_or_terms: typing.Union[str, typing.List[str]],
+    context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
+    ) -> typing.Optional[typing.Set[str]]:
+
+    if isinstance(term_or_terms, str):
+        term_or_terms = [term_or_terms]
+
+    term_type_list = []
+
+    for term in term_or_terms:
+        if term.startswith('?'):
+            if term in context_variables:
+                var_def = context_variables[term]
+                if isinstance(var_def, list):
+                    var_types = var_def[0].var_types
+                else:
+                    var_types = var_def.var_types
+
+                if isinstance(var_types, list):
+                    term_type_list.extend(var_types)
+                else:
+                    term_type_list.append(var_types)
+        else:
+            term_type_list.append(term)
+
+    if any(not isinstance(term_type, str) for term_type in term_type_list):
+        print(f'Non-string type found in {term_type_list}')
+    return set(term_type_list)
+
+
+def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, typing.List[str]],
     context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
     known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.Set[str]]:
-    if term.startswith('?'):
-        if term in context_variables:
-            var_def = context_variables[term]
-            if isinstance(var_def, list):
-                term_type_list = var_def[0].var_types
-            else:
-                term_type_list = var_def.var_types
-        else:
-            return None
-    else:
-        term_type_list = [term]
+
+    term_types = predicate_function_term_to_types(term_or_terms, context_variables)
+
+    if not term_types:
+        return None
 
     term_categories = set()
-    for term_type in term_type_list:
+    for term_type in term_types:
         if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
             if term_type not in known_missing_types and not term_type.isnumeric():
                 continue

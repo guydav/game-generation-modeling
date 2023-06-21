@@ -1039,6 +1039,7 @@ class PopulationBasedSampler():
             mutated_game = self._regrowth(rng, node_key_to_regrow=pred_key)
 
             if mutated_preference_as_new:
+                # TODO: check that the mutated preference is different from all current preferences
                 mutated_game_preferences_node = [section_tuple for section_tuple in mutated_game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
                 mutated_game_preferences_node['preferences'].insert(rng.integers(len(mutated_game_preferences_node['preferences']) + 1), original_preference)  # type: ignore
 

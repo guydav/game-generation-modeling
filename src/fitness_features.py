@@ -25,14 +25,14 @@ import tatsu.infos
 from tqdm import tqdm
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
-from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_category,\
+from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_categories,\
     VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures, NGRAM_SCORE_PATTERN
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser, DEFAULT_N_BY_SECTION
-from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
 import room_and_object_types
 
 
@@ -68,6 +68,7 @@ parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIM
 parser.add_argument('--no-binarize', action='store_true')
 parser.add_argument('--no-merge', action='store_true')
 parser.add_argument('--merge-threshold', type=float, default=DEFAULT_MERGE_THRESHOLD_PROPORTION)
+parser.add_argument('--use-specific-objects-ngram-model', action='store_true')
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
@@ -1817,7 +1818,7 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
 
             terms = extract_predicate_function_args(ast)
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-            term_categories = [predicate_function_term_to_type_category(term, context_variables, self.known_missing_types) for term in terms]
+            term_categories = [predicate_function_term_to_type_categories(term, context_variables, self.known_missing_types) for term in terms]
             if any(term_category is None for term_category in term_categories):
                 return
 
@@ -2421,7 +2422,13 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     # text_ngram_term = TextNGramTerm(top_k_min_n=2, score_all=True)
     # fitness.register(text_ngram_term, full_text_rule=True)
 
-    ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True, top_k_ngrams=None, top_k_ngrams_for_sections=None)
+    if args.use_specific_objects_ngram_model:
+        ngram_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+    else:
+        ngram_path = LATEST_AST_N_GRAM_MODEL_PATH
+
+    ast_ngram_term = ASTNGramTerm(top_k_min_n=2, score_all=True, top_k_ngrams=None,
+                                  top_k_ngrams_for_sections=None, n_gram_model_path=ngram_path)
     fitness.register(ast_ngram_term, full_ast_rule=True)
 
     return fitness

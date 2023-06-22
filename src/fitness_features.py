@@ -437,13 +437,16 @@ class VariableBasedFitnessTerm(FitnessTerm):
     def _inner_update(self, term: str, variables: typing.Dict[str, VariableDefinition]):
         pass
 
+    def _get_all_inner_keys(self):
+        return ['all', 'incorrect_count']
 
-class AllVariablesDefined(VariableBasedFitnessTerm):
+
+class VariablesDefinedTerm(VariableBasedFitnessTerm):
     defined_count: int = 0
     undefined_count: int = 0
 
     def __init__(self):
-        super().__init__('all_variables_defined')
+        super().__init__('variables_defined')
 
     def game_start(self) -> None:
         self.defined_count = 0
@@ -460,11 +463,13 @@ class AllVariablesDefined(VariableBasedFitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # print(self.defined_count, self.undefined_count)
         if self.defined_count == 0:
-            return 0
+            return dict(all=0, incorrect_count=0)
 
-        return self.undefined_count == 0
+        return dict(all=self.undefined_count == 0, incorrect_count=self.undefined_count)
 
         # return self.defined_count / (self.defined_count + self.undefined_count)
+
+
 
 
 class AllVariablesUsed(VariableBasedFitnessTerm):
@@ -473,7 +478,7 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
     variable_definition_repeated: bool
 
     def __init__(self):
-        super().__init__('all_variables_used')
+        super().__init__('variables_used')
 
     def game_start(self) -> None:
         self.defined_variables = set()
@@ -499,9 +504,11 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # print(self.defined_variables, self.used_variables, self.variable_definition_repeated)
         if len(self.defined_variables) == 0 or self.variable_definition_repeated:
-            return 0
+            return dict(all=0, incorrect_count=0)
 
-        return len(self.defined_variables.intersection(self.used_variables)) == len(self.defined_variables)
+        variable_intersection = self.defined_variables.intersection(self.used_variables)
+        return dict(all=len(variable_intersection) == len(self.defined_variables),
+                    incorrect_count=len(self.defined_variables) - len(variable_intersection))
 
 
 class AllPreferencesUsed(FitnessTerm):
@@ -509,7 +516,7 @@ class AllPreferencesUsed(FitnessTerm):
     used_preferences: typing.Set[str] = set()
 
     def __init__(self):
-        super().__init__(('preference', COUNT_RULE_PATTERN), 'all_preferences_used')
+        super().__init__(('preference', COUNT_RULE_PATTERN), 'preferences_used')
 
     def game_start(self) -> None:
         self.defined_preferences = set()
@@ -522,11 +529,16 @@ class AllPreferencesUsed(FitnessTerm):
         else:
             self.used_preferences.add(ast.name_and_types.pref_name)  # type: ignore
 
+    def _get_all_inner_keys(self):
+        return ['all', 'incorrect_count']
+
+
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.defined_preferences) == 0:
-            return 0
+            return dict(all=0, incorrect_count=0)
 
-        return len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))
+        return dict(all=len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences)),
+                    incorrect_count=len(self.defined_preferences.symmetric_difference(self.used_preferences)))
 
 
 class NumPreferencesDefined(FitnessTerm):
@@ -2302,7 +2314,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     fitness = ASTFitnessFeaturizer(preprocessors=preprocessors)
 
-    all_variables_defined = AllVariablesDefined()
+    all_variables_defined = VariablesDefinedTerm()
     fitness.register(all_variables_defined)
 
     all_variables_used = AllVariablesUsed()

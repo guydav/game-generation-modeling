@@ -983,24 +983,24 @@ class PopulationBasedSampler():
                 replace_child(preferences_node, ['preferences'], [preferences_node.preferences])  # type: ignore
 
         self._regrowth_sampler().set_source_ast(game)
-        preference_node_keys = []
+        pref_def_node_keys = []
         for node_key in self._regrowth_sampler().node_keys:
             node_info = self._regrowth_sampler().parent_mapping[node_key]
-            if node_info[0].parseinfo.rule == 'preference':  # type: ignore
-                preference_node_keys.append(node_key)
+            if node_info[0].parseinfo.rule == 'pref_def':  # type: ignore
+                pref_def_node_keys.append(node_key)
 
-        if len(preference_node_keys) == 0:
+        if len(pref_def_node_keys) == 0:
             raise SamplingException('No preference nodes found for mutation')
 
-        preference_node_key = self._choice(preference_node_keys, rng=rng)
-        preference_node = self._regrowth_sampler().parent_mapping[preference_node_key][0]  # type: ignore
+        pref_def_node_key = self._choice(pref_def_node_keys, rng=rng)
+        pref_def_node = self._regrowth_sampler().parent_mapping[pref_def_node_key][0]  # type: ignore
 
         # if we're adding the mutated preference, we should keep a copy of the original
-        original_preference = None
+        original_pref_def = None
         if mutated_preference_as_new:
-            original_preference = deepcopy_ast(preference_node, copy_type=ASTCopyType.NODE)
+            original_pref_def = deepcopy_ast(pref_def_node, copy_type=ASTCopyType.NODE)
 
-        pref_body = preference_node.pref_body.body  # type: ignore
+        pref_body = pref_def_node.definition.pref_body.body  # type: ignore
         if pref_body.parseinfo.rule == 'pref_body_exists':
             if resample_variable_types:
                 variables = pref_body.exists_vars.variables
@@ -1049,13 +1049,12 @@ class PopulationBasedSampler():
             pred_key = self._regrowth_sampler()._ast_key(pred)
 
             mutated_game = self._regrowth(rng, node_key_to_regrow=pred_key)
-
-            if mutated_preference_as_new:
-                # TODO: check that the mutated preference is different from all current preferences
-                mutated_game_preferences_node = [section_tuple for section_tuple in mutated_game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
-                mutated_game_preferences_node['preferences'].insert(rng.integers(len(mutated_game_preferences_node['preferences']) + 1), original_preference)  # type: ignore
-
             game = mutated_game
+
+        if mutated_preference_as_new:
+            # TODO: check that the mutated preference is different from all current preferences
+            game_preferences_node = [section_tuple for section_tuple in game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
+            game_preferences_node['preferences'].insert(rng.integers(len(game_preferences_node['preferences']) + 1), original_pref_def)  # type: ignore
 
         self._context_fixer().fix_contexts(game)  # type: ignore
 
@@ -1073,7 +1072,7 @@ class PopulationBasedSampler():
                     logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
                 continue
 
-        new_setup_tuple = (ast_parser.SETUP, new_setup)
+        new_setup_tuple = (ast_parser.SETUP, new_setup, ')')
 
         new_game = deepcopy_ast(game)
         new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
@@ -1098,7 +1097,7 @@ class PopulationBasedSampler():
                     logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
                 continue
 
-        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal)
+        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal, ')')
 
         new_game = deepcopy_ast(game)
         replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore

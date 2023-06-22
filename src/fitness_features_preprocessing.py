@@ -64,7 +64,7 @@ ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
-    re.compile(r'pref_forall_[\w\d_]+_incorrect_count$'),  # since I now allow these to return a number, it might as well be scaled
+    re.compile(r'[\w\d_]+_incorrect_count$'),  # since I now allow these to return a number, it might as well be scaled
     re.compile(r'scoring_count_expression_repetitions_\w+'),
 ]
 

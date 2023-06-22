@@ -1061,7 +1061,7 @@ class PopulationBasedSampler():
                     logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
                 continue
 
-        new_setup_tuple = (ast_parser.SETUP, new_setup)
+        new_setup_tuple = (ast_parser.SETUP, new_setup, ')')
 
         new_game = deepcopy_ast(game)
         new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
@@ -1086,7 +1086,7 @@ class PopulationBasedSampler():
                     logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
                 continue
 
-        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal)
+        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal, ')')
 
         new_game = deepcopy_ast(game)
         replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore

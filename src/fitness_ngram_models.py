@@ -470,6 +470,12 @@ class NGramASTParser(ast_parser.ASTParser):
         self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
         self.ast_counts_by_section = defaultdict(int)
 
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        # To allow unpickling of old models
+        self.__dict__.update(state)
+        if not hasattr(self, 'use_specific_objects'):
+            self.use_specific_objects = False
+
     def _add_token(self, token: str, at_start: bool = False, **kwargs):
         if at_start:
             self.preorder_ast_tokens.insert(0, token)
@@ -720,6 +726,12 @@ class ASTNGramTrieModel:
                                                preorder_traversal=preorder_traversal, pad=pad)
         self.model = NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False)
         self.model_by_section = {section: NGramTrieModel(self.n_by_sections[section], stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        # To allow unpickling of old models
+        self.__dict__.update(state)
+        if not hasattr(self, 'use_specific_objects'):
+            self.use_specific_objects = False
 
     def fit(self, asts: typing.Sequence[typing.Union[tuple,tatsu.ast.AST]]):
         for ast in asts:

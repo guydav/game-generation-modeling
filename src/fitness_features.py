@@ -2223,7 +2223,11 @@ class ASTNGramTerm(FitnessTerm):
         with open(self.n_gram_model_path, 'rb') as f:
             self.n_gram_model = pickle.load(f)
 
-        self.model_n = int(os.path.basename(self.n_gram_model_path).split('_')[1])
+        path_split = os.path.basename(self.n_gram_model_path).split('_')
+        path_digits = [s for s in path_split if s.isdigit()]
+        if len(path_digits) == 0:
+            raise ValueError(f'Could not find model_n in {self.n_gram_model_path}')
+        self.model_n = int(path_digits[0])
 
     def game_start(self) -> None:
         self.game_output = None
@@ -2496,6 +2500,9 @@ if __name__ == '__main__':
 
     if args.featurizer_output_path is None:
         args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
+
+    args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     original_recursion_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(args.recursion_limit)

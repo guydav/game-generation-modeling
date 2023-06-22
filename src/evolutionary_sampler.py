@@ -42,7 +42,9 @@ from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSe
 from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
-from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH,\
+    LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH,\
+    LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
@@ -86,11 +88,14 @@ parser.add_argument('--grammar-file', type=str, default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('--parse-counter', action='store_true')
 parser.add_argument('--counter-output-path', type=str, default=DEFAULT_COUNTER_OUTPUT_PATH)
 
+parser.add_argument('--use-specific-objects-models', action='store_true')
+
 DEFAULT_FITNESS_FUNCTION_DATE_ID = LATEST_FITNESS_FUNCTION_DATE_ID
 parser.add_argument('--fitness-function-date-id', type=str, default=DEFAULT_FITNESS_FUNCTION_DATE_ID)
 DEFAULT_FITNESS_FEATURIZER_PATH = LATEST_FITNESS_FEATURIZER_PATH
 parser.add_argument('--fitness-featurizer-path', type=str, default=DEFAULT_FITNESS_FEATURIZER_PATH)
-parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_SAVE_MODEL_NAME)
+DEFAULT_FITNESS_FUNCTION_MODEL_NAME = DEFAULT_SAVE_MODEL_NAME
+parser.add_argument('--fitness-function-model-name', type=str, default=DEFAULT_FITNESS_FUNCTION_MODEL_NAME)
 parser.add_argument('--no-flip-fitness-sign', action='store_true')
 
 DEFAULT_POPULATION_SIZE = 100
@@ -182,8 +187,10 @@ parser.add_argument('--no-weight-insert-delete-nodes-by-length', action='store_t
 
 DEFAULT_MAX_SAMPLE_TOTAL_SIZE = 1024 * 1024 * 5   # ~20x larger than the largest game in the real dataset
 parser.add_argument('--max-sample-total-size', type=int, default=DEFAULT_MAX_SAMPLE_TOTAL_SIZE)
-DEFAULT_MAX_SAMPLE_DEPTH = 40  # 2x deeper than the deepest game, which has depth 23
+DEFAULT_MAX_SAMPLE_DEPTH = 24  # deeper than the deepest game, which has depth 23, and this is for a single node regrowth
 parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
+DEFAULT_MAX_SAMPLE_NODES = 256  # longer most games, but limiting a single node regrowth, not an entire game
+parser.add_argument('--max-sample-nodes', type=int, default=DEFAULT_MAX_SAMPLE_NODES)
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
 parser.add_argument('--output-name', type=str, default=DEFAULT_OUTPUT_NAME)
@@ -319,6 +326,7 @@ class PopulationBasedSampler():
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
     initial_sampler: typing.Callable[[], ASTType]
     max_sample_depth: int
+    max_sample_nodes: int
     max_sample_total_size: int
     n_workers: int
     output_folder: str
@@ -330,7 +338,7 @@ class PopulationBasedSampler():
     regrowth_samplers: typing.List[RegrowthSampler]
     relative_path: str
     rng: np.random.Generator
-    sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]]
+    sample_filter_func: typing.Optional[typing.Callable[[ASTType, typing.Dict[str, typing.Any], float], bool]]
     sample_parallel: bool
     sampler_keys: typing.List[str]
     sampler_kwargs: typing.Dict[str, typing.Any]
@@ -371,11 +379,12 @@ class PopulationBasedSampler():
                  diversity_scorer_k: int = 1,
                  diversity_score_threshold: float = 0.0,
                  diversity_threshold_absolute: bool = False,
-                 sample_filter_func: typing.Optional[typing.Callable[[typing.Dict[str, typing.Any], float], bool]] = None,
+                 sample_filter_func: typing.Optional[typing.Callable[[ASTType, typing.Dict[str, typing.Any], float], bool]] = None,
                  sampler_prior_count: typing.List[int] = [PRIOR_COUNT],
                  weight_insert_delete_nodes_by_length: bool = True,
-                 max_sample_total_size: int = DEFAULT_MAX_SAMPLE_TOTAL_SIZE,
                  max_sample_depth: int = DEFAULT_MAX_SAMPLE_DEPTH,
+                 max_sample_nodes: int = DEFAULT_MAX_SAMPLE_NODES,
+                 max_sample_total_size: int = DEFAULT_MAX_SAMPLE_TOTAL_SIZE,
                  ):
 
         self.args = args
@@ -413,8 +422,9 @@ class PopulationBasedSampler():
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
         self.weight_insert_delete_nodes_by_length = weight_insert_delete_nodes_by_length
-        self.max_sample_total_size = max_sample_total_size
         self.max_sample_depth = max_sample_depth
+        self.max_sample_nodes = max_sample_nodes
+        self.max_sample_total_size = max_sample_total_size
 
         self.random_seed = args.random_seed
         self.rng = np.random.default_rng(self.random_seed)
@@ -425,7 +435,9 @@ class PopulationBasedSampler():
         self.sampler_kwargs = sampler_kwargs
         self.sampler_keys = [f'prior{pc}' for pc in sampler_prior_count]
 
-        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter, max_sample_depth=self.max_sample_depth,
+        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter,
+                                                   max_sample_depth=self.max_sample_depth,
+                                                   max_sample_nodes=self.max_sample_nodes,
                                                    seed=args.random_seed + i,   # type: ignore
                                                    prior_rule_count=pc, prior_token_count=pc,
                                                    length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
@@ -609,7 +621,7 @@ class PopulationBasedSampler():
                 sample = typing.cast(tuple, self.initial_sampler.sample(global_context=dict(original_game_id=f'evo-{idx}')))
                 if self.sample_filter_func is not None:
                     sample_fitness, sample_features = self._score_proposal(sample, return_features=True)  # type: ignore
-                    if not self.sample_filter_func(sample_features, sample_fitness):
+                    if not self.sample_filter_func(sample, sample_features, sample_fitness):
                         sample = None
 
             except RecursionError:
@@ -1224,7 +1236,7 @@ class PopulationBasedSampler():
                     else:
                         fitness, features = retval, None
 
-                    if self.sample_filter_func is not None and not self.sample_filter_func(features, fitness):  # type: ignore
+                    if self.sample_filter_func is not None and not self.sample_filter_func(child, features, fitness):  # type: ignore
                         continue
 
                     children.append(child)
@@ -1942,12 +1954,23 @@ class MAPElitesSampler(PopulationBasedSampler):
 
 
 feature_names = [f'length_of_then_modals_{i}' for i in range(3, 6)]
-def filter_samples_then_three_or_longer(sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
+def filter_samples_then_three_or_longer(sample: ASTType, sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
     return any(sample_features[name] for name in feature_names) or bool(sample_features['at_end_found'])
+
+
+def filter_samples_no_identical_preferences(sample: ASTType, sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
+    preferences = [section for section in sample if isinstance(section, tuple) and section[0] == '(:constraints'][0][1]
+    prefs = preferences.preferences
+    if not isinstance(prefs, list):
+        prefs = [prefs]
+
+    pref_strs = set([ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in prefs])
+    return len(pref_strs) == len(prefs)
 
 
 SAMPLE_FILTER_FUNCS = {
     'then_three_or_longer': filter_samples_then_three_or_longer,
+    'no_identical_preferences': filter_samples_no_identical_preferences,
 }
 
 
@@ -2008,6 +2031,19 @@ BEHAVIORAL_FEATURE_SETS = {
 
 
 def main(args):
+    if args.use_specific_objects_models:
+        if args.fitness_function_date_id == DEFAULT_FITNESS_FUNCTION_DATE_ID:
+            logger.info(f'Using specific objects fitness function date id LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID="{LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID}"')
+            args.fitness_function_date_id = LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
+
+        if args.fitness_featurizer_path == DEFAULT_FITNESS_FEATURIZER_PATH:
+            logger.info(f'Using specific objects fitness featurizer path LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH="{LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH}"')
+            args.fitness_featurizer_path = LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH
+
+        if args.ngram_model_path == LATEST_AST_N_GRAM_MODEL_PATH:
+            logger.info(f'Using specific objects ngram model path LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH="{LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH}"')
+            args.ngram_model_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+
     sampler_kwargs = dict(
         omit_rules=args.omit_rules,
         omit_tokens=args.omit_tokens,
@@ -2063,6 +2099,9 @@ def main(args):
             sampler_prior_count=args.sampler_prior_count,
             weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
             sample_patience=args.sample_patience,
+            max_sample_depth=args.max_sample_depth,
+            max_sample_nodes=args.max_sample_nodes,
+            max_sample_total_size=args.max_sample_total_size,
         )
 
         evosampler.initialize_population()

@@ -609,6 +609,7 @@ class ASTSampler:
     def __init__(self, grammar_parser: tatsu.grammars.Grammar,
                  ast_counter: ASTRuleValueCounter,
                  max_sample_depth: typing.Optional[int] = None,
+                 max_sample_nodes: typing.Optional[int] = None,
                  pattern_rule_options: typing.Dict[str, typing.Dict[typing.Tuple[str, str], typing.Callable]] = DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE,
                  rule_field_value_types: typing.Dict[typing.Tuple[str, str], typing.Union[str, typing.Tuple[str]]] = SPECIAL_RULE_FIELD_VALUE_TYPES,
                  pattern_type_mappings: typing.Dict[str, str] = PATTERN_TYPE_MAPPINGS,
@@ -623,7 +624,12 @@ class ASTSampler:
 
         self.grammar_parser = grammar_parser
         self.ast_counter = ast_counter
+        if max_sample_depth is None:
+            max_sample_depth = float('Inf')  # type: ignore
         self.max_sample_depth = max_sample_depth
+        if max_sample_nodes is None:
+            max_sample_nodes = float('Inf')  # type: ignore
+        self.max_sample_nodes = max_sample_nodes
 
         self.pattern_rule_options = pattern_rule_options
         self.rule_field_value_types = rule_field_value_types
@@ -1026,7 +1032,7 @@ class ASTSampler:
                 raise ValueError(f'Missing rule_posterior in sample: {sample_dict}')
 
             rule = str(posterior_dict_sample(global_context['rng'], sample_dict[RULE_POSTERIOR]))  # type: ignore
-            return self.sample(rule, global_context, local_context)
+            return self.sample(rule, global_context, local_context, False)
 
         elif sample_type == TOKEN:
             if TOKEN_POSTERIOR not in sample_dict:
@@ -1043,7 +1049,8 @@ class ASTSampler:
 
     def sample(self, rule: str = START,
         global_context: typing.Optional[ContextDict] = None,
-        local_context: typing.Optional[ContextDict] = None):
+        local_context: typing.Optional[ContextDict] = None,
+        initial_call: bool = True,):
 
         if rule == START:
             self.sample_parseinfo_index = 0
@@ -1052,6 +1059,13 @@ class ASTSampler:
             global_context = dict(rng=self.rng)
         elif 'rng' not in global_context:
             global_context['rng'] = self.rng
+
+        if initial_call:
+            global_context['total_nodes_generated'] = 0
+
+        global_context['total_nodes_generated'] += 1
+        if global_context['total_nodes_generated'] > self.max_sample_nodes:  # type: ignore
+            raise SamplingException(f'Exceeded max nodes generated: {self.max_sample_nodes}')
 
         if local_context is None:
             local_context = dict()
@@ -1062,7 +1076,7 @@ class ASTSampler:
             local_context['depth'] = 0
 
         local_context['depth'] += 1
-        if self.max_sample_depth is not None and local_context['depth'] > self.max_sample_depth:
+        if local_context['depth'] > self.max_sample_depth:  # type: ignore
             raise SamplingException(f'Exceeded max sample depth: {self.max_sample_depth}')
 
         rule_dict = self.rules[rule]
@@ -1080,14 +1094,14 @@ class ASTSampler:
                     output.append(prod_value)
 
             elif prod_type == RULE:
-                value, context_update = self.sample(prod_value, global_context, local_context)
+                value, context_update = self.sample(prod_value, global_context, local_context, False)
                 if context_update is not None:
                     local_context.update(context_update)
                 output.append(value)
 
             elif prod_type == NAMED:
                 return_ast = True
-                value, context_update = self._sample_named(rule_dict[prod_value], global_context, local_context)
+                value, context_update = self._sample_named(rule_dict[prod_value],  global_context, local_context)
                 if context_update is not None:
                     local_context.update(context_update)
                 output.append({prod_value: value})
@@ -1107,6 +1121,9 @@ class ASTSampler:
 
         else:
             output = tuple(output)
+
+        if initial_call:
+            global_context.pop('total_nodes_generated')
 
         if rule in self.local_context_propagating_rules:
             return output, local_context

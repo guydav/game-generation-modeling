@@ -61,8 +61,9 @@ parser.add_argument('-q', '--dont-tqdm', action='store_true')
 # DEFAULT_OUTPUT_PATH ='./data/fitness_features.csv.gz'
 DEFAULT_OUTPUT_PATH ='./data/fitness_features_1024_regrowths.csv.gz'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
-DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/fitness_featurizer_{today}.pkl.gz'
-parser.add_argument('-f', '--featurizer-output-path', default=None)
+DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/{name}_{today}.pkl.gz'
+DEFAULT_FEATURIZER_OUTPUT_NAME = 'fitness_featurizer'
+parser.add_argument('-f', '--featurizer-output-name', default=DEFAULT_FEATURIZER_OUTPUT_NAME)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--no-binarize', action='store_true')
@@ -173,7 +174,7 @@ class ASTFitnessFeaturizer:
         self.df_keys_set = set()
         self.df_keys = []
         self.all_column_keys = None
-        self.columns_to_terms = None
+        self.columns_to_terms = None  # type: ignore
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -465,7 +466,7 @@ class VariablesDefinedTerm(VariableBasedFitnessTerm):
         if self.defined_count == 0:
             return dict(all=0, incorrect_count=0)
 
-        return dict(all=self.undefined_count == 0, incorrect_count=self.undefined_count)
+        return dict(all=int(self.undefined_count == 0), incorrect_count=self.undefined_count)
 
         # return self.defined_count / (self.defined_count + self.undefined_count)
 
@@ -507,7 +508,7 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
             return dict(all=0, incorrect_count=0)
 
         variable_intersection = self.defined_variables.intersection(self.used_variables)
-        return dict(all=len(variable_intersection) == len(self.defined_variables),
+        return dict(all=int(len(variable_intersection) == len(self.defined_variables)),
                     incorrect_count=len(self.defined_variables) - len(variable_intersection))
 
 
@@ -537,7 +538,7 @@ class AllPreferencesUsed(FitnessTerm):
         if len(self.defined_preferences) == 0:
             return dict(all=0, incorrect_count=0)
 
-        return dict(all=len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences)),
+        return dict(all=int(len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))),
                     incorrect_count=len(self.defined_preferences.symmetric_difference(self.used_preferences)))
 
 
@@ -2510,8 +2511,8 @@ if __name__ == '__main__':
     if not args.output_path.endswith('.gz'):
         args.output_path += '.gz'
 
-    if args.featurizer_output_path is None:
-        args.featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(today=datetime.now().strftime('%Y_%m_%d'))
+    featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(
+            name=args.featurizer_output_name, today=datetime.now().strftime('%Y_%m_%d'))
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
     logger.debug(f'Shell arguments:\n{args_str}')
@@ -2621,8 +2622,8 @@ if __name__ == '__main__':
     logger.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 
-    if args.existing_featurizer_path is None and args.featurizer_output_path is not None:
-        with gzip.open(args.featurizer_output_path, 'wb') as f:
+    if args.existing_featurizer_path is None:
+        with gzip.open(featurizer_output_path, 'wb') as f:
             pickle.dump(featurizer, f)  # type: ignore
 
     sys.setrecursionlimit(original_recursion_limit)

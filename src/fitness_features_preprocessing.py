@@ -25,9 +25,9 @@ class FitnessFeaturesPreprocessor(ABC):
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
 BINARIZE_IGNORE_FEATURES = set([
-    'all_variables_defined', 'all_variables_used',
+    'variables_defined_all', 'variables_used_all', 'preferences_used_all',
     'setup_objects_used', 'setup_quantified_objects_used',
-    'starts_and_ends_once', 'all_preferences_used',
+    'starts_and_ends_once',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',

@@ -69,7 +69,8 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float,
 
 
 def main(args: argparse.Namespace):
-    fitness_df = utils.load_fitness_data('./data/fitness_features_1024_regrowths.csv.gz')
+    logger.info(f'Loading fitness data from {args.fitness_features_file}')
+    fitness_df = utils.load_fitness_data(args.fitness_features_file)
     logger.info(f'Unique source files: {fitness_df.src_file.unique()}')
     logger.info(f'Dataframe shape: {fitness_df.shape}')
     original_game_counts = fitness_df.groupby('original_game_name').src_file.count().value_counts()

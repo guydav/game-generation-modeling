@@ -1,4 +1,4 @@
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, OrderedDict
 import copy
 import itertools
 import logging
@@ -395,7 +395,7 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
 
 def predicate_function_term_to_types(term_or_terms: typing.Union[str, typing.List[str]],
     context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
-    ) -> typing.Optional[typing.Set[str]]:
+    ) -> typing.Optional[typing.List[str]]:
 
     if isinstance(term_or_terms, str):
         term_or_terms = [term_or_terms]
@@ -420,28 +420,36 @@ def predicate_function_term_to_types(term_or_terms: typing.Union[str, typing.Lis
 
     if any(not isinstance(term_type, str) for term_type in term_type_list):
         print(f'Non-string type found in {term_type_list}')
-    return set(term_type_list)
+
+    term_types = OrderedDict()
+    for type in term_type_list:
+        if type not in term_types:
+            term_types[type] = 0
+
+    return list(term_types.keys())
 
 
 def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, typing.List[str]],
     context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
-    known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.Set[str]]:
+    known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.List[str]]:
 
     term_types = predicate_function_term_to_types(term_or_terms, context_variables)
 
     if not term_types:
         return None
 
-    term_categories = set()
+    term_categories = OrderedDict()
     for term_type in term_types:
         if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
             if term_type not in known_missing_types and not term_type.isnumeric():
                 continue
                 # print(f'Unknown type {term_type_list} not in the types to categories map')
         else:
-            term_categories.add(room_and_object_types.TYPES_TO_CATEGORIES[term_type])
+            term_category = room_and_object_types.TYPES_TO_CATEGORIES[term_type]
+            if term_category not in term_categories:
+                term_categories[term_category] = 0
 
-    return term_categories
+    return list(term_categories.keys())
 
 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16

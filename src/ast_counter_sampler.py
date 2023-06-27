@@ -70,6 +70,11 @@ parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
 
+DEFAULT_MAX_SAMPLE_DEPTH = 16  # 24  # deeper than the deepest game, which has depth 23, and this is for a single node regrowth
+parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
+DEFAULT_MAX_SAMPLE_NODES = 128  # 256  # longer than most games, but limiting a single node regrowth, not an entire game
+parser.add_argument('--max-sample-nodes', type=int, default=DEFAULT_MAX_SAMPLE_NODES)
+
 MLE_SAMPLING = 'mle'
 REGROWTH_SAMPLING = 'regrowth'
 MCMC_REGRWOTH = 'mcmc-regrowth'
@@ -1586,8 +1591,13 @@ def main(args):
             worker_samplers = {}
             for pc in args.prior_count:
                 length_prior = {n: pc for n in LENGTH_PRIOR}
-                worker_samplers[f'prior{pc}'] = ASTSampler(grammar_parser[worker_id], counter, seed=args.random_seed + worker_id,  # type: ignore
-                                                    prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)     # type: ignore
+                worker_samplers[f'prior{pc}'] = ASTSampler(
+                    grammar_parser[worker_id], counter,  # type: ignore
+                    max_sample_depth=args.max_sample_depth,
+                    max_sample_nodes=args.max_sample_nodes,
+                    seed=args.random_seed + worker_id,
+                    prior_rule_count=pc, prior_token_count=pc,
+                    length_prior=length_prior)     # type: ignore
 
             samplers.append(worker_samplers)
 

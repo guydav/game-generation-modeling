@@ -565,7 +565,7 @@ class NGramASTParser(ast_parser.ASTParser):
                     self.current_input_ngrams_by_section[section][n].append(ngram)
 
     def _map_to_type_or_category(self, term: str,
-        context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]):
+        context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]) -> typing.Union[str, typing.List[str]]:
 
         if self.use_specific_objects:
             types_or_categories = ast_parser.predicate_function_term_to_types(term, context_variables)
@@ -641,7 +641,7 @@ class NGramASTParser(ast_parser.ASTParser):
                     if object_category is None or len(object_category) == 0:
                         raise ValueError(f'Could not find category for object type {obj_type}: {object_category}')
 
-                    obj = object_category if object_category == UNKNOWN_CATEGORY else f'object_type_{object_category.pop()}'
+                    obj = object_category if isinstance(object_category, str) else f'object_type_{object_category[0]}'
                     output.append(obj)  # type: ignore
 
             return output

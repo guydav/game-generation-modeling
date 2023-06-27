@@ -187,9 +187,9 @@ parser.add_argument('--no-weight-insert-delete-nodes-by-length', action='store_t
 
 DEFAULT_MAX_SAMPLE_TOTAL_SIZE = 1024 * 1024 * 5   # ~20x larger than the largest game in the real dataset
 parser.add_argument('--max-sample-total-size', type=int, default=DEFAULT_MAX_SAMPLE_TOTAL_SIZE)
-DEFAULT_MAX_SAMPLE_DEPTH = 24  # deeper than the deepest game, which has depth 23, and this is for a single node regrowth
+DEFAULT_MAX_SAMPLE_DEPTH = 16  # 24  # deeper than the deepest game, which has depth 23, and this is for a single node regrowth
 parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
-DEFAULT_MAX_SAMPLE_NODES = 256  # longer most games, but limiting a single node regrowth, not an entire game
+DEFAULT_MAX_SAMPLE_NODES = 128  # 256  # longer than most games, but limiting a single node regrowth, not an entire game
 parser.add_argument('--max-sample-nodes', type=int, default=DEFAULT_MAX_SAMPLE_NODES)
 
 DEFAULT_OUTPUT_NAME = 'evo-sampler'
@@ -313,9 +313,9 @@ class PopulationBasedSampler():
     diversity_scorer_type: typing.Optional[str]
     feature_names: typing.List[str]
     first_sampler_key: str
-    fitness_featurizer: ASTFitnessFeaturizer
+    fitness_featurizers: typing.List[ASTFitnessFeaturizer]
     fitness_featurizer_path: str
-    fitness_function: typing.Callable[[ASTType], float]
+    fitness_functions: typing.List[typing.Callable[[torch.Tensor], float]]
     fitness_function_date_id: str
     fitness_function_model_name: str
     flip_fitness_sign: bool
@@ -328,6 +328,7 @@ class PopulationBasedSampler():
     max_sample_depth: int
     max_sample_nodes: int
     max_sample_total_size: int
+    n_processes: int
     n_workers: int
     output_folder: str
     output_name: str
@@ -393,6 +394,7 @@ class PopulationBasedSampler():
         self.sample_patience = sample_patience
         self.sample_parallel = sample_parallel
         self.n_workers = n_workers
+        self.n_processes = n_workers + 1  # including the main process
         self.diversity_scorer_type = diversity_scorer_type
 
         self.grammar = open(args.grammar_file).read()
@@ -404,10 +406,12 @@ class PopulationBasedSampler():
         self.output_name = output_name
 
         self.fitness_featurizer_path = fitness_featurizer_path
-        self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
+        self.fitness_featurizers = [_load_pickle_gzip(fitness_featurizer_path) for _ in range(self.n_processes)]
         self.fitness_function_date_id = fitness_function_date_id
         self.fitness_function_model_name = fitness_function_model_name
-        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
+        fitness_functions = [load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path) for _ in range(self.n_processes)]
+        self.feature_names = fitness_functions[0][1]
+        self.fitness_functions = [fitness_function[0] for fitness_function in fitness_functions]  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
 
         self.diversity_scorer_type = diversity_scorer_type
@@ -417,7 +421,7 @@ class PopulationBasedSampler():
 
         self.diversity_scorer = None
         if self.diversity_scorer_type is not None:
-            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
+            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizers[0], feature_names=self.feature_names)
 
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
@@ -442,7 +446,7 @@ class PopulationBasedSampler():
                                                    prior_rule_count=pc, prior_token_count=pc,
                                                    length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
                                                    **sampler_kwargs) for pc in sampler_prior_count}
-                         for i in range(self.n_workers)]
+                         for i in range(self.n_processes)]
 
         self.first_sampler_key = list(self.samplers[0].keys())[0]
 
@@ -494,7 +498,7 @@ class PopulationBasedSampler():
         self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
-        return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
+        return typing.cast(dict, self._fitness_featurizer().parse(proposal, return_row=True))  # type: ignore
 
     def _features_to_tensor(self, features: typing.Dict[str, typing.Any]) -> torch.Tensor:
         return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
@@ -502,7 +506,7 @@ class PopulationBasedSampler():
     def _evaluate_fitness(self, features: torch.Tensor) -> float:
         if 'wrapper' in self.fitness_function.named_steps:  # type: ignore
             self.fitness_function.named_steps['wrapper'].eval()  # type: ignore
-        score = self.fitness_function.transform(features).item()
+        score = self._fitness_function().transform(features).item()
         return -score if self.flip_fitness_sign else score
 
     def _score_proposal(self, proposal: ASTType, return_features: bool = False):
@@ -520,7 +524,7 @@ class PopulationBasedSampler():
         if identity is None or len(identity) == 0:
             return 0
 
-        return (identity[0] - 1) % self.n_workers
+        return identity[0] % self.n_processes
 
     def _sampler(self, rng: np.random.Generator) -> ASTSampler:
         return self.samplers[self._process_index()][self._choice(self.sampler_keys, rng=rng)]  # type: ignore
@@ -530,6 +534,12 @@ class PopulationBasedSampler():
 
     def _context_fixer(self) -> ASTContextFixer:
         return self.context_fixers[self._process_index()]
+
+    def _fitness_featurizer(self) -> ASTFitnessFeaturizer:
+        return self.fitness_featurizers[self._process_index()]
+
+    def _fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
+        return self.fitness_functions[self._process_index()]
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
@@ -1563,7 +1573,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             custom_featurizer = build_behavioral_features_featurizer(
                 argparse_args,
                 self.grammar_parser,
-                self.fitness_featurizer,
+                self.fitness_featurizers[0],
                 self.feature_names
                 )
             features = custom_featurizer.get_feature_names()

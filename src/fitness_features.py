@@ -849,7 +849,7 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
             if isinstance(var_type, str):
                 n_types = 1
             else:
-                n_types = len(var_type.type_names) if isinstance(var_type.type_names, list) else 1
+                n_types = len(set(var_type.type_names)) if isinstance(var_type.type_names, list) else 1
             self.max_types_quantified = max(self.max_types_quantified, n_types)
 
             variables = ast.var_names
@@ -1051,7 +1051,7 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
     scoring_expression_to_count: typing.Dict[str, int] = {}
 
     def __init__(self):
-        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions_max')
+        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions')
 
     def game_start(self) -> None:
         self.scoring_expression_to_count = defaultdict(int)
@@ -1062,10 +1062,13 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.scoring_expression_to_count) == 0:
-            return 0
+            return dict(max=0, exist=0)
 
         values = [v - 1 for v in self.scoring_expression_to_count.values()]
-        return max(values)  # type: ignore
+        return dict(max=max(values), exist=int(any(v > 0 for v in values)))
+
+    def _get_all_inner_keys(self) -> typing.List[str]:
+        return ['max', 'exist']
 
 
 

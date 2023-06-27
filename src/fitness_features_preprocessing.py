@@ -27,7 +27,7 @@ NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'rea
 BINARIZE_IGNORE_FEATURES = set([
     'variables_defined_all', 'variables_used_all', 'preferences_used_all',
     'setup_objects_used', 'setup_quantified_objects_used',
-    'starts_and_ends_once',
+    'starts_and_ends_once', 'scoring_count_expression_repetitions_exist',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
@@ -65,7 +65,7 @@ ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
     re.compile(r'[\w\d_]+_incorrect_count$'),  # since I now allow these to return a number, it might as well be scaled
-    re.compile(r'scoring_count_expression_repetitions_\w+'),
+    re.compile(r'scoring_count_expression_repetitions_max'),
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [

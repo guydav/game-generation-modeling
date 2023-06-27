@@ -1,13 +1,15 @@
 import argparse
 from collections import namedtuple, defaultdict
 import tatsu
+import tatsu.ast
+import tatsu.buffering
 import tqdm
 import pandas as pd
 import numpy as np
 import os
 import re
 
-from parse_dsl import load_tests_from_file
+from parse_dsl import load_games_from_file
 from ast_parser import ASTParser
 
 
@@ -47,7 +49,7 @@ class ASTStatisticsAggregator:
             self.tuple_registry[rule].append(stat)
         else:
             self.rule_registry[rule].append(stat)
-        
+
 
     def register(self, stat, tuple_rule=False):
         if isinstance(stat.rule_or_rules, re.Pattern):
@@ -59,7 +61,7 @@ class ASTStatisticsAggregator:
             else:
                 for rule in stat.rule_or_rules:
                     self._register(stat, rule, tuple_rule)
-        
+
 
         self.header_registry[stat.header] = stat
         self.headers.append(stat.header)
@@ -110,23 +112,23 @@ class ASTStatisticsAggregator:
                 vars_key = vars_keys[0]
                 context_vars = context['variables'] if 'variables' in context else {}
 
-                for var_def in ast[vars_key].variables:
+                for var_def in ast[vars_key].variables:  # type: ignore
                     var_names = var_def.var_names
-                    if isinstance(var_names, str): 
+                    if isinstance(var_names, str):
                         var_names = [var_names]
-                    
+
                     var_type = var_def.var_type
                     if isinstance(var_type, tatsu.ast.AST):
                         var_type = var_type.type_names
 
-                    if isinstance(var_type, str): 
+                    if isinstance(var_type, str):
                         var_type = [var_type]
 
                     for var_name in var_names:
-                        context_vars[var_name] = var_type
+                        context_vars[var_name] = var_type  # type: ignore
 
                 context = context.copy()
-                context['variables'] = context_vars
+                context['variables'] = context_vars  # type: ignore
 
             if ast.parseinfo is not None:
                 stat_parsers = self.rule_registry[ast.parseinfo.rule]
@@ -134,7 +136,7 @@ class ASTStatisticsAggregator:
                     result = stat.extract(ast, context)
                     if result:
                         row[stat.header].append(result)
-                
+
                 for regex_stat in self.regex_rules:
                     if regex_stat.rule_or_rules.match(ast.parseinfo.rule):
                         result = regex_stat.extract(ast, context)
@@ -181,12 +183,12 @@ def build_aggregator(args):
         return len(ast[key]['variables'])
 
     num_setup_objects_quantified = StatExtractor(
-        ('setup_exists', 'setup_forall'), 'setup_objects_quantified', 
+        ('setup_exists', 'setup_forall'), 'setup_objects_quantified',
         objects_quantified, lambda x: x)
     agg.register(num_setup_objects_quantified)
 
     num_preference_objects_quantified = StatExtractor(
-        ('pref_body_exists', 'pref_body_forall', 'pref_forall'), 'preference_objects_quantified', 
+        ('pref_body_exists', 'pref_body_forall', 'pref_forall'), 'preference_objects_quantified',
         objects_quantified, lambda x: x)
     agg.register(num_preference_objects_quantified)
 
@@ -214,22 +216,22 @@ def build_aggregator(args):
                 # single object type
                 if isinstance(ast.object_types, tatsu.ast.AST):
                     results[ast.object_types.type_name] += 1
-                
+
                 # multiple object types
                 else:
                     for type_name in [t.type_name for t in ast.object_types if 'type_name' in t]:
                         results[type_name] += 1
-        
+
         else:
             key = 'exists_vars'
             if 'forall_vars' in ast:
                 key = 'forall_vars'
-            
+
             for quantification in ast[key]['variables']:
                 # single type
                 if isinstance(quantification['var_type'], str):
                     results[quantification['var_type']] += 1
-                
+
                 # either types
                 else:
                     for name in quantification['var_type'].type_names:
@@ -247,7 +249,7 @@ def build_aggregator(args):
     object_types_referenced = StatExtractor(
         ('setup_exists', 'setup_forall', 'setup_exists_predicate', 'setup_forall_predicate',
         'pref_body_exists', 'pref_body_forall', 'pref_forall',
-        'pref_predicate_exists', 'pref_predicate_forall', 
+        'pref_predicate_exists', 'pref_predicate_forall',
         'pref_name_and_types', 'predicate'),
         'object_types_referenced', objects_referenced, aggregate_count_dicts
     )
@@ -287,10 +289,10 @@ def build_aggregator(args):
         if isinstance(pred_args, str): pred_args = [pred_args]
 
         for arg in pred_args:
-            if isinstance(arg, tatsu.ast.AST) and arg.parseinfo.rule == 'predicate':
+            if isinstance(arg, tatsu.ast.AST) and arg.parseinfo.rule == 'predicate':  # type: ignore
                 inner_counts.append(map_types_to_predicates(arg, context))
 
-            elif arg.startswith('?'):
+            elif arg.startswith('?'):  # type: ignore
                 if arg not in variables:
                     raise ValueError(f'Encountered undefined argument {arg} in AST: {ast}')
 
@@ -314,13 +316,13 @@ def build_aggregator(args):
                     results[outer_key][inner_key] += count
 
         return {outer_key: dict(inner_dict) for outer_key, inner_dict in results.items()}
-    
+
 
     type_to_pred_counts = StatExtractor('predicate', 'type_to_pred_counts', map_types_to_predicates, aggregate_nested_count_dicts)
     agg.register(type_to_pred_counts)
 
     return agg
-            
+
 
 def main(args):
     grammar = open(args.grammar_file).read()
@@ -329,7 +331,7 @@ def main(args):
     aggregator = build_aggregator(args)
 
     for test_file in args.test_files:
-        test_cases = load_tests_from_file(test_file)
+        test_cases = load_games_from_file(test_file)
 
         if not args.dont_tqdm:
             test_cases = tqdm.tqdm(test_cases)
@@ -339,12 +341,12 @@ def main(args):
             aggregator.parse(ast, test_file)
 
     df = aggregator.to_df()
-    df.to_csv(args.output_path, index_label='Index')    
+    df.to_csv(args.output_path, index_label='Index')
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
-    
+
     main(args)

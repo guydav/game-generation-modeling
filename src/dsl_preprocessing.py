@@ -54,7 +54,7 @@ class ASTPreprocessor(ASTParser):
                         ast[args_key][i] = local_substitutions[arg]
                 else:
                     self(arg, **kwargs)
-                    
+
         else:
             vars_keys = [key for key in ast.keys() if key.endswith('_vars')]
             if len(vars_keys) > 1:
@@ -64,7 +64,7 @@ class ASTPreprocessor(ASTParser):
                 vars_key = vars_keys[0]
                 args_keys = [key for key in ast.keys() if key.startswith(vars_key.replace('_vars', ''))]
                 args_keys.remove(vars_key)
-                
+
                 if len(args_keys) > 1:
                     raise ValueError(f'Found too many argument keys under: {args_keys}', ast, ast.keys())
 
@@ -107,7 +107,7 @@ class ASTPreprocessor(ASTParser):
 
 def main(args):
     grammar = open(args.grammar_file).read()
-    grammar_parser = tatsu.compile(grammar) 
+    grammar_parser = tatsu.compile(grammar)
 
     asts = load_asts(args, grammar_parser, should_print=args.print_dsls)
     preprocessor = ASTPreprocessor()
@@ -126,5 +126,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
-    
+
     main(args)

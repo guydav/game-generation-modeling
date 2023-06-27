@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../slurm/fitness"
 		}
 	],
 	"settings": {

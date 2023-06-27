@@ -150,7 +150,6 @@ class ASTStatisticsAggregator:
         else:
             print(f'Encountered AST element with unrecognized type: {ast} of type {type(ast)}')
 
-
 class ASTNodeCounter(ASTParser):
     def __init__(self):
         self.count = 0

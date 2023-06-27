@@ -15,7 +15,7 @@ for test_file in DEFAULT_TEST_FILES:
     second_dash_idx = test_file.find('-', first_dash_idx)
     name = test_file[first_dash_idx:second_dash_idx]
 
-    test_cases = load_tests_from_file(test_file)
+    test_cases = load_games_from_file(test_file)
 
     asts[name] = [grammar.parse(case) for case in test_cases]
     game_id_to_ast[name] = {int(ast[1].game_name[ast[1].game_name.rfind('-') + 1:]): ast for ast in asts[name]}
@@ -23,4 +23,3 @@ for test_file in DEFAULT_TEST_FILES:
 
 # def get_ast(i):
 #     return grammar.parse(test_cases[i])
-

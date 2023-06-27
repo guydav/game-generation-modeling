@@ -6,3 +6,24 @@ latex/out/dsl_doc.pdf
 latex/out/pddl.aux
 
 */__pycache__/*
+**/.DS_Store
+notebooks/sandbox.ipynb
+data/fitness_scores_with_predicate_features_by_section.csv
+data/ast-real-regrowth-samples-gtr-t5-xl-embeddings.pt
+data/ast-real-regrowth-samples-mmarco-minilm-embeddings.pt
+data/interactive-beta-gtr-t5-xl-embeddings.pt
+data/interactive-beta-mmarco-minilm-embeddings.pt
+dsl/ast-real-regrowth-samples-1024-old.pddl
+dsl/cache/ast-real-regrowth-samples-1024-cache.pkl.gz
+
+tmp/**/*
+notes.md
+
+samples/every_gen
+
+.vscode/sftp.json
+run/profile_evo_sampler.sh
+**/lightning_logs/
+**/lightning_logs/*
+**/lightning_logs/**/*
+wandb/*

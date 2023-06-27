@@ -5,7 +5,7 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, get_object_assignments, ast_cache_key, is_type_or_color, get_object_types, \
+from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_or_color, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
 
@@ -33,7 +33,7 @@ class PredicateHandler:
     # Is the game ending after this step
     is_last_step: bool
     # Which field in each object to use as an id
-    object_id_key: str 
+    object_id_key: str
     # The cache from a string representation of the state X predicate X mapping to
     # the predicate's truth value in that state given the mapping.
     evaluation_cache: typing.Dict[str, typing.Union[bool, float]]
@@ -49,7 +49,7 @@ class PredicateHandler:
     def __init__(self, domain: str):
         self.domain = domain
         self._new_game()
-    
+
     def _new_game(self):
         """
         Call when a new game is started to clear the cache.
@@ -60,18 +60,18 @@ class PredicateHandler:
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
         self.state_cache_global_last_updated = -1
-    
-    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
+
+    def __call__(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> bool:
         """
         The external API to the predicate handler.
         For now, implements the same logic as before, to make sure I separated it correctly from the `preference_handler`.
         After that, this will implement the caching logic.
 
-        GD 2022-09-14: The data, as currently stored, saves delta updates of the state. 
+        GD 2022-09-14: The data, as currently stored, saves delta updates of the state.
         This means that the truth value of a predicate with a particular assignment holds unitl
         there's information that merits updating it. This means that we should cache predicate
-        evaluation results, update them when they return a non-None value, and return the cached result. 
+        evaluation results, update them when they return a non-None value, and return the cached result.
 
         GD 2022-09-29: We decided that since all external callers treat a None as a False, we might as well make it explicit here
         """
@@ -79,11 +79,16 @@ class PredicateHandler:
 
         return pred_value if pred_value is not None else False
 
-    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
+    def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
 
         pred_variables = extract_variables(predicate)
-        relevant_mapping = {var: var if is_type_or_color(var) else mapping[var] for var in pred_variables}
+        # the last if is to account for the case of a variable not already being in the mapping, if, e.g., it's quantified in a further down exists
+        # e.g. in the expression "(forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))"
+        # when we reach the (game-optional ...) node, the variable ?s isn't in the mapping yet, and will be added later
+        relevant_mapping = {var: var if is_type_or_color(var) else mapping[var]
+                            for var in pred_variables
+                            if is_type_or_color(var) or var in mapping}
 
         predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, relevant_mapping))
         state_index = state.original_index
@@ -121,15 +126,15 @@ class PredicateHandler:
             self.state_cache_object_last_updated[AGENT_STATE_KEY] = state_index
             self.state_cache_object_last_updated['agent'] = state_index
 
-    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState, 
+    def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
         '''
         Given a predicate, a trajectory state, and an assignment of each of the predicate's
         arguments to specific objects in the state, returns the evaluation of the predicate
 
         GD: 2022-09-14: The logic in `__call__` relies on the assumption that if the predicate's
-        value was not updated at this timestep, this function returns None, rather than False. 
-        This is to know when the cache should be updated. 
+        value was not updated at this timestep, this function returns None, rather than False.
+        This is to know when the cache should be updated.
 
         I should figure out how to implement this in a manner that's reasonable across all predicates,
         or maybe it's something the individual predicate handlers should do? Probably the latter.
@@ -138,22 +143,24 @@ class PredicateHandler:
         if predicate is None:
             return None
 
-        predicate_rule = predicate["parseinfo"].rule  # type: ignore
+        predicate_rule = predicate.parseinfo.rule  # type: ignore
 
         if predicate_rule == "predicate":
+            predicate_name = extract_predicate_function_name(predicate)  # type: ignore
+
             # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
-            if predicate["pred_name"] == "game_over":
+            if predicate_name == "game_over":
                 return self.is_last_step
 
             # Obtain the functional representation of the base predicate
-            predicate_fn = PREDICATE_LIBRARY[predicate["pred_name"]]  # type: ignore
+            predicate_fn = PREDICATE_LIBRARY[predicate_name]  # type: ignore
 
             # Determine the last step at which the predicate was evaluated
             predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, mapping))
             predicate_mapping_last_updated = self.evaluation_cache_last_updated.get(predicate_key, -1)
 
             # Evaluate the predicate
-            evaluation = predicate_fn(state, mapping, self.state_cache, self.state_cache_object_last_updated, 
+            evaluation = predicate_fn(state, mapping, self.state_cache, self.state_cache_object_last_updated,
                                       predicate_mapping_last_updated, force_evaluation)
 
             return evaluation
@@ -174,7 +181,7 @@ class PredicateHandler:
             # We can't speed this up as much by breaking out of the loop early when we encounter a False, because we don't
             # know if there would be an un-evaluable None later in the loop
             cur_truth_value = True
-            for sub in and_args:
+            for sub in and_args:  # type: ignore
                 eval = self._inner_call(sub, state, mapping, force_evaluation)
                 if eval is None:
                     return None
@@ -189,7 +196,7 @@ class PredicateHandler:
                 or_args = [or_args]
 
             all_none = True
-            for sub in or_args:
+            for sub in or_args:  # type: ignore
                 eval = self._inner_call(sub, state, mapping, force_evaluation) # outputs can be True, False, or None
                 if eval:
                     return True
@@ -198,9 +205,6 @@ class PredicateHandler:
 
             if all_none:
                 return None
-
-            return False
-
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
             used_objects = list(mapping.values())
@@ -240,7 +244,7 @@ class PredicateHandler:
 
         elif predicate_rule == "function_comparison":
             comp = typing.cast(tatsu.ast.AST, predicate["comp"])
-            comparison_operator = comp["comp_op"]      
+            comparison_operator = comp["comp_op"]
 
             # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
 
@@ -286,7 +290,7 @@ class PredicateHandler:
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
-    def evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState, 
+    def evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[float]:
         function_key = "{0}_{1}".format(*ast_cache_key(function, mapping))
         state_index = state.original_index
@@ -306,18 +310,20 @@ class PredicateHandler:
 
         return self.evaluation_cache.get(function_key, None)
 
-    def _inner_evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState, 
+    def _inner_evaluate_function(self, function: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[float]:
 
         if function is None:
             return None
 
+        function_name = extract_predicate_function_name(function)  # type: ignore
+
         # Obtain the functional representation of the function
-        func = FUNCTION_LIBRARY[str(function["func_name"])]
+        func = FUNCTION_LIBRARY[function_name]
 
         # Extract only the variables in the mapping relevant to this predicate
         relevant_mapping = {var: mapping[var] for var in extract_variables(function)}
-    
+
         # Evaluate the function
         evaluation = func(state, relevant_mapping, self.state_cache, self.state_cache_object_last_updated, force_evaluation)
 
@@ -329,9 +335,9 @@ class PredicateHandler:
 
 
 def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callable:
-    def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState], 
+    def wrapper(state: FullState, predicate_partial_mapping: typing.Dict[str, str], state_cache: typing.Dict[str, ObjectState],
         state_cache_last_updated: typing.Dict[str, int], predicate_mapping_last_updated: int, force_evaluation: bool = False) -> typing.Optional[bool]:
-        
+
         agent_object = state.agent_state if state.agent_state_changed else state_cache[AGENT_STATE_KEY]
 
         # if there are no objects in the predicate mapping, then we can just evaluate the predicate
@@ -346,7 +352,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
         # with only PseudoObjects in them are actually evaluated
         for var, obj in mapping_items:
             if obj in UNITY_PSEUDO_OBJECTS and obj not in state_cache:
-                state_cache[obj] = UNITY_PSEUDO_OBJECTS[obj]
+                state_cache[obj] = UNITY_PSEUDO_OBJECTS[obj]  # type: ignore
                 state_cache_last_updated[obj] = state.original_index
 
         any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_or_color(var))
@@ -381,7 +387,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
 def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     """
     This isn't here to do anything useful -- it's just to demonstrate the interface that all predicates
-    should follow.  The first argument should be the agent's state, and the second should be a list 
+    should follow.  The first argument should be the agent's state, and the second should be a list
     (potentially empty) of objects that are the arguments to this predicate.
     """
     raise NotImplementedError()
@@ -424,7 +430,7 @@ def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[Obj
         object_1_types = set([objects[0]])
 
     else:
-        object_1_types = get_object_types(objects[0])
+        object_1_types = get_object_types(objects[0])  # type: ignore
 
     if isinstance(objects[1], str):
         if objects[1] not in ALL_OBJECT_TYPES:
@@ -433,7 +439,7 @@ def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[Obj
         object_2_types = set([objects[1]])
 
     else:
-        object_2_types = get_object_types(objects[1])
+        object_2_types = get_object_types(objects[1])  # type: ignore
 
     type_intersection = object_1_types.intersection(object_2_types)
 
@@ -466,9 +472,9 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
-    inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])    
+    inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])
 
-    return np.all(inner_min_corner >= outer_min_corner - IN_MARGIN) and np.all(inner_max_corner <= outer_max_corner + IN_MARGIN) 
+    return np.all(inner_min_corner >= outer_min_corner - IN_MARGIN) and np.all(inner_max_corner <= outer_max_corner + IN_MARGIN)
 
 
 # TODO (GD): we should discuss what this threshold should be
@@ -498,10 +504,10 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     first_pseudo = isinstance(objects[0], PseudoObject)
     second_pseudo = isinstance(objects[1], PseudoObject)
 
-    # TODO (GD 2022-09-27): the logic here to decide which wall to attribute the collision here is incomoplete; 
-    # right now it assigns it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle 
-    # and traveled sufficiently far to be nearest another wall. This is a (literal) corner case, but one we probably 
-    # want to eventually resolve better, for example by simulating the ball back in time using the negative of its 
+    # TODO (GD 2022-09-27): the logic here to decide which wall to attribute the collision here is incomoplete;
+    # right now it assigns it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle
+    # and traveled sufficiently far to be nearest another wall. This is a (literal) corner case, but one we probably
+    # want to eventually resolve better, for example by simulating the ball back in time using the negative of its
     # velcoity and finding a wall it was most recently very close to?
 
     if first_pseudo and second_pseudo:
@@ -509,7 +515,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         second_building = isinstance(objects[1], BuildingPseudoObject)
         if first_building == second_building:
             return False   # if both are buildings they would be merged; if neither, they wouldn't touch
-        
+
         if first_building:
             return _building_touch(agent, objects[0], objects[1])  # type: ignore
 
@@ -524,7 +530,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
-            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore 
+            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
     elif second_pseudo:
         obj = typing.cast(ObjectState, objects[0])
         pseudo_obj = objects[1]
@@ -533,7 +539,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             return _building_touch(agent, pseudo_obj, obj)
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
-            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore 
+            pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
     else:
         return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
 
@@ -558,7 +564,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # Project a point slightly below the bottom center / corners of the upper object
         upper_object_corners = _object_corners(upper_object)
 
-        test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])
+        test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])  # type: ignore
                        for corner in upper_object_corners]
         test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
 
@@ -570,7 +576,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0
-        # or if they're touching and object 1 is contained withint object 0? 
+        # or if they're touching and object 1 is contained withint object 0?
         return objects_on or _pred_in(agent, objects)
 
     elif isinstance(upper_object, BuildingPseudoObject):
@@ -579,7 +585,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             return False
 
         # and (b) that object is not on any other object in the building
-        return not any([_pred_on(agent, [building_object, lower_object]) 
+        return not any([_pred_on(agent, [building_object, lower_object])
             for building_object in upper_object.building_objects.values()
             if building_object.object_id != lower_object.object_id])
 
@@ -589,7 +595,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             return False
 
         # and (b) no other object in the building is on that object
-        return not any([_pred_on(agent, [upper_object, building_object]) 
+        return not any([_pred_on(agent, [upper_object, building_object])
             for building_object in lower_object.building_objects.values()
             if building_object.object_id != upper_object.object_id])
 
@@ -628,8 +634,8 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
 
     object_dist = _func_distance(agent, objects)
 
-    # Intuition: an object is not adjacent to another if it's more than (some scaling >= 1) times its own size away from it. 
-    # Since adjacency is symmetric, we'll use the larger of the two objects to determine the threshold distance. We'll also 
+    # Intuition: an object is not adjacent to another if it's more than (some scaling >= 1) times its own size away from it.
+    # Since adjacency is symmetric, we'll use the larger of the two objects to determine the threshold distance. We'll also
     # first try determing an object's size by taking the average of its two dimensions (x and z)
 
     object_1_size = (objects[0].bbox_extents[0] + objects[0].bbox_extents[2]) # don't need to divide by 2 since the extent is half the size
@@ -677,7 +683,7 @@ def _pred_between(agent: AgentState, objects: typing.Sequence[typing.Union[Objec
 
     hull = ConvexHull(np.concatenate([object_1_bottom_corners, object_1_top_corners, object_2_bottom_corners, object_2_top_corners,
                                       np.array(test_position).reshape(1, -1)]))
-    
+
     # The test point is always at index 16
     return 16 not in hull.vertices
 
@@ -688,19 +694,19 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
     # For simplicitly, we zero out the y component in each vector
     projection = np.array([0, 2])
-    
+
     caster_pos = _object_location(caster)[projection]
     caster_facing = caster.rotation[projection]
 
     target_pos = _object_location(target)[projection]
 
-    target_corners = _object_corners(target, y_pos=0)
+    target_corners = _object_corners(target, y_pos=0)  # type: ignore
 
     caster_to_target = Vector(target_pos - caster_pos)
     caster_to_corners = [Vector(corner[projection] - caster_pos) for corner in target_corners]
 
     angle_to_corners = [caster_to_target.angle_signed(to_corner) for to_corner in caster_to_corners]
-    min_corner_angle, max_corner_angle = min(angle_to_corners), max(angle_to_corners)
+    min_corner_angle, max_corner_angle = min(angle_to_corners), max(angle_to_corners)  # type: ignore
 
     # Clearly this won't work, because the caster's rotation is not the same as its facing direction
     angle_to_facing = caster_to_target.angle_signed(caster_facing)
@@ -713,7 +719,7 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     print("Angle to facing:", angle_to_facing)
 
     return min_corner_angle <= angle_to_facing <= max_corner_angle
-    
+
 
 
 # ====================================== FUNCTION DEFINITIONS =======================================
@@ -741,7 +747,7 @@ def _get_pseudo_object_relevant_distance_dimension_index(pseudo_object: PseudoOb
 def _distance_object_pseudo_object(object: ObjectState, pseudo_object: PseudoObject):
     distance_dimension = _get_pseudo_object_relevant_distance_dimension_index(pseudo_object)
     return np.linalg.norm(_object_location(object)[distance_dimension] - _object_location(pseudo_object)[distance_dimension])
-        
+
 
 def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
@@ -756,8 +762,8 @@ def _func_distance(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
         return _distance_object_pseudo_object(objects[1], objects[0])  # type: ignore
     elif second_pseudo:
         return _distance_object_pseudo_object(objects[0], objects[1])  # type: ignore
-    
-    
+
+
     return np.linalg.norm(_object_location(objects[0]) - _object_location(objects[1]))
 
 
@@ -769,7 +775,7 @@ def _func_building_size(agent: AgentState, objects: typing.Sequence[typing.Union
     assert isinstance(objects[0], BuildingPseudoObject)
 
     return len(objects[0].building_objects)
-    
+
 
 
 # ================================= EXTRACTING LIBRARIES FROM LOCALS() ==================================
@@ -788,4 +794,3 @@ FUNCTION_LIBRARY = {local_key.replace(FUNCTION_PREFIX, ''): mapping_objects_deco
     for local_key, local_val_func in locals().items()
     if local_key.startswith(FUNCTION_PREFIX)
 }
-

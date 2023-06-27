@@ -109,9 +109,9 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
         "Window|-01.02|+00.93|-03.19"
     ],
     "wall": [
-        NORTH_WALL, 
-        SOUTH_WALL, 
-        EAST_WALL, 
+        NORTH_WALL,
+        SOUTH_WALL,
+        EAST_WALL,
         WEST_WALL
     ],
     NORTH_WALL: [NORTH_WALL],
@@ -249,7 +249,7 @@ OBJECTS_BY_ROOM_AND_TYPE = {
             "SmallSlide|-00.81|+00.14|-03.10",
             "SmallSlide|-01.31|+00.14|-03.10"
         ],
-        "tall_rect_block": [
+        "tall_rectangular_block": [
             "TallRectBlock|-02.95|+02.05|-02.31",
             "TallRectBlock|-02.95|+02.05|-02.52",
             "TallRectBlock|-02.95|+02.05|-02.72"
@@ -279,7 +279,7 @@ COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
-                        "tall_rect_block", "triangle_block"],
+                        "tall_rectangular_block", "triangle_block"],
               "color": COLORS}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
@@ -322,7 +322,7 @@ class PseudoObject:
         position: np.ndarray
         rotation: np.ndarray
 
-        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray, 
+        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray,
             extents: np.ndarray, rotation: np.ndarray):
 
             self.object_id = object_id
@@ -339,7 +339,7 @@ class PseudoObject:
                 return self.__dict__[item]
 
             raise ValueError(f'PsuedoObjects have only a name and an id, not a {item}')
-        
+
         def __contains__(self, item):
             return item in self.__dict__
 
@@ -349,6 +349,10 @@ WALL_TYPE = 'wall'
 
 DOOR_ID = 'FP326:StandardDoor1.019'
 DOOR_TYPE = 'door'
+
+DOOR_ID = 'FP326:StandardDoor1.019'
+DOOR_TYPE = 'door'
+
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
@@ -361,5 +365,3 @@ UNITY_PSEUDO_OBJECTS = {
         # TODO: need to determine the extent of the door in the x dimension
         DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([0.3, 1.35, 0.075]), rotation=np.zeros(3)),
 }
-
-

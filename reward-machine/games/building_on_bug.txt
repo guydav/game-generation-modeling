@@ -1,8 +1,8 @@
 (define (game building-test) (:domain many-objects-room-v1)
-(:constraints (and 
-    (preference chairOnTallRectBlock (exists (?c - chair ?l - tall_rect_block)
+(:constraints (and
+    (preference chairOnTallRectBlock (exists (?c - chair ?l - tall_rectangular_block)
         (at-end
-            (and 
+            (and
                 (on ?l ?c)
             )
         )

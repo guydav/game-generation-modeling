@@ -2200,7 +2200,7 @@ class SectionExistsFitnessTerm(FitnessTerm):
 DEFAULT_TOP_K_NGRAMS = 10
 DEFAULT_TOP_K_NGRAMS_FOR_SECTIONS = 5
 DEFAULT_TOP_K_MIN_N = 2
-DEFAULT_TOP_K_MAX_N = 7
+DEFAULT_TOP_K_MAX_N = 5
 
 
 class ASTNGramTerm(FitnessTerm):

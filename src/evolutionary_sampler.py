@@ -307,15 +307,15 @@ PARENT_INDEX = 'parent_index'
 class PopulationBasedSampler():
     args: argparse.Namespace
     candidates: SingleStepResults
-    context_fixers: typing.List[ASTContextFixer]
+    _context_fixers: typing.List[ASTContextFixer]
     counter: ASTRuleValueCounter
     diversity_scorer: typing.Optional[DiversityScorer]
     diversity_scorer_type: typing.Optional[str]
     feature_names: typing.List[str]
     first_sampler_key: str
-    fitness_featurizers: typing.List[ASTFitnessFeaturizer]
+    _fitness_featurizers: typing.List[ASTFitnessFeaturizer]
     fitness_featurizer_path: str
-    fitness_functions: typing.List[typing.Callable[[torch.Tensor], float]]
+    _fitness_functions: typing.List[typing.Callable[[torch.Tensor], float]]
     fitness_function_date_id: str
     fitness_function_model_name: str
     flip_fitness_sign: bool
@@ -332,11 +332,11 @@ class PopulationBasedSampler():
     n_workers: int
     output_folder: str
     output_name: str
-    postprocessor: ast_parser.ASTSamplePostprocessor
+    _postprocessors: typing.List[ast_parser.ASTSamplePostprocessor]
     population: typing.List[ASTType]
     population_size: int
     random_seed: int
-    regrowth_samplers: typing.List[RegrowthSampler]
+    _regrowth_samplers: typing.List[RegrowthSampler]
     relative_path: str
     rng: np.random.Generator
     sample_filter_func: typing.Optional[typing.Callable[[ASTType, typing.Dict[str, typing.Any], float], bool]]
@@ -344,7 +344,7 @@ class PopulationBasedSampler():
     sampler_keys: typing.List[str]
     sampler_kwargs: typing.Dict[str, typing.Any]
     sampler_prior_count: typing.List[int]
-    samplers: typing.List[typing.Dict[str, ASTSampler]]
+    _samplers: typing.List[typing.Dict[str, ASTSampler]]
     saving: bool
     verbose: int
     weight_insert_delete_nodes_by_length: bool
@@ -406,12 +406,12 @@ class PopulationBasedSampler():
         self.output_name = output_name
 
         self.fitness_featurizer_path = fitness_featurizer_path
-        self.fitness_featurizers = [_load_pickle_gzip(fitness_featurizer_path) for _ in range(self.n_processes)]
+        self._fitness_featurizers = [_load_pickle_gzip(fitness_featurizer_path) for _ in range(self.n_processes)]
         self.fitness_function_date_id = fitness_function_date_id
         self.fitness_function_model_name = fitness_function_model_name
         fitness_functions = [load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path) for _ in range(self.n_processes)]
         self.feature_names = fitness_functions[0][1]
-        self.fitness_functions = [fitness_function[0] for fitness_function in fitness_functions]  # type: ignore
+        self._fitness_functions = [fitness_function[0] for fitness_function in fitness_functions]  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
 
         self.diversity_scorer_type = diversity_scorer_type
@@ -421,7 +421,7 @@ class PopulationBasedSampler():
 
         self.diversity_scorer = None
         if self.diversity_scorer_type is not None:
-            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizers[0], feature_names=self.feature_names)
+            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self._fitness_featurizers[0], feature_names=self.feature_names)
 
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
@@ -439,7 +439,7 @@ class PopulationBasedSampler():
         self.sampler_kwargs = sampler_kwargs
         self.sampler_keys = [f'prior{pc}' for pc in sampler_prior_count]
 
-        self.samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter,
+        self._samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter,
                                                    max_sample_depth=self.max_sample_depth,
                                                    max_sample_nodes=self.max_sample_nodes,
                                                    seed=args.random_seed + i,   # type: ignore
@@ -448,22 +448,22 @@ class PopulationBasedSampler():
                                                    **sampler_kwargs) for pc in sampler_prior_count}
                          for i in range(self.n_processes)]
 
-        self.first_sampler_key = list(self.samplers[0].keys())[0]
+        self.first_sampler_key = list(self._samplers[0].keys())[0]
 
         self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self.samplers[0][self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
+            initial_proposal_type, self._samplers[0][self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
 
 
         # Used as the mutation operator to modify existing games
-        self.regrowth_samplers = [RegrowthSampler(samplers, seed=args.random_seed + i, rng=samplers[self.first_sampler_key].rng) for i, samplers in enumerate(self.samplers)]
+        self._regrowth_samplers = [RegrowthSampler(samplers, seed=args.random_seed + i, rng=samplers[self.first_sampler_key].rng) for i, samplers in enumerate(self._samplers)]
 
         # Used to fix the AST context after crossover / mutation
-        self.context_fixers = [ASTContextFixer(samplers[self.first_sampler_key], samplers[self.first_sampler_key].rng) for samplers in self.samplers]
+        self._context_fixers = [ASTContextFixer(samplers[self.first_sampler_key], samplers[self.first_sampler_key].rng) for samplers in self._samplers]
 
         # Initialize the candidate pools in each genera
         self.candidates = SingleStepResults([], [], [], [], [])
 
-        self.postprocessor = ast_parser.ASTSamplePostprocessor()
+        self._postprocessors = [ast_parser.ASTSamplePostprocessor() for _ in range(self.n_processes)]
         self.generation_index = 0
         self.fitness_metrics_history = []
         self.diversity_metrics_history = []
@@ -489,7 +489,7 @@ class PopulationBasedSampler():
         if isinstance(pop, dict):
             pop = pop.values()
 
-        logger.debug(f'Mean initial population_size: {np.mean([object_total_size(p) for p in pop]):.3f}')
+        # logger.debug(f'Mean initial population_size: {np.mean([object_total_size(p) for p in pop]):.3f}')
 
     def _pre_population_sample_setup(self):
         pass
@@ -498,13 +498,13 @@ class PopulationBasedSampler():
         self.set_population([self._gen_init_sample(idx) for idx in trange(self.population_size, desc='Generating initial population')])
 
     def _proposal_to_features(self, proposal: ASTType) -> typing.Dict[str, typing.Any]:
-        return typing.cast(dict, self._fitness_featurizer().parse(proposal, return_row=True))  # type: ignore
+        return typing.cast(dict, self.fitness_featurizer.parse(proposal, return_row=True))  # type: ignore
 
     def _features_to_tensor(self, features: typing.Dict[str, typing.Any]) -> torch.Tensor:
         return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
 
     def _evaluate_fitness(self, features: torch.Tensor) -> float:
-        fitness_function = self._fitness_function()
+        fitness_function = self.fitness_function
         if 'wrapper' in fitness_function.named_steps:  # type: ignore
             fitness_function.named_steps['wrapper'].eval()  # type: ignore
         score = fitness_function.transform(features).item()
@@ -528,19 +528,27 @@ class PopulationBasedSampler():
         return identity[0] % self.n_processes
 
     def _sampler(self, rng: np.random.Generator) -> ASTSampler:
-        return self.samplers[self._process_index()][self._choice(self.sampler_keys, rng=rng)]  # type: ignore
+        return self._samplers[self._process_index()][self._choice(self.sampler_keys, rng=rng)]  # type: ignore
 
-    def _regrowth_sampler(self) -> RegrowthSampler:
-        return self.regrowth_samplers[self._process_index()]
+    @property
+    def regrowth_sampler(self) -> RegrowthSampler:
+        return self._regrowth_samplers[self._process_index()]
 
-    def _context_fixer(self) -> ASTContextFixer:
-        return self.context_fixers[self._process_index()]
+    @property
+    def context_fixer(self) -> ASTContextFixer:
+        return self._context_fixers[self._process_index()]
 
-    def _fitness_featurizer(self) -> ASTFitnessFeaturizer:
-        return self.fitness_featurizers[self._process_index()]
+    @property
+    def fitness_featurizer(self) -> ASTFitnessFeaturizer:
+        return self._fitness_featurizers[self._process_index()]
 
-    def _fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
-        return self.fitness_functions[self._process_index()]
+    @property
+    def fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
+        return self._fitness_functions[self._process_index()]
+
+    @property
+    def postprocessor(self) -> ast_parser.ASTSamplePostprocessor:
+        return self._postprocessors[self._process_index()]
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
@@ -659,7 +667,7 @@ class PopulationBasedSampler():
         without errors)
         '''
         # Set the source AST of the regrowth sampler to the current game
-        self._regrowth_sampler().set_source_ast(game)
+        self.regrowth_sampler.set_source_ast(game)
 
         return self._regrowth(rng)
 
@@ -669,8 +677,8 @@ class PopulationBasedSampler():
 
         while not sample_generated:
             try:
-                new_proposal = self._regrowth_sampler().sample(sample_index=0, update_game_id=False, rng=rng, node_key_to_regrow=node_key_to_regrow)
-                self._context_fixer().fix_contexts(new_proposal)
+                new_proposal = self.regrowth_sampler.sample(sample_index=0, update_game_id=False, rng=rng, node_key_to_regrow=node_key_to_regrow)
+                self.context_fixer.fix_contexts(new_proposal)
                 sample_generated = True
 
                 # In this context I don't need this expensive check for identical samples, as it's just a noop
@@ -697,12 +705,12 @@ class PopulationBasedSampler():
             (parent, selector, section, global_context, local_context)
         '''
 
-        self._regrowth_sampler().set_source_ast(game)
+        self.regrowth_sampler.set_source_ast(game)
 
         # Collect all nodes whose final selector is an integet (i.e. an index into a list) and whose parent
         # yields a list when its first selector is applied. Also make sure that the list has a minimum length
         valid_nodes = []
-        for _, parent, selector, _, section, global_context, local_context in self._regrowth_sampler().parent_mapping.values():
+        for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
             if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list) and len(parent[selector[0]]) >= min_length:  # type: ignore
                 valid_nodes.append((parent, selector[0], section, global_context, local_context))
 
@@ -714,7 +722,7 @@ class PopulationBasedSampler():
         valid_nodes = []
         valid_node_weights = []
         for parent, selector, section, global_context, local_context in valid_nodes:
-            key = (*self._regrowth_sampler()._ast_key(parent), selector)
+            key = (*self.regrowth_sampler._ast_key(parent), selector)
             if key not in valid_node_keys:
                 valid_node_keys.add(key)
                 valid_nodes.append((parent, selector, section, global_context, local_context))
@@ -780,7 +788,7 @@ class PopulationBasedSampler():
         parent[selector].insert(rng.integers(len(parent[selector]) + 1), new_node) # type: ignore
 
         # Do any necessary context-fixing
-        self._context_fixer().fix_contexts(new_game, crossover_child=new_node)  # type: ignore
+        self.context_fixer.fix_contexts(new_game, crossover_child=new_node)  # type: ignore
 
         return new_game
 
@@ -813,7 +821,7 @@ class PopulationBasedSampler():
         del parent[selector][delete_index] # type: ignore
 
         # Do any necessary context-fixing
-        self._context_fixer().fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
+        self.context_fixer.fix_contexts(new_game, original_child=child_to_delete)  # type: ignore
 
         return new_game
 
@@ -856,16 +864,16 @@ class PopulationBasedSampler():
             game_2 = deepcopy_ast(game_2)
 
         # Create a map from crossover_type keys to lists of nodeinfos for each game
-        self._regrowth_sampler().set_source_ast(game_1)
+        self.regrowth_sampler.set_source_ast(game_1)
         game_1_crossover_map = defaultdict(list)
-        for node_key in self._regrowth_sampler().node_keys:
-            node_info = self._regrowth_sampler().parent_mapping[node_key]
+        for node_key in self.regrowth_sampler.node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
             game_1_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
 
-        self._regrowth_sampler().set_source_ast(game_2)
+        self.regrowth_sampler.set_source_ast(game_2)
         game_2_crossover_map = defaultdict(list)
-        for node_key in self._regrowth_sampler().node_keys:
-            node_info = self._regrowth_sampler().parent_mapping[node_key]
+        for node_key in self.regrowth_sampler.node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
             game_2_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
 
         # Find the set of crossover_type keys that are shared between the two games
@@ -888,12 +896,12 @@ class PopulationBasedSampler():
         if crossover_first_game:
             game_2_crossover_node = deepcopy_ast(g2_node, copy_type=ASTCopyType.NODE)
             replace_child(g1_parent, g1_selector, game_2_crossover_node) # type: ignore
-            self._context_fixer().fix_contexts(game_1, g1_node, game_2_crossover_node)  # type: ignore
+            self.context_fixer.fix_contexts(game_1, g1_node, game_2_crossover_node)  # type: ignore
 
         if crossover_second_game:
             game_1_crossover_node = deepcopy_ast(g1_node, copy_type=ASTCopyType.NODE)
             replace_child(g2_parent, g2_selector, game_1_crossover_node) # type: ignore
-            self._context_fixer().fix_contexts(game_2, g2_node, game_1_crossover_node)  # type: ignore
+            self.context_fixer.fix_contexts(game_2, g2_node, game_1_crossover_node)  # type: ignore
 
         return [game_1, game_2]
 
@@ -949,7 +957,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_1_sections, game_2_section)
             section_copy = deepcopy_ast(game_2[3 + game_2_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
-            self._context_fixer().fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
+            self.context_fixer.fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
 
         if crossover_second_game:
             game_1_section_index = rng.integers(len(game_1_sections))
@@ -957,7 +965,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_2_sections, game_1_section)
             section_copy = deepcopy_ast(game_1[3 + game_1_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_2, section_copy, index, replace)  # type: ignore
-            self._context_fixer().fix_contexts(game_2, crossover_child=section_copy[1])  # type: ignore
+            self.context_fixer.fix_contexts(game_2, crossover_child=section_copy[1])  # type: ignore
 
         return [game_1, game_2]
 
@@ -993,10 +1001,10 @@ class PopulationBasedSampler():
             if isinstance(preferences_node.preferences, tatsu.ast.AST):
                 replace_child(preferences_node, ['preferences'], [preferences_node.preferences])  # type: ignore
 
-        self._regrowth_sampler().set_source_ast(game)
+        self.regrowth_sampler.set_source_ast(game)
         pref_def_node_keys = []
-        for node_key in self._regrowth_sampler().node_keys:
-            node_info = self._regrowth_sampler().parent_mapping[node_key]
+        for node_key in self.regrowth_sampler.node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
             if node_info[0].parseinfo.rule == 'pref_def':  # type: ignore
                 pref_def_node_keys.append(node_key)
 
@@ -1004,7 +1012,7 @@ class PopulationBasedSampler():
             raise SamplingException('No preference nodes found for mutation')
 
         pref_def_node_key = self._choice(pref_def_node_keys, rng=rng)
-        pref_def_node = self._regrowth_sampler().parent_mapping[pref_def_node_key][0]  # type: ignore
+        pref_def_node = self.regrowth_sampler.parent_mapping[pref_def_node_key][0]  # type: ignore
 
         # if we're adding the mutated preference, we should keep a copy of the original
         original_pref_def = None
@@ -1017,8 +1025,8 @@ class PopulationBasedSampler():
                 variables = pref_body.exists_vars.variables
                 if isinstance(variables, tatsu.ast.AST):
                     type_def_node = variables.var_type
-                    type_def_node_key = self._regrowth_sampler()._ast_key(type_def_node)
-                    global_context, local_context = self._regrowth_sampler().parent_mapping[type_def_node_key][-2:]  # type: ignore
+                    type_def_node_key = self.regrowth_sampler._ast_key(type_def_node)
+                    global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]  # type: ignore
                     replace_child(variables, ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
 
                 else:
@@ -1029,8 +1037,8 @@ class PopulationBasedSampler():
                     for i, resample in enumerate(variables_to_resample):
                         if resample:
                             type_def_node = variables[i].var_type
-                            type_def_node_key = self._regrowth_sampler()._ast_key(type_def_node)
-                            global_context, local_context = self._regrowth_sampler().parent_mapping[type_def_node_key][-2:]  # type: ignore
+                            type_def_node_key = self.regrowth_sampler._ast_key(type_def_node)
+                            global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]  # type: ignore
                             replace_child(variables[i], ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
 
             pref_body = pref_body.exists_args
@@ -1057,7 +1065,7 @@ class PopulationBasedSampler():
             else:
                 raise ValueError(f'Unexpected preference body rule: {pref_body.parseinfo.rule}')
 
-            pred_key = self._regrowth_sampler()._ast_key(pred)
+            pred_key = self.regrowth_sampler._ast_key(pred)
 
             mutated_game = self._regrowth(rng, node_key_to_regrow=pred_key)
             game = mutated_game
@@ -1067,7 +1075,7 @@ class PopulationBasedSampler():
             game_preferences_node = [section_tuple for section_tuple in game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
             game_preferences_node['preferences'].insert(rng.integers(len(game_preferences_node['preferences']) + 1), original_pref_def)  # type: ignore
 
-        self._context_fixer().fix_contexts(game)  # type: ignore
+        self.context_fixer.fix_contexts(game)  # type: ignore
 
         return game
 
@@ -1087,7 +1095,7 @@ class PopulationBasedSampler():
 
         new_game = deepcopy_ast(game)
         new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
-        self._context_fixer().fix_contexts(new_game)  # type: ignore
+        self.context_fixer.fix_contexts(new_game)  # type: ignore
         return new_game
 
     @handle_multiple_inputs
@@ -1095,9 +1103,9 @@ class PopulationBasedSampler():
         new_terminal = None
 
         base_scoring_node = game[-2][1]  # type: ignore
-        self._regrowth_sampler().set_source_ast(game)
-        base_scoring_node_key = self._regrowth_sampler()._ast_key(base_scoring_node)
-        global_context = self._regrowth_sampler().parent_mapping[base_scoring_node_key][-2]  # type: ignore
+        self.regrowth_sampler.set_source_ast(game)
+        base_scoring_node_key = self.regrowth_sampler._ast_key(base_scoring_node)
+        global_context = self.regrowth_sampler.parent_mapping[base_scoring_node_key][-2]  # type: ignore
         global_context['rng'] = rng
 
         while new_terminal is None:
@@ -1115,7 +1123,7 @@ class PopulationBasedSampler():
         index = len(new_game) - 2 if not replace else len(new_game) - 3
         new_game = self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
 
-        self._context_fixer().fix_contexts(new_game)  # type: ignore
+        self.context_fixer.fix_contexts(new_game)  # type: ignore
         return new_game
 
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
@@ -1202,12 +1210,6 @@ class PopulationBasedSampler():
         top_indices = np.argsort(all_scores)[-self.population_size:]
         self.set_population([all_games[i] for i in top_indices], [all_scores[i] for i in top_indices])
 
-    def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
-        """
-        Here to enable the MAP-Elites sampler to postprocess features into archive keys
-        """
-        return features
-
     def _sample_and_apply_operator(self, parent: typing.Union[ASTType, typing.List[ASTType]],
                                    parent_info: typing.Dict[str, typing.Any],
                                    generation_index: int, sample_index: int,
@@ -1231,15 +1233,16 @@ class PopulationBasedSampler():
                 children_features = []
 
                 for i, child in enumerate(child_or_children):
-                    child_size = object_total_size(child)
-                    if child_size > self.max_sample_total_size:
-                        # TODO: move this to be only if verbose at some point in the future
-                        parent_size = [object_total_size(p) for p in parent] if isinstance(parent, list) else object_total_size(parent)
-                        section_sizes = [object_total_size(s) for s in child[3:-1]]  # type: ignore
-                        logger.info(f'Sample size {child_size} ({section_sizes}) exceeds max size {self.max_sample_total_size} from parent with size {parent_size}, skipping')
-                        continue
+                    # child_size = object_total_size(child)
+                    # if child_size > self.max_sample_total_size:
+                    #     # TODO: move this to be only if verbose at some point in the future
+                    #     parent_size = [object_total_size(p) for p in parent] if isinstance(parent, list) else object_total_size(parent)
+                    #     section_sizes = [object_total_size(s) for s in child[3:-1]]  # type: ignore
+                    #     logger.info(f'Sample size {child_size} ({section_sizes}) exceeds max size {self.max_sample_total_size} from parent with size {parent_size}, skipping')
+                    #     continue
 
                     self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
+                    child = typing.cast(ASTType, self.postprocessor(child))
                     retval = self._score_proposal(child, return_features=compute_features)
                     if compute_features:
                         fitness, features = retval  # type: ignore
@@ -1251,18 +1254,18 @@ class PopulationBasedSampler():
 
                     children.append(child)
                     children_fitness_scores.append(fitness)
-                    children_features.append(self._postprocess_features(features))
+                    children_features.append(features)
 
                 if len(children) == 0:
                     raise SamplingException('No children passed the filter func')
 
                 children_features = None if not return_sample_features else children_features
-                children_diversity_scores = [self.diversity_scorer(child) for child in child_or_children] if self.diversity_scorer is not None else None
+                children_diversity_scores = [self.diversity_scorer(child) for child in children] if self.diversity_scorer is not None else None
 
-                if not isinstance(parent_info, list) or len(parent_info) != len(child_or_children):
+                if not isinstance(parent_info, list) or len(parent_info) != len(children):
                     parent_info = itertools.repeat(parent_info)  # type: ignore
 
-                return SingleStepResults(child_or_children, children_fitness_scores, parent_info, children_diversity_scores, children_features)  # type: ignore
+                return SingleStepResults(children, children_fitness_scores, parent_info, children_diversity_scores, children_features)  # type: ignore
 
             except SamplingException as e:
                 # if self.verbose:
@@ -1301,7 +1304,7 @@ class PopulationBasedSampler():
         return zip(parent_iterator, itertools.repeat(self.generation_index), itertools.count())
 
     def evolutionary_step(self, pool: typing.Optional[mpp.Pool] = None, chunksize: int = 1,
-                          postprocess: bool = False, should_tqdm: bool = False, use_imap: bool = True):
+                          should_tqdm: bool = False, use_imap: bool = True):
         # The core steps are:
         # 1. determine which "operator" is going to be used (an operator takes in one or more games and produces one or more new games)
         # 2. create a "parent_iteraor" which takes in the population and yields the parents that will be used by the operator
@@ -1326,10 +1329,6 @@ class PopulationBasedSampler():
             children_iter = tqdm(children_iter)  # type: ignore
 
         for step_results in children_iter:
-            if postprocess:
-                for i in range(len(step_results)):
-                    step_results.samples[i] = self.postprocessor(step_results.samples[i])  # type: ignore
-
             self._handle_single_operator_results(step_results)
 
         self._end_single_evolutionary_step()
@@ -1353,7 +1352,7 @@ class PopulationBasedSampler():
 
     def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
-                                    postprocess: bool = False, use_imap: bool = True,
+                                    use_imap: bool = True,
                                     compute_diversity_metrics: bool = False, save_interval: int = 0):
 
         if hasattr(self, 'population_initialized') and not self.population_initialized:
@@ -1364,7 +1363,7 @@ class PopulationBasedSampler():
             pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
 
         for _ in step_iter:  # type: ignore
-            self.evolutionary_step(pool, chunksize, postprocess=postprocess, should_tqdm=inner_tqdm, use_imap=use_imap)
+            self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm, use_imap=use_imap)
 
             if compute_diversity_metrics:
                 if self.diversity_scorer is None:
@@ -1398,21 +1397,21 @@ class PopulationBasedSampler():
 
             # This is required because the changes to the rng state happen in the pickled copies in the worker processes
             # and (potentially?) don't get propagated back here -- so we have to provide a different state for each map call
-            for i, sampler_dict in enumerate(self.samplers):
+            for i, sampler_dict in enumerate(self._samplers):
                 for sampler in sampler_dict.values():
                     sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
 
-            for i, regrowth_sampler in enumerate(self.regrowth_samplers):
+            for i, regrowth_sampler in enumerate(self._regrowth_samplers):
                 regrowth_sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
 
-            for i, context_fixer in enumerate(self.context_fixers):
+            for i, context_fixer in enumerate(self._context_fixers):
                 context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
 
             if save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps:
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
-                                             inner_tqdm: bool = False, postprocess: bool = False, use_imap: bool = True,
+                                             inner_tqdm: bool = False, use_imap: bool = True,
                                              compute_diversity_metrics: bool = False, save_interval: int = 0,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
@@ -1423,7 +1422,7 @@ class PopulationBasedSampler():
         with mpp.Pool(n_workers, maxtasksperchild=maxtasksperchild) as pool:
             self.multiple_evolutionary_steps(num_steps, pool, chunksize=chunksize,  # type: ignore
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
-                                             postprocess=postprocess,  use_imap=use_imap,
+                                             use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
                                              save_interval=save_interval)
 
@@ -1445,7 +1444,7 @@ class PopulationBasedSampler():
                 print(f'"{keyword}": {keyword_features}')
 
         evaluate_single_game_energy_contributions(
-            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,   # type: ignore
+            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,
             top_k=top_k, display_overall_features=display_overall_features,
             display_game=display_game, min_display_threshold=min_display_threshold,
             )
@@ -1574,7 +1573,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             custom_featurizer = build_behavioral_features_featurizer(
                 argparse_args,
                 self.grammar_parser,
-                self.fitness_featurizers[0],
+                self.fitness_featurizer,
                 self.feature_names
                 )
             features = custom_featurizer.get_feature_names()
@@ -1744,15 +1743,6 @@ class MAPElitesSampler(PopulationBasedSampler):
             return key, features  # type: ignore
 
         return key
-
-    def _postprocess_features(self, features: typing.Optional[typing.Dict[str, typing.Any]] = None):
-        """
-        Here to enable the MAP-Elites sampler to postprocess features into archive keys
-
-        2023-05-09: passing through here to pass the basic features, so `_handle_single_operator_results` can parse the key from the features or game if need be
-        """
-        return features
-        # return self._features_to_key(features)
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''

@@ -670,6 +670,7 @@ class ASTSamplePostprocessor(ASTParser):
         self.variable_index = 0
         self.preference_mapping = {}
         self.variable_mapping = {}
+        self.parseinfo_index = 0
 
     def __call__(self, ast, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
@@ -686,6 +687,10 @@ class ASTSamplePostprocessor(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
+
+        new_parseinfo = tatsu.infos.ParseInfo(None, rule, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index)
+        ast_utils.replace_child(ast, 'parseinfo', new_parseinfo)
+        self.parseinfo_index += 1
 
         if rule == 'preference':
             pref_name = ast.pref_name

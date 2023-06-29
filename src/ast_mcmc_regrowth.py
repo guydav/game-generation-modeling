@@ -16,7 +16,7 @@ import tatsu.grammars
 import torch
 
 from ast_counter_sampler import *
-from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler
+from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler, NGRAM_MODEL_KEY_BY_SECTION
 from ast_initial_proposal_sampler import *
 from fitness_ngram_models import *
 from ast_parser import ASTSamplePostprocessor
@@ -120,6 +120,27 @@ def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSample
 
         if ngram_model_path is None:
             raise ValueError('ngram_model_path must be specified for section sampler')
+
+        ngram_model_index = ngram_model_path.find('ngram_model')
+        model_n = int(ngram_model_path[ngram_model_index - 2: ngram_model_index - 1])
+        if model_n != 7:
+            if 'ngram_model_key_by_section' not in section_sampler_kwargs:
+                section_sampler_kwargs['ngram_model_key_by_section'] = {k: f'{k[2:]}_n_{model_n}_score' for k in ast_parser.SECTION_KEYS}
+
+            if 'ngram_model_kwargs' not in section_sampler_kwargs:
+                section_sampler_kwargs['ngram_model_kwargs'] = {}
+
+            if 'k' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['k'] = model_n
+
+            if 'top_k_min_n' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['top_k_min_n'] = model_n
+
+            if 'top_k_max_n' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['top_k_max_n'] = model_n
+
+            if 'k_for_sections' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['k_for_sections'] = model_n
 
         with open(ngram_model_path, 'rb') as f:
             ngram_model = pickle.load(f)

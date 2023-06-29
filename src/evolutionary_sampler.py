@@ -504,9 +504,10 @@ class PopulationBasedSampler():
         return torch.tensor([features[name] for name in self.feature_names], dtype=torch.float32)  # type: ignore
 
     def _evaluate_fitness(self, features: torch.Tensor) -> float:
-        if 'wrapper' in self.fitness_function.named_steps:  # type: ignore
-            self.fitness_function.named_steps['wrapper'].eval()  # type: ignore
-        score = self._fitness_function().transform(features).item()
+        fitness_function = self._fitness_function()
+        if 'wrapper' in fitness_function.named_steps:  # type: ignore
+            fitness_function.named_steps['wrapper'].eval()  # type: ignore
+        score = fitness_function.transform(features).item()
         return -score if self.flip_fitness_sign else score
 
     def _score_proposal(self, proposal: ASTType, return_features: bool = False):

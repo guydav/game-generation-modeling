@@ -204,5 +204,18 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
         },
+        {
+            "name": "Python: ngrams hyperparameters",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--min-n", "10",
+                "--max-n", "10",
+                "--evaluate-sections"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

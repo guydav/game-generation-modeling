@@ -1,0 +1,6 @@
+{
+    "param_grid": {
+        "stupid_backoff_discount": [0.1, 0.2, 0.3, 0.4, 0.5],
+        "zero_log_prob": [-9, -8, -7, -6, -5]
+    }
+}

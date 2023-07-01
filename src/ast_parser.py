@@ -672,13 +672,13 @@ class ASTSamplePostprocessor(ASTParser):
         self.variable_mapping = {}
         self.parseinfo_index = 0
 
-    def __call__(self, ast, **kwargs):
+    def __call__(self, ast, should_deepcopy_initial: bool = True, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
             self._new_parse()
-
-            ast = ast_utils.deepcopy_ast(ast)
+            if should_deepcopy_initial:
+                ast = ast_utils.deepcopy_ast(ast)
 
         super().__call__(ast, **kwargs)
 

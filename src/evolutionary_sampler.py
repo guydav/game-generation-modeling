@@ -176,7 +176,6 @@ parser.add_argument('--parallel-use-plain-map', action='store_true')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--should-tqdm', action='store_true')
 parser.add_argument('--within-step-tqdm', action='store_true')
-parser.add_argument('--postprocess', action='store_true')
 parser.add_argument('--compute-diversity-metrics', action='store_true')
 parser.add_argument('--save-interval', type=int, default=0)
 parser.add_argument('--omit-rules', type=str, nargs='*')
@@ -647,6 +646,8 @@ class PopulationBasedSampler():
                 if self.verbose >= 2: logger.info(f'Recursion error in sample {idx} -- skipping')
             except SamplingException:
                 if self.verbose >= 2: logger.info(f'Sampling exception in sample {idx} -- skipping')
+            except ValueError:
+                if self.verbose >= 2: logger.info(f'Value error in sample {idx} -- skipping')
 
         return sample
 
@@ -689,9 +690,10 @@ class PopulationBasedSampler():
 
             except RecursionError as e:
                 if self.verbose >= 2: logger.info(f'Recursion error in regrowth, skipping sample: {e.args}')
-
             except SamplingException as e:
                 if self.verbose >= 2: logger.info(f'Sampling exception in regrowth, skipping sample: {e.args}')
+            except ValueError:
+                if self.verbose >= 2: logger.info(f'Value error in sample {idx} -- skipping')
 
         return new_proposal  # type: ignore
 
@@ -774,12 +776,12 @@ class PopulationBasedSampler():
         while new_node is None:
             try:
                 new_node = self._sampler(rng).sample(new_rule, global_context=sample_global_context, local_context=local_context) # type: ignore
-
             except RecursionError as e:
                 if self.verbose >= 2: logger.info(f'Recursion error in insert, skipping sample: {e.args}')
-
             except SamplingException as e:
                 if self.verbose >= 2: logger.info(f'Sampling exception in insert, skipping sample: {e.args}')
+            except ValueError:
+                if self.verbose >= 2: logger.info(f'Value error in sample {idx} -- skipping')
 
         if isinstance(new_node, tuple):
             new_node = new_node[0]
@@ -1242,7 +1244,7 @@ class PopulationBasedSampler():
                     #     continue
 
                     self._rename_game(child, f'evo-{generation_index}-{sample_index}-{i}')
-                    child = typing.cast(ASTType, self.postprocessor(child))
+                    child = typing.cast(ASTType, self.postprocessor(child, should_deepcopy_initial=False))
                     retval = self._score_proposal(child, return_features=compute_features)
                     if compute_features:
                         fitness, features = retval  # type: ignore
@@ -1271,16 +1273,14 @@ class PopulationBasedSampler():
                 # if self.verbose:
                 #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
-
             except RecursionError as e:
                 # if self.verbose:
                 #     logger.info(f'Could not validly sample an operator and apply it to a child, retrying: {e}')
                 continue
-
             except ValueError as e:
-                logging.error(traceback.format_exc())
-                raise e
-
+                # logging.error(traceback.format_exc())
+                # raise e
+                continue
             except RuntimeError as e:
                 logging.error(traceback.format_exc())
                 raise e
@@ -2128,7 +2128,7 @@ def main(args):
         if args.sample_parallel:
             evosampler.multiple_evolutionary_steps_parallel(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm, inner_tqdm=args.within_step_tqdm,
-                postprocess=args.postprocess, use_imap=not args.parallel_use_plain_map,
+                use_imap=not args.parallel_use_plain_map,
                 n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
                 maxtasksperchild=args.parallel_maxtasksperchild,
                 compute_diversity_metrics=args.compute_diversity_metrics,
@@ -2138,7 +2138,7 @@ def main(args):
         else:
             evosampler.multiple_evolutionary_steps(
                 num_steps=args.n_steps, should_tqdm=args.should_tqdm,
-                inner_tqdm=args.within_step_tqdm, postprocess=args.postprocess,
+                inner_tqdm=args.within_step_tqdm,
                 compute_diversity_metrics=args.compute_diversity_metrics,
                 save_interval=args.save_interval,
                 )

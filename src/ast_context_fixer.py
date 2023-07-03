@@ -11,6 +11,7 @@ import tatsu.ast
 import ast_printer
 import ast_parser
 from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
+from ast_counter_sampler import *
 from ast_parser import ASTNodeInfo, ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
 from ast_utils import replace_child
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID

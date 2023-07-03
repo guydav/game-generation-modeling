@@ -172,7 +172,7 @@ class SectionBySectionNGramScoreSampler:
             setup = ('(:setup', setup, ')')
 
         n_preferences = self.rng.choice(np.arange(1, len(self.n_preferences_weights) + 1), p=self.n_preferences_weights)
-        preference_list = [self._sample_rule('preference', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
+        preference_list = [self._sample_rule('pref_def', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
 
         preferences_dict = dict(preferences=preference_list)
         preferences_dict['parseinfo'] = tatsu.infos.ParseInfo(  # type: ignore

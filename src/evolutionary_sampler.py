@@ -989,11 +989,15 @@ class PopulationBasedSampler():
     @handle_multiple_inputs
     def _cognitive_inspired_mutate_preference(self, game: ASTType, rng: np.random.Generator, mutate_first_condition: bool = False,
                                     mutate_last_condition: bool = False, resample_variable_types: bool = False,
+                                    sample_additional_variable: typing.Optional[bool] = None,
                                     mutated_preference_as_new: typing.Optional[bool] = None) -> ASTType:
         game = deepcopy_ast(game)  # type: ignore
 
         if mutated_preference_as_new is None:
             mutated_preference_as_new = rng.uniform() < 0.5
+
+        if sample_additional_variable is None:
+            sample_additional_variable = rng.uniform() < 0.5
 
         # if we're adding the preference, we should check that the preferences are a list
         preferences_node = None
@@ -1021,15 +1025,27 @@ class PopulationBasedSampler():
         if mutated_preference_as_new:
             original_pref_def = deepcopy_ast(pref_def_node, copy_type=ASTCopyType.NODE)
 
-        pref_body = pref_def_node.definition.pref_body.body  # type: ignore
+        if pref_def_node.definition.parseinfo.rule == 'pref_forall':  # type: ignore
+            pref_forall_pref = pref_def_node.definition.forall_pref.preferences  # type: ignore
+            if not isinstance(pref_forall_pref, tatsu.ast.AST):
+                pref_forall_pref = self._choice(pref_forall_pref, rng=rng)
+
+            pref_body = pref_forall_pref.pref_body  # type: ignore
+
+        else:
+            pref_body = pref_def_node.definition.pref_body.body  # type: ignore
+
+
         if pref_body.parseinfo.rule == 'pref_body_exists':
+            variables = pref_body.exists_vars.variables
+
             if resample_variable_types:
-                variables = pref_body.exists_vars.variables
                 if isinstance(variables, tatsu.ast.AST):
                     type_def_node = variables.var_type
                     type_def_node_key = self.regrowth_sampler._ast_key(type_def_node)
-                    global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]  # type: ignore
-                    replace_child(variables, ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
+                    global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]
+                    rule = typing.cast(str, type_def_node.parseinfo.rule)  # type: ignore
+                    replace_child(variables, ['var_type'], self._sampler(rng).sample(rule, global_context, local_context)[0])
 
                 else:
                     variables_to_resample = rng.uniform(size=len(variables)) < 0.5
@@ -1040,8 +1056,40 @@ class PopulationBasedSampler():
                         if resample:
                             type_def_node = variables[i].var_type
                             type_def_node_key = self.regrowth_sampler._ast_key(type_def_node)
-                            global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]  # type: ignore
-                            replace_child(variables[i], ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])  # type: ignore
+                            global_context, local_context = self.regrowth_sampler.parent_mapping[type_def_node_key][-2:]
+                            replace_child(variables[i], ['var_type'], self._sampler(rng).sample(type_def_node.parseinfo.rule, global_context, local_context)[0])
+
+            if sample_additional_variable:
+                # before_str = ast_printer.ast_section_to_string(pref_body.exists_vars, ast_parser.PREFERENCES)
+                node_key = self.regrowth_sampler._ast_key(pref_body.exists_vars)
+                sampler = self._sampler(rng)
+                varible_def_rules, variable_def_probs = zip(*sampler.rules['variable_list']['variables'][RULE_POSTERIOR].items())
+                new_variable_def_rule = typing.cast(str, self._choice(varible_def_rules, weights=variable_def_probs, rng=rng))
+                global_context, local_context = self.regrowth_sampler.parent_mapping[node_key][-2:]
+
+                current_variable_types = set()
+                if isinstance(variables, tatsu.ast.AST):
+                    if isinstance(variables.var_type.type, str):  # type: ignore
+                        current_variable_types.add(variables.var_type.type)  # type: ignore
+
+                else:
+                    for var_def in variables:
+                        if isinstance(var_def.var_type.type, str):
+                            current_variable_types.add(var_def.var_type.type)
+
+                new_variable_node = None
+                while new_variable_node is None or (isinstance(new_variable_node.var_type.type, str) and new_variable_node.var_type.type in current_variable_types):  # type: ignore
+                    new_variable_node = sampler.sample(new_variable_def_rule, global_context, local_context)[0]
+
+                if isinstance(variables, tatsu.ast.AST):
+                    new_variable_list = [variables, new_variable_node]
+                    replace_child(pref_body.exists_vars, 'variables', new_variable_list)  # type: ignore
+
+                else:
+                    variables.append(new_variable_node)
+
+                # after_str = ast_printer.ast_section_to_string(pref_body.exists_vars, ast_parser.PREFERENCES)
+                # print(f'Added variable to preference: {before_str} -> {after_str}')
 
             pref_body = pref_body.exists_args
 

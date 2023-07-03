@@ -921,6 +921,28 @@ class NoVariablesRepeated(FitnessTerm):
         return self.count_with_repeats != 0
 
 
+class RepeatedVariableTypeInEither(FitnessTerm):
+    repeated_type_found: bool = False
+
+    def __init__(self):
+        super().__init__(VARIABLE_TYPE_DEF_RULES_PATTERN, 'repeated_variable_type_in_either')
+
+    def game_start(self) -> None:
+        self.repeated_type_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            var_type = ast.var_type.type  # type: ignore
+            if isinstance(var_type, tatsu.ast.AST):
+                type_names = var_type.type_names
+                if isinstance(type_names, list):
+                    if len(set(type_names)) < len(type_names):
+                        self.repeated_type_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.repeated_type_found
+
+
 ALL_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or|_not)$')
 MULTI_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or)$')
 LOGICALS_CHILD_KEY_OPTIONS = ['pred', 'setup', 'terminal']
@@ -2365,6 +2387,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     no_repeated_variables_in_predicate = NoVariablesRepeated()
     fitness.register(no_repeated_variables_in_predicate)
+
+    repeated_variable_type_in_either = RepeatedVariableTypeInEither()
+    fitness.register(repeated_variable_type_in_either)
 
     no_nested_logicals = NoNestedLogicals()
     fitness.register(no_nested_logicals)

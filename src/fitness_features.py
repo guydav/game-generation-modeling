@@ -1084,13 +1084,13 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.scoring_expression_to_count) == 0:
-            return dict(max=0, exist=0)
+            return dict(exist=0)  # max=0,
 
         values = [v - 1 for v in self.scoring_expression_to_count.values()]
-        return dict(max=max(values), exist=int(any(v > 0 for v in values)))
+        return dict(exist=int(any(v > 0 for v in values)))  # max=max(values),
 
     def _get_all_inner_keys(self) -> typing.List[str]:
-        return ['max', 'exist']
+        return ['exist']  # ['max', 'exist']
 
 
 

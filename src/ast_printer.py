@@ -1030,17 +1030,25 @@ def pretty_print_ast(ast, increment=DEFAULT_INCREMENT, context=None):
     _indent_print('', 0, increment, context)
 
 
-def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', context=None):
+def _postprocess_ast_to_string(ast_str: str):
+    return ast_str.replace(' )', ')')
+
+
+def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAULT_INCREMENT, context=None, postprocess: bool = True):
     reset_buffers(to_list=True)
-    pretty_print_ast(ast, context=context)
+    pretty_print_ast(ast, increment=increment, context=context)
     _flush_line_buffer()
-    return line_delimiter.join(BUFFER).strip()  # type: ignore
+    out_str = line_delimiter.join(BUFFER).strip()  # type: ignore
+    if postprocess:
+        return _postprocess_ast_to_string(out_str)
 
 
-def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = '', context=None):
+def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = '', context=None, postprocess: bool = True):
     if context is None:
         context = {}
     reset_buffers(to_list=True)
     PARSE_DICT[section_key](ast, context=context)
     _flush_line_buffer()
-    return line_delimiter.join(BUFFER).strip()  # type: ignore
+    out_str = line_delimiter.join(BUFFER).strip()  # type: ignore
+    if postprocess:
+        return _postprocess_ast_to_string(out_str)

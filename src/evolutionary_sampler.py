@@ -2092,6 +2092,7 @@ def main(args):
             logger.info(f'Using specific objects ngram model path LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH="{LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH}"')
             args.ngram_model_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
 
+
     sampler_kwargs = dict(
         omit_rules=args.omit_rules,
         omit_tokens=args.omit_tokens,
@@ -2117,6 +2118,11 @@ def main(args):
             args.map_elites_generation_size = args.map_elites_generation_size // 2
             args.parallel_chunksize = args.parallel_chunksize // 2
             logger.info(f'New generation size: {args.map_elites_generation_size}, new chunksize: {args.parallel_chunksize}')
+
+        # TODO: check if output name ends with behavioral features key, and if it doesn't, append it
+        if args.map_elites_custom_behavioral_features_key is not None:
+            if not args.output_name.endswith(args.map_elites_custom_behavioral_features_key):
+                args.output_name += f'_{args.map_elites_custom_behavioral_features_key}'
 
         evosampler = MAPElitesSampler(
             key_type=MAPElitesKeyType(args.map_elites_key_type),

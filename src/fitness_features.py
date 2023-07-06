@@ -2128,7 +2128,7 @@ SECTION_COUNT_THRESHOLDS = {
     },
     SectionMaxWidth: {
         ast_parser.SETUP: [0.0, 1.0, 3.0, 10.0],
-        ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
+        ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10], # TODO: change to [2.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
         ast_parser.TERMINAL: [0.0, 2.0, 3.0, 4.0],  # [0.0, 0.0, 0.0, 4.0]
         ast_parser.SCORING: [0.0, 2.0, 3.0, 12.0],
     }

@@ -46,6 +46,7 @@ parser.add_argument('--use-specific-objects', action='store_true')
 parser.add_argument('--cv-settings-json', type=str, default=os.path.join(os.path.dirname(__file__), 'ngram_cv_settings.json'))
 DEFAULT_N_FOLDS = 5
 parser.add_argument('--cv-n-folds', type=int, default=DEFAULT_N_FOLDS)
+parser.add_argument('--refit-metric', type=str, default='real')
 DEFAULT_RANDOM_SEED = 33
 parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 
@@ -108,12 +109,36 @@ class NgramSklearnWrapper(BaseEstimator, TransformerMixin):
         return real_game_scores, regrown_game_scores
 
 
-def score_ngram_scores(model: NgramSklearnWrapper, X: typing.List[typing.List[TokenizedGame]], y=None) -> float:
+
+def score_real_games(model: NgramSklearnWrapper, X: typing.List[typing.List[TokenizedGame]], y=None) -> float:
+    real_game_scores, _ = model.transform(X)
+    real_game_scores = np.array(real_game_scores, dtype=float)
+    return -real_game_scores.mean()
+
+
+def score_regrown_games(model: NgramSklearnWrapper, X: typing.List[typing.List[TokenizedGame]], y=None) -> float:
+    _, regrown_game_scores = model.transform(X)
+    regrown_game_scores = np.array(regrown_game_scores, dtype=float)
+    return -regrown_game_scores.mean()
+
+
+def score_regrowth_differences(model: NgramSklearnWrapper, X: typing.List[typing.List[TokenizedGame]], y=None) -> float:
     real_game_scores, regrown_game_scores = model.transform(X)
     real_game_scores = np.array(real_game_scores, dtype=float)
     regrown_game_scores = np.array(regrown_game_scores, dtype=float)
-    # return -(real_game_scores.mean() - regrown_game_scores.mean())
+    # # return -(real_game_scores.mean() - regrown_game_scores.mean())
     return -np.nanmean(real_game_scores - np.nanmean(regrown_game_scores, axis=1))
+
+
+SCORE_KEYS = ['real', 'regrown', 'regrowth_differences']
+
+
+def combined_score(model: NgramSklearnWrapper, X: typing.List[typing.List[TokenizedGame]], y=None) -> typing.Dict[str, float]:
+    return {
+        'real': score_real_games(model, X, y),
+        'regrown': score_regrown_games(model, X, y),
+        'regrowth_differences': score_regrowth_differences(model, X, y),
+    }
 
 
 def _create_tokenized_games_dict(n_values: typing.List[int]) -> typing.Dict[str, typing.Dict[int, typing.Dict[str, typing.List[TokenizedGame]]]]:
@@ -123,7 +148,10 @@ def _create_tokenized_games_dict(n_values: typing.List[int]) -> typing.Dict[str,
     }
 
 
-def single_key_evaluation(section_key: str, args: argparse.Namespace, tokenized_games: typing.Dict[str, typing.Dict[int, typing.Dict[str, typing.List[TokenizedGame]]]], cv_settings: typing.Dict[str, typing.Any]):
+def single_key_evaluation(
+        section_key: str, args: argparse.Namespace,
+        tokenized_games: typing.Dict[str, typing.Dict[int, typing.Dict[str, typing.List[TokenizedGame]]]],
+        cv_settings: typing.Dict[str, typing.Any], score_keys: typing.List[str] = SCORE_KEYS):
     cv_dfs = []
     for n in range(args.min_n, args.max_n + 1):
         setting_tokenized_games = tokenized_games[section_key][n]
@@ -142,24 +170,27 @@ def single_key_evaluation(section_key: str, args: argparse.Namespace, tokenized_
 
         model = NgramSklearnWrapper(None, None, None)  # type: ignore
 
-        cv_kwargs = dict(n_jobs=-1, verbose=0)
+        cv_kwargs = dict(n_jobs=-1, verbose=0, error_score='raise', refit=args.refit_metric)
 
-        cv = GridSearchCV(model, param_grid, scoring=score_ngram_scores,
+        cv = GridSearchCV(model, param_grid, scoring=combined_score,
             cv=KFold(args.cv_n_folds, shuffle=True, random_state=args.random_seed),
-            **cv_kwargs, error_score='raise')  # type: ignore
+            **cv_kwargs)  # type: ignore
 
         cv = cv.fit(all_games)
 
         cv_series_or_dfs = [
             pd.Series(cv.cv_results_[name], name=name)
-            for name in ('mean_test_score', 'std_test_score')
+            for key in score_keys
+            for name in (f'mean_test_{key}', f'rank_test_{key}')
         ]
         cv_series_or_dfs.insert(0, pd.DataFrame(cv.cv_results_["params"]))  # type: ignore
         cv_df = pd.concat(cv_series_or_dfs, axis=1)
         cv_dfs.append(cv_df)
 
     cv_df = pd.concat(cv_dfs, axis=0)
-    cv_df['section'] = section_key
+    cv_df = cv_df.assign(**{f'rank_test_{key}': cv_df[f'mean_test_{key}'].rank() for key in score_keys})
+
+    # cv_df['section'] = section_key
     return cv_df
 
 
@@ -209,7 +240,6 @@ def main(args: argparse.Namespace):
         with gzip.open(os.path.join(CACHE_FOLDER, args.tokenized_games_file_name), 'wb') as f:
             pickle.dump(tokenized_games, f)
 
-
     else:
         with gzip.open(os.path.join(CACHE_FOLDER, args.tokenized_games_file_name), 'rb') as f:
             tokenized_games = pickle.load(f)
@@ -223,8 +253,10 @@ def main(args: argparse.Namespace):
 
         for section_key in section_keys:
             cv_df = single_key_evaluation(section_key, args, tokenized_games, cv_settings)
-            print(f'Best CV Results for section {section_key}:')
-            print(cv_df.sort_values(by='mean_test_score').head(20))
+            print(f'Best CV Results for section {section_key}, sorted by {args.refit_metric}:')
+            pd.set_option('display.max_columns', None)
+            pd.set_option('display.max_colwidth', 12)
+            print(cv_df.sort_values(by=f'mean_test_{args.refit_metric}').head(10))
 
 
 if __name__ == '__main__':

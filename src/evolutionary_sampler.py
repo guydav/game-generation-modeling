@@ -1035,9 +1035,10 @@ class PopulationBasedSampler():
         else:
             pref_body = pref_def_node.definition.pref_body.body  # type: ignore
 
+        pref_body = typing.cast(tatsu.ast.AST, pref_body)
 
-        if pref_body.parseinfo.rule == 'pref_body_exists':
-            variables = pref_body.exists_vars.variables
+        if pref_body.parseinfo.rule == 'pref_body_exists':  # type: ignore
+            variables = pref_body.exists_vars.variables  # type: ignore
 
             if resample_variable_types:
                 if isinstance(variables, tatsu.ast.AST):
@@ -1091,11 +1092,11 @@ class PopulationBasedSampler():
                 # after_str = ast_printer.ast_section_to_string(pref_body.exists_vars, ast_parser.PREFERENCES)
                 # print(f'Added variable to preference: {before_str} -> {after_str}')
 
-            pref_body = pref_body.exists_args
+            pref_body = typing.cast(tatsu.ast.AST, pref_body.exists_args)
 
         if mutate_first_condition or mutate_last_condition:
-            if pref_body.parseinfo.rule == 'then':
-                seq_funcs = pref_body.then_funcs
+            if pref_body.parseinfo.rule == 'then':  # type: ignore
+                seq_funcs = typing.cast(list, pref_body.then_funcs)
                 seq_func = seq_funcs[0 if mutate_first_condition else -1].seq_func
                 if seq_func.parseinfo.rule == 'once':
                     pred = seq_func.once_pred
@@ -1109,11 +1110,11 @@ class PopulationBasedSampler():
                 else:
                     raise ValueError(f'Unexpected sequence function rule: {seq_func.parseinfo.rule}')
 
-            elif pref_body.parseinfo.rule == 'at_end':
+            elif pref_body.parseinfo.rule == 'at_end':  # type: ignore
                 pred = pref_body.at_end_pred
 
             else:
-                raise ValueError(f'Unexpected preference body rule: {pref_body.parseinfo.rule}')
+                raise ValueError(f'Unexpected preference body rule: {pref_body.parseinfo.rule}')   # type: ignore
 
             pred_key = self.regrowth_sampler._ast_key(pred)
 

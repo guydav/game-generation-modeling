@@ -788,6 +788,11 @@ PREDICATE_LIBRARY = {local_key.replace(PREDICATE_PREFIX, ''): mapping_objects_de
     if local_key.startswith(PREDICATE_PREFIX)
 }
 
+PREDICATE_LIBRARY_RAW = {local_key.replace(PREDICATE_PREFIX, ''): local_val_pred
+    for local_key, local_val_pred in locals().items()
+    if local_key.startswith(PREDICATE_PREFIX)
+}
+
 FUNCTION_PREFIX = '_func_'
 
 FUNCTION_LIBRARY = {local_key.replace(FUNCTION_PREFIX, ''): mapping_objects_decorator(local_val_func)

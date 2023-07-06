@@ -2120,10 +2120,14 @@ def main(args):
             args.parallel_chunksize = args.parallel_chunksize // 2
             logger.info(f'New generation size: {args.map_elites_generation_size}, new chunksize: {args.parallel_chunksize}')
 
-        # TODO: check if output name ends with behavioral features key, and if it doesn't, append it
         if args.map_elites_custom_behavioral_features_key is not None:
             if not args.output_name.endswith(args.map_elites_custom_behavioral_features_key):
                 args.output_name += f'_{args.map_elites_custom_behavioral_features_key}'
+
+        elif args.map_elites_pca_behavioral_features_indices is not None:
+            args.output_name += f'_pca_{"_".join([str(i) for i in args.map_elites_pca_behavioral_features_indices])}'
+
+        args.output_name += f'_seed_{args.random_seed}'
 
         evosampler = MAPElitesSampler(
             key_type=MAPElitesKeyType(args.map_elites_key_type),

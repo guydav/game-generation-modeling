@@ -205,6 +205,9 @@ class PredicateHandler:
 
             if all_none:
                 return None
+            
+            return False
+
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
             used_objects = list(mapping.values())

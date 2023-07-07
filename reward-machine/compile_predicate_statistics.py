@@ -142,13 +142,11 @@ for key in intervals:
 data = sum(intervals.values(), [])
 
 df = pd.DataFrame(data)
-# print(df)
-# print(df.loc[(df["predicate"] == "touch") & (df["arg_types"] == ("Dodgeball", "Shelf"))])
-# print(df[df["arg_types"].str.contains("Dodgeball")])
-
-print(df.loc[df["arg_types"].apply(lambda x: "Dodgeball" in x) & df["predicate"].isin(["in_motion", "touch"])])
-# print(df["arg_types"].str.contains("ball", na=False).value_counts())
-        
 
 
-# How do we determine the conjunction and disjunction of multiple predicates under this scheme?
+
+
+target_types = ["Dodgeball"]
+filter_fn = lambda x: all([target_type in x for target_type in target_types])
+
+print(df.loc[df["arg_types"].apply(filter_fn) & df["predicate"].isin(["in_motion", "touch", "agent_holds"])].sort_values("start_step"))

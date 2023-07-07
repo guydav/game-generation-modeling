@@ -17,8 +17,6 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     # ("between", 3),
 )
 
-data = []
-
 trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_all_dodgeballs.json')
 trace = list(_load_trace(trace_path))
 
@@ -27,6 +25,15 @@ most_recent_object_states = {}
 
 # HACK: we extract the full set of objects in the room by looking for the first "full state update"
 #       in the trace. We do this by looking for the first state that has more than 20 objects updated
+
+# IDEA: ultimately the plan is to construct a dataframe with the following keys: predicate | arg_ids | arg_types | start step | end step | trace
+#       where the start and end step are intervals where the predicate is true with the given arguments. A given predicate / set of arguments
+#       might have multiple intervals in a single trace.
+#       
+#       This will require storing partial intervals as we work through the trace, and terminating them when the predicate becomes false.
+
+# Will map from a key that uniquely identifies a predicate and its arguments to a list of intervals
+intervals = {}
 
 for idx, (state, is_final) in enumerate(tqdm(trace, total=len(trace), desc="Processing trace")):
     state = FullState.from_state_dict(state)
@@ -49,19 +56,37 @@ for idx, (state, is_final) in enumerate(tqdm(trace, total=len(trace), desc="Proc
             if n_args == 0:
                 evaluation = PREDICATE_LIBRARY_RAW[predicate](most_recent_agent_state, [])
 
+                # If the predicate is true, then check to see if the last interval is closed. If it is, then
+                # create a new interval
+                key = f"{predicate}-()"
                 if evaluation:
-                    info = {"predicate": predicate, "arg_ids": (), "arg_types": (), "step": idx, "trace": trace_path.stem}
-                    data.append(info)
+                    if key not in intervals or intervals[key][-1]["end_step"] is not None:
+                        intervals[key] = [{"predicate": predicate, "arg_ids": (), "arg_types": (), "start_step": idx, "end_step": None, "trace": trace_path.stem}]
+
+                # If the predicate is false, then check to see if the last interval is open. If it is, then
+                # close it
+                else:
+                    if key in intervals and intervals[key][-1]["end_step"] is None:
+                        intervals[key][-1]["end_step"] = idx
 
             # Perform the check for each updated object
             elif n_args == 1:
                 for object_id in changed_this_step:
                     evaluation = PREDICATE_LIBRARY_RAW[predicate](most_recent_agent_state, [most_recent_object_states[object_id]])
 
+                    arg_ids = (object_id,)
+                    arg_types = (most_recent_object_states[object_id].object_type,)
+
+                    key = f"{predicate}-{arg_ids}"
                     if evaluation:
-                        info = {"predicate": predicate, "arg_ids": (object_id,), "arg_types": (most_recent_object_states[object_id].object_type,), 
-                                "step": idx, "trace": trace_path.stem}
-                        data.append(info)
+                        if key not in intervals or intervals[key][-1]["end_step"] is not None:  
+                            intervals[key] = [{"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types, 
+                                               "start_step": idx, "end_step": None, "trace": trace_path.stem}]
+
+                    else:
+                        if key in intervals and intervals[key][-1]["end_step"] is None:
+                            intervals[key][-1]["end_step"] = idx
+
                 
             # Perform the check for every pair of objects where at least one is updated
             elif n_args == 2:
@@ -71,13 +96,18 @@ for idx, (state, is_final) in enumerate(tqdm(trace, total=len(trace), desc="Proc
                     for permutation in itertools.permutations(objects):
                         evaluation = PREDICATE_LIBRARY_RAW[predicate](most_recent_agent_state, permutation)
 
-                        if evaluation:
-                            arg_ids = tuple([obj.object_id for obj in permutation])
-                            arg_types = tuple([obj.object_type for obj in permutation])
-                            info = {"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types, 
-                                    "step": idx, "trace": trace_path.stem}
-                            data.append(info)
+                        arg_ids = tuple([obj.object_id for obj in permutation])
+                        arg_types = tuple([obj.object_type for obj in permutation])
 
+                        key = f"{predicate}-{arg_ids}"
+                        if evaluation:
+                            if key not in intervals or intervals[key][-1]["end_step"] is not None:  
+                                intervals[key] = [{"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types, 
+                                                   "start_step": idx, "end_step": None, "trace": trace_path.stem}]
+
+                        else:
+                            if key in intervals and intervals[key][-1]["end_step"] is None:
+                                intervals[key][-1]["end_step"] = idx
 
             # Perform the check for every triple of objects where at least one is updated
             elif n_args == 3:
@@ -90,13 +120,35 @@ for idx, (state, is_final) in enumerate(tqdm(trace, total=len(trace), desc="Proc
                     for permutation in itertools.permutations(objects):
                         evaluation = PREDICATE_LIBRARY_RAW[predicate](most_recent_agent_state, permutation)
 
+                        arg_ids = tuple([obj.object_id for obj in permutation])
+                        arg_types = tuple([obj.object_type for obj in permutation])
+
+                        key = f"{predicate}-{arg_ids}"
                         if evaluation:
-                            arg_ids = tuple([obj.object_id for obj in permutation])
-                            arg_types = tuple([obj.object_type for obj in permutation])
-                            info = {"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types, 
-                                    "step": idx, "trace": trace_path.stem}
-                            data.append(info)
+                            if key not in intervals or intervals[key][-1]["end_step"] is not None:  
+                                intervals[key] = [{"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types, 
+                                                   "start_step": idx, "end_step": None, "trace": trace_path.stem}]
+
+                        else:
+                            if key in intervals and intervals[key][-1]["end_step"] is None:
+                                intervals[key][-1]["end_step"] = idx
+
+
+# Set the end step of any intervals that are still open
+for key in intervals:
+    if intervals[key][-1]["end_step"] is None:
+        intervals[key][-1]["end_step"] = len(trace)
+
+data = sum(intervals.values(), [])
 
 df = pd.DataFrame(data)
-print(df.loc[(df["predicate"] == "in_motion") & (df["arg_types"] == ("Dodgeball",))])
+# print(df)
+# print(df.loc[(df["predicate"] == "touch") & (df["arg_types"] == ("Dodgeball", "Shelf"))])
+# print(df[df["arg_types"].str.contains("Dodgeball")])
+
+print(df.loc[df["arg_types"].apply(lambda x: "Dodgeball" in x) & df["predicate"].isin(["in_motion", "touch"])])
+# print(df["arg_types"].str.contains("ball", na=False).value_counts())
         
+
+
+# How do we determine the conjunction and disjunction of multiple predicates under this scheme?

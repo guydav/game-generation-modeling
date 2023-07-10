@@ -4,11 +4,12 @@ import json
 import os
 import pandas as pd
 import pathlib
+import tatsu, tatsu.ast, tatsu.grammars
 from tqdm import tqdm
 import typing
 
 from config import OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS, COLORS
-from utils import FullState, get_project_dir
+from utils import FullState, get_project_dir, extract_predicate_function_name
 from manual_run import _load_trace
 from predicate_handler import PREDICATE_LIBRARY_RAW
 
@@ -28,7 +29,18 @@ class CommonSensePredicateStatistics():
                  trace_paths: typing.Sequence[str]):
         
         self.cache_dir = cache_dir
-        self.data = pd.DataFrame(columns=['predicate', 'arg_ids', 'arg_types', 'start_step', 'end_step', 'id'])
+
+        cache_filename = os.path.join(cache_dir, 'predicate_statistics.pkl')
+
+        if os.path.exists(cache_filename):
+            self.data = pd.read_pickle(cache_filename)
+
+        else:
+            self.data = pd.DataFrame(columns=['predicate', 'arg_ids', 'arg_types', 'start_step', 'end_step', 'id'])
+            for trace_path in tqdm(trace_paths, desc="Processing traces"):
+                trace = json.load(open(trace_path, 'r'))
+                self.process_trace(trace)
+            self.data.to_pickle(cache_filename)
 
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
@@ -74,7 +86,7 @@ class CommonSensePredicateStatistics():
 
         received_full_update = False
 
-        for idx, state in tqdm(enumerate(replay), total=len(replay), desc="Processing replay", leave=False):
+        for idx, state in tqdm(enumerate(replay), total=len(replay), desc=f"Processing replay {trace['id']}", leave=False):
             is_final = idx == len(replay) - 1
             state = FullState.from_state_dict(state)
 
@@ -135,21 +147,108 @@ class CommonSensePredicateStatistics():
             if predicate_intervals[key][-1]["end_step"] is None:
                 predicate_intervals[key][-1]["end_step"] = len(replay)
 
-        # Collapse the intervals into a single dataframe
+        # Collapse the intervals into a single dataframe and add it to the overall dataframe
         game_df = pd.DataFrame(sum(predicate_intervals.values(), []))
         self.data = pd.concat([self.data, game_df], ignore_index=True)
+
+    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Optional[typing.Dict[str, str]]):
+        '''
+        Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
+        for each processed trace
+
+        Returns a dictionary mapping from the trace ID to a list of intervals in which the predicate is true
+        '''
+
+        predicate_rule = predicate.parseinfo.rule  # type: ignore
+
+        if predicate_rule == "predicate":
+            predicate_name = extract_predicate_function_name(predicate)  # type: ignore
+            exit("WIP")
+
+        elif predicate_rule == "super_predicate":
+            return self.filter(predicate['pred'], mapping)
+        
+        elif predicate_rule == "super_predicate_and":
+            and_args = predicate["and_args"]
+            if isinstance(and_args, tatsu.ast.AST):
+                and_args = [and_args]
+
+            interval_mapping = {}
+            sub_interval_mappings = [self.filter(and_arg, mapping) for and_arg in and_args]
+
+            # For each trace ID in which each sub-predicate is true for at least one interval...
+            for id in set.intersection(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
+                
+                # Compute the set of indices in which the predicate is true for all sub-predicates (i.e. the union of the intervals in which it's true)
+                truth_idxs = [set.union(*[set(range(*interval)) for interval in sub_interval_mapping[id]]) for sub_interval_mapping in sub_interval_mappings]
+
+                # Compute the intersection of the indices in which the predicate is true for all sub-predicates
+                intersection = set.intersection(*truth_idxs)
+
+                if len(intersection) > 0:
+
+                    # Reduce the set of indices back to a list of intervals (inclusive, exclusive)
+                    intervals = []
+                    for idx in sorted(intersection):
+                        # If this is the first interval, or the current index is not adjacent to the last index, then create a new interval
+                        if len(intervals) == 0 or idx != intervals[-1][-1]:
+                            intervals.append((idx, idx + 1))
+
+                        # Otherwise, extend the last interval
+                        else:
+                            intervals[-1] = (intervals[-1][0], idx + 1)
+
+                    interval_mapping[id] = intervals
+
+            return interval_mapping
+
+
+        elif predicate_rule == "super_predicate_or":
+            raise NotImplementedError
+        
+        elif predicate_rule == "super_predicate_not":
+            sub_intervals = self.filter(predicate["not_args"], mapping)
+        
+        else:
+            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
         
 
+if __name__ == '__main__':
 
-trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/new_replay_format_test.json')
-# trace = list(_load_trace(trace_path))
-trace = json.load(open(trace_path, 'r'))
-a = CommonSensePredicateStatistics('', '')
-a.process_trace(trace)
+    def indices_to_intervals(indices):
+        intervals = []
+        for idx in sorted(indices):
+            # If this is the first interval, or the current index is not adjacent to the last index, then create a new interval
+            print(f"Idx: {idx}, Last interval: {intervals[-1] if len(intervals) > 0 else None}")
+            if len(intervals) == 0 or idx != intervals[-1][-1]:
+                intervals.append((idx, idx + 1))
 
-# target_types = []
-# filter_fn = lambda x: all([target_type in x for target_type in target_types])
+            # Otherwise, extend the last interval
+            else:
+                intervals[-1] = (intervals[-1][0], idx + 1)
 
-# print(df.loc[df["arg_types"].apply(filter_fn) & df["predicate"].isin(["in_motion", "touch", "agent_holds"])].sort_values("start_step"))
+        return intervals
+
+    DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
+    grammar = open(DEFAULT_GRAMMAR_PATH).read()
+    grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
+
+    game = open(get_project_dir() + '/reward-machine/games/ball_to_bin_from_bed.txt').read()
+    game_ast = grammar_parser.parse(game)  # type: ignore
+
+    # should be: (and (not (in_motion ?b)) (in ?h ?b)))
+    test_pred = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['once_pred']
+    test_mapping = {"?b": ["dodgeball", "golfball"], "?h": ["hexagonal_bin"]}
+
+    trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/new_replay_format_test.json')
+    cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
+
+    stats = CommonSensePredicateStatistics(cache_dir, [trace_path])
+    stats.filter(test_pred, test_mapping)
+
+    # target_types = []
+    # filter_fn = lambda x: all([target_type in x for target_type in target_types])
+
+    # print(df.loc[df["arg_types"].apply(filter_fn) & df["predicate"].isin(["in_motion", "touch", "agent_holds"])].sort_values("start_step"))
 
 

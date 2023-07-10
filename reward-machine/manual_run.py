@@ -34,7 +34,7 @@ REPLAY_NESTING_KEYS = (
 
 def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = REPLAY_NESTING_KEYS):
     with open(path, 'r') as f:
-        trace = json.load(f)
+        trace = json.load(f)['replay']
 
     simple = isinstance(trace, list)
 

@@ -6,6 +6,7 @@ import multiprocess as multiprocessing
 from multiprocess import pool as mpp
 import os
 import re
+import signal
 import sys
 import tempfile
 import traceback
@@ -345,6 +346,7 @@ class PopulationBasedSampler():
     sampler_prior_count: typing.List[int]
     _samplers: typing.List[typing.Dict[str, ASTSampler]]
     saving: bool
+    signal_received: bool
     verbose: int
     weight_insert_delete_nodes_by_length: bool
 
@@ -471,6 +473,7 @@ class PopulationBasedSampler():
         self.generation_diversity_scores_index = -1
         self.saving = False
         self.population_initialized = False
+        self.signal_received = False
 
     def initialize_population(self):
         """
@@ -1456,8 +1459,12 @@ class PopulationBasedSampler():
             for i, context_fixer in enumerate(self._context_fixers):
                 context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
 
-            if save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps:
+            if (save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps) or self.signal_received:
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
+
+            if self.signal_received:
+                logger.info('Received signal to stop evolution, stopping early...')
+                break
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, use_imap: bool = True,
@@ -1474,6 +1481,10 @@ class PopulationBasedSampler():
                                              use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
                                              save_interval=save_interval)
+
+    def signal_handler(self, *args, **kwargs):
+        logger.info(f'Caught signal with args: {args} and kwargs: {kwargs}, will terminate when this evolutionary step is done')
+        self.signal_received = True
 
     def _visualize_sample(self, sample: ASTType, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005, postprocess_sample: bool = True,
                           feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
@@ -2129,6 +2140,8 @@ def main(args):
 
         args.output_name += f'_seed_{args.random_seed}'
 
+        logger.info(f'Final output name: {args.output_name}')
+
         evosampler = MAPElitesSampler(
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
@@ -2176,6 +2189,9 @@ def main(args):
             config=vars(args),
             dir=os.environ.get('WANDB_CACHE_DIR', '.wandb'),
         )
+
+    signal.signal(signal.SIGUSR1, evosampler.signal_handler)
+    signal.signal(signal.SIGUSR2, evosampler.signal_handler)
 
     tracer = None
 

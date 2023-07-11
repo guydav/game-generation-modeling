@@ -2190,6 +2190,7 @@ def main(args):
             dir=os.environ.get('WANDB_CACHE_DIR', '.wandb'),
         )
 
+    signal.signal(signal.SIGTERM, evosampler.signal_handler)
     signal.signal(signal.SIGUSR1, evosampler.signal_handler)
     signal.signal(signal.SIGUSR2, evosampler.signal_handler)
 

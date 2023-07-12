@@ -25,6 +25,10 @@ TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/trac
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
 THROW_WITH_STACKED_BLOCKS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
+CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
+# TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
+TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
+
 REPLAY_NESTING_KEYS = (
     'participants-v2-develop',
     '17tSEDmCvGp1uKVEh5iq',
@@ -34,7 +38,9 @@ REPLAY_NESTING_KEYS = (
 
 def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = REPLAY_NESTING_KEYS):
     with open(path, 'r') as f:
-        trace = json.load(f)['replay']
+        trace = json.load(f)
+        if 'replay' in trace:
+            trace = trace['replay']
 
     simple = isinstance(trace, list)
 
@@ -93,7 +99,7 @@ TEST_GAME_LIBRARY = {
 
 if __name__ == "__main__":
     game_handler = GameHandler(TEST_GAME_LIBRARY['throw-block-cache-test'])
-    trace_path = THROW_WITH_STACKED_BLOCKS_TRACE.resolve().as_posix()
+    trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
 
     score = None
 

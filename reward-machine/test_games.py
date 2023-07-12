@@ -20,9 +20,18 @@ THROW_ALL_DODGEBALLS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/t
 SETUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/setup_test_trace.json')
 THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_ball_to_bin_unique_positions.json')
 COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
-CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
+
+# CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
+CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame.json')
+# CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
+
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
-TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
+# TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/sp9Aq6hJRgnebtopwZDN-preCreateGame-rerecorded.json')
+
+# TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
+TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
+TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
+
 
 
 def load_game(game_name: str):

@@ -240,7 +240,27 @@ class CommonSensePredicateStatistics():
 
 
         elif predicate_rule == "super_predicate_or":
-            raise NotImplementedError
+            or_args = predicate["or_args"]
+            if isinstance(or_args, tatsu.ast.AST):
+                or_args = [or_args]
+
+            interval_mapping = {}
+            sub_interval_mappings = [self.filter(or_arg, mapping) for or_arg in or_args]
+
+            # For each trace ID in which at least one sub-predicate is true...
+            for id in set.union(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
+                
+                # Compute, for each sub-predicate, the full set of indices in which it is true
+                truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id]) for sub_interval_mapping in sub_interval_mappings]
+
+                # Compute the union of those indices (i.e. the indices in which at least one sub-predicate is true)
+                union = set.union(*truth_idxs)
+
+                # Reduce the set of indices back to a list of intervals
+                if len(union) > 0:
+                    interval_mapping[id] = self._indices_to_intervals(union)
+
+            return interval_mapping
         
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
@@ -309,7 +329,7 @@ if __name__ == '__main__':
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 
     stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
-    stats.filter(test_pred_2, test_mapping)
+    print(stats.filter(test_pred_2, test_mapping))
 
     # target_types = []
     # filter_fn = lambda x: all([target_type in x for target_type in target_types])

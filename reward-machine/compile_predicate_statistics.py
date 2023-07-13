@@ -9,7 +9,7 @@ from tqdm import tqdm
 import typing
 
 from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
-from utils import FullState, get_project_dir, extract_predicate_function_name, extract_variables
+from utils import FullState, get_project_dir, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
 from manual_run import _load_trace
 from predicate_handler import PREDICATE_LIBRARY_RAW
 
@@ -141,6 +141,9 @@ class CommonSensePredicateStatistics():
                         changed_this_step = [obj.object_id for obj in state.objects]
                         possible_args = list(product(*([changed_this_step] + list(repeat(room_objects, n_args - 1)))))
 
+                        # Filter out any sets of arguments with duplicates
+                        possible_args = [arg_set for arg_set in possible_args if len(set(arg_set)) == len(arg_set)]
+
                     for arg_set in possible_args:
                         for arg_ids in permutations(arg_set):
                             args = [most_recent_object_states[obj_id] for obj_id in arg_ids]
@@ -175,7 +178,7 @@ class CommonSensePredicateStatistics():
         game_df = pd.DataFrame(sum(predicate_intervals.values(), []))
         self.data = pd.concat([self.data, game_df], ignore_index=True)
 
-    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Optional[typing.Dict[str, str]]):
+    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, str]):
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
@@ -189,18 +192,19 @@ class CommonSensePredicateStatistics():
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
             variables = extract_variables(predicate)  # type: ignore
 
+            print(f"Filtering by predicate '{predicate_name}' with variables {variables}")
+
             # Restrict the mapping to just the referenced variables and expand meta-types
             relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], []) 
                                     for var in variables if var in mapping}
 
             # In cases where a variable can have multiple types, we consider all possible combinations of types
-            possible_arg_types = product(*[types for types in relevant_arg_mapping.values()])
+            possible_arg_types = list(product(*[types for types in relevant_arg_mapping.values()]))
+
+            print(f"Possible arg types: {possible_arg_types}")
 
             # Merge the intervals for each possible assignment of argument types
-            predicate_df = pd.DataFrame()
-            for arg_types in possible_arg_types:
-                arg_df = self.data[(self.data["predicate"] == predicate_name) & (self.data["arg_types"] == arg_types)]
-                predicate_df = pd.concat([predicate_df, arg_df], ignore_index=True)
+            predicate_df = self.data[(self.data["predicate"] == predicate_name) & (self.data["arg_types"].isin(possible_arg_types))]
 
             # Construct the interval mapping
             interval_mapping = {}
@@ -286,27 +290,21 @@ class CommonSensePredicateStatistics():
 
             return interval_mapping
 
-                    
-        
+        elif predicate_rule == "super_predicate_exists":
+            variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore  
+            # will return something like {?c2 - cube_block}
+            print(f"Exists variable type mapping: {variable_type_mapping}")
+
+            sub_intervals = self.filter(predicate["exists_args"], {**mapping, **variable_type_mapping})      
+            # this will return, for each game, the set of intervals based on the argument *types* (not the argument *names*)
+            # is it sufficient to just directly return this?
+
+            return sub_intervals
+
         else:
-            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
-        
+            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")   
 
 if __name__ == '__main__':
-
-    def indices_to_intervals(indices):
-        intervals = []
-        for idx in sorted(indices):
-            # If this is the first interval, or the current index is not adjacent to the last index, then create a new interval
-            print(f"Idx: {idx}, Last interval: {intervals[-1] if len(intervals) > 0 else None}")
-            if len(intervals) == 0 or idx != intervals[-1][-1]:
-                intervals.append((idx, idx + 1))
-
-            # Otherwise, extend the last interval
-            else:
-                intervals[-1] = (intervals[-1][0], idx + 1)
-
-        return intervals
 
     DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
@@ -321,6 +319,10 @@ if __name__ == '__main__':
     # should be: (and (in_motion ?b) (not (agent_holds ?b)))
     test_pred_2 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred'] 
 
+    # should be: (exists (?c2 - cube_block) (touch ?c2 ?b))
+    test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred'] 
+
+
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
 
     # trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/new_replay_format_test.json')
@@ -329,7 +331,7 @@ if __name__ == '__main__':
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 
     stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
-    print(stats.filter(test_pred_2, test_mapping))
+    print(stats.filter(test_pred_3, test_mapping))
 
     # target_types = []
     # filter_fn = lambda x: all([target_type in x for target_type in target_types])

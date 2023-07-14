@@ -57,7 +57,8 @@ class PreferenceHandler:
     variable_type_mapping: typing.Dict[str, typing.List[str]]
 
     def __init__(self, preference: tatsu.ast.AST, predicate_handler: PredicateHandler, domain: str,
-                 additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None):
+                 additional_variable_mapping: typing.Optional[typing.Dict[str, typing.List[str]]] = None,
+                 verbose: bool = False):
         '''
         Construct a handler object for the provided preference, responsible for tracking when and how the
         the preference has been satisfied by the various objects in the state using its process() method
@@ -76,6 +77,7 @@ class PreferenceHandler:
         self.preference = preference
         self.predicate_handler = predicate_handler
         self.domain = domain
+        self.verbose = verbose
 
         self.preference_name = preference["pref_name"]  # type: ignore
         body = preference["pref_body"]["body"]  # type: ignore
@@ -180,7 +182,7 @@ class PreferenceHandler:
 
 
     def advance_preference(self,
-        partial_preference_satisfcation: PartialPreferenceSatisfaction,
+        partial_preference_satisfaction: PartialPreferenceSatisfaction,
         new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction],
         debug: bool = False):
         '''
@@ -194,23 +196,32 @@ class PreferenceHandler:
         we need to make sure not to add duplicate branches back in)
         '''
 
-        next_pred_idx = self.temporal_predicates.index(partial_preference_satisfcation.next_predicate)
-        new_cur_predicate = partial_preference_satisfcation.next_predicate
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+        from ast_printer import ast_section_to_string
+        cur = ast_section_to_string(partial_preference_satisfaction.current_predicate, '(:constraints') if partial_preference_satisfaction.current_predicate is not None else None
+        next = ast_section_to_string(partial_preference_satisfaction.next_predicate, '(:constraints') if partial_preference_satisfaction.next_predicate is not None else None
+        print(f"The following predicate has been satisfied for {partial_preference_satisfaction.mapping}: {cur} --> {next}")
+
+
+        next_pred_idx = self.temporal_predicates.index(partial_preference_satisfaction.next_predicate)
+        new_cur_predicate = partial_preference_satisfaction.next_predicate
 
         # Check to see whether we've just satisfied the last predicate of the (then) operator, in which case
         # the entire preference has been satisfied! Add the current mapping to the list satisfied at this step
         # and add the reverted mapping back to new_partial_preference_satisfactions
         if next_pred_idx + 1 == len(self.temporal_predicates):
-            print("\n\tPREFERENCE SATISFIED!")
-            self.satisfied_this_step.append(PreferenceSatisfaction(partial_preference_satisfcation.mapping, partial_preference_satisfcation.start,
-                self.cur_step, partial_preference_satisfcation.measures))
-            self.revert_preference(partial_preference_satisfcation.mapping, new_partial_preference_satisfactions)
+            if self.verbose: print("\n\tPREFERENCE SATISFIED!")
+            self.satisfied_this_step.append(PreferenceSatisfaction(partial_preference_satisfaction.mapping, partial_preference_satisfaction.start,
+                self.cur_step, partial_preference_satisfaction.measures))
+            self.revert_preference(partial_preference_satisfaction.mapping, new_partial_preference_satisfactions)
             return
 
         else:
             new_next_predicate = self.temporal_predicates[next_pred_idx + 1]
             # Determine all of the variables referenced in the new predicate that aren't referenced already
-            new_variables = [var for var in extract_variables(new_next_predicate) if var not in partial_preference_satisfcation.mapping]
+            new_variables = [var for var in extract_variables(new_next_predicate) if var not in partial_preference_satisfaction.mapping]
 
         if debug: print("\n\tNew variables required by the next predicate:", new_variables)
 
@@ -221,21 +232,23 @@ class PreferenceHandler:
 
             # We extract the set of objects that are already used in this partial satisfaction, so that they do not get reassigned
             # to new variables
-            used_objects = list(partial_preference_satisfcation.mapping.values())
+            used_objects = list(partial_preference_satisfaction.mapping.values())
             object_assignments = get_object_assignments(self.domain, new_var_types, used_objects)
 
             for object_assignment in object_assignments:
                 new_mapping = dict(zip(new_variables, object_assignment))
-                new_mapping.update(partial_preference_satisfcation.mapping)
+                new_mapping.update(partial_preference_satisfaction.mapping)
 
-                new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(mapping=new_mapping, current_predicate=new_cur_predicate,
+                new_partial_preference_satisfactions.append(partial_preference_satisfaction._replace(mapping=new_mapping, current_predicate=new_cur_predicate,
                                                                                                      next_predicate=new_next_predicate, while_sat=0))
+                
+                
 
         # Otherwise, just advance the predicates but keep the mapping the same
         else:
-            new_partial_preference_satisfactions.append(partial_preference_satisfcation._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate,
+            new_partial_preference_satisfactions.append(partial_preference_satisfaction._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate,
                                                                                                  while_sat=0))
-
+            
     def revert_preference(self, mapping: typing.Dict[str, str], new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction]) -> None:
         '''
         Called when a predicate inside a (then) operator is no longer satisfied and we have to return to

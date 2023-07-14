@@ -29,7 +29,7 @@ TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machi
 # TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/sp9Aq6hJRgnebtopwZDN-preCreateGame-rerecorded.json')
 
 # TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
-TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
+# TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
 TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
 
 

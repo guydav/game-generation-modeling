@@ -34,7 +34,7 @@ class GameHandler():
     preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
     building_handler: BuildingHandler
 
-    def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH):
+    def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH, verbose: bool = False):
         grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
 
@@ -46,6 +46,7 @@ class GameHandler():
         self.preferences = []
         self.terminal = None
         self.scoring = None
+        self.verbose = verbose
 
         self.game_ast = self.grammar_parser.parse(game)  # type: ignore
         self._extract_game_info(self.game_ast)  # type: ignore
@@ -77,10 +78,10 @@ class GameHandler():
             if rule == "preference":
                 name = typing.cast(str, pref_def["pref_name"])
 
-                pref_handler = PreferenceHandler(pref_def, self.predicate_handler, self.domain_name)
+                pref_handler = PreferenceHandler(pref_def, self.predicate_handler, self.domain_name, verbose=self.verbose)
                 self.preference_handlers[name] = pref_handler
                 self.preference_satisfactions[name] = []
-                print(f"Successfully constructed PreferenceHandler for '{name}'")
+                if self.verbose: print(f"Successfully constructed PreferenceHandler for '{name}'")
 
             # This case handles externall forall preferences
             elif rule == "pref_forall":
@@ -98,10 +99,10 @@ class GameHandler():
                     name = typing.cast(str, sub_preference["pref_name"])
 
                     pref_handler = PreferenceHandler(sub_preference, self.predicate_handler, self.domain_name,
-                        additional_variable_mapping=variable_type_mapping)
+                        additional_variable_mapping=variable_type_mapping, verbose=self.verbose)
                     self.preference_handlers[name] = pref_handler
                     self.preference_satisfactions[name] = []
-                    print(f"Successfully constructed PreferenceHandler for '{name}'")
+                    if self.verbose: print(f"Successfully constructed PreferenceHandler for '{name}'")
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST]):
         '''

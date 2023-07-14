@@ -39,7 +39,7 @@ REPLAY_NESTING_KEYS = (
 def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = REPLAY_NESTING_KEYS):
     with open(path, 'r') as f:
         trace = json.load(f)
-        if 'replay' in trace:
+        if not isinstance(trace, list) and 'replay' in trace:
             trace = trace['replay']
 
     simple = isinstance(trace, list)
@@ -98,6 +98,8 @@ TEST_GAME_LIBRARY = {
 }
 
 if __name__ == "__main__":
+
+
     game_handler = GameHandler(TEST_GAME_LIBRARY['throw-block-cache-test'])
     trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
 
@@ -122,9 +124,3 @@ if __name__ == "__main__":
         print(key + ":")
         for sat in val:
             print(f"\t{sat}")
-            # print(f"\t\t{', '.join(sorted(sat.mapping.values()))}")
-
-            # if ", ".join(sorted(sat.mapping.values())) in used_mappings:
-            #     print("DUPLICATE MAPPING")
-            #     exit()
-            # used_mappings.add(", ".join(sorted(sat.mapping.values())))

@@ -1938,15 +1938,18 @@ class MAPElitesSampler(PopulationBasedSampler):
         else:
             raise ValueError(f'Unknown key type {self.key_type}')
 
+    def print_key_features(self, key: KeyTypeAnnotation):
+        key_dict = self._key_to_feature_dict(key)
+        print(f'Sample features for key {key}:')
+        for feature_name, feature_value in key_dict.items():
+            print(f'{feature_name}: {feature_value}')
+
     def _visualize_sample_by_key(self, key: KeyTypeAnnotation, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
                                  postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         if key not in self.population:
             raise ValueError(f'Key {key} not found in population')
 
-        key_dict = self._key_to_feature_dict(key)
-        print(f'Sample features for key {key}:')
-        for feature_name, feature_value in key_dict.items():
-            print(f'{feature_name}: {feature_value}')
+        self.print_key_features(key)
 
         self._visualize_sample(self.population[key], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
         return key

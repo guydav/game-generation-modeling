@@ -44,7 +44,7 @@ TEST_TRACE_NAMES = ["throw_ball_to_bin_unique_positions", "setup_test_trace", "b
                     "complex_stacking_trace"]
 
 TEST_GAME_NAMES = ["test-count-unique-positions", "test-setup", "test-building",
-                    "test-external-scoring", "test-building-on-chair", "test-wall-bounce",
+                    "test-external-scoring", "test-building", "test-wall-bounce",
                     "test-count-overlapping"]
 
 for trace, game in zip(TEST_TRACE_NAMES, TEST_GAME_NAMES):
@@ -76,14 +76,14 @@ for trace, game in zip(TEST_TRACE_NAMES, TEST_GAME_NAMES):
                 print(f"\t{sat}")
 
 
-        handler = game_handler.preference_handlers["throwBallToBin"]
-        for partial in handler.partial_preference_satisfactions:
-            print("\nPartial satisfaction:")
-            print(f"\tMapping: {partial.mapping}")
-            print(f"\tCurrent predicate: {ast_section_to_string(partial.current_predicate, '(:constraints') if partial.current_predicate else None}")
-            print(f"\tNext predicate: {ast_section_to_string(partial.next_predicate, '(:constraints') if partial.next_predicate else None}")
-            print(f"\tStart: {partial.start}")
+        # handler = game_handler.preference_handlers["throwBallToBin"]
+        # for partial in handler.partial_preference_satisfactions:
+        #     print("\nPartial satisfaction:")
+        #     print(f"\tMapping: {partial.mapping}")
+        #     print(f"\tCurrent predicate: {ast_section_to_string(partial.current_predicate, '(:constraints') if partial.current_predicate else None}")
+        #     print(f"\tNext predicate: {ast_section_to_string(partial.next_predicate, '(:constraints') if partial.next_predicate else None}")
+        #     print(f"\tStart: {partial.start}")
 
             
 
-    break
+    # break

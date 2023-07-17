@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import permutations, product, repeat
 import itertools
 import json
@@ -9,7 +10,12 @@ from tqdm import tqdm
 import typing
 
 from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
-from utils import FullState, get_project_dir, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
+from utils import (extract_predicate_function_name, 
+                   extract_variables, 
+                   extract_variable_type_mapping,
+                   get_project_dir,
+                   get_object_assignments,
+                   FullState)
 from manual_run import _load_trace
 from predicate_handler import PREDICATE_LIBRARY_RAW
 
@@ -47,21 +53,23 @@ class CommonSensePredicateStatistics():
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
     
+    def _domain_key(self, domain: str):
+        if domain.endswith('few_new_objects'):
+            return 'few'
+        elif domain.endswith('medium_new_objects'):
+            return 'medium'
+        elif domain.endswith('many_new_objects'):
+            return 'many'
+        else:
+            raise ValueError(f"Unrecognized domain: {domain}")
+    
     def _get_room_objects(self, trace) -> set:
         '''
         Returns the set of objects in the room type of the given trace, excluding pseudo-objects,
         colors, and the agent
         '''
 
-        if trace['scene'].endswith('few_new_objects'):
-            room_type = 'few'
-        elif trace['scene'].endswith('medium_new_objects'):
-            room_type = 'medium'
-        elif trace['scene'].endswith('many_new_objects'):
-            room_type = 'many'
-        else:
-            raise ValueError(f"Unrecognized scene: {trace['scene']}")
-        
+        room_type = self._domain_key(trace['scene'])          
         room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
         room_objects -= set(UNITY_PSEUDO_OBJECTS.keys())
         room_objects -= set(COLORS)
@@ -74,7 +82,10 @@ class CommonSensePredicateStatistics():
         Converts a list of (start, end) intervals to a list of indices (i.e. timesteps) covered
         by the intervals
         '''
-        return set.union(*[set(range(*interval)) for interval in intervals])
+        if intervals == []:
+            return set()
+        
+        return set.union(*[set(range(*interval)) for interval in intervals if interval != []])
     
     def _indices_to_intervals(self, indices):
         '''
@@ -160,7 +171,8 @@ class CommonSensePredicateStatistics():
                                 if key not in predicate_intervals or predicate_intervals[key][-1]["end_step"] is not None:
                                     predicate_intervals[key] = [{"predicate": predicate, "arg_ids": arg_ids, 
                                                                  "arg_types": arg_types, "start_step": idx, 
-                                                                 "end_step": None, "id": trace['id']}]
+                                                                 "end_step": None, "id": trace['id'],
+                                                                 "domain": trace['scene']}]
 
                             # If the predicate is false, then check to see if the last interval is open. If it is, then
                             # close it
@@ -183,7 +195,8 @@ class CommonSensePredicateStatistics():
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
 
-        Returns a dictionary mapping from the trace ID to a list of intervals in which the predicate is true
+        Returns a dictionary mapping from the trace ID to a dictionary that maps from the set of arguments to a list of
+        intervals in which the predicate is true for that set of arguments
         '''
 
         predicate_rule = predicate.parseinfo.rule  # type: ignore
@@ -192,8 +205,6 @@ class CommonSensePredicateStatistics():
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
             variables = extract_variables(predicate)  # type: ignore
 
-            print(f"Filtering by predicate '{predicate_name}' with variables {variables}")
-
             # Restrict the mapping to just the referenced variables and expand meta-types
             relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], []) 
                                     for var in variables if var in mapping}
@@ -201,18 +212,13 @@ class CommonSensePredicateStatistics():
             # In cases where a variable can have multiple types, we consider all possible combinations of types
             possible_arg_types = list(product(*[types for types in relevant_arg_mapping.values()]))
 
-            print(f"Possible arg types: {possible_arg_types}")
-
             # Merge the intervals for each possible assignment of argument types
             predicate_df = self.data[(self.data["predicate"] == predicate_name) & (self.data["arg_types"].isin(possible_arg_types))]
 
             # Construct the interval mapping
-            interval_mapping = {}
+            interval_mapping = defaultdict(lambda: defaultdict(list))
             for row in predicate_df.itertuples():
-                if row.id not in interval_mapping:
-                    interval_mapping[row.id] = []
-
-                interval_mapping[row.id].append((row.start_step, row.end_step))
+                interval_mapping[row.id][row.arg_ids].append((row.start_step, row.end_step))
 
             return interval_mapping
 
@@ -224,21 +230,24 @@ class CommonSensePredicateStatistics():
             if isinstance(and_args, tatsu.ast.AST):
                 and_args = [and_args]
 
-            interval_mapping = {}
+            interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_interval_mappings = [self.filter(and_arg, mapping) for and_arg in and_args]
 
             # For each trace ID in which each sub-predicate is true for at least one interval...
             for id in set.intersection(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
                 
-                # Compute, for each sub-predicate, the full set of indices in which it is true
-                truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id]) for sub_interval_mapping in sub_interval_mappings]
+                # Similarly, for each set of arguments in which each sub-predicate is true for at least one interval...
+                for arg_ids in set.intersection(*[set(sub_interval_mapping[id].keys()) for sub_interval_mapping in sub_interval_mappings]):
 
-                # Compute the intersection of those indices (i.e. the indices in which all sub-predicates are true)
-                intersection = set.intersection(*truth_idxs)
+                    # Compute, for each sub-predicate, the full set of indices in which it is true
+                    truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id][arg_ids]) for sub_interval_mapping in sub_interval_mappings]
 
-                # Reduce the set of indices back to a list of intervals (inclusive, exclusive)
-                if len(intersection) > 0:
-                    interval_mapping[id] = self._indices_to_intervals(intersection)
+                    # Compute the intersection of those indices (i.e. the indices in which all sub-predicates are true)
+                    intersection = set.intersection(*truth_idxs)
+
+                    # Reduce the set of indices back to a list of intervals (inclusive, exclusive)
+                    if len(intersection) > 0:
+                        interval_mapping[id][arg_ids] = self._indices_to_intervals(intersection)
 
             return interval_mapping
 
@@ -248,45 +257,58 @@ class CommonSensePredicateStatistics():
             if isinstance(or_args, tatsu.ast.AST):
                 or_args = [or_args]
 
-            interval_mapping = {}
+            interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_interval_mappings = [self.filter(or_arg, mapping) for or_arg in or_args]
 
-            # For each trace ID in which at least one sub-predicate is true...
+            # For each trace ID in which at least one sub-predicate is true for at least interval...
             for id in set.union(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
-                
-                # Compute, for each sub-predicate, the full set of indices in which it is true
-                truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id]) for sub_interval_mapping in sub_interval_mappings]
+                for arg_ids in set.union(*[set(sub_interval_mapping[id].keys()) for sub_interval_mapping in sub_interval_mappings]):
 
-                # Compute the union of those indices (i.e. the indices in which at least one sub-predicate is true)
-                union = set.union(*truth_idxs)
+                    # Compute, for each sub-predicate, the full set of indices in which it is true
+                    truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id][arg_ids]) for sub_interval_mapping in sub_interval_mappings]
 
-                # Reduce the set of indices back to a list of intervals
-                if len(union) > 0:
-                    interval_mapping[id] = self._indices_to_intervals(union)
+                    # Compute the union of those indices (i.e. the indices in which at least one sub-predicate is true)
+                    union = set.union(*truth_idxs)
+
+                    # Reduce the set of indices back to a list of intervals
+                    if len(union) > 0:
+                        interval_mapping[id][arg_ids] = self._indices_to_intervals(union)
 
             return interval_mapping
         
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
 
-            interval_mapping = {}
+            # This is slightly different than in the [predicate] case above: we don't expand meta-types here
+            # because that's handled inside get_object_assignments()
+            variables = extract_variables(predicate)  # type: ignore
+            relevant_arg_mapping = {var: mapping[var] for var in variables if var in mapping}
+
+            
+            interval_mapping = defaultdict(lambda: defaultdict(list))
 
             # We need to check every trace ID in the dataset in case there are some traces in which the sub-predicate is never true
             for id in self.data["id"].unique():
                 
-                # TODO: there's a very small chance that these values could be undefined
-                earliest_start = min(self.data[self.data["id"] == id]["start_step"])
-                latest_end = max(self.data[self.data["id"] == id]["end_step"])
+                domain = self._domain_key(self.data[self.data["id"] == id]["domain"].unique()[0])
+                possible_arg_assignments = get_object_assignments(domain, relevant_arg_mapping.values())
 
-                if id not in sub_intervals:
-                    interval_mapping[id] = [(earliest_start, latest_end)]
+                # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
+                for arg_ids in possible_arg_assignments:
+              
+                    # TODO: there's a very small chance that these values could be undefined
+                    earliest_start = min(self.data[self.data["id"] == id]["start_step"])
+                    latest_end = max(self.data[self.data["id"] == id]["end_step"])
 
-                else:
-                    truth_idxs = self._intervals_to_indices(sub_intervals[id])
-                    inverted_idxs = set(range(earliest_start, latest_end)) - truth_idxs
+                    if sub_intervals[id][arg_ids] == []:
+                        interval_mapping[id][arg_ids] = [(earliest_start, latest_end)]
 
-                    if len(inverted_idxs) > 0:
-                        interval_mapping[id] = self._indices_to_intervals(inverted_idxs)
+                    else:
+                        truth_idxs = self._intervals_to_indices(sub_intervals[id][arg_ids])
+                        inverted_idxs = set(range(earliest_start, latest_end)) - truth_idxs
+
+                        if len(inverted_idxs) > 0:
+                            interval_mapping[id][arg_ids] = self._indices_to_intervals(inverted_idxs)
 
             return interval_mapping
 
@@ -295,11 +317,19 @@ class CommonSensePredicateStatistics():
             # will return something like {?c2 - cube_block}
             print(f"Exists variable type mapping: {variable_type_mapping}")
 
-            sub_intervals = self.filter(predicate["exists_args"], {**mapping, **variable_type_mapping})      
+            sub_intervals = self.filter(predicate["exists_args"], {**mapping, **variable_type_mapping})
             # this will return, for each game, the set of intervals based on the argument *types* (not the argument *names*)
             # is it sufficient to just directly return this?
 
             return sub_intervals
+        
+        elif predicate_rule == "super_predicate_forall":
+            variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
+            sub_intervals = self.filter(predicate["forall_args"], {**mapping, **variable_type_mapping})
+
+            interval_mapping = {}
+            for id in sub_intervals:
+                pass
 
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")   
@@ -330,8 +360,16 @@ if __name__ == '__main__':
     # trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 
+
+    TEST_TRACE_NAMES = ["throw_ball_to_bin_unique_positions", "setup_test_trace", "building_castle",
+                        "throw_all_dodgeballs", "stack_3_cube_blocks", "three_wall_to_bin_bounces",
+                        "complex_stacking_trace"]
+
+    # stats = CommonSensePredicateStatistics(cache_dir, [f"{get_project_dir()}/reward-machine/traces/{trace}-rerecorded.json" for trace in TEST_TRACE_NAMES], overwrite=True)
+    # print(stats.data)
+
     stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
-    print(stats.filter(test_pred_3, test_mapping))
+    print(stats.filter(test_pred_2, test_mapping))
 
     # target_types = []
     # filter_fn = lambda x: all([target_type in x for target_type in target_types])

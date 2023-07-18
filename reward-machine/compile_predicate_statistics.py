@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import permutations, product, repeat
+from itertools import groupby, permutations, product, repeat
 import itertools
 import json
 import os
@@ -191,44 +191,6 @@ class CommonSensePredicateStatistics():
         game_df = pd.DataFrame(sum(predicate_intervals.values(), []))
         self.data = pd.concat([self.data, game_df], ignore_index=True)
 
-    def _tuple_containment(self, tuple_1, tuple_2):
-        '''
-        Returns true if the elements of tuple 1 appear, in order, in tuple 2
-        '''
-        if len(tuple_1) > len(tuple_2):
-            return False
-        
-        for idx in range(len(tuple_2) - len(tuple_1) + 1):
-            if tuple_1 == tuple_2[idx:idx + len(tuple_1)]:
-                return True
-            
-        return False
-
-    def _group_contained_mappings(self, argument_mapping_lists, operator="and"):
-        '''
-        Given a list of [N] argument mapping lists, each of which is a list of mappings the form (?v1-obj1, ?v2-obj2, ...),
-        returns a list of list of [N] argument mappings where each mapping is contained by the largest in the list
-        '''
-        grouped_mappings = []
-
-        for combination in product(*argument_mapping_lists):
-            sorted_combination = sorted(combination, key=lambda x: len(x[0]), reverse=True)
-            largest_mapping = sorted_combination[0]
-            smaller_mappings = sorted_combination[1:]
-
-            if operator == "and":
-                condition = all([self._tuple_containment(smaller_mapping, largest_mapping) for smaller_mapping in smaller_mappings])
-
-            # TODO: finish
-            elif operator == "or":
-                condition = any([self._tuple_containment(smaller_mapping, largest_mapping) for smaller_mapping in smaller_mappings])
-
-            if condition:
-                grouped_mappings.append(combination)
-
-        return grouped_mappings
-
-
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, str]):
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
@@ -272,10 +234,12 @@ class CommonSensePredicateStatistics():
 
                 domain = self._domain_key(row.domain)
                 other_object_assignments = get_object_assignments(domain, unused_variable_types, used_objects=row.arg_ids)
+                if len(other_object_assignments) == 0:
+                    other_object_assignments = [()]
 
                 for assignment in other_object_assignments:
-                    full_assignment = tuple(sorted([f"{var}-{id}" for var, id in zip(variables, row.arg_ids)] + 
-                                                   [f"{var}-{id}" for var, id in zip(unused_variables, assignment)]))
+                    full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(variables, row.arg_ids)] + 
+                                                   [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
 
                     interval_mapping[row.id][full_assignment].append((row.start_step, row.end_step))
 
@@ -294,7 +258,6 @@ class CommonSensePredicateStatistics():
 
             # For each trace ID in which each sub-predicate is true for at least one interval...
             for id in set.intersection(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
-                
                 for arg_ids in set.intersection(*[set(sub_interval_mapping[id].keys()) for sub_interval_mapping in sub_interval_mappings]):
 
                     # Compute, for each sub-predicate, the full set of indices in which it is true
@@ -348,7 +311,7 @@ class CommonSensePredicateStatistics():
                 # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
                 for arg_ids in possible_arg_assignments:
               
-                    argument_mapping = tuple(sorted(f"{var}-{id}" for var, id in zip(mapping.keys(), arg_ids)))
+                    argument_mapping = tuple(sorted(f"{var}->{id}" for var, id in zip(mapping.keys(), arg_ids)))
 
                     # TODO: there's a very small chance that these values could be undefined
                     earliest_start = min(self.data[self.data["id"] == id]["start_step"])
@@ -367,15 +330,46 @@ class CommonSensePredicateStatistics():
             return interval_mapping
 
         elif predicate_rule == "super_predicate_exists":
-            variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore  
-            # will return something like {?c2 - cube_block}
-            print(f"Exists variable type mapping: {variable_type_mapping}")
+            variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
 
+            variables = extract_variables(predicate)
+            unused_variables = [var for var in mapping.keys() if var not in variables]
+            unused_variable_types = [mapping[var] for var in unused_variables]
+
+            interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_intervals = self.filter(predicate["exists_args"], {**mapping, **variable_type_mapping})
-            # this will return, for each game, the set of intervals based on the argument *types* (not the argument *names*)
-            # is it sufficient to just directly return this?
 
-            return sub_intervals
+            # Groups the intervals by the part of the mapping that *isn't* within the (exists)
+            def keyfunc(element):
+                key = tuple(sorted(elem for elem in element if elem.split('->')[0] not in variable_type_mapping.keys()))
+                return key
+            
+            for id in sub_intervals:
+                sorted_arg_ids = sorted(sub_intervals[id].keys(), key=keyfunc)
+                for key, group in groupby(sorted_arg_ids, keyfunc):
+
+                    used_variables = tuple(elem.split('->')[0] for elem in key)
+                    used_objects = tuple(elem.split('->')[1] for elem in key)
+
+                    # As with [or], above, we need to compute the union of the indices in which the sub-predicate is true
+                    truth_idxs = [self._intervals_to_indices(sub_intervals[id][arg_ids]) for arg_ids in group]
+                    union = set.union(*truth_idxs)
+
+                    if len(union) > 0:
+
+                        domain = self._domain_key(self.data[self.data["id"] == id]["domain"].unique()[0])
+                        other_object_assignments = get_object_assignments(domain, unused_variable_types, used_objects=used_objects)
+                        if len(other_object_assignments) == 0:
+                            other_object_assignments = [()]
+
+                        for assignment in other_object_assignments:
+                            full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(used_variables, used_objects)] + 
+                                                           [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
+
+
+                            interval_mapping[id][full_assignment] = self._indices_to_intervals(union)
+
+            return interval_mapping
         
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
@@ -397,14 +391,14 @@ if __name__ == '__main__':
     game = open(get_project_dir() + '/reward-machine/games/ball_to_bin_from_bed.txt').read()
     game_ast = grammar_parser.parse(game)  # type: ignore
 
-    # should be: (and (not (in_motion ?b)) (in ?h ?b)))
-    test_pred = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['once_pred']
-    
     # should be: (and (in_motion ?b) (not (agent_holds ?b)))
-    test_pred_2 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred'] 
+    test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred'] 
 
-    # should be: (exists (?c2 - cube_block) (touch ?c2 ?b))
-    # test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred'] 
+    # should be: (and (not (in_motion ?b)) (in ?h ?b)))
+    test_pred_2 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['once_pred']
+    
+    # should be: (once (and (not (in_motion ?b) (exists (?c - hexagonal_bin) (in ?c ?b)))))
+    test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred'] 
 
 
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
@@ -425,8 +419,15 @@ if __name__ == '__main__':
     # print(stats.data)
 
     stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
-    print(stats.data[stats.data["predicate"] == "in"])
-    print(stats.filter(test_pred, test_mapping))
+    # print(stats.data[stats.data["predicate"] == "in"])
+    print(stats.filter(test_pred_3, test_mapping))
+
+    # import time
+    # start = time.perf_counter()
+    # for i in range(1000):
+    #     stats.filter(test_pred, test_mapping)
+    # end = time.perf_counter()
+    # print(f"Time taken: {end - start}, avg: {'%.3f' % ((end - start) / 1000)}")
 
     # target_types = []
     # filter_fn = lambda x: all([target_type in x for target_type in target_types])

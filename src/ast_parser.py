@@ -337,6 +337,24 @@ class ASTDepthParser(ASTParser):
         return kwargs['depth']
 
 
+class ASTPredicateFunctionCounter(ASTParser):
+    def __init__(self):
+        self.counts = defaultdict(int)
+
+    def _handle_ast(self, ast, **kwargs):
+        rule = ast.parseinfo.rule  # type: ignore
+        if rule == 'function_eval':
+            inner_rule = ast.func.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('function_', '')] += 1
+
+        elif rule == 'predicate':
+            inner_rule = ast.pred.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('predicate_', '')] += 1
+
+        return super()._handle_ast(ast, **kwargs)
+
+
+
 VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
 
 

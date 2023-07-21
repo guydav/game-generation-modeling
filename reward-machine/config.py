@@ -274,25 +274,33 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
 NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
-COLORS = ["red", "blue", "green", "yellow", "black", "white", "brown", "pink"]
+COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "pink", "purple", "red", "tan", "white", "yellow"]
+ORIENTATIONS = ["diagonal", "sideways", "upright", "upside_down"]
+SIDES = ["back", "front", "front_left_corner", "left", "right"]
+
+
 
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
                         "tall_rectangular_block", "triangle_block"],
-              "color": COLORS}
+              "color": COLORS,
+              "orientation": ORIENTATIONS,
+              "side": SIDES}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
 GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
                               "poster", "shelf", "side_table", "window", "wall", "agent"]
-GAME_OBJECT_EXCLUDED_TYPES += COLORS
+GAME_OBJECT_EXCLUDED_TYPES += COLORS + ORIENTATIONS + SIDES
 GAME_OBJECT_EXCLUDED_TYPES += list(META_TYPES.keys())
 
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
 for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
     OBJECTS_BY_ROOM_AND_TYPE[domain]["agent"] = ["agent"]
-    OBJECTS_BY_ROOM_AND_TYPE[domain].update({color: [color] for color in COLORS})
+    for collection in COLORS, ORIENTATIONS, SIDES:
+        OBJECTS_BY_ROOM_AND_TYPE[domain].update({item: [item] for item in collection})
+
 
     for meta_type, object_types in META_TYPES.items():
         OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] = []

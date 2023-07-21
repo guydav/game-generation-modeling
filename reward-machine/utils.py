@@ -12,7 +12,7 @@ sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix()
 import ast_printer
 import ast_parser
 
-from config import ALL_OBJECT_TYPES, COLORS, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
 
 PROJECT_NAME = 'game-generation-modeling'
 
@@ -91,6 +91,7 @@ class ObjectState(typing.NamedTuple):
     angular_velocity: np.ndarray  # x, y, z
     bbox_center: np.ndarray  #  x, y, z
     bbox_extents:  np.ndarray  # x, y, z
+    initial_rotation: typing.Optional[np.ndarray]  # x, y, z
     is_broken: bool
     is_open: bool
     is_toggled: bool
@@ -100,14 +101,14 @@ class ObjectState(typing.NamedTuple):
     position: np.ndarray  # x, y, z
     rotation: np.ndarray  # x, y, z
     touching_objects: typing.List[str]
-    contained_objects: typing.List[str]
+    contained_objects: typing.Optional[typing.List[str]]
     velocity: np.ndarray  # x, y, z
 
     @staticmethod
     def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
         # Manually handle the floor, which is not placed correctly in the Unity scene
         if state_dict['objectId'] == 'Floor|+00.00|+00.00|+00.00':
-            state_dict['position'] = {'x': 0, 'y': 0, 'z': 0}
+            state_dict['position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
             state_dict['bboxCenter'] = {'x': 0.16, 'y': -0.1, 'z': -0.185}
             state_dict['bboxExtents'] = {'x': 3.65, 'y': 0.1, 'z': 2.75}
 
@@ -118,13 +119,14 @@ class ObjectState(typing.NamedTuple):
             is_broken=state_dict['isBroken'],
             is_open=state_dict['isOpen'],
             is_toggled=state_dict['isToggled'],
+            initial_rotation=None,
             name=state_dict['name'],
             object_id=state_dict['objectId'],
             object_type=state_dict['objectType'],
             position=_vec_dict_to_array(state_dict['position']),
             rotation=_vec_dict_to_array(state_dict['rotation']),
             touching_objects=state_dict['touchingObjects'],
-            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None, # old traces don't have containedObjects
+            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None,  # old traces don't have containedObjects
             velocity=_vec_dict_to_array(state_dict['velocity']),
         )
 
@@ -450,11 +452,11 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
 
     return ast_str, mapping_str
 
-def is_type_or_color(variable: str):
+def is_type_color_side_orientation(variable: str):
     '''
     Returns whether the variable is a type or color
     '''
-    return (variable in ALL_OBJECT_TYPES or variable in COLORS) and (variable not in NAMED_OBJECTS)
+    return any(variable in collection for collection in (ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS)) and (variable not in NAMED_OBJECTS)
 
 def get_object_types(obj: ObjectState):
     '''

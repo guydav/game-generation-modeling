@@ -11,7 +11,7 @@ from preference_handler import PreferenceSatisfaction
 
 
 
-
+BALL_TO_BIN_FROM_BED_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/ball_to_bin_from_bed_trace.json')
 BLOCK_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/block_stacking_test_trace.json')
 BALL_TO_WALL_TO_BIN_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces.json')
 BUILDING_IN_TOUCH_TEST_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/weZ1UVzKNaiTjaqu0DGI-preCreateGame-buildings-in-touching.json')
@@ -58,6 +58,7 @@ TEST_GAME_LIBRARY = {
     'test-clean-room': load_game("game-27"),
     'test-agent-adjacent': load_game("test_agent_door_adjacent"),
     'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
+    'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
 }
 
 TEST_CASES = [
@@ -258,6 +259,11 @@ TEST_CASES = [
         'throwWithStackedBlocksVerIII': [
             PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=312, end=545, measures={})
         ]
+    },),
+    ('test-ball-from-bed', BALL_TO_BIN_FROM_BED_TRACE, 1.0, {
+        'ballToBinFromBed': [
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.75|-00.03|-02.74', '?b': 'Dodgeball|+00.19|+01.13|-02.80', 'bed': 'Bed|-02.46|00.00|-00.57', 'agent': 'agent'}, start=992, end=1142, measures={}),
+        ],
     },),
 ]
 

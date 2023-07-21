@@ -117,10 +117,14 @@ class MeanNodeDepth(FitnessTerm):
 SPECIFIC_PREDICATES =  ['adjacent', 'agent_holds', 'between', 'in', 'in_motion', 'on', 'touch']
 
 
+def _list_to_key(pred_list: typing.List[str]) -> str:
+    return '|'.join(pred_list)
+
+
 class PredicateUsed(FitnessTerm):
     predicates_used: typing.Set[str]
 
-    def __init__(self, predicates: typing.List[str] = SPECIFIC_PREDICATES):
+    def __init__(self, predicates: typing.List[typing.Union[str, typing.List[str]]] = SPECIFIC_PREDICATES):  # type: ignore
         super().__init__(PREDICATE_AND_FUNCTION_RULES, 'predicate_used')
         self.predicates = predicates
 
@@ -138,10 +142,20 @@ class PredicateUsed(FitnessTerm):
             self.predicates_used.add(pred)
 
     def game_end(self):
-        return {pred: int(pred in self.predicates_used) for pred in self.predicates}
+        output = {}
+        for pred_or_list in self.predicates:
+            if isinstance(pred_or_list, str):
+                pred = pred_or_list
+                output[pred] = int(pred in self.predicates_used)
+            else:
+                pred_list = pred_or_list
+                output[_list_to_key(pred_list)] = int(any(pred in self.predicates_used for pred in pred_list))
+
+        return output
 
     def _get_all_inner_keys(self):
-        return self.predicates
+        return [pred_or_list if isinstance(pred_or_list, str) else _list_to_key(pred_or_list)
+                for pred_or_list in self.predicates]
 
 
 SPECIFIC_CATEGORIES = [room_and_object_types.BALLS, room_and_object_types.BLOCKS,
@@ -151,7 +165,8 @@ SPECIFIC_CATEGORIES = [room_and_object_types.BALLS, room_and_object_types.BLOCKS
                        ]
 
 class ObjectCategoryUsed(SetupObjectsUsed):
-    def __init__(self, categories: typing.List[str] = SPECIFIC_CATEGORIES, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
+    def __init__(self, categories: typing.List[typing.Union[str, typing.List[str]]] = SPECIFIC_CATEGORIES, # type: ignore
+                 skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
         super().__init__(skip_objects=skip_objects, header='object_category_used')
         self.categories = categories
 
@@ -162,10 +177,36 @@ class ObjectCategoryUsed(SetupObjectsUsed):
                 if obj in room_and_object_types.TYPES_TO_CATEGORIES:
                     categories_used.add(room_and_object_types.TYPES_TO_CATEGORIES[obj])
 
-        return {cat: int(cat in categories_used) for cat in self.categories}
+        output = {}
+        for cat_or_list in self.categories:
+            if isinstance(cat_or_list, str):
+                cat = cat_or_list
+                output[cat] = int(cat in categories_used)
+            else:
+                cat_list = cat_or_list
+                output[_list_to_key(cat_list)] = int(any(pred in categories_used for pred in cat_list))
+
+        return output
 
     def _get_all_inner_keys(self):
-        return self.categories
+        return [cat_or_list if isinstance(cat_or_list, str) else _list_to_key(cat_or_list)
+                for cat_or_list in self.categories]
+
+
+PREDICATE_AND_OBJECT_GROUP_OBJECTS = [
+    [room_and_object_types.BALLS, room_and_object_types.RECEPTACLES],
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+]
+
+
+PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
+    ['agent_holds', 'in_motion'],
+    'in',
+    ['on', 'touch'],
+    ['adjacent', 'between'],
+]
 
 
 BASIC_BINNED = 'basic_binned'
@@ -177,6 +218,7 @@ NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
 SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
 SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
 NODE_COUNT_SPECIFIC_PREDICATES = 'node_count_specific_predicates'
+PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
 
 
 FEATURE_SETS = [
@@ -188,7 +230,8 @@ FEATURE_SETS = [
     NODE_COUNT_PREDICATES_SETUP,
     SPECIFIC_PREDICATES_SETUP,
     SPECIFIC_CATEGORIES_SETUP,
-    NODE_COUNT_SPECIFIC_PREDICATES
+    NODE_COUNT_SPECIFIC_PREDICATES,
+    PREDICATE_AND_OBJECT_GROUPS
 ]
 
 
@@ -352,6 +395,10 @@ def build_behavioral_features_featurizer(
         elif feature_set == NODE_COUNT_SPECIFIC_PREDICATES:
             featurizer.register(NodeCount(NODE_COUNT_BINS_8))
             featurizer.register(PredicateUsed())
+
+        elif feature_set == PREDICATE_AND_OBJECT_GROUPS:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS))  # type: ignore
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

@@ -37,7 +37,8 @@ BINARIZE_IGNORE_FEATURES = set([
     'two_number_operation_found', 'single_argument_multi_operation_found',
     'tautological_expression_found', 'redundant_expression_found',
     'redundant_scoring_terminal_expression_found', 'at_end_found',
-    'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
+    'identical_consecutive_seq_func_predicates_found',
+    'disjoint_seq_funcs_found', 'disjoint_at_end_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [

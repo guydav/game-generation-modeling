@@ -198,6 +198,7 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS = [
     [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
     [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
     [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+    room_and_object_types.GAME_OBJECT,
 ]
 
 

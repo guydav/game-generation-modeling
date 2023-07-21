@@ -1261,7 +1261,7 @@ class DisjointAtEndPredicateTerm(FitnessTerm):
             self._find_ast_predicate_terms(ast.pred)  # type: ignore
             return
 
-        if rule in ('predicate', 'function_eval'):
+        if rule in ('predicate', 'function_comparison'):
             self.current_at_end_term_sets.append(self.term_tracker(ast))
             return
 

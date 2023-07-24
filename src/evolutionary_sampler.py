@@ -2027,8 +2027,16 @@ def filter_samples_no_identical_preferences(sample: ASTType, sample_features: ty
     if not isinstance(prefs, list):
         prefs = [prefs]
 
-    pref_strs = set([ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in prefs])
-    return len(pref_strs) == len(prefs)
+    pref_strs = typing.cast(typing.List[str], [ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in prefs])
+    cleaned_strs = set()
+
+    for s in pref_strs:
+        pref_index = s.index('(preference')
+        space_index = s.index(' ', pref_index)
+        space_after_pref_name_index = s.index(' ', space_index + 1)
+        cleaned_strs.add(s[space_after_pref_name_index:].strip())
+
+    return len(prefs) == len(cleaned_strs)
 
 
 SAMPLE_FILTER_FUNCS = {

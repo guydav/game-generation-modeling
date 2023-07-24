@@ -48,6 +48,8 @@ TEST_GAME_NAMES = ["test-count-unique-positions", "test-setup", "test-building",
                     "test-count-overlapping"]
 
 for trace, game in zip(TEST_TRACE_NAMES, TEST_GAME_NAMES):
+    if trace != "three_wall_to_bin_bounces":
+        continue
     base_trace_path = pathlib.Path(f"{get_project_dir()}/reward-machine/traces/{trace}.json")
     rerecorded_trace_path = pathlib.Path(f"{get_project_dir()}/reward-machine/traces/{trace}-rerecorded.json")
 

@@ -196,13 +196,13 @@ class PreferenceHandler:
         we need to make sure not to add duplicate branches back in)
         '''
 
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
-        from ast_printer import ast_section_to_string
-        cur = ast_section_to_string(partial_preference_satisfaction.current_predicate, '(:constraints') if partial_preference_satisfaction.current_predicate is not None else None
-        next = ast_section_to_string(partial_preference_satisfaction.next_predicate, '(:constraints') if partial_preference_satisfaction.next_predicate is not None else None
-        print(f"The following predicate has been satisfied for {partial_preference_satisfaction.mapping}: {cur} --> {next}")
+        # import sys
+        # import os
+        # sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+        # from ast_printer import ast_section_to_string
+        # cur = ast_section_to_string(partial_preference_satisfaction.current_predicate, '(:constraints') if partial_preference_satisfaction.current_predicate is not None else None
+        # next = ast_section_to_string(partial_preference_satisfaction.next_predicate, '(:constraints') if partial_preference_satisfaction.next_predicate is not None else None
+        # print(f"The following predicate has been satisfied for {partial_preference_satisfaction.mapping}: {cur} --> {next}")
 
 
         next_pred_idx = self.temporal_predicates.index(partial_preference_satisfaction.next_predicate)

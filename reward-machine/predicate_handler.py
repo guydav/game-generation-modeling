@@ -5,7 +5,7 @@ import tatsu
 import tatsu.ast
 import typing
 
-from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_or_color, get_object_types, \
+from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
 
@@ -30,6 +30,10 @@ OBJECT_NAME_KEY = 'name'
 class PredicateHandler:
     # Which field in the state to use as the index
     index_key: str
+    # A cache of the first observed value for each object
+    initial_state_cache: typing.Dict[str, typing.Union[ObjectState, AgentState, PseudoObject]]
+    # Did the game just start?
+    is_first_step: bool
     # Is the game ending after this step
     is_last_step: bool
     # Which field in each object to use as an id
@@ -57,6 +61,8 @@ class PredicateHandler:
         self.evaluation_cache = {}
         self.evaluation_cache_last_updated = {}
         self.is_last_step = False
+        self.is_first_step = True
+        self.initial_state_cache = {}
         self.state_cache = {}
         self.state_cache_object_last_updated = {}
         self.state_cache_global_last_updated = -1
@@ -86,9 +92,9 @@ class PredicateHandler:
         # the last if is to account for the case of a variable not already being in the mapping, if, e.g., it's quantified in a further down exists
         # e.g. in the expression "(forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))"
         # when we reach the (game-optional ...) node, the variable ?s isn't in the mapping yet, and will be added later
-        relevant_mapping = {var: var if is_type_or_color(var) else mapping[var]
+        relevant_mapping = {var: var if is_type_color_side_orientation(var) else mapping[var]
                             for var in pred_variables
-                            if is_type_or_color(var) or var in mapping}
+                            if is_type_color_side_orientation(var) or var in mapping}
 
         predicate_key = "{0}_{1}".format(*ast_cache_key(predicate, relevant_mapping))
         state_index = state.original_index
@@ -113,9 +119,16 @@ class PredicateHandler:
         Update the cache if any objects / the agent are changed in the current state
         '''
         state_index = state.original_index
+        if state_index > 0:
+            self.is_first_step = False
 
         self.state_cache_global_last_updated = state_index
         for obj in state.objects:
+            if obj.object_id not in self.initial_state_cache:
+                self.initial_state_cache[obj.object_id] = obj
+            else:
+                obj = obj._replace(initial_rotation=self.initial_state_cache[obj.object_id].rotation)  # type: ignore
+
             self.state_cache[obj.object_id] = obj
             self.state_cache_object_last_updated[obj.object_id] = state_index
 
@@ -149,6 +162,9 @@ class PredicateHandler:
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
             # Check for specific one-off predicates, like game-over, that can be evaluated without a mapping
+            if predicate_name == "game_start":
+                return self.is_first_step
+
             if predicate_name == "game_over":
                 return self.is_last_step
 
@@ -205,7 +221,7 @@ class PredicateHandler:
 
             if all_none:
                 return None
-            
+
             return False
 
         elif predicate_rule == "super_predicate_exists":
@@ -358,7 +374,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
                 state_cache[obj] = UNITY_PSEUDO_OBJECTS[obj]  # type: ignore
                 state_cache_last_updated[obj] = state.original_index
 
-        any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_or_color(var))
+        any_object_not_in_cache = any(obj not in state_cache for var, obj in mapping_items if not is_type_color_side_orientation(var))
 
         # If any objects are not in the cache, we cannot evaluate the predidate
         if any_object_not_in_cache:
@@ -366,9 +382,9 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
                 raise ValueError(f'Attempted to force predicate evaluation while at least one object was not in the cache: {[(obj, obj in state_cache) for var, obj in mapping_items]}')
             return None
 
-        any_objects_changed = any(state_cache_last_updated[obj] == state.original_index for var, obj in mapping_items if not is_type_or_color(var))
+        any_objects_changed = any(state_cache_last_updated[obj] == state.original_index for var, obj in mapping_items if not is_type_color_side_orientation(var))
 
-        latest_object_update = max(state_cache_last_updated[obj] for var, obj in mapping_items if not is_type_or_color(var))
+        latest_object_update = max(state_cache_last_updated[obj] for var, obj in mapping_items if not is_type_color_side_orientation(var))
 
         # If none of the objects have changed in the current step or since the last time we evaluated this predicate,
         # then return None unless force_evaluation is True
@@ -377,7 +393,7 @@ def mapping_objects_decorator(predicate_func: typing.Callable) -> typing.Callabl
 
         mapping_objects = []
         for var, obj in mapping_items:
-            mapping_objects.append(state_cache[obj] if not is_type_or_color(var) else obj)
+            mapping_objects.append(state_cache[obj] if not is_type_color_side_orientation(var) else obj)
 
         return predicate_func(agent_object, mapping_objects)
 
@@ -400,11 +416,19 @@ def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Unio
     assert len(objects) == 0
     return agent.crouching
 
+
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
     return agent.held_object == objects[0].object_id
+
+
+def _pred_broken(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 1
+    if isinstance(objects[0], PseudoObject):
+        return False
+    return objects[0].is_open
 
 
 def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
@@ -413,11 +437,13 @@ def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectSt
         return False
     return objects[0].is_open
 
+
 def _pred_toggled_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
     return objects[0].is_toggled
+
 
 def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject, str]]):
     assert len(objects) == 2
@@ -555,7 +581,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-
     objects_touch = _pred_touch(agent, objects)
 
     if objects_touch:
@@ -655,7 +680,7 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
     adjacent_by_z = z_displacement <= threshold_dist and x_overlap
     adjacent_by_dist = object_dist <= threshold_dist
 
-    if objects[1].name == "south_wall":
+    if isinstance(objects[1], PseudoObject) and objects[1].name == "south_wall":
         print("\n==========\nObject:", objects[0].name)
         print("Object position:", objects[0].bbox_center)
         print("Object extents:", objects[0].bbox_extents)
@@ -722,6 +747,38 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     print("Angle to facing:", angle_to_facing)
 
     return min_corner_angle <= angle_to_facing <= max_corner_angle
+
+
+OBJECT_ORIENTATION_ANGLE_MARGIN = 15
+
+
+def _pred_object_orientation(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    obj = objects[0]
+    orientation = objects[1]
+
+    if isinstance(obj, PseudoObject) or obj.initial_rotation is None:
+        return orientation == 'upright'
+
+    rotation_diff = 180 - np.abs(np.abs(obj.rotation - obj.initial_rotation) - 180)
+    sideways = (abs(rotation_diff[0] - 90) <= OBJECT_ORIENTATION_ANGLE_MARGIN) or (abs(rotation_diff[2] - 90) <= OBJECT_ORIENTATION_ANGLE_MARGIN)
+    upside_down = ((abs(rotation_diff[0] - 180) <= OBJECT_ORIENTATION_ANGLE_MARGIN) != (abs(rotation_diff[2] - 180) <= OBJECT_ORIENTATION_ANGLE_MARGIN)) and not sideways
+    upright = (abs(rotation_diff[0]) <= OBJECT_ORIENTATION_ANGLE_MARGIN) or (abs(rotation_diff[2]) <= OBJECT_ORIENTATION_ANGLE_MARGIN)
+
+    if orientation == 'upright':
+        return upright
+
+    if orientation == 'sideways':
+        return sideways
+
+    if orientation == 'upside_down':
+        return upside_down
+
+    if orientation == 'diagonal':
+        return not (upright or sideways or upside_down)
+
+    raise ValueError(f'Invalid orientation: {orientation}')
 
 
 

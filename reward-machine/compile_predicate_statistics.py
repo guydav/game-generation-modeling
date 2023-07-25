@@ -1,6 +1,6 @@
 from collections import defaultdict
-from itertools import groupby, permutations, product, repeat
-import itertools
+from functools import reduce
+from itertools import groupby, permutations, product, repeat, starmap
 import json
 import os
 import pandas as pd
@@ -46,7 +46,8 @@ class CommonSensePredicateStatistics():
             self.data = pd.read_pickle(cache_filename)
 
         else:
-            self.data = pd.DataFrame(columns=['predicate', 'arg_ids', 'arg_types', 'start_step', 'end_step', 'id'])
+            self.data = pd.DataFrame(columns=['predicate', 'arg_ids', 'arg_types', 'trace_id', 'domain', 'intervals'])
+            self.trace_lengths = {}
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
@@ -81,31 +82,61 @@ class CommonSensePredicateStatistics():
 
         return room_objects
     
-    def _intervals_to_indices(self, intervals):
+    def _intersect_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
-        Converts a list of (start, end) intervals to a list of indices (i.e. timesteps) covered
-        by the intervals
-        '''
-        if intervals == []:
-            return set()
-        
-        return set.union(*[set(range(*interval)) for interval in intervals if interval != []])
-    
-    def _indices_to_intervals(self, indices):
-        '''
-        Converts a list of indices (i.e. timesteps) to a list of (start, end) intervals
-        '''
-        intervals = []
-        for idx in sorted(indices):
-            # If this is the first interval, or the current index is not adjacent to the last index, then create a new interval
-            if len(intervals) == 0 or idx != intervals[-1][-1]:
-                intervals.append((idx, idx + 1))
+        Given two lists of [start, end] intervals, returns the list of intervals in which they intersect
 
-            # Otherwise, extend the last interval
+        Code from: https://stackoverflow.com/questions/69997547/intersections-of-intervals
+        '''
+        intersections = []
+        i = j = 0
+
+        while i < len(intervals_1) and j < len(intervals_2):
+            low = max(intervals_1[i][0], intervals_2[j][0])
+            high = min(intervals_1[i][1], intervals_2[j][1])
+            if low <= high:
+                intersections.append([low, high])
+
+            # Remove the interval with the smallest endpoint
+            if intervals_1[i][1] < intervals_2[j][1]:
+                i += 1
             else:
-                intervals[-1] = (intervals[-1][0], idx + 1)
+                j += 1
 
-        return intervals
+        return intersections
+    
+    def _union_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
+        '''
+        Given two lists of [start, end] intervals, returns the list of intervals in which either is true
+        '''
+        
+        all_intervals = sorted(intervals_1 + intervals_2)
+        unions = []
+
+        for start, end in all_intervals:
+            if unions != [] and unions[-1][1] >= start - 1:
+                unions[-1][1] = max(unions[-1][1], end)
+            else:
+                unions.append([start, end])
+
+        return unions
+    
+    def _invert_intervals(self, intervals: typing.List[typing.List[int]], length: int):
+        if intervals == []:
+            return [[0, length]]
+        
+        inverted = []
+        cur = 0
+
+        for interval in intervals:
+            if cur < interval[0]:
+                inverted.append([cur, interval[0]])
+            cur = interval[1]
+
+        if cur < length:
+            inverted.append([cur, length])
+
+        return inverted
     
     def process_trace(self, trace):
         '''
@@ -118,7 +149,7 @@ class CommonSensePredicateStatistics():
         replay_len = int(len(replay))
         
         # Maps from the predicate-arg key to a list of intervals in which the predicate is true
-        predicate_intervals = defaultdict(list)
+        predicate_satisfaction_mapping = {}
 
         # Stores the most recent state of the agent and of each object
         most_recent_agent_state = None
@@ -172,27 +203,33 @@ class CommonSensePredicateStatistics():
 
                             # If the predicate is true, then check to see if the last interval is closed. If it is, then
                             # create a new interval
-                            if evaluation:
-                                if key not in predicate_intervals or predicate_intervals[key][-1]["end_step"] is not None:
-                                    predicate_intervals[key].append({"predicate": predicate, "arg_ids": arg_ids, 
-                                                                     "arg_types": arg_types, "start_step": idx, 
-                                                                     "end_step": None, "replay_len": replay_len,
-                                                                     "id": trace['id'], "domain": trace['scene']})
+                            if evaluation:                                 
+                                if key not in predicate_satisfaction_mapping:
+                                    info = {"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types,
+                                            "trace_id": trace['id'], "domain": self._domain_key(trace['scene']), 
+                                            "intervals": [[idx, None]]}
+                                    predicate_satisfaction_mapping[key] = info
+
+                                elif predicate_satisfaction_mapping[key]['intervals'][-1][1] is not None:
+                                    predicate_satisfaction_mapping[key]['intervals'].append([idx, None])                   
 
                             # If the predicate is false, then check to see if the last interval is open. If it is, then
                             # close it
                             else:
-                                if key in predicate_intervals and predicate_intervals[key][-1]["end_step"] is None:
-                                    predicate_intervals[key][-1]["end_step"] = idx
+                                if key in predicate_satisfaction_mapping and predicate_satisfaction_mapping[key]["intervals"][-1][1] is None:
+                                    predicate_satisfaction_mapping[key]["intervals"][-1][1] = idx
 
 
         # Close any intervals that are still open
-        for key in predicate_intervals:
-            if predicate_intervals[key][-1]["end_step"] is None:
-                predicate_intervals[key][-1]["end_step"] = replay_len
+        for key in predicate_satisfaction_mapping:
+            if predicate_satisfaction_mapping[key]["intervals"][-1][1] is None:
+                predicate_satisfaction_mapping[key]["intervals"][-1][1] = replay_len
+
+        # Record the trace's length
+        self.trace_lengths[trace['id']] = replay_len
 
         # Collapse the intervals into a single dataframe and add it to the overall dataframe
-        game_df = pd.DataFrame(sum(predicate_intervals.values(), []))
+        game_df = pd.DataFrame(predicate_satisfaction_mapping.values())
         self.data = pd.concat([self.data, game_df], ignore_index=True)
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, str]):
@@ -232,20 +269,16 @@ class CommonSensePredicateStatistics():
             # Merge the intervals for each possible assignment of argument types
             predicate_df = self.data[(self.data["predicate"] == predicate_name) & (self.data["arg_types"].isin(possible_arg_types))]
 
-            # Construct the interval mapping, which maps from the trace ID to the argument mapping to a list of intervals
-            interval_mapping = defaultdict(lambda: defaultdict(list))
-            for row in predicate_df.itertuples():
+            all_trace_ids, domains, all_arg_ids, all_intervals = predicate_df["trace_id"], predicate_df["domain"], predicate_df["arg_ids"], predicate_df["intervals"]
+            unused_object_assignments = starmap(get_object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
 
-                domain = self._domain_key(row.domain)
-                other_object_assignments = get_object_assignments(domain, unused_variable_types, used_objects=row.arg_ids)
-                if len(other_object_assignments) == 0:
-                    other_object_assignments = [()]
-
-                for assignment in other_object_assignments:
-                    full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(variables, row.arg_ids)] + 
+            interval_mapping = defaultdict(list)
+            for trace_id, arg_ids, assignments, intervals in zip(all_trace_ids, all_arg_ids, unused_object_assignments, all_intervals):
+                for assignment in assignments:
+                    full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(variables, arg_ids)] + 
                                                    [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
-
-                    interval_mapping[row.id][full_assignment].append((row.start_step, row.end_step))
+                    
+                    interval_mapping[(trace_id, full_assignment)] = intervals
 
             return interval_mapping
 
@@ -260,19 +293,12 @@ class CommonSensePredicateStatistics():
             interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_interval_mappings = [self.filter(and_arg, mapping) for and_arg in and_args]
 
-            # For each trace ID in which each sub-predicate is true for at least one interval...
-            for id in set.intersection(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
-                for arg_ids in set.intersection(*[set(sub_interval_mapping[id].keys()) for sub_interval_mapping in sub_interval_mappings]):
+            keys = set(sum([list(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings], []))
 
-                    # Compute, for each sub-predicate, the full set of indices in which it is true
-                    truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id][arg_ids]) for sub_interval_mapping in sub_interval_mappings]
+            interval_mapping = {key: reduce(self._intersect_intervals, [sub[key] for sub in sub_interval_mappings]) for key in keys}
 
-                    # Compute the intersection of those indices
-                    union = set.intersection(*truth_idxs)
-
-                    # Reduce the set of indices back to a list of intervals
-                    if len(union) > 0:
-                        interval_mapping[id][arg_ids] = self._indices_to_intervals(union)
+            # Filter out empty intervals
+            interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
 
             return interval_mapping
 
@@ -285,51 +311,32 @@ class CommonSensePredicateStatistics():
             interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_interval_mappings = [self.filter(or_arg, mapping) for or_arg in or_args]
 
-            # For each trace ID in which at least one sub-predicate is true for at least interval...
-            for id in set.union(*[set(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings]):
-                for arg_ids in set.union(*[set(sub_interval_mapping[id].keys()) for sub_interval_mapping in sub_interval_mappings]):
+            keys = set(sum([list(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings], []))
 
-                    # Compute, for each sub-predicate, the full set of indices in which it is true
-                    truth_idxs = [self._intervals_to_indices(sub_interval_mapping[id][arg_ids]) for sub_interval_mapping in sub_interval_mappings]
+            interval_mapping = {key: reduce(self._union_intervals, [sub[key] for sub in sub_interval_mappings]) for key in keys}
 
-                    # Compute the union of those indices (i.e. the indices in which at least one sub-predicate is true)
-                    union = set.union(*truth_idxs)
-
-                    # Reduce the set of indices back to a list of intervals
-                    if len(union) > 0:
-                        interval_mapping[id][arg_ids] = self._indices_to_intervals(union)
+            # Filter out empty intervals
+            interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
 
             return interval_mapping
         
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
             
-            interval_mapping = defaultdict(lambda: defaultdict(list))
+            interval_mapping = defaultdict(list)
 
             # We need to check every trace ID in the dataset in case there are some traces in which the sub-predicate is never true
-            for id in self.data["id"].unique():
+            for trace_id, length in self.trace_lengths.items():
                 
-                domain = self._domain_key(self.data[self.data["id"] == id]["domain"].unique()[0])
+                domain = self.data[self.data["trace_id"] == trace_id]["domain"].unique()[0]
                 possible_arg_assignments = get_object_assignments(domain, mapping.values())
 
                 # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
                 for arg_ids in possible_arg_assignments:
               
                     argument_mapping = tuple(sorted(f"{var}->{id}" for var, id in zip(mapping.keys(), arg_ids)))
-
-                    # TODO: there's a very small chance that these values could be undefined
-                    earliest_start = min(self.data[self.data["id"] == id]["start_step"])
-                    latest_end = max(self.data[self.data["id"] == id]["end_step"])
-
-                    if sub_intervals[id][argument_mapping] == []:
-                        interval_mapping[id][argument_mapping] = [(earliest_start, latest_end)]
-
-                    else:
-                        truth_idxs = self._intervals_to_indices(sub_intervals[id][argument_mapping])
-                        inverted_idxs = set(range(earliest_start, latest_end)) - truth_idxs
-
-                        if len(inverted_idxs) > 0:
-                            interval_mapping[id][argument_mapping] = self._indices_to_intervals(inverted_idxs)
+                    key = (trace_id, argument_mapping)
+                    interval_mapping[key] = self._invert_intervals(sub_intervals[key], length)
 
             return interval_mapping
 
@@ -424,7 +431,15 @@ if __name__ == '__main__':
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
     trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
-    # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
+    stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
+    
+    print(stats.filter(test_pred_2, test_mapping))
+    start = time.perf_counter()
+    for _ in tqdm(range(1000)):
+        stats.filter(test_pred_2, test_mapping)
+    end = time.perf_counter()
+    print(f"Time per iteration: {'%.5f' % ((end - start) / 1000)}s")
+    exit()
 
     TEST_TRACE_NAMES = ["throw_ball_to_bin_unique_positions", "setup_test_trace", "building_castle",
                         "throw_all_dodgeballs", "stack_3_cube_blocks", "three_wall_to_bin_bounces",

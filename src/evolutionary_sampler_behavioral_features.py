@@ -387,24 +387,24 @@ class ExemplarDistanceType(enum.Enum):
     STRING_EDIT = 'string_edit'
 
 
-class DistanceMetric(enum.Enum):
+class ExemplarDistanceMetric(enum.Enum):
     L1 = 'l1'
     L2 = 'l2'
     COSINE = 'cosine'
 
     def distance(self, a: np.ndarray, b: np.ndarray) -> float:
-        if self == DistanceMetric.L1:
+        if self == ExemplarDistanceMetric.L1:
             return np.linalg.norm(a - b, ord=1)  # type: ignore
-        elif self == DistanceMetric.L2:
+        elif self == ExemplarDistanceMetric.L2:
             return np.linalg.norm(a - b, ord=2)   # type: ignore
-        elif self == DistanceMetric.COSINE:
+        elif self == ExemplarDistanceMetric.COSINE:
             return (1 - np.dot(a, b)) / (np.linalg.norm(a) * np.linalg.norm(b))
         else:
             raise ValueError(f'Invalid distance metric: {self}')
 
 
 class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
-    def __init__(self, distance_type: ExemplarDistanceType, distance_metric: DistanceMetric,
+    def __init__(self, distance_type: ExemplarDistanceType, distance_metric: ExemplarDistanceMetric,
                  feature_indices: typing.List[int], bins_per_feature: int,
                  ast_file_path: str, grammar_parser: tatsu.grammars.Grammar,  # type: ignore
                  fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str],
@@ -542,11 +542,30 @@ def build_behavioral_features_featurizer(
     bins_per_feature = args.map_elites_pca_behavioral_features_bins_per_feature
 
     if bins_per_feature is None:
-        raise ValueError('Must specify bins per feature for PCA featurizer')
+        raise ValueError('Must specify bins per feature for PCA or Exempalr Distance featurizers')
 
     ast_file_path = args.map_elites_pca_behavioral_features_ast_file_path
     n_components = args.map_elites_pca_behavioral_features_n_components if args.map_elites_pca_behavioral_features_n_components is not None else max(indices) + 1
     random_seed = args.random_seed
+
+    if args.map_elites_behavioral_feature_exemplar_distance_type is not None:
+        if args.map_elites_behavioral_feature_distance_exemplar_metric is None:
+            args.map_elites_behavioral_feature_distance_exemplar_metric = ExemplarDistanceMetric.L1.name
+
+        exemplar_distance_featurizer = ExemplarDistanceFeaturizer(
+            ExemplarDistanceType(args.map_elites_behavioral_feature_exemplar_distance_type.upper()),
+            ExemplarDistanceMetric(args.map_elites_behavioral_feature_distance_exemplar_metric.upper()),
+            feature_indices=indices,
+            bins_per_feature=bins_per_feature,
+            ast_file_path=ast_file_path,
+            grammar_parser=grammar_parser,
+            fitness_featurizer=fitness_featurizer,
+            feature_names=feature_names,
+            n_components=n_components,
+            random_seed=random_seed
+        )
+
+        return exemplar_distance_featurizer
 
     pca_featurizer = PCABehavioralFeaturizer(
         feature_indices=indices,

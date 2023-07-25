@@ -155,6 +155,9 @@ parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=s
 parser.add_argument('--map-elites-pca-behavioral-features-bins-per-feature', type=int, default=None)
 parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=int, default=None)
 
+parser.add_argument('--map-elites-behavioral-feature-exemplar-distance-type', type=str, default=None)
+parser.add_argument('--map-elites-behavioral-feature-exemplar-distance-metric', type=str, default=None)
+
 parser.add_argument('--map-elites-good-threshold', type=float, required=True)
 parser.add_argument('--map-elites-great-threshold', type=float, required=True)
 

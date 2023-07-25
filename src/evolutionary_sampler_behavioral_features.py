@@ -417,36 +417,39 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
         super().__init__(feature_indices, bins_per_feature, ast_file_path, grammar_parser, fitness_featurizer, feature_names, n_components, random_seed,
                          should_init_pca=should_init_pca, feature_prefix='exemplar_distance')
 
-        # TODO: if not using PCA, implement feature binning
-        if not should_init_pca:
-            game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
-            if self.distance_type == ExemplarDistanceType.STRING_EDIT:
-                postprocessor = ast_parser.ASTSamplePostprocessor()
-                game_strings = [ast_printer.ast_to_string(postprocessor(game), '\n') for game in game_asts]  # type: ignore
+        game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
+        if self.distance_type == ExemplarDistanceType.STRING_EDIT:
+            postprocessor = ast_parser.ASTSamplePostprocessor()
+            game_strings = [ast_printer.ast_to_string(postprocessor(game), '\n') for game in game_asts]  # type: ignore
 
-                self.exemplars = {i: game_strings[i] for i in feature_indices}
-                exemplar_distances = {i: [edit_distance(game_strings[i], gs) for gs in game_strings] for i in feature_indices}
+            self.exemplars = {i: game_strings[i] for i in feature_indices}
+            exemplar_distances = {i: [edit_distance(game_strings[i], gs) for gs in game_strings] for i in feature_indices}
 
-            elif self.distance_type == ExemplarDistanceType.FEATURE_VECTOR:
-                game_features = []
-                for game in game_asts:
-                    game_features.append(self._game_to_feature_vector(game))
+        elif self.distance_type in (ExemplarDistanceType.FEATURE_VECTOR, ExemplarDistanceType.PCA):
+            game_features = []
+            for game in game_asts:
+                game_vector = self._game_to_feature_vector(game)
+                if self.distance_type == ExemplarDistanceType.PCA:
+                    game_vector = self.pca.transform(game_vector.reshape(1, -1))[0]
 
-                self.exemplars = {i: game_features[i] for i in feature_indices}
-                exemplar_distances = {i: [self.distance_metric.distance(game_features[i], features) for features in game_features] for i in feature_indices}
+                game_features.append(game_vector)
 
-            else:
-                raise ValueError(f'Invalid distance type: {self.distance_type}')
+            self.exemplars = {i: game_features[i] for i in feature_indices}
+            exemplar_distances = {i: [self.distance_metric.distance(game_features[i], features) for features in game_features] for i in feature_indices}
 
-            for feature_index in self.feature_indices:
-                feature_values = exemplar_distances[feature_index]
-                step = 1 / self.bins_per_feature
-                quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
-                self.bins_by_feature_index[feature_index] = quantiles
+        else:
+            raise ValueError(f'Invalid distance type: {self.distance_type}')
 
-                digits = np.digitize(feature_values, quantiles)
-                counts = Counter(digits)
-                logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
+        self.bins_by_feature_index = {}
+        for feature_index in self.feature_indices:
+            feature_values = exemplar_distances[feature_index]
+            step = 1 / self.bins_per_feature
+            quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
+            self.bins_by_feature_index[feature_index] = quantiles
+
+            digits = np.digitize(feature_values, quantiles)
+            counts = Counter(digits)
+            logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
 
 
     def _project_game_pre_binning(self, game) -> typing.Union[np.ndarray, typing.Dict[int, float]]:

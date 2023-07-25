@@ -1,6 +1,8 @@
 import abc
 import argparse
 from collections import Counter
+import enum
+from Levenshtein import distance as edit_distance
 import logging
 import numpy as np
 import typing
@@ -124,7 +126,7 @@ def _list_to_key(pred_list: typing.List[str]) -> str:
 class PredicateUsed(FitnessTerm):
     predicates_used: typing.Set[str]
 
-    def __init__(self, predicates: typing.List[typing.Union[str, typing.List[str]]] = SPECIFIC_PREDICATES):  # type: ignore
+    def __init__(self, predicates: typing.Union[typing.List[str], typing.List[typing.List[str]], typing.List[typing.Union[str, typing.List[str]]]] = SPECIFIC_PREDICATES):
         super().__init__(PREDICATE_AND_FUNCTION_RULES, 'predicate_used')
         self.predicates = predicates
 
@@ -165,7 +167,7 @@ SPECIFIC_CATEGORIES = [room_and_object_types.BALLS, room_and_object_types.BLOCKS
                        ]
 
 class ObjectCategoryUsed(SetupObjectsUsed):
-    def __init__(self, categories: typing.List[typing.Union[str, typing.List[str]]] = SPECIFIC_CATEGORIES, # type: ignore
+    def __init__(self, categories: typing.Union[typing.List[str], typing.List[typing.List[str]], typing.List[typing.Union[str, typing.List[str]]]] = SPECIFIC_CATEGORIES,
                  skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
         super().__init__(skip_objects=skip_objects, header='object_category_used')
         self.categories = categories
@@ -198,8 +200,33 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS = [
     [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
     [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
     [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+]
+
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_GAME_OBJECT = [
+    [room_and_object_types.BALLS, room_and_object_types.RECEPTACLES],
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
     room_and_object_types.ANY_OBJECT,
 ]
+
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN = [
+    room_and_object_types.BALLS,
+    room_and_object_types.RECEPTACLES,
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+]
+
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT = [
+    room_and_object_types.BALLS,
+    room_and_object_types.RECEPTACLES,
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+    room_and_object_types.ANY_OBJECT,
+]
+
 
 
 PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
@@ -220,6 +247,9 @@ SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
 SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
 NODE_COUNT_SPECIFIC_PREDICATES = 'node_count_specific_predicates'
 PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
+PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
+PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
+PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
 
 
 FEATURE_SETS = [
@@ -232,7 +262,10 @@ FEATURE_SETS = [
     SPECIFIC_PREDICATES_SETUP,
     SPECIFIC_CATEGORIES_SETUP,
     NODE_COUNT_SPECIFIC_PREDICATES,
-    PREDICATE_AND_OBJECT_GROUPS
+    PREDICATE_AND_OBJECT_GROUPS,
+    PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT,
+    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN,
+    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT
 ]
 
 
@@ -274,7 +307,7 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
         return self.parse(game, return_row=True)  # type: ignore
 
 
-DEFAULT_N_COMPONENTS = 20
+DEFAULT_N_COMPONENTS = 32
 DEFAULT_RANDOM_SEED = 33
 
 
@@ -282,7 +315,8 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
     def __init__(self, feature_indices: typing.List[int], bins_per_feature: int,
                  ast_file_path: str, grammar_parser: tatsu.grammars.Grammar,  # type: ignore
                  fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str],
-                 n_components: int = DEFAULT_N_COMPONENTS, random_seed: int = DEFAULT_RANDOM_SEED):
+                 n_components: int = DEFAULT_N_COMPONENTS, random_seed: int = DEFAULT_RANDOM_SEED,
+                 should_init_pca: bool = True, feature_prefix: str = 'pca'):
         self.feature_indices = feature_indices
         self.bins_per_feature = bins_per_feature
         self.ast_file_path = ast_file_path
@@ -291,10 +325,13 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.feature_names = feature_names
         self.n_components = n_components
         self.random_seed = random_seed
+        self.feature_prefix = feature_prefix
 
+        self.bins_by_feature_index = {}
         self.output_feature_names = [self._feature_name(i) for i in self.feature_indices]
 
-        self._init_pca()
+        if should_init_pca:
+            self._init_pca()
 
     def _game_to_feature_vector(self, game) -> np.ndarray:
         game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
@@ -311,7 +348,6 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.pca = PCA(n_components=self.n_components, random_state=self.random_seed)
         projections = self.pca.fit_transform(features_array)
 
-        self.bins_by_feature_index = {}
         for feature_index in self.feature_indices:
             feature_values = projections[:, feature_index]
             step = 1 / self.bins_per_feature
@@ -328,7 +364,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         logger.debug(f'The real games have {len(all_game_feature_tuples)} unique feature tuples')
 
     def _feature_name(self, feature_index: int):
-        return f'pca_{feature_index}'
+        return f'{self.feature_prefix}_{feature_index}'
 
     def get_feature_names(self) -> typing.List[str]:
         return self.output_feature_names
@@ -336,10 +372,94 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
     def get_feature_value_counts(self) -> typing.Dict[str, int]:
         return {self._feature_name(i): self.bins_per_feature for i in self.feature_indices}
 
-    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+    def _project_game_pre_binning(self, game) -> np.ndarray:
         game_vector = self._game_to_feature_vector(game)
-        game_projection = self.pca.transform(game_vector.reshape(1, -1))[0]
+        return self.pca.transform(game_vector.reshape(1, -1))[0]
+
+    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+        game_projection = self._project_game_pre_binning(game)
         return {self._feature_name(i): np.digitize(game_projection[i], self.bins_by_feature_index[i]) for i in self.feature_indices}
+
+
+class ExemplarDistanceType(enum.Enum):
+    FEATURE_VECTOR = 'feature_vector'
+    PCA = 'pca'
+    STRING_EDIT = 'string_edit'
+
+
+class DistanceMetric(enum.Enum):
+    L1 = 'l1'
+    L2 = 'l2'
+    COSINE = 'cosine'
+
+    def distance(self, a: np.ndarray, b: np.ndarray) -> float:
+        if self == DistanceMetric.L1:
+            return np.linalg.norm(a - b, ord=1)  # type: ignore
+        elif self == DistanceMetric.L2:
+            return np.linalg.norm(a - b, ord=2)   # type: ignore
+        elif self == DistanceMetric.COSINE:
+            return (1 - np.dot(a, b)) / (np.linalg.norm(a) * np.linalg.norm(b))
+        else:
+            raise ValueError(f'Invalid distance metric: {self}')
+
+
+class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
+    def __init__(self, distance_type: ExemplarDistanceType, distance_metric: DistanceMetric,
+                 feature_indices: typing.List[int], bins_per_feature: int,
+                 ast_file_path: str, grammar_parser: tatsu.grammars.Grammar,  # type: ignore
+                 fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str],
+                 n_components: int = DEFAULT_N_COMPONENTS, random_seed: int = DEFAULT_RANDOM_SEED):
+
+        self.distance_type = distance_type
+        self.distance_metric = distance_metric
+
+        should_init_pca = distance_type == ExemplarDistanceType.PCA
+        super().__init__(feature_indices, bins_per_feature, ast_file_path, grammar_parser, fitness_featurizer, feature_names, n_components, random_seed,
+                         should_init_pca=should_init_pca, feature_prefix='exemplar_distance')
+
+        # TODO: if not using PCA, implement feature binning
+        if not should_init_pca:
+            game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
+            if self.distance_type == ExemplarDistanceType.STRING_EDIT:
+                postprocessor = ast_parser.ASTSamplePostprocessor()
+                game_strings = [ast_printer.ast_to_string(postprocessor(game), '\n') for game in game_asts]  # type: ignore
+
+                self.exemplars = {i: game_strings[i] for i in feature_indices}
+                exemplar_distances = {i: [edit_distance(game_strings[i], gs) for gs in game_strings] for i in feature_indices}
+
+            elif self.distance_type == ExemplarDistanceType.FEATURE_VECTOR:
+                game_features = []
+                for game in game_asts:
+                    game_features.append(self._game_to_feature_vector(game))
+
+                self.exemplars = {i: game_features[i] for i in feature_indices}
+                exemplar_distances = {i: [self.distance_metric.distance(game_features[i], features) for features in game_features] for i in feature_indices}
+
+            else:
+                raise ValueError(f'Invalid distance type: {self.distance_type}')
+
+            for feature_index in self.feature_indices:
+                feature_values = exemplar_distances[feature_index]
+                step = 1 / self.bins_per_feature
+                quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
+                self.bins_by_feature_index[feature_index] = quantiles
+
+                digits = np.digitize(feature_values, quantiles)
+                counts = Counter(digits)
+                logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
+
+
+    def _project_game_pre_binning(self, game) -> typing.Union[np.ndarray, typing.Dict[int, float]]:
+        if self.distance_type == ExemplarDistanceType.STRING_EDIT:
+            game_string = ast_printer.ast_to_string(game, '\n')
+            return {i: edit_distance(self.exemplars[i], game_string) for i in self.feature_indices}
+
+        elif self.distance_type == ExemplarDistanceType.FEATURE_VECTOR:
+            game_vector = self._game_to_feature_vector(game)
+            return {i: self.distance_metric.distance(self.exemplars[i], game_vector) for i in self.feature_indices}  # type: ignore
+
+        else:
+            raise ValueError(f'Invalid distance type: {self.distance_type}')
 
 
 def build_behavioral_features_featurizer(
@@ -399,7 +519,19 @@ def build_behavioral_features_featurizer(
 
         elif feature_set == PREDICATE_AND_OBJECT_GROUPS:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
-            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS))  # type: ignore
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS))
+
+        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_GAME_OBJECT))
+
+        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN))
+
+        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

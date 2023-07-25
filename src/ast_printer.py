@@ -1034,7 +1034,7 @@ def _postprocess_ast_to_string(ast_str: str):
     return ast_str.replace(' )', ')')
 
 
-def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAULT_INCREMENT, context=None, postprocess: bool = True):
+def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAULT_INCREMENT, context=None, postprocess: bool = True) -> str:
     reset_buffers(to_list=True)
     pretty_print_ast(ast, increment=increment, context=context)
     _flush_line_buffer()
@@ -1042,8 +1042,10 @@ def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAUL
     if postprocess:
         return _postprocess_ast_to_string(out_str)
 
+    return out_str
 
-def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = '', context=None, postprocess: bool = True):
+
+def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: str = '', context=None, postprocess: bool = True) -> str:
     if context is None:
         context = {}
     reset_buffers(to_list=True)
@@ -1052,3 +1054,5 @@ def ast_section_to_string(ast: tatsu.ast.AST, section_key: str, line_delimiter: 
     out_str = line_delimiter.join(BUFFER).strip()  # type: ignore
     if postprocess:
         return _postprocess_ast_to_string(out_str)
+
+    return out_str

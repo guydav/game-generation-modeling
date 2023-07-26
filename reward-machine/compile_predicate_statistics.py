@@ -65,6 +65,8 @@ class CommonSensePredicateStatistics():
         self.data["arg_types"] = self.data["arg_types"].apply(join_args)
         self.data = pl.from_pandas(self.data)
 
+        # Cache calls to get_object_assignments
+        self.object_assignment_cache = {}
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
@@ -94,6 +96,18 @@ class CommonSensePredicateStatistics():
         room_objects -= set(['agent'])
 
         return room_objects
+    
+    def _object_assignments(self, domain, variable_types, used_objects=[]):
+        '''
+        Wrapper around get_object_assignments in order to cache outputs
+        '''
+
+        key = (domain, tuple(variable_types), tuple(used_objects))
+        if key not in self.object_assignment_cache:
+            object_assignments = get_object_assignments(domain, variable_types, used_objects=used_objects)
+            self.object_assignment_cache[key] = object_assignments
+
+        return self.object_assignment_cache[key]
     
     def _intersect_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
@@ -274,7 +288,7 @@ class CommonSensePredicateStatistics():
             #  then we store its satisfaction for all possible assignments of ?h). The downside of this is that we wind up
             # storing an interval for every entry in the cartesian product of the unused variables' types -- possible TODO?
             unused_variables = [var for var in mapping.keys() if var not in variables]
-            unused_variable_types = [mapping[var] for var in unused_variables]
+            unused_variable_types = tuple([tuple(mapping[var]) for var in unused_variables])
 
             # In cases where a variable can have multiple types, we consider all possible combinations of types
             possible_arg_types = ["-".join(entry) for entry in product(*[types for types in relevant_arg_mapping.values()])]
@@ -282,7 +296,7 @@ class CommonSensePredicateStatistics():
             predicate_df = self.data.filter((pl.col("predicate") == predicate_name) & (pl.col("arg_types").is_in(possible_arg_types)))
 
             all_trace_ids, domains, all_arg_ids, all_intervals = predicate_df["trace_id"], predicate_df["domain"], predicate_df["arg_ids"], predicate_df["intervals"]
-            unused_object_assignments = starmap(get_object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
+            unused_object_assignments = starmap(self._object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
 
             interval_mapping = defaultdict(list)
             for trace_id, arg_ids, assignments, intervals in zip(all_trace_ids, all_arg_ids, unused_object_assignments, all_intervals):
@@ -341,7 +355,9 @@ class CommonSensePredicateStatistics():
             for trace_id, length in self.trace_lengths.items():
                 
                 domain = self.data.filter(pl.col("trace_id") == trace_id)["domain"][0]
-                possible_arg_assignments = get_object_assignments(domain, mapping.values())
+
+                variable_types = tuple(tuple(mapping[var]) for var in mapping.keys())
+                possible_arg_assignments = self._object_assignments(domain, variable_types)
 
                 # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
                 for arg_ids in possible_arg_assignments:

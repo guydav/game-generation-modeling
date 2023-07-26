@@ -5,6 +5,8 @@ import json
 import os
 import pandas as pd
 import pathlib
+import pickle
+import polars as pl
 import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
@@ -40,10 +42,12 @@ class CommonSensePredicateStatistics():
         
         self.cache_dir = cache_dir
 
-        cache_filename = os.path.join(cache_dir, 'predicate_statistics.pkl')
+        stats_filename = os.path.join(cache_dir, 'predicate_statistics.pkl')
+        trace_lengths_filename = os.path.join(cache_dir, 'trace_lengths.pkl')
 
-        if os.path.exists(cache_filename) and not overwrite:
-            self.data = pd.read_pickle(cache_filename)
+        if os.path.exists(stats_filename) and not overwrite:
+            self.data = pd.read_pickle(stats_filename)
+            self.trace_lengths = pickle.load(open(trace_lengths_filename, 'rb'))
 
         else:
             self.data = pd.DataFrame(columns=['predicate', 'arg_ids', 'arg_types', 'trace_id', 'domain', 'intervals'])
@@ -51,7 +55,16 @@ class CommonSensePredicateStatistics():
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
-            self.data.to_pickle(cache_filename)
+            
+            self.data.to_pickle(stats_filename)
+            pickle.dump(self.trace_lengths, open(trace_lengths_filename, 'wb'))
+
+        # Convert to polars and combine the arg types field for easier selection
+        def join_args(args):
+            return "-".join(args)
+        self.data["arg_types"] = self.data["arg_types"].apply(join_args)
+        self.data = pl.from_pandas(self.data)
+
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
@@ -264,10 +277,9 @@ class CommonSensePredicateStatistics():
             unused_variable_types = [mapping[var] for var in unused_variables]
 
             # In cases where a variable can have multiple types, we consider all possible combinations of types
-            possible_arg_types = list(product(*[types for types in relevant_arg_mapping.values()]))
+            possible_arg_types = ["-".join(entry) for entry in product(*[types for types in relevant_arg_mapping.values()])]
 
-            # Merge the intervals for each possible assignment of argument types
-            predicate_df = self.data[(self.data["predicate"] == predicate_name) & (self.data["arg_types"].isin(possible_arg_types))]
+            predicate_df = self.data.filter((pl.col("predicate") == predicate_name) & (pl.col("arg_types").is_in(possible_arg_types)))
 
             all_trace_ids, domains, all_arg_ids, all_intervals = predicate_df["trace_id"], predicate_df["domain"], predicate_df["arg_ids"], predicate_df["intervals"]
             unused_object_assignments = starmap(get_object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
@@ -278,7 +290,7 @@ class CommonSensePredicateStatistics():
                     full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(variables, arg_ids)] + 
                                                    [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
                     
-                    interval_mapping[(trace_id, full_assignment)] = intervals
+                    interval_mapping[(trace_id, full_assignment)] = intervals.to_list()
 
             return interval_mapping
 
@@ -328,7 +340,7 @@ class CommonSensePredicateStatistics():
             # We need to check every trace ID in the dataset in case there are some traces in which the sub-predicate is never true
             for trace_id, length in self.trace_lengths.items():
                 
-                domain = self.data[self.data["trace_id"] == trace_id]["domain"].unique()[0]
+                domain = self.data.filter(pl.col("trace_id") == trace_id)["domain"][0]
                 possible_arg_assignments = get_object_assignments(domain, mapping.values())
 
                 # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
@@ -431,15 +443,7 @@ if __name__ == '__main__':
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
     trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
-    stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
-    
-    print(stats.filter(test_pred_2, test_mapping))
-    start = time.perf_counter()
-    for _ in tqdm(range(1000)):
-        stats.filter(test_pred_2, test_mapping)
-    end = time.perf_counter()
-    print(f"Time per iteration: {'%.5f' % ((end - start) / 1000)}s")
-    exit()
+    # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
 
     TEST_TRACE_NAMES = ["throw_ball_to_bin_unique_positions", "setup_test_trace", "building_castle",
                         "throw_all_dodgeballs", "stack_3_cube_blocks", "three_wall_to_bin_bounces",
@@ -457,7 +461,10 @@ if __name__ == '__main__':
                         "three_wall_to_bin_bounces-RErerecorded"]
     
     trace_paths = [f"{get_project_dir()}/reward-machine/traces/{trace}.json" for trace in TEST_TRACE_NAMES]
-    stats = CommonSensePredicateStatistics(cache_dir, trace_paths, overwrite=True)
+    trace_paths += [f"{get_project_dir()}/reward-machine/traces/participant-traces/{trace}" for trace in  
+                    os.listdir(f"{get_project_dir()}/reward-machine/traces/participant-traces")]
+
+    stats = CommonSensePredicateStatistics(cache_dir, trace_paths, overwrite=False)
 
     
     print(stats.filter(test_pred_2, test_mapping))

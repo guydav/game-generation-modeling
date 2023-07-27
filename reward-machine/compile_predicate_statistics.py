@@ -298,13 +298,21 @@ class CommonSensePredicateStatistics():
             all_trace_ids, domains, all_arg_ids, all_intervals = predicate_df["trace_id"], predicate_df["domain"], predicate_df["arg_ids"], predicate_df["intervals"]
             unused_object_assignments = starmap(self._object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
 
+            start = time.perf_counter()
             interval_mapping = defaultdict(list)
             for trace_id, arg_ids, assignments, intervals in zip(all_trace_ids, all_arg_ids, unused_object_assignments, all_intervals):
                 for assignment in assignments:
-                    full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(variables, arg_ids)] + 
-                                                   [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
+
+                    full_variables = variables + unused_variables
+                    full_objects = tuple(arg_ids.to_list()) + assignment
+
+                    full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(full_variables, full_objects)]))
+                    
                     
                     interval_mapping[(trace_id, full_assignment)] = intervals.to_list()
+
+            end = time.perf_counter()
+            print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
 
             return interval_mapping
 
@@ -319,12 +327,16 @@ class CommonSensePredicateStatistics():
             interval_mapping = defaultdict(lambda: defaultdict(list))
             sub_interval_mappings = [self.filter(and_arg, mapping) for and_arg in and_args]
 
+            start = time.perf_counter()
             keys = set(sum([list(sub_interval_mapping.keys()) for sub_interval_mapping in sub_interval_mappings], []))
 
             interval_mapping = {key: reduce(self._intersect_intervals, [sub[key] for sub in sub_interval_mappings]) for key in keys}
 
             # Filter out empty intervals
             interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
+
+            end = time.perf_counter()
+            print(f"Time to intersect: {'%.5f' % (end - start)}s")
 
             return interval_mapping
 
@@ -349,6 +361,8 @@ class CommonSensePredicateStatistics():
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
             
+
+            start = time.perf_counter()
             interval_mapping = defaultdict(list)
 
             # We need to check every trace ID in the dataset in case there are some traces in which the sub-predicate is never true
@@ -365,6 +379,9 @@ class CommonSensePredicateStatistics():
                     argument_mapping = tuple(sorted(f"{var}->{id}" for var, id in zip(mapping.keys(), arg_ids)))
                     key = (trace_id, argument_mapping)
                     interval_mapping[key] = self._invert_intervals(sub_intervals[key], length)
+
+            end = time.perf_counter()
+            print(f"Time to invert: {'%.5f' % (end - start)}s")
 
             return interval_mapping
 
@@ -485,8 +502,12 @@ if __name__ == '__main__':
     
     print(stats.filter(test_pred_2, test_mapping))
     start = time.perf_counter()
-    for _ in tqdm(range(1000)):
+    for i in range(1000):
+        print(f"\n====================")
+        start = time.perf_counter()
         stats.filter(test_pred_2, test_mapping)
+        end = time.perf_counter()
+        print(f"Time per iteration: {'%.5f' % (end - start)}s")
     end = time.perf_counter()
     print(f"Time per iteration: {'%.5f' % ((end - start) / 1000)}s")
     exit()

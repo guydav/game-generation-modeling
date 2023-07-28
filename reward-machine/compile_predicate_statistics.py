@@ -7,6 +7,7 @@ import pandas as pd
 import pathlib
 import pickle
 import polars as pl
+import re
 import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
@@ -19,7 +20,8 @@ from utils import (extract_predicate_function_name,
                    get_project_dir,
                    get_object_assignments,
                    FullState)
-from manual_run import _load_trace
+from ast_parser import PREFERENCES
+from ast_printer import ast_section_to_string
 from predicate_handler import PREDICATE_LIBRARY_RAW
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
@@ -38,7 +40,8 @@ class CommonSensePredicateStatistics():
     def __init__(self,
                  cache_dir: str,
                  trace_paths: typing.Sequence[str],
-                 overwrite=False):
+                 cache_rules: typing.Sequence[str]=[],
+                 overwrite: bool=False):
         
         self.cache_dir = cache_dir
 
@@ -66,7 +69,9 @@ class CommonSensePredicateStatistics():
         self.data = pl.from_pandas(self.data)
 
         # Cache calls to get_object_assignments
+        self.cache_rules = cache_rules
         self.object_assignment_cache = {}
+        self.predicate_interval_cache = {}
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
@@ -270,6 +275,15 @@ class CommonSensePredicateStatistics():
 
         predicate_rule = predicate.parseinfo.rule  # type: ignore
 
+        if predicate_rule in self.cache_rules:
+            ast_str = ast_section_to_string(predicate, PREFERENCES)
+            ast_str = re.sub(r"\s+", " ", ast_str)
+            for key, val in mapping.items():
+                ast_str = ast_str.replace(key, str(val))
+
+            if ast_str in self.predicate_interval_cache:
+                return self.predicate_interval_cache[ast_str]
+
         if predicate_rule == "predicate":
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
             variables = extract_variables(predicate)  # type: ignore
@@ -314,10 +328,8 @@ class CommonSensePredicateStatistics():
             end = time.perf_counter()
             print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
 
-            return interval_mapping
-
         elif predicate_rule == "super_predicate":
-            return self.filter(predicate['pred'], mapping)
+            interval_mapping = self.filter(predicate["pred"], mapping)
         
         elif predicate_rule == "super_predicate_and":
             and_args = predicate["and_args"]
@@ -338,9 +350,6 @@ class CommonSensePredicateStatistics():
             end = time.perf_counter()
             print(f"Time to intersect: {'%.5f' % (end - start)}s")
 
-            return interval_mapping
-
-
         elif predicate_rule == "super_predicate_or":
             or_args = predicate["or_args"]
             if isinstance(or_args, tatsu.ast.AST):
@@ -355,8 +364,6 @@ class CommonSensePredicateStatistics():
 
             # Filter out empty intervals
             interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
-
-            return interval_mapping
         
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
@@ -382,8 +389,6 @@ class CommonSensePredicateStatistics():
 
             end = time.perf_counter()
             print(f"Time to invert: {'%.5f' % (end - start)}s")
-
-            return interval_mapping
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
@@ -452,7 +457,12 @@ class CommonSensePredicateStatistics():
                     # TODO
 
         else:
-            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")   
+            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
+
+        if predicate_rule in self.cache_rules:
+            self.predicate_interval_cache[ast_str] = interval_mapping
+
+        return interval_mapping   
 
 if __name__ == '__main__':
 
@@ -497,7 +507,8 @@ if __name__ == '__main__':
     trace_paths += [f"{get_project_dir()}/reward-machine/traces/participant-traces/{trace}" for trace in  
                     os.listdir(f"{get_project_dir()}/reward-machine/traces/participant-traces")]
 
-    stats = CommonSensePredicateStatistics(cache_dir, trace_paths, overwrite=False)
+    stats = CommonSensePredicateStatistics(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
+                                           "super_predicate_or", "super_predicate_not"], overwrite=False)
 
     
     print(stats.filter(test_pred_2, test_mapping))

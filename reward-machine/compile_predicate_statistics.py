@@ -12,10 +12,12 @@ import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
 import typing
+from viztracer import VizTracer
+
 
 from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS
-from utils import (extract_predicate_function_name, 
-                   extract_variables, 
+from utils import (extract_predicate_function_name,
+                   extract_variables,
                    extract_variable_type_mapping,
                    get_project_dir,
                    get_object_assignments,
@@ -35,14 +37,17 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
 )
 
 TYPE_REMAP = {"hexagonal_bin": "garbagecan"}
+DEBUG = False
+PROFILE = False
+
 
 class CommonSensePredicateStatistics():
     def __init__(self,
-                 cache_dir: str,
+                 cache_dir: typing.Union[str, pathlib.Path],
                  trace_paths: typing.Sequence[str],
-                 cache_rules: typing.Sequence[str]=[],
+                 cache_rules: typing.Optional[typing.Sequence[str]] = None,
                  overwrite: bool=False):
-        
+
         self.cache_dir = cache_dir
 
         stats_filename = os.path.join(cache_dir, 'predicate_statistics.pkl')
@@ -50,6 +55,7 @@ class CommonSensePredicateStatistics():
 
         if os.path.exists(stats_filename) and not overwrite:
             self.data = pd.read_pickle(stats_filename)
+            print(f'Loaded data with shape {self.data.shape} from {stats_filename}')
             self.trace_lengths = pickle.load(open(trace_lengths_filename, 'rb'))
 
         else:
@@ -58,7 +64,7 @@ class CommonSensePredicateStatistics():
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
-            
+
             self.data.to_pickle(stats_filename)
             pickle.dump(self.trace_lengths, open(trace_lengths_filename, 'wb'))
 
@@ -75,7 +81,7 @@ class CommonSensePredicateStatistics():
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
-    
+
     def _domain_key(self, domain: str):
         if domain.endswith('few_new_objects'):
             return 'few'
@@ -85,14 +91,14 @@ class CommonSensePredicateStatistics():
             return 'many'
         else:
             raise ValueError(f"Unrecognized domain: {domain}")
-    
+
     def _get_room_objects(self, trace) -> set:
         '''
         Returns the set of objects in the room type of the given trace, excluding pseudo-objects,
         colors, and the agent
         '''
 
-        room_type = self._domain_key(trace['scene'])          
+        room_type = self._domain_key(trace['scene'])
         room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
         room_objects -= set(UNITY_PSEUDO_OBJECTS.keys())
         room_objects -= set(COLORS)
@@ -101,7 +107,7 @@ class CommonSensePredicateStatistics():
         room_objects -= set(['agent'])
 
         return room_objects
-    
+
     def _object_assignments(self, domain, variable_types, used_objects=[]):
         '''
         Wrapper around get_object_assignments in order to cache outputs
@@ -113,7 +119,7 @@ class CommonSensePredicateStatistics():
             self.object_assignment_cache[key] = object_assignments
 
         return self.object_assignment_cache[key]
-    
+
     def _intersect_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
         Given two lists of [start, end] intervals, returns the list of intervals in which they intersect
@@ -136,12 +142,12 @@ class CommonSensePredicateStatistics():
                 j += 1
 
         return intersections
-    
+
     def _union_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
         Given two lists of [start, end] intervals, returns the list of intervals in which either is true
         '''
-        
+
         all_intervals = sorted(intervals_1 + intervals_2)
         unions = []
 
@@ -152,11 +158,11 @@ class CommonSensePredicateStatistics():
                 unions.append([start, end])
 
         return unions
-    
+
     def _invert_intervals(self, intervals: typing.List[typing.List[int]], length: int):
         if intervals == []:
             return [[0, length]]
-        
+
         inverted = []
         cur = 0
 
@@ -169,17 +175,17 @@ class CommonSensePredicateStatistics():
             inverted.append([cur, length])
 
         return inverted
-    
+
     def process_trace(self, trace):
         '''
         Process a trace, collecting the intervals in which each predicate is true (for
         every possible set of its arguments). Adds the information to the overall dataframe
         '''
-     
+
         room_objects = self._get_room_objects(trace)
         replay = trace['replay']
         replay_len = int(len(replay))
-        
+
         # Maps from the predicate-arg key to a list of intervals in which the predicate is true
         predicate_satisfaction_mapping = {}
 
@@ -200,13 +206,13 @@ class CommonSensePredicateStatistics():
             # And to objects
             for obj in state.objects:
                 most_recent_object_states[obj.object_id] = obj
-            
+
             # Check if we've received a full state update, which we detect by seeing if the most_recent_object_states
             # includes every object in the room
             if not received_full_update:
                 difference = room_objects.difference(set(most_recent_object_states.keys()))
                 received_full_update = (len(difference) == 0)
-            
+
             # Only perform predicate checks if we've received at least one full state update
             if received_full_update and state.n_objects_changed > 0:
                 for predicate, n_args in COMMON_SENSE_PREDICATES_AND_FUNCTIONS:
@@ -235,15 +241,15 @@ class CommonSensePredicateStatistics():
 
                             # If the predicate is true, then check to see if the last interval is closed. If it is, then
                             # create a new interval
-                            if evaluation:                                 
+                            if evaluation:
                                 if key not in predicate_satisfaction_mapping:
                                     info = {"predicate": predicate, "arg_ids": arg_ids, "arg_types": arg_types,
-                                            "trace_id": trace['id'], "domain": self._domain_key(trace['scene']), 
+                                            "trace_id": trace['id'], "domain": self._domain_key(trace['scene']),
                                             "intervals": [[idx, None]]}
                                     predicate_satisfaction_mapping[key] = info
 
                                 elif predicate_satisfaction_mapping[key]['intervals'][-1][1] is not None:
-                                    predicate_satisfaction_mapping[key]['intervals'].append([idx, None])                   
+                                    predicate_satisfaction_mapping[key]['intervals'].append([idx, None])
 
                             # If the predicate is false, then check to see if the last interval is open. If it is, then
                             # close it
@@ -275,28 +281,29 @@ class CommonSensePredicateStatistics():
 
         predicate_rule = predicate.parseinfo.rule  # type: ignore
 
-        if predicate_rule in self.cache_rules:
-            ast_str = ast_section_to_string(predicate, PREFERENCES)
-            ast_str = re.sub(r"\s+", " ", ast_str)
-            for key, val in mapping.items():
-                ast_str = ast_str.replace(key, str(val))
+        # Temporarily disable caching to profile without it
+        # if predicate_rule in self.cache_rules:
+        #     ast_str = ast_section_to_string(predicate, PREFERENCES)
+        #     ast_str = re.sub(r"\s+", " ", ast_str)
+        #     for key, val in mapping.items():
+        #         ast_str = ast_str.replace(key, str(val))
 
-            if ast_str in self.predicate_interval_cache:
-                return self.predicate_interval_cache[ast_str]
+        #     if ast_str in self.predicate_interval_cache:
+        #         return self.predicate_interval_cache[ast_str]
 
         if predicate_rule == "predicate":
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
             variables = extract_variables(predicate)  # type: ignore
 
             # Restrict the mapping to just the referenced variables and expand meta-types
-            relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], []) 
+            relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
                                     for var in variables if var in mapping}
-            
+
             # Apply the type remapping, when needed. TODO: this is probably pretty slow -- best would be to just be consistent about
             # type naming
             for key, val in relevant_arg_mapping.items():
                 relevant_arg_mapping[key] = [TYPE_REMAP.get(arg_type, arg_type) for arg_type in val]
-            
+
             # For each predicate, we imagine that it is satisfied for every possible assignment of its unused arguments
             # (e.g., in the context of (?b - ball, ?h - bin), if the predicate (in_motion ?b) is satisfied for ?b = Dodgeball1,
             #  then we store its satisfaction for all possible assignments of ?h). The downside of this is that we wind up
@@ -316,21 +323,19 @@ class CommonSensePredicateStatistics():
             interval_mapping = defaultdict(list)
             for trace_id, arg_ids, assignments, intervals in zip(all_trace_ids, all_arg_ids, unused_object_assignments, all_intervals):
                 for assignment in assignments:
-
                     full_variables = variables + unused_variables
                     full_objects = tuple(arg_ids.to_list()) + assignment
 
                     full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(full_variables, full_objects)]))
-                    
-                    
+
                     interval_mapping[(trace_id, full_assignment)] = intervals.to_list()
 
             end = time.perf_counter()
-            print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
+            if DEBUG: print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
 
         elif predicate_rule == "super_predicate":
             interval_mapping = self.filter(predicate["pred"], mapping)
-        
+
         elif predicate_rule == "super_predicate_and":
             and_args = predicate["and_args"]
             if isinstance(and_args, tatsu.ast.AST):
@@ -348,7 +353,7 @@ class CommonSensePredicateStatistics():
             interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
 
             end = time.perf_counter()
-            print(f"Time to intersect: {'%.5f' % (end - start)}s")
+            if DEBUG: print(f"Time to intersect: {'%.5f' % (end - start)}s")
 
         elif predicate_rule == "super_predicate_or":
             or_args = predicate["or_args"]
@@ -364,17 +369,17 @@ class CommonSensePredicateStatistics():
 
             # Filter out empty intervals
             interval_mapping = defaultdict(list, {key: val for key, val in interval_mapping.items() if val != []})
-        
+
         elif predicate_rule == "super_predicate_not":
             sub_intervals = self.filter(predicate["not_args"], mapping)
-            
+
 
             start = time.perf_counter()
             interval_mapping = defaultdict(list)
 
             # We need to check every trace ID in the dataset in case there are some traces in which the sub-predicate is never true
             for trace_id, length in self.trace_lengths.items():
-                
+
                 domain = self.data.filter(pl.col("trace_id") == trace_id)["domain"][0]
 
                 variable_types = tuple(tuple(mapping[var]) for var in mapping.keys())
@@ -382,13 +387,13 @@ class CommonSensePredicateStatistics():
 
                 # Similarly, we need to check every possible set of arguments in case there are some sets in which the sub-predicate is never true
                 for arg_ids in possible_arg_assignments:
-              
+
                     argument_mapping = tuple(sorted(f"{var}->{id}" for var, id in zip(mapping.keys(), arg_ids)))
                     key = (trace_id, argument_mapping)
                     interval_mapping[key] = self._invert_intervals(sub_intervals[key], length)
 
             end = time.perf_counter()
-            print(f"Time to invert: {'%.5f' % (end - start)}s")
+            if DEBUG: print(f"Time to invert: {'%.5f' % (end - start)}s")
 
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
@@ -404,7 +409,7 @@ class CommonSensePredicateStatistics():
             def keyfunc(element):
                 key = tuple(sorted(elem for elem in element if elem.split('->')[0] not in variable_type_mapping.keys()))
                 return key
-            
+
             for id in sub_intervals:
                 sorted_arg_ids = sorted(sub_intervals[id].keys(), key=keyfunc)
                 for key, group in groupby(sorted_arg_ids, keyfunc):
@@ -424,14 +429,14 @@ class CommonSensePredicateStatistics():
                             other_object_assignments = [()]
 
                         for assignment in other_object_assignments:
-                            full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(used_variables, used_objects)] + 
+                            full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(used_variables, used_objects)] +
                                                            [f"{var}->{id}" for var, id in zip(unused_variables, assignment)]))
 
 
                             interval_mapping[id][full_assignment] = self._indices_to_intervals(union)
 
             return interval_mapping
-        
+
         elif predicate_rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"])  # type: ignore
 
@@ -446,7 +451,7 @@ class CommonSensePredicateStatistics():
             def keyfunc(element):
                 key = tuple(sorted(elem for elem in element if elem.split('->')[0] not in variable_type_mapping.keys()))
                 return key
-            
+
             for id in sub_intervals:
                 sorted_arg_ids = sorted(sub_intervals[id].keys(), key=keyfunc)
                 for key, group in groupby(sorted_arg_ids, keyfunc):
@@ -459,10 +464,19 @@ class CommonSensePredicateStatistics():
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
-        if predicate_rule in self.cache_rules:
-            self.predicate_interval_cache[ast_str] = interval_mapping
+        # Temporarily disable caching
+        # if predicate_rule in self.cache_rules:
+        #     self.predicate_interval_cache[ast_str] = interval_mapping
 
-        return interval_mapping   
+        return interval_mapping
+
+
+def _print_results_as_expected_intervals(filter_results):
+    print(' ' * 8 + 'expected_intervals={')
+    for key, intervals in filter_results.items():
+        print(f'{" " * 12}{key}: {intervals},')
+    print(' ' * 8 + '}')
+
 
 if __name__ == '__main__':
 
@@ -474,13 +488,13 @@ if __name__ == '__main__':
     game_ast = grammar_parser.parse(game)  # type: ignore
 
     # should be: (and (in_motion ?b) (not (agent_holds ?b)))
-    test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred'] 
+    test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred']
 
     # should be: (and (not (in_motion ?b)) (in ?h ?b)))
     test_pred_2 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['once_pred']
-    
+
     # should be: (once (and (not (in_motion ?b) (exists (?c - hexagonal_bin) (in ?c ?b)))))
-    test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred'] 
+    test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred']
 
 
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
@@ -491,7 +505,7 @@ if __name__ == '__main__':
     TEST_TRACE_NAMES = ["throw_ball_to_bin_unique_positions", "setup_test_trace", "building_castle",
                         "throw_all_dodgeballs", "stack_3_cube_blocks", "three_wall_to_bin_bounces",
                         "complex_stacking_trace"]
-    
+
     TEST_TRACE_NAMES = ["ZBcXIZbvTS3U4IBGk1zk-createGame-rerecorded",
                         "ZBcXIZbvTS3U4IBGk1zk-preCreateGame-rerecorded",
                         "KO8pbUWEpZldxy7AzyM5-gameplay-attempt-1-rerecorded",
@@ -502,25 +516,37 @@ if __name__ == '__main__':
                         "ZMqZkrMMB0PcsCeLhQqE-gameplay-attempt-1-rerecorded",
                         "ZMqZkrMMB0PcsCeLhQqE-preCreateGame-rerecorded",
                         "three_wall_to_bin_bounces-RErerecorded"]
-    
+
     trace_paths = [f"{get_project_dir()}/reward-machine/traces/{trace}.json" for trace in TEST_TRACE_NAMES]
-    trace_paths += [f"{get_project_dir()}/reward-machine/traces/participant-traces/{trace}" for trace in  
+    trace_paths += [f"{get_project_dir()}/reward-machine/traces/participant-traces/{trace}" for trace in
                     os.listdir(f"{get_project_dir()}/reward-machine/traces/participant-traces")]
 
     stats = CommonSensePredicateStatistics(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
                                            "super_predicate_or", "super_predicate_not"], overwrite=False)
+    tracer = None
+    if PROFILE:
+        tracer = VizTracer(10000000)
+        tracer.start()
 
-    
-    print(stats.filter(test_pred_2, test_mapping))
+    test_out = stats.filter(test_pred_1, test_mapping)
+    _print_results_as_expected_intervals(test_out)
     start = time.perf_counter()
-    for i in range(1000):
-        print(f"\n====================")
-        start = time.perf_counter()
+    N_ITER = 100
+    for i in range(N_ITER):
+        # print(f"\n====================")
+        inner_start = time.perf_counter()
         stats.filter(test_pred_2, test_mapping)
-        end = time.perf_counter()
-        print(f"Time per iteration: {'%.5f' % (end - start)}s")
+        # inner_end = time.perf_counter()
+        # print(f"Time per iteration: {'%.5f' % (inner_end - inner_start)}s")
     end = time.perf_counter()
-    print(f"Time per iteration: {'%.5f' % ((end - start) / 1000)}s")
+    print(f"Time per iteration: {'%.5f' % ((end - start) / N_ITER)}s")
+
+    if tracer is not None:
+        tracer.stop()
+        profile_output_path = os.path.join(get_project_dir(), 'reward-machine/temp/viztracer.json')
+        print(f'Saving profile to {profile_output_path}')
+        tracer.save(profile_output_path)
+
     exit()
 
     # Satisfactions of in_motion
@@ -532,7 +558,7 @@ if __name__ == '__main__':
     # Satisfactions of in
     in_sats = stats.data[stats.data["predicate"] == "in"]
     long_in_sats = in_sats[(in_sats["end_step"] - in_sats["start_step"]) / in_sats["replay_len"] >= 0.9]
-    
+
     print("All 'in' satisfactions:")
     print(in_sats[["predicate", "arg_ids", "start_step", "end_step", "replay_len"]])
 
@@ -544,5 +570,3 @@ if __name__ == '__main__':
 
     # stats = CommonSensePredicateStatistics(cache_dir, [f"{get_project_dir()}/reward-machine/traces/{trace}-rerecorded.json" for trace in TEST_TRACE_NAMES], overwrite=True)
     # print(stats.data)
-
-    

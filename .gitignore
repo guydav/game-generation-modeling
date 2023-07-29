@@ -28,3 +28,5 @@ run/profile_evo_sampler.sh
 **/lightning_logs/**/*
 wandb/*
 reward-machine/traces/*
+reward-machine/utils.py
+reward-machine/temp/**/*

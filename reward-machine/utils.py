@@ -12,9 +12,17 @@ sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix()
 import ast_printer
 import ast_parser
 
-from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject, FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM
 
 PROJECT_NAME = 'game-generation-modeling'
+
+
+DOMAIN_REMAPPING = {
+    'FloorPlan326_physics_semi_sparse_few_new_objects': FEW_OBJECTS_ROOM,
+    'FloorPlan326_physics_semi_sparse_new_objects': MEDIUM_OBJECTS_ROOM,
+    'FloorPlan326_physics_semi_sparse_many_new_objects': MANY_OBJECTS_ROOM,
+}
+
 
 
 def get_project_dir(project_name: str = PROJECT_NAME):
@@ -424,6 +432,9 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
 
     if used_objects is None:
         used_objects = []
+
+    if domain in DOMAIN_REMAPPING:
+        domain = DOMAIN_REMAPPING[domain]
 
     grouped_objects = []
     for sub_types in variable_types:

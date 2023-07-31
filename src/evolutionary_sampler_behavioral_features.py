@@ -441,6 +441,7 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
             raise ValueError(f'Invalid distance type: {self.distance_type}')
 
         self.bins_by_feature_index = {}
+        digits_by_feature_index = []
         for feature_index in self.feature_indices:
             feature_values = exemplar_distances[feature_index]
             step = 1 / self.bins_per_feature
@@ -448,8 +449,13 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
             self.bins_by_feature_index[feature_index] = quantiles
 
             digits = np.digitize(feature_values, quantiles)
+            digits_by_feature_index.append(digits)
             counts = Counter(digits)
             logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
+
+        digit_tuples = list(zip(*digits_by_feature_index))
+        unique_digit_tuples = set(digit_tuples)
+        logger.debug(f'The real games have a total of {len(unique_digit_tuples)} unique digit tuples')
 
 
     def _project_game_pre_binning(self, game) -> typing.Union[np.ndarray, typing.Dict[int, float]]:
@@ -552,12 +558,12 @@ def build_behavioral_features_featurizer(
     random_seed = args.random_seed
 
     if args.map_elites_behavioral_feature_exemplar_distance_type is not None:
-        if args.map_elites_behavioral_feature_distance_exemplar_metric is None:
-            args.map_elites_behavioral_feature_distance_exemplar_metric = ExemplarDistanceMetric.L1.name
+        if args.map_elites_behavioral_feature_exemplar_distance_metric is None:
+            args.map_elites_behavioral_feature_exemplar_distance_metric = ExemplarDistanceMetric.L2.name
 
         exemplar_distance_featurizer = ExemplarDistanceFeaturizer(
-            ExemplarDistanceType(args.map_elites_behavioral_feature_exemplar_distance_type.upper()),
-            ExemplarDistanceMetric(args.map_elites_behavioral_feature_distance_exemplar_metric.upper()),
+            ExemplarDistanceType(args.map_elites_behavioral_feature_exemplar_distance_type.lower()),
+            ExemplarDistanceMetric(args.map_elites_behavioral_feature_exemplar_distance_metric.lower()),
             feature_indices=indices,
             bins_per_feature=bins_per_feature,
             ast_file_path=ast_file_path,

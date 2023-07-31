@@ -365,42 +365,21 @@ class CommonSensePredicateStatisticsSplitArgs():
             for key, val in relevant_arg_mapping.items():
                 relevant_arg_mapping[key] = [TYPE_REMAP.get(arg_type, arg_type) for arg_type in val]
 
-            # For each predicate, we imagine that it is satisfied for every possible assignment of its unused arguments
-            # (e.g., in the context of (?b - ball, ?h - bin), if the predicate (in_motion ?b) is satisfied for ?b = Dodgeball1,
-            #  then we store its satisfaction for all possible assignments of ?h). The downside of this is that we wind up
-            # storing an interval for every entry in the cartesian product of the unused variables' types -- possible TODO?
-            # unused_variables = [var for var in mapping.keys() if var not in variables]
-            # unused_variable_types = tuple([tuple(mapping[var]) for var in unused_variables])
-
-            # In cases where a variable can have multiple types, we consider all possible combinations of types
-            # possible_arg_types = ["-".join(entry) for entry in product(*[types for types in relevant_arg_mapping.values()])]
-
             filter_expr = pl.col("predicate") == predicate_name
             rename_mapping = {}
             for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
                 # TODO: think about what to do about directly quantified variables here
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
                 rename_mapping[f"arg_{i + 1}_id"] = arg_var
-
-            # predicate_df = self.data.filter((pl.col("predicate") == predicate_name) & (pl.col("arg_types").is_in(possible_arg_types)))
+            
+            # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
             predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
 
-            # all_trace_ids, domains, all_arg_ids, all_intervals = predicate_df["trace_id"], predicate_df["domain"], predicate_df["arg_ids"], predicate_df["intervals"]
-            # # unused_object_assignments = starmap(self._object_assignments, zip(domains, repeat(unused_variable_types), all_arg_ids))
+            # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
+            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")])
 
-            # start = time.perf_counter()
-            # interval_mapping = defaultdict(list)
-            # for trace_id, arg_ids, assignments, intervals in zip(all_trace_ids, all_arg_ids, unused_object_assignments, all_intervals):
-            #     for assignment in assignments:
-            #         full_variables = variables + unused_variables
-            #         full_objects = tuple(arg_ids.to_list()) + assignment
-
-            #         full_assignment = tuple(sorted([f"{var}->{id}" for var, id in zip(full_variables, full_objects)]))
-
-            #         interval_mapping[(trace_id, full_assignment)] = intervals.to_list()
-
-            # end = time.perf_counter()
-            # if DEBUG: print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
+            end = time.perf_counter()
+            if DEBUG: print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
 
         elif predicate_rule == "super_predicate":
             predicate_df = self._inner_filter(predicate["pred"], mapping, used_variables)  # type: ignore
@@ -416,10 +395,20 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             start = time.perf_counter()
             for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
+                # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
                 shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
+
+                # Join the two dataframes based on the trace identifier, domain, and shared variable columns
                 predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
-                predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+
+                # Replace the intervals column with the intersection of the current intervals and the new ones from the sub-predicate
+                predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(
+                    self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+                
+                # Remove all the 'right-hand' columns added by the join 
                 predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+
+                # Remove any rows with empty intervals
                 predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
             end = time.perf_counter()
@@ -436,6 +425,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             start = time.perf_counter()
             for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
+                # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
                 shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
                 predicate_df = predicate_df.join(sub_predicate_df, how="outer", on=["trace_id", "domain"] + shared_var_columns)
                 predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
@@ -468,9 +458,13 @@ class CommonSensePredicateStatisticsSplitArgs():
             # If they're missing in the sub_predicate_df, add them, with an empty interval
             potential_missing_values_df = pl.DataFrame(dict(trace_id=trace_ids, domain=domains, intervals=intervals, **assignment_columns))
 
+            # Now, for each possible combination of args on each trace / domain, 'intervals' will contain the truth intervals if 
+            # they exist and null otherwise, and 'intervals_right' will contain the empty interval
             predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=["trace_id", "domain"] + relevant_vars)
+            
             # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
             predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+            
             # Invert intervals will then flip them to be the entire length of the trace
             predicate_df.replace("intervals", predicate_df.select("intervals", "trace_id").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
             predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
@@ -615,7 +609,7 @@ if __name__ == '__main__':
     for i in range(N_ITER):
         # print(f"\n====================")
         inner_start = time.perf_counter()
-        stats.filter(test_pred_or, all_block_test_mapping)
+        stats.filter(test_pred_2, test_mapping)
         # inner_end = time.perf_counter()
         # print(f"Time per iteration: {'%.5f' % (inner_end - inner_start)}s")
     end = time.perf_counter()

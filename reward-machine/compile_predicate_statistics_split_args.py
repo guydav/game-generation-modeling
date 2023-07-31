@@ -40,12 +40,14 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
 INTERVALS_LIST_POLARS_TYPE = pl.List(pl.List(pl.Int64))
 
 
+# Maps from types returned by unity to the types used in the DSL
 TYPE_REMAP = {
-    "hexagonal_bin": "garbagecan", "bridge_block": "bridgeblock", "cube_block": "cubeblock",
-    "cylindrical_block": "cylinderblock", "flat_block": "flatrectblock",
-    "pyramid_block": "pyramidblock", "tall_cylindrical_block": "longcylinderblock",
-    "tall_rectangular_block": "tallrectblock", "triangle_block": "triangleblock"
+    "garbagecan": "hexagonal_bin", "bridgeblock": "bridge_block", "cubeblock": "cube_block",
+    "cylinderblock": "cylindrical_block", "flatrectblock": "flat_block",
+    "pyramidblock": "pyramid_block", "longcylinderblock": "tall_cylindrical_block",
+    "tallrectblock": "tall_rectangular_block", "triangleblock": "triangle_block"
 }
+
 DEBUG = False
 PROFILE = False
 
@@ -83,10 +85,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             self.data.to_pickle(stats_filename)
             pickle.dump(self.trace_lengths_and_domains, open(trace_lengths_and_domains_filename, 'wb'))
 
-        # Convert to polars and combine the arg types field for easier selection
-        # def join_args(args):
-        #     return "-".join(args)
-        # self.data["arg_types"] = self.data["arg_types"].apply(join_args)
+        # Convert to polars
         self.data = pl.from_pandas(self.data)
 
         # Cache calls to get_object_assignments
@@ -293,7 +292,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
                                     for i, (arg_id, arg_type) in enumerate(zip(arg_ids, arg_types)):
                                         info[f"arg_{i + 1}_id"] = arg_id
-                                        info[f"arg_{i + 1}_type"] = arg_type
+                                        info[f"arg_{i + 1}_type"] = TYPE_REMAP.get(arg_type, arg_type)
                                     predicate_satisfaction_mapping[key] = info
 
                                 elif predicate_satisfaction_mapping[key]['intervals'][-1][1] is not None:
@@ -359,11 +358,6 @@ class CommonSensePredicateStatisticsSplitArgs():
                     relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
                 elif not var.startswith("?"):
                     relevant_arg_mapping[var] = [var]
-
-            # Apply the type remapping, when needed. TODO: this is probably pretty slow -- best would be to just be consistent about
-            # type naming
-            for key, val in relevant_arg_mapping.items():
-                relevant_arg_mapping[key] = [TYPE_REMAP.get(arg_type, arg_type) for arg_type in val]
 
             filter_expr = pl.col("predicate") == predicate_name
             rename_mapping = {}
@@ -603,7 +597,7 @@ if __name__ == '__main__':
         tracer.start()
 
     test_out = stats.filter(test_pred_desk_or, block_desk_test_mapping)
-    # _print_results_as_expected_intervals(test_out)
+    _print_results_as_expected_intervals(test_out)
     start = time.perf_counter()
     N_ITER = 100
     for i in range(N_ITER):

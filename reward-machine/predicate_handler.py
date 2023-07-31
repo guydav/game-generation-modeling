@@ -419,28 +419,28 @@ def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Unio
 
 def _pred_agent_holds(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
-    if isinstance(objects[0], PseudoObject):
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
     return agent.held_object == objects[0].object_id
 
 
 def _pred_broken(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
-    if isinstance(objects[0], PseudoObject):
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
     return objects[0].is_open
 
 
 def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
-    if isinstance(objects[0], PseudoObject):
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
     return objects[0].is_open
 
 
 def _pred_toggled_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 1
-    if isinstance(objects[0], PseudoObject):
+    if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
     return objects[0].is_toggled
 
@@ -458,6 +458,9 @@ def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[Obj
 
         object_1_types = set([objects[0]])
 
+    elif isinstance(objects[0], AgentState):
+        object_1_types = set(["agent"])
+
     else:
         object_1_types = get_object_types(objects[0])  # type: ignore
 
@@ -466,6 +469,9 @@ def _pred_same_type(agent: AgentState, objects: typing.Sequence[typing.Union[Obj
             raise ValueError(f"Invalid object type: {objects[1]} (may be a color)")
 
         object_2_types = set([objects[1]])
+
+    elif isinstance(objects[0], AgentState):
+        object_2_types = set(["agent"])
 
     else:
         object_2_types = get_object_types(objects[1])  # type: ignore
@@ -484,6 +490,10 @@ IN_MARGIN = 0.05
 
 def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
+
+    # The agent cannot be a container or contained in another object
+    if isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
+        return False
 
     first_pseudo = isinstance(objects[0], PseudoObject)
     second_pseudo = isinstance(objects[1], PseudoObject)
@@ -513,6 +523,10 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
+    
+    elif isinstance(objects[0], AgentState):
+        return agent.last_movement_result # TODO: does this contain the information we want?
+
     return not (np.allclose(objects[0].velocity, 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD) and \
         np.allclose(objects[0].angular_velocity, 0, atol=IN_MOTION_ZERO_VELOCITY_THRESHOLD))
 
@@ -550,6 +564,10 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
         elif second_building:
             return _building_touch(agent, objects[1], objects[0])  # type: ignore
+        
+    # TODO (GT 2023-07-31): do we have a way to detect this? Does the agent show up on an object's touching_objects list?
+    elif isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
+        return False
 
     elif first_pseudo:
         obj = typing.cast(ObjectState, objects[1])
@@ -560,6 +578,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
+    
     elif second_pseudo:
         obj = typing.cast(ObjectState, objects[0])
         pseudo_obj = objects[1]
@@ -569,6 +588,7 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
         return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
+    
     else:
         return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
 
@@ -680,18 +700,18 @@ def _pred_adjacent(agent: AgentState, objects: typing.Sequence[typing.Union[Obje
     adjacent_by_z = z_displacement <= threshold_dist and x_overlap
     adjacent_by_dist = object_dist <= threshold_dist
 
-    if isinstance(objects[1], PseudoObject) and objects[1].name == "south_wall":
-        print("\n==========\nObject:", objects[0].name)
-        print("Object position:", objects[0].bbox_center)
-        print("Object extents:", objects[0].bbox_extents)
+    # if isinstance(objects[1], PseudoObject) and objects[1].name == "south_wall":
+    #     print("\n==========\nObject:", objects[0].name)
+    #     print("Object position:", objects[0].bbox_center)
+    #     print("Object extents:", objects[0].bbox_extents)
 
-        print("Wall position:", objects[1].bbox_center)
-        print("Wall extents:", objects[1].bbox_extents)
+    #     print("Wall position:", objects[1].bbox_center)
+    #     print("Wall extents:", objects[1].bbox_extents)
 
-        print("\nThreshold:", threshold_dist)
-        print("Adjacent by x:", x_displacement, z_overlap)
-        print("Adjacent by z:", z_displacement, x_overlap)
-        print("Adjacent by dist:", adjacent_by_dist)
+    #     print("\nThreshold:", threshold_dist)
+    #     print("Adjacent by x:", x_displacement, z_overlap)
+    #     print("Adjacent by z:", z_displacement, x_overlap)
+    #     print("Adjacent by dist:", adjacent_by_dist)
 
     return adjacent_by_dist or adjacent_by_x or adjacent_by_z
 

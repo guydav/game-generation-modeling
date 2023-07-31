@@ -22,7 +22,8 @@ from utils import (extract_predicate_function_name,
                    extract_variable_type_mapping,
                    get_project_dir,
                    get_object_assignments,
-                   FullState)
+                   FullState,
+                   AgentState)
 from ast_parser import PREFERENCES
 from ast_printer import ast_section_to_string
 from predicate_handler import PREDICATE_LIBRARY_RAW
@@ -86,6 +87,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             pickle.dump(self.trace_lengths_and_domains, open(trace_lengths_and_domains_filename, 'wb'))
 
         # Convert to polars
+        breakpoint()
         self.data = pl.from_pandas(self.data)
 
         # Cache calls to get_object_assignments
@@ -114,7 +116,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         room_type = self._domain_key(trace['scene'])
         room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
-        room_objects -= set(UNITY_PSEUDO_OBJECTS.keys())
+        # room_objects -= set(UNITY_PSEUDO_OBJECTS.keys())
         room_objects -= set(COLORS)
         room_objects -= set(SIDES)
         room_objects -= set(ORIENTATIONS)
@@ -251,10 +253,10 @@ class CommonSensePredicateStatisticsSplitArgs():
                 most_recent_object_states[obj.object_id] = obj
 
             # Check if we've received a full state update, which we detect by seeing if the most_recent_object_states
-            # includes every object in the room
+            # includes every object in the room (aside from PseudoObjects, which never receive updates)
             if not received_full_update:
                 difference = room_objects.difference(set(most_recent_object_states.keys()))
-                received_full_update = (len(difference) == 0)
+                received_full_update = (difference == set(UNITY_PSEUDO_OBJECTS.keys()))
 
             # Only perform predicate checks if we've received at least one full state update
             if received_full_update and state.n_objects_changed > 0:
@@ -267,6 +269,10 @@ class CommonSensePredicateStatisticsSplitArgs():
                     # Collect all possible sets of arguments in which at least one has been updated this step
                     else:
                         changed_this_step = [obj.object_id for obj in state.objects]
+
+                        if state.agent_state_changed:
+                            changed_this_step.append("agent")
+
                         possible_args = list(product(*([changed_this_step] + list(repeat(room_objects, n_args - 1)))))
 
                         # Filter out any sets of arguments with duplicates
@@ -274,8 +280,20 @@ class CommonSensePredicateStatisticsSplitArgs():
 
                     for arg_set in possible_args:
                         for arg_ids in permutations(arg_set):
-                            args = [most_recent_object_states[obj_id] for obj_id in arg_ids]
-                            arg_types = tuple([obj.object_type.lower() for obj in args])
+
+                            args, arg_types = [], []
+                            for obj_id in arg_ids:
+                                if obj_id == "agent":
+                                    args.append(most_recent_agent_state)
+                                    arg_types.append("agent")
+
+                                elif obj_id in UNITY_PSEUDO_OBJECTS:
+                                    args.append(UNITY_PSEUDO_OBJECTS[obj_id])
+                                    arg_types.append(UNITY_PSEUDO_OBJECTS[obj_id].object_type.lower())
+
+                                else:
+                                    args.append(most_recent_object_states[obj_id])
+                                    arg_types.append(most_recent_object_states[obj_id].object_type.lower())
 
                             key = self._predicate_key(predicate, arg_ids)
                             predicate_fn = PREDICATE_LIBRARY_RAW[predicate]
@@ -366,6 +384,8 @@ class CommonSensePredicateStatisticsSplitArgs():
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
                 rename_mapping[f"arg_{i + 1}_id"] = arg_var
             
+            breakpoint()
+
             # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
             predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
 
@@ -565,32 +585,45 @@ if __name__ == '__main__':
     test_pred_2 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['once_pred']
 
     # should be: (once (and (not (in_motion ?b) (exists (?c - hexagonal_bin) (in ?c ?b)))))
-    test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred']
+    # test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred']
 
     block_stacking_game = open(get_project_dir() + '/reward-machine/games/block_stacking.txt').read()
     block_stacking_game_ast = grammar_parser.parse(block_stacking_game)  # type: ignore
 
     test_pred_or = block_stacking_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['hold_pred']
-
     test_pred_desk_or = block_stacking_game_ast[3][1]['preferences'][1]['definition']['pref_body']['body']['exists_args']['at_end_pred']
+
+    BALL_TO_BIN_FROM_BED_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
+    agent_adj_game = open(get_project_dir() + '/reward-machine/games/test_agent_door_adjacent.txt').read()
+    agent_adj_game_ast = grammar_parser.parse(agent_adj_game)  # type: ignore
+
+    agent_adj_predicate = agent_adj_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][0]['seq_func']['once_pred']
+    agent_adj_mapping = {"?d": ["ball"]}
+
 
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
     block_test_mapping = {"?b1": ['cube_block'], "?b2": ["cube_block"]}
     block_desk_test_mapping = {"?b": ["block"]}
     all_block_test_mapping = {"?b1": ["block"], "?b2": ["block"]}
 
-
-    # trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
-    # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
 
-    # trace_paths = [f"{get_project_dir()}/reward-machine/traces/participant-traces/{trace}" for trace in
-    #                 os.listdir(f"{get_project_dir()}/reward-machine/traces/participant-traces")]
+    stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, [BALL_TO_BIN_FROM_BED_TRACE], cache_rules=[], overwrite=True)
+    out = stats.filter(agent_adj_predicate, agent_adj_mapping)
+    _print_results_as_expected_intervals(out)
+
+    exit()
+
 
     trace_paths = glob.glob(f"{get_project_dir()}/reward-machine/traces/participant-traces/*.json")
 
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
                                            "super_predicate_or", "super_predicate_not"], overwrite=False)
+    out = stats.filter(agent_adj_predicate, agent_adj_mapping)
+    _print_results_as_expected_intervals(out)
+
+    exit()
+
     tracer = None
     if PROFILE:
         tracer = VizTracer(10000000)

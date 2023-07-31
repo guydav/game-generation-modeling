@@ -10,6 +10,14 @@
                 )
             )
         )
+        (preference blockNextToOrOnDesk
+            (exists (?b - block)
+                (at-end (or
+                    (on desk ?b)
+                    (adjacent desk ?b)
+                ))
+            )
+        )
 ))
 (:scoring (+
     (* (count blockOnBlock) 1)

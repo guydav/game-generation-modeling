@@ -40,7 +40,12 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
 INTERVALS_LIST_POLARS_TYPE = pl.List(pl.List(pl.Int64))
 
 
-TYPE_REMAP = {"hexagonal_bin": "garbagecan"}
+TYPE_REMAP = {
+    "hexagonal_bin": "garbagecan", "bridge_block": "bridgeblock", "cube_block": "cubeblock",
+    "cylindrical_block": "cylinderblock", "flat_block": "flatrectblock",
+    "pyramid_block": "pyramidblock", "tall_cylindrical_block": "longcylinderblock",
+    "tall_rectangular_block": "tallrectblock", "triangle_block": "triangleblock"
+}
 DEBUG = False
 PROFILE = False
 
@@ -314,12 +319,14 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.data = pd.concat([self.data, game_df], ignore_index=True)
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
-        result = self._inner_filter(predicate, mapping)
-        return {(row_dict['trace_id'], tuple([f'{k}->{v}' for k, v in row_dict.items() if k.startswith('?')])): row_dict['intervals']
+        used_variables = set()
+        result = self._inner_filter(predicate, mapping, used_variables)
+        sorted_variables = sorted(used_variables)
+        return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
                 for row_dict in result.to_dicts()}
 
 
-    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> pl.DataFrame:
+    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], used_variables: typing.Set[str]) -> pl.DataFrame:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
@@ -343,10 +350,15 @@ class CommonSensePredicateStatisticsSplitArgs():
         if predicate_rule == "predicate":
             predicate_name = extract_predicate_function_name(predicate)  # type: ignore
             variables = extract_variables(predicate)  # type: ignore
+            used_variables.update(variables)
 
             # Restrict the mapping to just the referenced variables and expand meta-types
-            relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
-                                    for var in variables if var in mapping}
+            relevant_arg_mapping = {}
+            for var in variables:
+                if var in mapping:
+                    relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
+                elif not var.startswith("?"):
+                    relevant_arg_mapping[var] = [var]
 
             # Apply the type remapping, when needed. TODO: this is probably pretty slow -- best would be to just be consistent about
             # type naming
@@ -366,6 +378,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             filter_expr = pl.col("predicate") == predicate_name
             rename_mapping = {}
             for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
+                # TODO: think about what to do about directly quantified variables here
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
                 rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
@@ -390,20 +403,20 @@ class CommonSensePredicateStatisticsSplitArgs():
             # if DEBUG: print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")
 
         elif predicate_rule == "super_predicate":
-            predicate_df = self._inner_filter(predicate["pred"], mapping)  # type: ignore
+            predicate_df = self._inner_filter(predicate["pred"], mapping, used_variables)  # type: ignore
 
         elif predicate_rule == "super_predicate_and":
             and_args = predicate["and_args"]
             if isinstance(and_args, tatsu.ast.AST):
                 and_args = [and_args]
 
-            sub_predicate_dfs = [self._inner_filter(and_arg, mapping) for and_arg in and_args]  # type: ignore
+            sub_predicate_dfs = [self._inner_filter(and_arg, mapping, used_variables) for and_arg in and_args]  # type: ignore
 
             predicate_df = sub_predicate_dfs[0]
 
             start = time.perf_counter()
             for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
-                shared_var_columns = [c for c in set(predicate_df.columns) & set(sub_predicate_df.columns) if c.startswith('?')]
+                shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
                 predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
                 predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
                 predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
@@ -417,24 +430,24 @@ class CommonSensePredicateStatisticsSplitArgs():
             if isinstance(or_args, tatsu.ast.AST):
                 or_args = [or_args]
 
-            sub_predicate_dfs = [self._inner_filter(or_arg, mapping) for or_arg in or_args]  # type: ignore
+            sub_predicate_dfs = [self._inner_filter(or_arg, mapping, used_variables) for or_arg in or_args]  # type: ignore
 
             predicate_df = sub_predicate_dfs[0]
 
             start = time.perf_counter()
             for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
-                shared_var_columns = [c for c in set(predicate_df.columns) & set(sub_predicate_df.columns) if c.startswith('?')]
+                shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
                 predicate_df = predicate_df.join(sub_predicate_df, how="outer", on=["trace_id", "domain"] + shared_var_columns)
                 predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
                 predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
                 predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         elif predicate_rule == "super_predicate_not":
-            predicate_df = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
+            predicate_df = self._inner_filter(predicate["not_args"], mapping, used_variables)  # type: ignore
             start = time.perf_counter()
 
             # For each trace ID, and each assignment of the vars that exist in the sub_predicate_df so far:
-            relevant_vars = [c for c in predicate_df.columns if c.startswith('?')]
+            relevant_vars = [c for c in predicate_df.columns if c in used_variables]
             relevant_var_mapping = {var: mapping[var] for var in relevant_vars}
 
             # For each cartesian product of the valid assignments for those vars given the domain
@@ -456,6 +469,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             potential_missing_values_df = pl.DataFrame(dict(trace_id=trace_ids, domain=domains, intervals=intervals, **assignment_columns))
 
             predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=["trace_id", "domain"] + relevant_vars)
+            # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
             predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
             # Invert intervals will then flip them to be the entire length of the trace
             predicate_df.replace("intervals", predicate_df.select("intervals", "trace_id").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
@@ -472,7 +486,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         #     unused_variable_types = [mapping[var] for var in unused_variables]
 
         #     interval_mapping = defaultdict(lambda: defaultdict(list))
-        #     sub_intervals = self._inner_filter(predicate["exists_args"], {**mapping, **variable_type_mapping})
+        #     sub_intervals = self._inner_filter(predicate["exists_args"], {**mapping, **variable_type_mapping}, used_variables)
 
         #     # Groups the intervals by the part of the mapping that *isn't* within the (exists)
         #     def keyfunc(element):
@@ -514,7 +528,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         #     unused_variable_types = [mapping[var] for var in unused_variables]
 
         #     interval_mapping = defaultdict(lambda: defaultdict(list))
-        #     sub_intervals = self._inner_filter(predicate["forall_args"], {**mapping, **variable_type_mapping})
+        #     sub_intervals = self._inner_filter(predicate["forall_args"], {**mapping, **variable_type_mapping}, used_variables)
 
         #     # Groups the intervals by the part of the mapping that *isn't* within the (forall)
         #     def keyfunc(element):
@@ -565,8 +579,16 @@ if __name__ == '__main__':
     # should be: (once (and (not (in_motion ?b) (exists (?c - hexagonal_bin) (in ?c ?b)))))
     test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred']
 
+    block_stacking_game = open(get_project_dir() + '/reward-machine/games/block_stacking.txt').read()
+    block_stacking_game_ast = grammar_parser.parse(block_stacking_game)  # type: ignore
+
+    test_pred_or = block_stacking_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['hold_pred']
+
+    test_pred_desk_or = block_stacking_game_ast[3][1]['preferences'][1]['definition']['pref_body']['body']['exists_args']['at_end_pred']
 
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
+    block_test_mapping = {"?b1": ['cube_block'], "?b2": ["cube_block"]}
+    block_desk_test_mapping = {"?b": ["block"]}
     # trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
     # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
@@ -583,8 +605,8 @@ if __name__ == '__main__':
         tracer = VizTracer(10000000)
         tracer.start()
 
-    test_out = stats.filter(test_pred_2, test_mapping)
-    # _print_results_as_expected_intervals(test_out)
+    test_out = stats.filter(test_pred_desk_or, block_desk_test_mapping)
+    _print_results_as_expected_intervals(test_out)
     start = time.perf_counter()
     N_ITER = 100
     for i in range(N_ITER):

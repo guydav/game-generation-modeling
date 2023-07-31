@@ -37,7 +37,12 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     # ("between", 3),
 )
 
-TYPE_REMAP = {"hexagonal_bin": "garbagecan"}
+TYPE_REMAP = {
+    "hexagonal_bin": "garbagecan", "bridge_block": "bridgeblock", "cube_block": "cubeblock",
+    "cylindrical_block": "cylinderblock", "flat_block": "flatrectblock",
+    "pyramid_block": "pyramidblock", "tall_cylindrical_block": "longcylinderblock",
+    "tall_rectangular_block": "tallrectblock", "triangle_block": "triangleblock"
+}
 DEBUG = False
 PROFILE = False
 
@@ -280,7 +285,7 @@ class CommonSensePredicateStatistics():
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         used_variables = set()
         filter_results = self._inner_filter(predicate, mapping, used_variables)
-        return {(key[0], tuple([key_mapping for key_mapping in key[1] if any(key_mapping.startswith(v) for v in used_variables)])): intervals
+        return {(key[0], tuple(sorted([key_mapping for key_mapping in key[1] if any(key_mapping.startswith(v) for v in used_variables)]))): intervals
             for key, intervals in filter_results.items()
         }
 
@@ -310,12 +315,17 @@ class CommonSensePredicateStatistics():
             variables = extract_variables(predicate)  # type: ignore
             used_variables.update(variables)
 
-            # Restrict the mapping to just the referenced variables and expand meta-types
-            relevant_arg_mapping = {var: sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
-                                    for var in variables if var in mapping}
+            # Restrict the mapping to just the referenced variables and expand meta-types + support for directly quantified objects
+            relevant_arg_mapping = {}
+            for var in variables:
+                if var in mapping:
+                    relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
+                elif not var.startswith("?"):
+                    relevant_arg_mapping[var] = [var]
 
             # Apply the type remapping, when needed. TODO: this is probably pretty slow -- best would be to just be consistent about
             # type naming
+            # TODO (gd1279): we should move this to the preprocessing step -- we don't care if it's slow then?
             for key, val in relevant_arg_mapping.items():
                 relevant_arg_mapping[key] = [TYPE_REMAP.get(arg_type, arg_type) for arg_type in val]
 
@@ -516,8 +526,17 @@ if __name__ == '__main__':
     # should be: (once (and (not (in_motion ?b) (exists (?c - hexagonal_bin) (in ?c ?b)))))
     test_pred_3 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][3]['seq_func']['once_pred']
 
+    block_stacking_game = open(get_project_dir() + '/reward-machine/games/block_stacking.txt').read()
+    block_stacking_game_ast = grammar_parser.parse(block_stacking_game)  # type: ignore
+
+    test_pred_or = block_stacking_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['hold_pred']
+
+    test_pred_desk_or = block_stacking_game_ast[3][1]['preferences'][1]['definition']['pref_body']['body']['exists_args']['at_end_pred']
+
 
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
+    block_test_mapping = {"?b1": ['cube_block'], "?b2": ["cube_block"]}
+    block_desk_test_mapping = {"?b": ["block"]}
     trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
     # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
@@ -551,8 +570,8 @@ if __name__ == '__main__':
         tracer = VizTracer(10000000)
         tracer.start()
 
-    test_out = stats.filter(test_pred_2, test_mapping)
-    # _print_results_as_expected_intervals(test_out)
+    test_out = stats.filter(test_pred_desk_or, block_desk_test_mapping)
+    _print_results_as_expected_intervals(test_out)
     start = time.perf_counter()
     N_ITER = 100
     for i in range(N_ITER):

@@ -59,6 +59,7 @@ TEST_GAME_LIBRARY = {
     'test-agent-adjacent': load_game("test_agent_door_adjacent"),
     'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
     'test-ball-from-bed': load_game("ball_to_bin_from_bed"),
+    'test-block-stacking': load_game("block_stacking"),
 }
 
 TEST_CASES = [

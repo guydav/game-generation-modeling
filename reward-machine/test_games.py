@@ -252,13 +252,13 @@ TEST_CASES = [
     },),
     ('throw-block-cache-test', TEST_BLOCK_CACHE_TEST, 3.0, {
         'throwWithStackedBlocksVerI': [
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=312, end=546, measures={})
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=313, end=546, measures={})
         ],
         'throwWithStackedBlocksVerII': [
-            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', '?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83'}, start=312, end=545, measures={})
+            PreferenceSatisfaction(mapping={'?d': 'Dodgeball|-02.97|+01.29|-02.28', '?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83'}, start=313, end=545, measures={})
         ],
         'throwWithStackedBlocksVerIII': [
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=312, end=545, measures={})
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?b': 'CubeBlock|+00.20|+00.29|-02.83', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=313, end=545, measures={})
         ]
     },),
     ('test-ball-from-bed', BALL_TO_BIN_FROM_BED_TRACE, 1.0, {

@@ -537,6 +537,9 @@ if __name__ == '__main__':
     test_mapping = {"?b": ["ball"], "?h": ["hexagonal_bin"]}
     block_test_mapping = {"?b1": ['cube_block'], "?b2": ["cube_block"]}
     block_desk_test_mapping = {"?b": ["block"]}
+    all_block_test_mapping = {"?b1": ["block"], "?b2": ["block"]}
+
+
     trace_path = pathlib.Path(get_project_dir() + '/reward-machine/traces/three_wall_to_bin_bounces-RErerecorded.json')
     cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
     # stats = CommonSensePredicateStatistics(cache_dir, [trace_path], overwrite=True)
@@ -571,13 +574,13 @@ if __name__ == '__main__':
         tracer.start()
 
     test_out = stats.filter(test_pred_desk_or, block_desk_test_mapping)
-    _print_results_as_expected_intervals(test_out)
+    # _print_results_as_expected_intervals(test_out)
     start = time.perf_counter()
-    N_ITER = 100
+    N_ITER = 10
     for i in range(N_ITER):
         # print(f"\n====================")
         inner_start = time.perf_counter()
-        stats.filter(test_pred_1, test_mapping)
+        stats.filter(test_pred_or, all_block_test_mapping)
         # inner_end = time.perf_counter()
         # print(f"Time per iteration: {'%.5f' % (inner_end - inner_start)}s")
     end = time.perf_counter()

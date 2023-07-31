@@ -316,7 +316,8 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
                  ast_file_path: str, grammar_parser: tatsu.grammars.Grammar,  # type: ignore
                  fitness_featurizer: ASTFitnessFeaturizer, feature_names: typing.List[str],
                  n_components: int = DEFAULT_N_COMPONENTS, random_seed: int = DEFAULT_RANDOM_SEED,
-                 should_init_pca: bool = True, feature_prefix: str = 'pca'):
+                 should_init_pca: bool = True, should_init_features: bool = True, feature_prefix: str = 'pca'):
+
         self.feature_indices = feature_indices
         self.bins_per_feature = bins_per_feature
         self.ast_file_path = ast_file_path
@@ -331,13 +332,13 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.output_feature_names = [self._feature_name(i) for i in self.feature_indices]
 
         if should_init_pca:
-            self._init_pca()
+            self._init_pca(should_init_features)
 
     def _game_to_feature_vector(self, game) -> np.ndarray:
         game_features = self.fitness_featurizer.parse(game, return_row=True)  # type: ignore
         return np.array([game_features[name] for name in self.feature_names])  # type: ignore
 
-    def _init_pca(self):
+    def _init_pca(self, init_features: bool):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
         game_features = []
         for game in game_asts:
@@ -348,20 +349,21 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         self.pca = PCA(n_components=self.n_components, random_state=self.random_seed)
         projections = self.pca.fit_transform(features_array)
 
-        for feature_index in self.feature_indices:
-            feature_values = projections[:, feature_index]
-            step = 1 / self.bins_per_feature
-            quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
-            self.bins_by_feature_index[feature_index] = quantiles
+        if init_features:
+            for feature_index in self.feature_indices:
+                feature_values = projections[:, feature_index]
+                step = 1 / self.bins_per_feature
+                quantiles = np.quantile(feature_values, np.linspace(step, 1 - step, self.bins_per_feature - 1))
+                self.bins_by_feature_index[feature_index] = quantiles
 
-            digits = np.digitize(feature_values, quantiles)
-            counts = Counter(digits)
-            logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
+                digits = np.digitize(feature_values, quantiles)
+                counts = Counter(digits)
+                logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
 
-        all_game_features = [self.get_game_features(game) for game in game_asts]
-        all_game_feature_tuples = [tuple(game_features[name] for name in self.output_feature_names) for game_features in all_game_features]
-        all_game_feature_tuples = set(all_game_feature_tuples)
-        logger.debug(f'The real games have {len(all_game_feature_tuples)} unique feature tuples')
+            all_game_features = [self.get_game_features(game) for game in game_asts]
+            all_game_feature_tuples = [tuple(game_features[name] for name in self.output_feature_names) for game_features in all_game_features]
+            all_game_feature_tuples = set(all_game_feature_tuples)
+            logger.debug(f'The real games have {len(all_game_feature_tuples)} unique feature tuples')
 
     def _feature_name(self, feature_index: int):
         return f'{self.feature_prefix}_{feature_index}'
@@ -415,7 +417,7 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
 
         should_init_pca = distance_type == ExemplarDistanceType.PCA
         super().__init__(feature_indices, bins_per_feature, ast_file_path, grammar_parser, fitness_featurizer, feature_names, n_components, random_seed,
-                         should_init_pca=should_init_pca, feature_prefix='exemplar_distance')
+                         should_init_pca=should_init_pca, should_init_features=False, feature_prefix='exemplar_distance')
 
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
         if self.distance_type == ExemplarDistanceType.STRING_EDIT:
@@ -425,7 +427,7 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
             self.exemplars = {i: game_strings[i] for i in feature_indices}
             exemplar_distances = {i: [edit_distance(game_strings[i], gs) for gs in game_strings] for i in feature_indices}
 
-        elif self.distance_type in (ExemplarDistanceType.FEATURE_VECTOR, ExemplarDistanceType.PCA):
+        elif self.distance_type == ExemplarDistanceType.FEATURE_VECTOR or self.distance_type == ExemplarDistanceType.PCA:
             game_features = []
             for game in game_asts:
                 game_vector = self._game_to_feature_vector(game)

@@ -53,8 +53,10 @@ TYPE_REMAP = {
 
 DEBUG = False
 PROFILE = False
+DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME = 'trace_lengths_{traces_hash}.pkl'
+DEFAULT_BASE_TRACE_PATH = "reward-machine/traces/participant-traces/"
 
 
 class PredicateNotImplementedException(Exception):
@@ -78,7 +80,8 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     def __init__(self,
                  cache_dir: typing.Union[str, pathlib.Path],
-                 trace_paths: typing.Sequence[str],
+                 trace_names: typing.Sequence[str],
+                 base_trace_path: typing.Optional[typing.Union[str, pathlib.Path]] = None,
                  cache_rules: typing.Optional[typing.Sequence[str]] = None,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME,
@@ -87,10 +90,10 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.cache_dir = cache_dir
 
         # Compute hash of trace paths
-        trace_paths_hash = stable_hash_list(trace_paths)[:trace_hash_n_characters]
+        trace_names_hash = stable_hash_list(trace_names)[:trace_hash_n_characters]
 
-        stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_paths_hash))
-        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_paths_hash))
+        stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
+        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
         open_method = gzip.open if stats_filename.endswith('.gz') else open
 
         if os.path.exists(stats_filename) and not overwrite:
@@ -100,8 +103,12 @@ class CommonSensePredicateStatisticsSplitArgs():
                 self.trace_lengths_and_domains = pickle.load(f)
 
         else:
-            if trace_paths is None:
-                raise ValueError("Must provide trace paths if cache does not exist")
+            if base_trace_path is None:
+                raise ValueError("Must provide a valid path to traces if cache does not exist")
+            
+            print(f"No cache file found at {stats_filename}. Building from scratch...")
+
+            trace_paths = [os.path.join(get_project_dir(), base_trace_path, f"{trace_name}.json") for trace_name in trace_names]
 
             # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
             # add additional columns here
@@ -717,8 +724,6 @@ CURRENT_TEST_TRACE_LIST = [
     'jCc0kkmGUg3xUmUSXg5w-gameplay-attempt-2-rerecorded',
     '7r4cgxJHzLJooFaMG1Rd-preCreateGame-rerecorded'
 ]
-CURRENT_TEST_TRACE_LIST = [os.path.join(get_project_dir(), 'reward-machine/traces/participant-traces', trace + '.json') for trace in CURRENT_TEST_TRACE_LIST]
-
 
 def _print_results_as_expected_intervals(filter_results):
     print(' ' * 8 + 'expected_intervals={')
@@ -764,9 +769,11 @@ if __name__ == '__main__':
     block_desk_test_mapping = {"?b": ["block"]}
     all_block_test_mapping = {"?b1": ["block"], "?b2": ["block"]}
 
-    cache_dir = pathlib.Path(get_project_dir() + '/reward-machine/caches')
-
-    stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, CURRENT_TEST_TRACE_LIST, cache_rules=[], overwrite=False)
+    stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
+                                                    trace_names=CURRENT_TEST_TRACE_LIST,
+                                                    base_trace_path=DEFAULT_BASE_TRACE_PATH,
+                                                    cache_rules=[],
+                                                    overwrite=False)
     out = stats.filter(test_pred_2, test_mapping)
     _print_results_as_expected_intervals(out)
 

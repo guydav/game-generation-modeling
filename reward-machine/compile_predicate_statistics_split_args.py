@@ -45,10 +45,25 @@ INTERVALS_LIST_POLARS_TYPE = pl.List(pl.List(pl.Int64))
 
 # Maps from types returned by unity to the types used in the DSL
 TYPE_REMAP = {
-    "garbagecan": "hexagonal_bin", "bridgeblock": "bridge_block", "cubeblock": "cube_block",
-    "cylinderblock": "cylindrical_block", "flatrectblock": "flat_block",
-    "pyramidblock": "pyramid_block", "longcylinderblock": "tall_cylindrical_block",
-    "tallrectblock": "tall_rectangular_block", "triangleblock": "triangle_block"
+    "alarmclock": "alarm_clock",
+    "bridgeblock": "bridge_block",
+    "creditcard": "credit_card",
+    "cubeblock": "cube_block",
+    "curvedramp": "curved_wooden_ramp",
+    "cylinderblock": "cylindrical_block",
+    "desklamp": "lamp",
+    "dogbed": "doggie_bed",
+    "flatrectblock": "flat_block",
+    "garbagecan": "hexagonal_bin",
+    "keychain": "key_chain",
+    "longcylinderblock": "tall_cylindrical_block",
+    "lightswitch": "main_light_switch",
+    "pyramidblock": "pyramid_block",
+    "sidetable": "side_table",
+    "smallslide": "triangular_ramp",
+    "tallrectblock": "tall_rectangular_block",
+    "teddybear": "teddy_bear",
+    "triangleblock": "triangle_block"
 }
 
 DEBUG = False
@@ -106,7 +121,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             if base_trace_path is None:
                 raise ValueError("Must specify base_trace_path if cache file does not exist")
 
-            print(f"No cache file found at {stats_filename}. Building from scratch...")
+            print(f"No cache file found at {stats_filename}, building from scratch...")
 
             trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json") for trace_name in trace_names]
 
@@ -127,7 +142,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         self._trace_lengths_and_domains_to_df()
 
         # Convert to polars
-        # breakpoint()
         self.data = pl.from_pandas(self.data)
 
         # Cache calls to get_object_assignments

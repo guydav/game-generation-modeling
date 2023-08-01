@@ -4,6 +4,7 @@
     (preference throwAdjacentToDoor
         (exists (?d - ball)
             (then 
+                (once (agent_holds ?d))
                 (once (and (agent_holds ?d) (adjacent agent door) (on floor bed)))
                 (hold (and (not (agent_holds ?d)) (in_motion ?d))) 
                 (once (not (in_motion ?d)))

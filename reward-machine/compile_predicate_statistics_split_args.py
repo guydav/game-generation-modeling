@@ -248,6 +248,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             if state.agent_state_changed:
                 most_recent_agent_state = state.agent_state
 
+
             # And to objects
             for obj in state.objects:
                 most_recent_object_states[obj.object_id] = obj
@@ -259,7 +260,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                 received_full_update = (difference == set(UNITY_PSEUDO_OBJECTS.keys()))
 
             # Only perform predicate checks if we've received at least one full state update
-            if received_full_update and state.n_objects_changed > 0:
+            if received_full_update and (state.n_objects_changed > 0 or state.agent_state_changed):
                 for predicate, n_args in COMMON_SENSE_PREDICATES_AND_FUNCTIONS:
 
                     # Some predicates take only an empty list for arguments
@@ -383,8 +384,6 @@ class CommonSensePredicateStatisticsSplitArgs():
                 # TODO: think about what to do about directly quantified variables here
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
                 rename_mapping[f"arg_{i + 1}_id"] = arg_var
-            
-            breakpoint()
 
             # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
             predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
@@ -593,7 +592,7 @@ if __name__ == '__main__':
     test_pred_or = block_stacking_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['hold_pred']
     test_pred_desk_or = block_stacking_game_ast[3][1]['preferences'][1]['definition']['pref_body']['body']['exists_args']['at_end_pred']
 
-    BALL_TO_BIN_FROM_BED_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
+    BALL_TO_BIN_FROM_BED_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/FhhBELRaBFiGGvX0YG7W-preCreateGame-rerecorded.json')
     agent_adj_game = open(get_project_dir() + '/reward-machine/games/test_agent_door_adjacent.txt').read()
     agent_adj_game_ast = grammar_parser.parse(agent_adj_game)  # type: ignore
 

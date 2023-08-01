@@ -620,6 +620,80 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
                          'setup_quantified_objects_used')
 
 
+PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
+PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
+
+
+class PredicateFoundInData(FitnessTerm):
+    min_interval_count: int
+    min_trace_count: int
+    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
+                                              typing.Dict[typing.Tuple[str, typing.Tuple[str, ...]], typing.List[typing.List[int]]]]
+    predicates_found: typing.List[int]
+    rules_to_child_keys: typing.Dict[str, str]
+
+    def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
+                 min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+
+        super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
+        self.rules_to_child_keys = rules_to_child_keys
+        self.min_trace_count = min_trace_count
+        self.min_interval_count = min_interval_count
+        # TODO: instantiate reference to predicate_data_estimator
+
+    def game_start(self) -> None:
+        self.predicates_found = []
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            rule = ast.parseinfo.rule  # type: ignore
+            if rule not in self.rules_to_child_keys:
+                raise ValueError(f'Rule {rule} not in {self.rules_to_child_keys}')
+
+            child_key = self.rules_to_child_keys[rule]
+            if child_key not in ast:
+                raise ValueError(f'Child key {child_key} not in {ast}')
+
+            pred = ast[child_key]
+            context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
+            # TODO: convert from this format to the one the thing expects the mapping to be in
+            # mapping = ...(context_variables)
+            # intervals = self.predicate_data_estimator(pred, mapping)
+            # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
+            intervals = {}
+            predicate_found = len(intervals) > self.min_interval_count and sum(intervals.values()) > self.min_trace_count
+            self.predicates_found.append(1 if predicate_found else 0)
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        # TODO: should this be 0 or 1 if none are found?
+        if len(self.predicates_found) == 0:
+            return 0
+        return sum(self.predicates_found) / len(self.predicates_found)
+
+
+# TODO: decide if we might want different thresholds between these two?
+
+
+class SetupSuperPredicateFoundInData(PredicateFoundInData):
+    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+        super().__init__({'setup_game_conserved': 'conserved_pred', 'setup_game_optional': 'optional_pred'},
+                         'setup_super_predicate', min_trace_count, min_interval_count)
+
+
+class PreferencesPredicateFoundInData(PredicateFoundInData):
+    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+
+        super().__init__({'once': 'once_pred', 'once_measure': 'once_measure_pred',
+                          'hold': 'hold_pred', 'while_hold': 'hold_pred',
+                          'at_end': 'at_end_pred',},
+                         'preferences', min_trace_count, min_interval_count)
+
+
+
+
 class NoAdjacentOnce(FitnessTerm):
     total_prefs: int = 0
     prefs_with_adjacent_once: int = 0

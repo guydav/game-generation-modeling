@@ -8,6 +8,7 @@ import sys
 
 # from compile_predicate_statistics import CommonSensePredicateStatistics
 from compile_predicate_statistics_split_args import CommonSensePredicateStatisticsSplitArgs as CommonSensePredicateStatistics
+from compile_predicate_statistics_split_args import CURRENT_TEST_TRACE_LIST
 from test_games import TEST_GAME_LIBRARY
 from utils import get_project_dir
 
@@ -15,6 +16,7 @@ from utils import get_project_dir
 @dataclass
 class ExpectedCompletionsTestCase:
     test_id: str
+    trace_list: typing.List[str]
     game_key: str
     predicate_selector: typing.List[typing.Union[str, int]]
     mapping: typing.Dict[str, typing.List[str]]
@@ -28,6 +30,7 @@ class ExpectedCompletionsTestCase:
 EXPECTED_COMPLETION_TEST_CASES = [
     ExpectedCompletionsTestCase(
         test_id='test (and (in_motion ?b) (not (agent_holds ?b)))',
+        trace_list=CURRENT_TEST_TRACE_LIST,
         game_key='test-ball-from-bed',
         predicate_selector=[4, 1, 'preferences', 0, 'definition', 'forall_pref', 'preferences', 'pref_body', 'body', 'exists_args', 'then_funcs', 1, 'seq_func', 'hold_pred'],
         mapping={'?b': ['ball'], '?h': ['hexagonal_bin']},
@@ -207,6 +210,7 @@ EXPECTED_COMPLETION_TEST_CASES = [
 
     ExpectedCompletionsTestCase(
         test_id='test (and (not (in_motion ?b)) (in ?h ?b)))',
+        trace_list=CURRENT_TEST_TRACE_LIST,
         game_key='test-ball-from-bed',
         predicate_selector=[4, 1, 'preferences', 0, 'definition', 'forall_pref', 'preferences', 'pref_body', 'body', 'exists_args', 'then_funcs', 2, 'seq_func', 'once_pred'],
         mapping={'?b': ['ball'], '?h': ['hexagonal_bin']},
@@ -257,6 +261,7 @@ EXPECTED_COMPLETION_TEST_CASES = [
 
     ExpectedCompletionsTestCase(
         test_id='test (or (in_motion ?b1) (on ?b2 ?b1))',
+        trace_list=CURRENT_TEST_TRACE_LIST,
         game_key='test-block-stacking',
         predicate_selector=[3, 1, 'preferences', 0, 'definition', 'pref_body', 'body', 'exists_args', 'then_funcs', 2, 'seq_func', 'hold_pred'],
         mapping={'?b1': ['cube_block'], '?b2': ['cube_block']},
@@ -462,6 +467,7 @@ EXPECTED_COMPLETION_TEST_CASES = [
 
     ExpectedCompletionsTestCase(
         test_id='test (or (on desk ?b) (adjacent desk ?b))',
+        trace_list=CURRENT_TEST_TRACE_LIST,
         game_key='test-block-stacking',
         predicate_selector=[3, 1, 'preferences', 1, 'definition', 'pref_body', 'body', 'exists_args', 'at_end_pred'],
         mapping={'?b': ['block']},
@@ -494,7 +500,7 @@ def _test_to_id(test_case: ExpectedCompletionsTestCase) -> str:
 def test_expected_completions(test_case: ExpectedCompletionsTestCase):
     cache_dir = pathlib.Path(get_project_dir() + test_case.cache_dir_relative_path)
 
-    stats = CommonSensePredicateStatistics(cache_dir, [], test_case.cache_rules, overwrite=False)  # type: ignore
+    stats = CommonSensePredicateStatistics(cache_dir, test_case.trace_list, test_case.cache_rules, overwrite=False)  # type: ignore
 
     game_def = TEST_GAME_LIBRARY[test_case.game_key]
 

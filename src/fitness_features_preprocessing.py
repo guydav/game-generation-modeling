@@ -53,6 +53,8 @@ BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'predicate_under_modal_[\w\d_]+'),
     re.compile(r'section_doesnt_exist_[\w\d_]+'),
     re.compile(r'num_preferences_defined_[\d_]+'),
+
+    re.compile(r'predicate_found_in_data_[\w\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [

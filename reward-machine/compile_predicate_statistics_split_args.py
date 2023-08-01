@@ -82,9 +82,12 @@ class CommonSensePredicateStatisticsSplitArgs():
                  cache_rules: typing.Optional[typing.Sequence[str]] = None,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME,
+                 traces_relative_path: typing.Optional[str] = None,
                  overwrite: bool = False, trace_hash_n_characters: int = 8):
 
         self.cache_dir = cache_dir
+        if traces_relative_path is None:
+            traces_relative_path = os.path.dirname(__file__)
 
         # Compute hash of trace paths
         trace_paths_hash = stable_hash_list(trace_paths)[:trace_hash_n_characters]
@@ -108,7 +111,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             self.data = pd.DataFrame(columns=['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals'])  # type: ignore
             self.trace_lengths_and_domains = {}
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
-                trace = json.load(open(trace_path, 'r'))
+                full_trace_path = os.path.join(traces_relative_path, trace_path)
+                trace = json.load(open(full_trace_path, 'r'))
                 self.process_trace(trace)
 
             self.data.to_pickle(stats_filename)
@@ -717,7 +721,7 @@ CURRENT_TEST_TRACE_LIST = [
     'jCc0kkmGUg3xUmUSXg5w-gameplay-attempt-2-rerecorded',
     '7r4cgxJHzLJooFaMG1Rd-preCreateGame-rerecorded'
 ]
-CURRENT_TEST_TRACE_LIST = [os.path.join(get_project_dir(), 'reward-machine/traces/participant-traces', trace + '.json') for trace in CURRENT_TEST_TRACE_LIST]
+CURRENT_TEST_TRACE_LIST = [os.path.join('traces/participant-traces', trace + '.json') for trace in CURRENT_TEST_TRACE_LIST]
 
 
 def _print_results_as_expected_intervals(filter_results):

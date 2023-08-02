@@ -266,6 +266,53 @@ OBJECTS_BY_ROOM_AND_TYPE = {
     }
 }
 
+SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
+    FEW_OBJECTS_ROOM: {
+        "blue_cube_block": ['CubeBlock|-00.02|+00.28|-02.83', 'CubeBlock|-00.24|+00.10|-02.83'],
+        "blue_dodgeball": ['Dodgeball|-02.95|+01.29|-02.61'],
+        "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
+        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
+        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
+        "pink_dodgeball": ['Dodgeball|-02.97|+01.29|-02.28'],
+        "rug": [],
+        "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
+        "tan_cube_block": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
+        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
+        "yellow_cube_block": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
+    },
+    MEDIUM_OBJECTS_ROOM: {
+        "blue_cube_block": ['CubeBlock|+00.50|+01.61|-02.91'],
+        "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
+        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
+        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
+        "red_dodgeball": ['Dodgeball|-02.60|+00.13|-02.18'],
+        "red_pyramid_block": ['PyramidBlock|+00.93|+01.78|-02.89'],
+        "rug": [],
+        "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
+        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
+        "yellow_cube_block": ['CubeBlock|+00.70|+01.61|-02.91'],
+    },
+    MANY_OBJECTS_ROOM: {
+        "blue_cube_block": ['CubeBlock|-02.99|+01.26|-01.49'],
+        "blue_dodgeball": ['Dodgeball|+00.19|+01.13|-02.80'],
+        "blue_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.20'],
+        "bottom_shelf": ['Shelf|+00.62|+01.01|-02.82'],
+        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
+        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
+        "green_golfball": ['Golfball|+01.05|+01.04|-02.70'],  # Orange is 'Golfball|+00.96|+01.04|-02.70', white is 'Golfball|+01.14|+01.04|-02.70'
+        "green_triangular_ramp": ['SmallSlide|-00.81|+00.14|-03.10'],  # tan/brown is 'SmallSlide|-01.31|+00.14|-03.10'
+        "pink_dodgeball": ['Dodgeball|+00.70|+01.11|-02.80'],
+        "red_dodgeball": ['Dodgeball|+00.44|+01.13|-02.80'],
+        "red_pyramid_block": ['PyramidBlock|-02.96|+01.61|-02.44'],
+        "rug": [],
+        "sliding_door": ["Window|+02.28|+00.93|-03.18", ],
+        "tan_cube_block": ['CubeBlock|-02.96|+01.26|-01.72'],
+        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
+        "yellow_cube_block": ['CubeBlock|-02.97|+01.26|-01.94'],
+        "yellow_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.66'],
+    }
+}
+
 # Add the shared objects to each of the room domains
 for room_type in OBJECTS_BY_ROOM_AND_TYPE:
     OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
@@ -322,34 +369,38 @@ ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys
 # ===================================================================================================
 
 class PseudoObject:
-        object_id: str
-        object_type: str
-        name: str
-        bbox_center: np.ndarray
-        bbox_extents: np.ndarray
-        position: np.ndarray
-        rotation: np.ndarray
+    identifiers: typing.List[str]
+    object_id: str
+    object_type: str
+    name: str
+    bbox_center: np.ndarray
+    bbox_extents: np.ndarray
+    position: np.ndarray
+    rotation: np.ndarray
 
-        def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray,
-            extents: np.ndarray, rotation: np.ndarray):
+    def __init__(self, object_id: str, object_type: str, name: str, position: np.ndarray,
+        extents: np.ndarray, rotation: np.ndarray, alternative_names: typing.Optional[typing.List[str]] = None):
 
-            self.object_id = object_id
-            self.object_type = object_type
-            self.name = name
-            self.position = position
-            self.bbox_center = position
-            self.bbox_extents = extents
-            self.rotation = rotation
+        self.object_id = object_id
+        self.object_type = object_type
+        self.name = name
+        self.position = position
+        self.bbox_center = position
+        self.bbox_extents = extents
+        self.rotation = rotation
+        if alternative_names is None:
+            alternative_names = []
+        self.identifiers = [self.object_id, self.object_type] + alternative_names
 
 
-        def __getitem__(self, item: typing.Any) -> typing.Any:
-            if item in self.__dict__:
-                return self.__dict__[item]
+    def __getitem__(self, item: typing.Any) -> typing.Any:
+        if item in self.__dict__:
+            return self.__dict__[item]
 
-            raise ValueError(f'PsuedoObjects have only a name and an id, not a {item}')
+        raise ValueError(f'PsuedoObjects have only a name and an id, not a {item}')
 
-        def __contains__(self, item):
-            return item in self.__dict__
+    def __contains__(self, item):
+        return item in self.__dict__
 
 
 WALL_ID = 'FP326:StandardWallSize.021'
@@ -361,6 +412,11 @@ DOOR_TYPE = 'door'
 DOOR_ID = 'FP326:StandardDoor1.019'
 DOOR_TYPE = 'door'
 
+RUG_ID = 'FP326:Rug'
+RUG_TYPE = 'rug'
+RUG = 'rug'
+RUG_ALT_NAME = 'HighFrictionTrigger'
+
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
@@ -370,6 +426,7 @@ UNITY_PSEUDO_OBJECTS = {
         EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, EAST_WALL, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the desk
         WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WEST_WALL, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the bed
 
-        # TODO: need to determine the extent of the door in the x dimension
-        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.1875, 1.35, 0.675]), extents=np.array([0.3, 1.35, 0.075]), rotation=np.zeros(3)),
+        DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.448, 1.35, 0.675]), extents=np.array([0.423, 1.35, 0.075]), rotation=np.zeros(3)),
+
+        RUG: PseudoObject(RUG_ID, RUG_TYPE, RUG, position=np.array([-1.485, 0.05, -1.673]), extents=np.array([1.338, 0.05, 0.926]), rotation=np.array([0, 90, 0]), alternative_names=[RUG_ALT_NAME]),
 }

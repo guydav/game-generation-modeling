@@ -523,7 +523,7 @@ def _pred_in_motion(agent: AgentState, objects: typing.Sequence[ObjectState]):
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject):
         return False
-    
+
     elif isinstance(objects[0], AgentState):
         return agent.last_movement_result # TODO: does this contain the information we want?
 
@@ -564,31 +564,31 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
         elif second_building:
             return _building_touch(agent, objects[1], objects[0])  # type: ignore
-        
+
     # TODO (GT 2023-07-31): do we have a way to detect this? Does the agent show up on an object's touching_objects list?
     elif isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
         return False
 
     elif first_pseudo:
         obj = typing.cast(ObjectState, objects[1])
-        pseudo_obj = objects[0]
+        pseudo_obj = typing.cast(PseudoObject, objects[0])
 
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
 
-        return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
+        return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
-    
+
     elif second_pseudo:
         obj = typing.cast(ObjectState, objects[0])
-        pseudo_obj = objects[1]
+        pseudo_obj = typing.cast(PseudoObject, objects[1])
 
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
 
-        return (pseudo_obj.object_id in obj.touching_objects or pseudo_obj.name in obj.touching_objects) and \
+        return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
-    
+
     else:
         return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
 
@@ -810,6 +810,9 @@ def _find_nearest_pseudo_object_of_type(object: ObjectState, object_type: str):
     Finds the pseudo object in the sequence that is closest to the object.
     """
     filtered_pseudo_objects = [obj for obj in UNITY_PSEUDO_OBJECTS.values() if obj.object_type == object_type]
+    if len(filtered_pseudo_objects) == 1:
+        return filtered_pseudo_objects[0]
+
     distances = [_distance_object_pseudo_object(object, pseudo_object) for pseudo_object in filtered_pseudo_objects]
     return filtered_pseudo_objects[np.argmin(distances)]
 

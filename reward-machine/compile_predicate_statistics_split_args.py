@@ -806,9 +806,18 @@ if __name__ == '__main__':
                                                     trace_names=CURRENT_TEST_TRACE_NAMES,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True)
+                                                    overwrite=False)
     out = stats.filter(test_pred_2, test_mapping)
     _print_results_as_expected_intervals(out)
+
+    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    for var_type in variable_type_usage:
+        if var_type in META_TYPES:
+            continue
+        var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
+
+        prefix = "[+]" if len(var_intervals) > 0 else "[-]" 
+        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
     exit()
 

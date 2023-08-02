@@ -18,7 +18,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS
+from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -45,10 +45,25 @@ INTERVALS_LIST_POLARS_TYPE = pl.List(pl.List(pl.Int64))
 
 # Maps from types returned by unity to the types used in the DSL
 TYPE_REMAP = {
-    "garbagecan": "hexagonal_bin", "bridgeblock": "bridge_block", "cubeblock": "cube_block",
-    "cylinderblock": "cylindrical_block", "flatrectblock": "flat_block",
-    "pyramidblock": "pyramid_block", "longcylinderblock": "tall_cylindrical_block",
-    "tallrectblock": "tall_rectangular_block", "triangleblock": "triangle_block"
+    "alarmclock": "alarm_clock",
+    "bridgeblock": "bridge_block",
+    "creditcard": "credit_card",
+    "cubeblock": "cube_block",
+    "curvedramp": "curved_wooden_ramp",
+    "cylinderblock": "cylindrical_block",
+    "desklamp": "lamp",
+    "dogbed": "doggie_bed",
+    "flatrectblock": "flat_block",
+    "garbagecan": "hexagonal_bin",
+    "keychain": "key_chain",
+    "longcylinderblock": "tall_cylindrical_block",
+    "lightswitch": "main_light_switch",
+    "pyramidblock": "pyramid_block",
+    "sidetable": "side_table",
+    "smallslide": "triangular_ramp",
+    "tallrectblock": "tall_rectangular_block",
+    "teddybear": "teddy_bear",
+    "triangleblock": "triangle_block"
 }
 
 DEBUG = False
@@ -106,7 +121,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             if base_trace_path is None:
                 raise ValueError("Must specify base_trace_path if cache file does not exist")
 
-            print(f"No cache file found at {stats_filename}. Building from scratch...")
+            print(f"No cache file found at {stats_filename}, building from scratch...")
 
             trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json") for trace_name in trace_names]
 
@@ -127,7 +142,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         self._trace_lengths_and_domains_to_df()
 
         # Convert to polars
-        # breakpoint()
         self.data = pl.from_pandas(self.data)
 
         # Cache calls to get_object_assignments
@@ -303,7 +317,6 @@ class CommonSensePredicateStatisticsSplitArgs():
             if state.agent_state_changed:
                 most_recent_agent_state = state.agent_state
 
-
             # And to objects
             for obj in state.objects:
                 most_recent_object_states[obj.object_id] = obj
@@ -343,6 +356,9 @@ class CommonSensePredicateStatisticsSplitArgs():
                                     args.append(most_recent_agent_state)
                                     arg_types.append("agent")
 
+                                # This will assign each of the specific walls (e.g. 'north_wall') to object type 'wall',
+                                # which is correct, but we also need to assign each of them to the type which is their 
+                                # name in order to account for cases where something like 'north_wall' is used directly
                                 elif obj_id in UNITY_PSEUDO_OBJECTS:
                                     args.append(UNITY_PSEUDO_OBJECTS[obj_id])
                                     arg_types.append(UNITY_PSEUDO_OBJECTS[obj_id].object_type.lower())
@@ -379,10 +395,24 @@ class CommonSensePredicateStatisticsSplitArgs():
                                     predicate_satisfaction_mapping[key]["intervals"][-1][1] = idx
 
 
-        # Close any intervals that are still open
+        # Close any intervals that are still open and add special copy of predicate satisfactions that involve the named walls,
+        # because those also need to appear as having the arg type corresponding to their ID
+        to_update = []
         for key in predicate_satisfaction_mapping:
             if predicate_satisfaction_mapping[key]["intervals"][-1][1] is None:
                 predicate_satisfaction_mapping[key]["intervals"][-1][1] = replay_len
+
+            info_copy = predicate_satisfaction_mapping[key].copy()
+            if info_copy.get("arg_1_id") in NAMED_WALLS or info_copy.get("arg_2_id") in NAMED_WALLS:
+                if info_copy.get("arg_1_id") in NAMED_WALLS:
+                    info_copy["arg_1_type"] = info_copy["arg_1_id"]
+
+                if info_copy.get("arg_2_id") in NAMED_WALLS:
+                    info_copy["arg_2_type"] = info_copy["arg_2_id"]
+
+                to_update.append((key + "wall_remap", info_copy))
+
+        predicate_satisfaction_mapping.update(to_update)
 
         # Record the trace's length
         self.trace_lengths_and_domains[full_trace_id] = (replay_len, self._domain_key(trace['scene']))
@@ -440,6 +470,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             for var in variables:
                 if var in mapping:
                     relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
+
+                # This handles variables which are referenced directly, like the desk and bed
                 elif not var.startswith("?"):
                     relevant_arg_mapping[var] = [var]
 
@@ -777,6 +809,15 @@ if __name__ == '__main__':
                                                     overwrite=False)
     out = stats.filter(test_pred_2, test_mapping)
     _print_results_as_expected_intervals(out)
+
+    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    for var_type in variable_type_usage:
+        if var_type in META_TYPES:
+            continue
+        var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
+
+        prefix = "[+]" if len(var_intervals) > 0 else "[-]" 
+        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
     exit()
 

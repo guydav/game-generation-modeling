@@ -8,6 +8,7 @@ NORTH_WALL = 'north_wall'
 SOUTH_WALL = 'south_wall'
 EAST_WALL = 'east_wall'
 WEST_WALL = 'west_wall'
+NAMED_WALLS = [NORTH_WALL, SOUTH_WALL, EAST_WALL, WEST_WALL]
 
 DOOR = 'door'
 

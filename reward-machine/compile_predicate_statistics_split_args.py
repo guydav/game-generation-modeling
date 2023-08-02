@@ -18,7 +18,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS
+from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -186,7 +186,6 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         room_type = self._domain_key(trace['scene'])
         room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
-        # room_objects -= set(UNITY_PSEUDO_OBJECTS.keys())
         room_objects -= set(COLORS)
         room_objects -= set(SIDES)
         room_objects -= set(ORIENTATIONS)
@@ -395,31 +394,35 @@ class CommonSensePredicateStatisticsSplitArgs():
                                     predicate_satisfaction_mapping[key]["intervals"][-1][1] = idx
 
 
-        # Close any intervals that are still open and add special copy of predicate satisfactions that involve the named walls,
-        # because those also need to appear as having the arg type corresponding to their ID
-        to_update = []
+        # Close any intervals that are still open
         for key in predicate_satisfaction_mapping:
             if predicate_satisfaction_mapping[key]["intervals"][-1][1] is None:
                 predicate_satisfaction_mapping[key]["intervals"][-1][1] = replay_len
 
-            info_copy = predicate_satisfaction_mapping[key].copy()
-            if info_copy.get("arg_1_id") in NAMED_WALLS or info_copy.get("arg_2_id") in NAMED_WALLS:
-                if info_copy.get("arg_1_id") in NAMED_WALLS:
-                    info_copy["arg_1_type"] = info_copy["arg_1_id"]
-
-                if info_copy.get("arg_2_id") in NAMED_WALLS:
-                    info_copy["arg_2_type"] = info_copy["arg_2_id"]
-
-                to_update.append((key + "wall_remap", info_copy))
-
-        predicate_satisfaction_mapping.update(to_update)
-
         # Record the trace's length
         self.trace_lengths_and_domains[full_trace_id] = (replay_len, self._domain_key(trace['scene']))
 
-        # Collapse the intervals into a single dataframe and add it to the overall dataframe
+        # Collapse the intervals into a single dataframe
         game_df = pd.DataFrame(predicate_satisfaction_mapping.values())
-        self.data = pd.concat([self.data, game_df], ignore_index=True)  # type: ignore
+
+        # Extract the rows in which an argument is one of the specific named objects
+        object_ids_to_specific_names = {id: name for name, ids in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self._domain_key(trace['scene'])].items() for id in ids}
+        object_ids_to_specific_names.update({id: id for id in NAMED_WALLS})
+        specific_objects = list(object_ids_to_specific_names.keys())
+
+        # Remap the arg ids and types for the specific objects
+        sub_df = game_df.loc[(game_df["arg_1_id"].isin(specific_objects)) | (game_df["arg_2_id"].isin(specific_objects))]
+        for idx, row in sub_df.iterrows():
+            if row["arg_1_id"] in object_ids_to_specific_names:
+                sub_df.at[idx, "arg_1_id"] = object_ids_to_specific_names[row["arg_1_id"]]
+                sub_df.at[idx, "arg_1_type"] = row["arg_1_id"]
+
+            if row["arg_2_id"] in object_ids_to_specific_names:
+                sub_df.at[idx, "arg_2_id"] = object_ids_to_specific_names[row["arg_2_id"]]
+                sub_df.at[idx, "arg_2_type"] = row["arg_2_id"]
+
+        # Combine the resulting dataframes and add them to the overall dataframe        
+        self.data = pd.concat([self.data, game_df, sub_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
@@ -807,7 +810,7 @@ if __name__ == '__main__':
                                                     trace_names=CURRENT_TEST_TRACE_NAMES,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=False)
+                                                    overwrite=True)
     out = stats.filter(test_pred_2, test_mapping)
     _print_results_as_expected_intervals(out)
 

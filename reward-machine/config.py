@@ -12,6 +12,10 @@ NAMED_WALLS = [NORTH_WALL, SOUTH_WALL, EAST_WALL, WEST_WALL]
 
 DOOR = 'door'
 
+RUG = 'rug'
+RUG_ALT_NAME = 'HighFrictionTrigger'
+
+
 BUILDING_TYPE = 'building'
 
 FEW_OBJECTS_ROOM = 'few'
@@ -119,7 +123,8 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     SOUTH_WALL: [SOUTH_WALL],
     EAST_WALL: [EAST_WALL],
     WEST_WALL: [WEST_WALL],
-    DOOR: [DOOR]
+    DOOR: [DOOR],
+    RUG: [RUG]
 }
 
 
@@ -412,9 +417,6 @@ DOOR_TYPE = 'door'
 
 RUG_ID = 'FP326:Rug'
 RUG_TYPE = 'rug'
-RUG = 'rug'
-RUG_ALT_NAME = 'HighFrictionTrigger'
-
 
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7

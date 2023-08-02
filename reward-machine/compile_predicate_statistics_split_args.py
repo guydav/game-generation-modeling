@@ -357,7 +357,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                                     arg_types.append("agent")
 
                                 # This will assign each of the specific walls (e.g. 'north_wall') to object type 'wall',
-                                # which is correct, but we also need to assign each of them to the type which is their 
+                                # which is correct, but we also need to assign each of them to the type which is their
                                 # name in order to account for cases where something like 'north_wall' is used directly
                                 elif obj_id in UNITY_PSEUDO_OBJECTS:
                                     args.append(UNITY_PSEUDO_OBJECTS[obj_id])
@@ -486,7 +486,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
 
             # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")])
+            # Added a drop of the predicate column which we no longer need here -- discovered it's still here while debugging yesterday
+            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")] + ['predicate'])
 
             if DEBUG:
                 end = time.perf_counter()
@@ -505,7 +506,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             predicate_df = sub_predicate_dfs[0]
 
             if DEBUG: start = time.perf_counter()
-            for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
+            for sub_predicate_df in sub_predicate_dfs[1:]:
                 # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
                 shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
 
@@ -536,7 +537,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             predicate_df = sub_predicate_dfs[0]
 
             if DEBUG: start = time.perf_counter()
-            for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
+            for sub_predicate_df in sub_predicate_dfs[1:]:
                 # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
                 shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
                 predicate_df = predicate_df.join(sub_predicate_df, how="outer", on=["trace_id", "domain"] + shared_var_columns)
@@ -816,7 +817,7 @@ if __name__ == '__main__':
             continue
         var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
 
-        prefix = "[+]" if len(var_intervals) > 0 else "[-]" 
+        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
         print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
     exit()

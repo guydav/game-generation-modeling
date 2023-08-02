@@ -71,7 +71,7 @@ PROFILE = False
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
-DEFAULT_BASE_TRACE_PATH = "reward-machine/traces/participant-traces/"
+DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
 class PredicateNotImplementedException(Exception):
@@ -105,7 +105,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.cache_dir = cache_dir
 
         # Compute hash of trace names
-        trace_names_hash = stable_hash_list([os.path.basename(trace_name) for trace_name in trace_names])[:trace_hash_n_characters]
+        trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
@@ -123,7 +123,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             print(f"No cache file found at {stats_filename}, building from scratch...")
 
-            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json") for trace_name in trace_names]
+            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]
 
             # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
             # add additional columns here
@@ -421,7 +421,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                 sub_df.at[idx, "arg_2_id"] = object_ids_to_specific_names[row["arg_2_id"]]
                 sub_df.at[idx, "arg_2_type"] = row["arg_2_id"]
 
-        # Combine the resulting dataframes and add them to the overall dataframe        
+        # Combine the resulting dataframes and add them to the overall dataframe
         self.data = pd.concat([self.data, game_df, sub_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
@@ -761,6 +761,7 @@ CURRENT_TEST_TRACE_NAMES = [
     '7r4cgxJHzLJooFaMG1Rd-preCreateGame-rerecorded'
 ]
 
+FULL_PARTICIPANT_TRACE_SET = glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))
 
 def _print_results_as_expected_intervals(filter_results):
     print(' ' * 8 + 'expected_intervals={')
@@ -770,7 +771,6 @@ def _print_results_as_expected_intervals(filter_results):
 
 
 if __name__ == '__main__':
-
     DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
@@ -807,7 +807,7 @@ if __name__ == '__main__':
     all_block_test_mapping = {"?b1": ["block"], "?b2": ["block"]}
 
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
-                                                    trace_names=CURRENT_TEST_TRACE_NAMES,
+                                                    trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
                                                     overwrite=True)

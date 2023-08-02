@@ -29,3 +29,5 @@ run/profile_evo_sampler.sh
 wandb/*
 # reward-machine/traces/*
 reward-machine/temp/**/*
+reward-machine/traces/participant-traces/*.json
+reward-machine/traces/participant-traces/*.zip

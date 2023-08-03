@@ -778,6 +778,9 @@ def _pred_object_orientation(agent: AgentState, objects: typing.Sequence[typing.
     obj = objects[0]
     orientation = objects[1]
 
+    if isinstance(obj, AgentState):
+        return orientation == 'upright'
+
     if isinstance(obj, PseudoObject) or obj.initial_rotation is None:
         return orientation == 'upright'
 

@@ -867,6 +867,7 @@ if __name__ == '__main__':
 
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
                                                     trace_names=CURRENT_TEST_TRACE_NAMES,
+                                                    # trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
                                                     overwrite=True)

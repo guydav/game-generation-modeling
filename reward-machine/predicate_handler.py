@@ -6,7 +6,7 @@ import tatsu.ast
 import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
-    _extract_object_limits, _object_corners, _point_in_object, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
+    _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
 from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
@@ -621,7 +621,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
         test_points += upper_object_corners
 
-        objects_on = any([_point_in_object(test_point, lower_object) for test_point in test_points])
+        objects_on = any([_point_in_top_half(test_point, lower_object) for test_point in test_points])
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0
         # or if they're touching and object 1 is contained withint object 0?

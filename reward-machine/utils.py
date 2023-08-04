@@ -311,6 +311,18 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
+def _point_in_top_half(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
+    '''
+    Returns whether a point is contained with the top half of the bounding box of the provided object
+    '''
+
+    bbox_center = object.bbox_center
+    bbox_extents = object.bbox_extents
+
+    low_corner = np.array([bbox_center[0] - bbox_extents[0], bbox_center[1] - (bbox_extents[1] / 2), bbox_center[2] - bbox_extents[2]])
+    high_corner = bbox_center + bbox_extents
+
+    return np.all(point >= low_corner) and np.all(point <= high_corner)
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
     '''

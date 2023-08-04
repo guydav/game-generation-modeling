@@ -18,7 +18,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM
+from config import COLORS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -31,11 +31,16 @@ from ast_printer import ast_section_to_string
 from predicate_handler import PREDICATE_LIBRARY_RAW
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
+    ("agent_crouches", 0),
     ("adjacent", 2),
     ("agent_holds", 1),
+    ("broken", 1),
     ("in", 2),
     ("in_motion", 1),
+    ("object_orientation", 1),  # as it takes 1 object and an orientation we'll hard-code
     ("on", 2),
+    ("open", 1),
+    ("toggled_on", 1),
     ("touch", 2),
     # ("between", 3),
 )
@@ -71,7 +76,7 @@ PROFILE = False
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
-DEFAULT_BASE_TRACE_PATH = "reward-machine/traces/participant-traces/"
+DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
 class PredicateNotImplementedException(Exception):
@@ -90,8 +95,11 @@ class CommonSensePredicateStatisticsSplitArgs():
     data: pl.DataFrame
     domains: typing.List[str]
     predicates: typing.List[str]
+    room_objects_cache: typing.Dict[str, typing.Set[str]]
+    same_type_arg_cache: typing.Dict[str, typing.List[typing.Tuple[str, str, str, str]]]
     trace_lengths_and_domains: typing.Dict[str, typing.Tuple[int, str]]
     trace_lengths_and_domains_df: pl.DataFrame
+
 
     def __init__(self,
                  cache_dir: typing.Union[str, pathlib.Path],
@@ -104,8 +112,15 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         self.cache_dir = cache_dir
 
+        # Cache calls to get_object_assignments
+        self.cache_rules = cache_rules
+        self.object_assignment_cache = {}
+        self.predicate_interval_cache = {}
+        self.room_objects_cache = {}
+        self.same_type_arg_cache = {}
+
         # Compute hash of trace names
-        trace_names_hash = stable_hash_list([os.path.basename(trace_name) for trace_name in trace_names])[:trace_hash_n_characters]
+        trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
@@ -123,7 +138,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             print(f"No cache file found at {stats_filename}, building from scratch...")
 
-            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json") for trace_name in trace_names]
+            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]
 
             # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
             # add additional columns here
@@ -143,11 +158,6 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         # Convert to polars
         self.data = pl.from_pandas(self.data)
-
-        # Cache calls to get_object_assignments
-        self.cache_rules = cache_rules
-        self.object_assignment_cache = {}
-        self.predicate_interval_cache = {}
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []
@@ -178,6 +188,27 @@ class CommonSensePredicateStatisticsSplitArgs():
         else:
             raise ValueError(f"Unrecognized domain: {domain}")
 
+    def _get_room_same_type_args(self, trace) -> typing.List[typing.Tuple[str, str, str, str]]:
+        room_type = self._domain_key(trace['scene'])
+        if room_type not in self.same_type_arg_cache:
+            same_type_args = []
+
+            for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
+                meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
+                for object in objects_of_type:
+                    same_type_args.append((object, obj_type, obj_type, 'object_type'))
+                    if meta_type is not None:
+                        same_type_args.append((object, obj_type, meta_type, 'object_type'))
+                    if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
+                        same_type_args.append((object, obj_type, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object], 'object_type'))
+
+                for first_object, second_object in permutations(objects_of_type, 2):
+                    same_type_args.append((first_object, obj_type, second_object, obj_type))
+
+            self.same_type_arg_cache[room_type] = same_type_args
+
+        return self.same_type_arg_cache[room_type]
+
     def _get_room_objects(self, trace) -> set:
         '''
         Returns the set of objects in the room type of the given trace, excluding pseudo-objects,
@@ -185,13 +216,15 @@ class CommonSensePredicateStatisticsSplitArgs():
         '''
 
         room_type = self._domain_key(trace['scene'])
-        room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
-        room_objects -= set(COLORS)
-        room_objects -= set(SIDES)
-        room_objects -= set(ORIENTATIONS)
-        room_objects -= set(['agent'])
+        if room_type not in self.room_objects_cache:
+            room_objects = set(sum([list(OBJECTS_BY_ROOM_AND_TYPE[room_type][obj_type]) for obj_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]], []))
+            room_objects -= set(COLORS)
+            room_objects -= set(SIDES)
+            room_objects -= set(ORIENTATIONS)
+            room_objects.remove('agent')
+            self.room_objects_cache[room_type] = room_objects
 
-        return room_objects
+        return self.room_objects_cache[room_type]
 
     def _object_assignments(self, domain, variable_types, used_objects=[]):
         '''
@@ -303,10 +336,12 @@ class CommonSensePredicateStatisticsSplitArgs():
         # Stores the most recent state of the agent and of each object
         most_recent_agent_state = None
         most_recent_object_states = {}
+        initial_object_states = {}
 
         received_full_update = False
 
         full_trace_id = f"{trace['id']}-{trace['replayKey']}"
+        domain_key = self._domain_key(trace['scene'])
 
         for idx, state in tqdm(enumerate(replay), total=replay_len, desc=f"Processing replay {full_trace_id}", leave=False):
             is_final = idx == replay_len - 1
@@ -317,8 +352,16 @@ class CommonSensePredicateStatisticsSplitArgs():
                 most_recent_agent_state = state.agent_state
 
             # And to objects
+            objects_with_initial_rotations = []
             for obj in state.objects:
+                if obj.object_id not in initial_object_states:
+                    initial_object_states[obj.object_id] = obj
+
+                obj = obj._replace(initial_rotation=initial_object_states[obj.object_id].rotation)
+                objects_with_initial_rotations.append(obj)
                 most_recent_object_states[obj.object_id] = obj
+
+            state = state._replace(objects=objects_with_initial_rotations)
 
             # Check if we've received a full state update, which we detect by seeing if the most_recent_object_states
             # includes every object in the room (aside from PseudoObjects, which never receive updates)
@@ -347,7 +390,9 @@ class CommonSensePredicateStatisticsSplitArgs():
                         possible_args = [arg_set for arg_set in possible_args if len(set(arg_set)) == len(arg_set)]
 
                     for arg_set in possible_args:
-                        for arg_ids in permutations(arg_set):
+                        arg_assignments = permutations(arg_set) if predicate != 'object_orientation' else [(arg_set[0], orientation) for orientation in ORIENTATIONS]
+
+                        for arg_ids in arg_assignments:
 
                             args, arg_types = [], []
                             for obj_id in arg_ids:
@@ -361,6 +406,10 @@ class CommonSensePredicateStatisticsSplitArgs():
                                 elif obj_id in UNITY_PSEUDO_OBJECTS:
                                     args.append(UNITY_PSEUDO_OBJECTS[obj_id])
                                     arg_types.append(UNITY_PSEUDO_OBJECTS[obj_id].object_type.lower())
+
+                                elif obj_id in ORIENTATIONS:
+                                    args.append(obj_id)
+                                    arg_types.append("orientation")
 
                                 else:
                                     args.append(most_recent_object_states[obj_id])
@@ -376,7 +425,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                             if evaluation:
                                 if key not in predicate_satisfaction_mapping:
                                     info = {"predicate": predicate,"trace_id": full_trace_id,
-                                            "domain": self._domain_key(trace['scene']),
+                                            "domain": domain_key,
                                             "intervals": [[idx, None]]}
 
                                     for i, (arg_id, arg_type) in enumerate(zip(arg_ids, arg_types)):
@@ -400,13 +449,13 @@ class CommonSensePredicateStatisticsSplitArgs():
                 predicate_satisfaction_mapping[key]["intervals"][-1][1] = replay_len
 
         # Record the trace's length
-        self.trace_lengths_and_domains[full_trace_id] = (replay_len, self._domain_key(trace['scene']))
+        self.trace_lengths_and_domains[full_trace_id] = (replay_len, domain_key)
 
         # Collapse the intervals into a single dataframe
         game_df = pd.DataFrame(predicate_satisfaction_mapping.values())
 
         # Extract the rows in which an argument is one of the specific named objects
-        object_ids_to_specific_names = {id: name for name, ids in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self._domain_key(trace['scene'])].items() for id in ids}
+        object_ids_to_specific_names = {id: name for name, ids in SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain_key].items() for id in ids}
         object_ids_to_specific_names.update({id: id for id in NAMED_WALLS})
         specific_objects = list(object_ids_to_specific_names.keys())
 
@@ -421,8 +470,18 @@ class CommonSensePredicateStatisticsSplitArgs():
                 sub_df.at[idx, "arg_2_id"] = object_ids_to_specific_names[row["arg_2_id"]]
                 sub_df.at[idx, "arg_2_type"] = row["arg_2_id"]
 
-        # Combine the resulting dataframes and add them to the overall dataframe        
-        self.data = pd.concat([self.data, game_df, sub_df], ignore_index=True)  # type: ignore
+        # ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
+
+        # Add the same_types intervals
+        same_type_records = [
+            dict(predicate='same_type', arg_1_id=arg_1_id, arg_1_type=arg_1_type, arg_2_id=arg_2_id, arg_2_type=arg_2_type,
+                 trace_id=full_trace_id, domain=domain_key, intervals=[[0, replay_len]])
+            for arg_1_id, arg_1_type, arg_2_id, arg_2_type in self._get_room_same_type_args(trace)
+        ]
+        same_type_df = pd.DataFrame(same_type_records)
+
+        # Combine the resulting dataframes and add them to the overall dataframe
+        self.data = pd.concat([self.data, game_df, sub_df, same_type_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
@@ -761,6 +820,7 @@ CURRENT_TEST_TRACE_NAMES = [
     '7r4cgxJHzLJooFaMG1Rd-preCreateGame-rerecorded'
 ]
 
+FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
 
 def _print_results_as_expected_intervals(filter_results):
     print(' ' * 8 + 'expected_intervals={')
@@ -770,7 +830,6 @@ def _print_results_as_expected_intervals(filter_results):
 
 
 if __name__ == '__main__':
-
     DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))

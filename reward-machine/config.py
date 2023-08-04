@@ -316,6 +316,14 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
     }
 }
 
+OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM = {
+    room: {specific_object: name}
+    for room, room_specific_objects in SPECIFIC_NAMED_OBJECTS_BY_ROOM.items()
+    for name, specific_objects in room_specific_objects.items()
+    for specific_object in specific_objects
+}
+
+
 # Add the shared objects to each of the room domains
 for room_type in OBJECTS_BY_ROOM_AND_TYPE:
     OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
@@ -337,6 +345,8 @@ META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "color": COLORS,
               "orientation": ORIENTATIONS,
               "side": SIDES}
+
+TYPES_TO_META_TYPE = {sub_type: meta_type for meta_type, sub_types in META_TYPES.items() for sub_type in sub_types}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
 GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",

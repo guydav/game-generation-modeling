@@ -428,7 +428,7 @@ def _pred_broken(agent: AgentState, objects: typing.Sequence[typing.Union[Object
     assert len(objects) == 1
     if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
-    return objects[0].is_open
+    return objects[0].is_broken
 
 
 def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
@@ -777,6 +777,9 @@ def _pred_object_orientation(agent: AgentState, objects: typing.Sequence[typing.
 
     obj = objects[0]
     orientation = objects[1]
+
+    if isinstance(obj, AgentState):
+        return orientation == 'upright'
 
     if isinstance(obj, PseudoObject) or obj.initial_rotation is None:
         return orientation == 'upright'

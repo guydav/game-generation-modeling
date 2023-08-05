@@ -84,6 +84,8 @@ DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/partic
 CACHE_MAX_SIZE = 1024
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
+FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
+
 
 class PredicateNotImplementedException(Exception):
     pass
@@ -108,8 +110,8 @@ class CommonSensePredicateStatisticsSplitArgs():
 
 
     def __init__(self,
-                 cache_dir: typing.Union[str, pathlib.Path],
-                 trace_names: typing.Sequence[str],
+                 cache_dir: typing.Union[str, pathlib.Path] = DEFAULT_CACHE_DIR,
+                 trace_names: typing.Sequence[str] = FULL_PARTICIPANT_TRACE_SET,
                  cache_rules: typing.Optional[typing.Sequence[str]] = None,
                  base_trace_path: typing.Union[str, pathlib.Path] = DEFAULT_BASE_TRACE_PATH,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
@@ -493,9 +495,12 @@ class CommonSensePredicateStatisticsSplitArgs():
         try:
             result, used_variables = self._inner_filter(predicate, mapping)
             n_traces = result.select("trace_id").unique().shape[0]
-            total_intervals = result.select(pl.col('intervals').list.lengths()).sum().item()
-            # TODO: if we also want mean/total interval length we can do that too, with a bit more polars manipulation
-            return n_traces, total_intervals
+            n_intervals = result.select(pl.col("intervals").list.lengths()).sum().item()
+            total_interval_states = result.select("intervals").explode("intervals") \
+                .select(pl.col("intervals").list.to_struct(fields=["start", "end"])) \
+                .unnest("intervals").select(pl.col("end") - pl.col("start")).sum().item()
+            # TODO: we could also similarlty extract, mean, or mean per trace, or...
+            return n_traces, n_intervals, total_interval_states
             # sorted_variables = sorted(used_variables)
             # return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
             #         for row_dict in result.to_dicts()}
@@ -868,7 +873,6 @@ CURRENT_TEST_TRACE_NAMES = [
     '7r4cgxJHzLJooFaMG1Rd-preCreateGame-rerecorded'
 ]
 
-FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
 
 def _print_results_as_expected_intervals(filter_results):
     print(' ' * 8 + 'expected_intervals={')

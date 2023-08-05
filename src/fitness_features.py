@@ -35,6 +35,9 @@ from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieMode
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
 import room_and_object_types
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
+import compile_predicate_statistics_split_args
+
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -471,8 +474,6 @@ class VariablesDefinedTerm(VariableBasedFitnessTerm):
         # return self.defined_count / (self.defined_count + self.undefined_count)
 
 
-
-
 class AllVariablesUsed(VariableBasedFitnessTerm):
     defined_variables: typing.Set[typing.Tuple[str, str, int]]
     used_variables: typing.Set[typing.Tuple[str, str, int]]
@@ -622,24 +623,29 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
 
 PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
+PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 200
 
 
 class PredicateFoundInData(FitnessTerm):
     min_interval_count: int
     min_trace_count: int
     predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
-                                              typing.Dict[typing.Tuple[str, typing.Tuple[str, ...]], typing.List[typing.List[int]]]]
+                                              typing.Tuple[int, int, int]]
     predicates_found: typing.List[int]
     rules_to_child_keys: typing.Dict[str, str]
 
     def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
 
         super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
         self.rules_to_child_keys = rules_to_child_keys
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
+        self.min_total_interval_state_count = min_total_interval_state_count
+
+        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs()
         # TODO: instantiate reference to predicate_data_estimator
 
     def game_start(self) -> None:
@@ -661,15 +667,23 @@ class PredicateFoundInData(FitnessTerm):
             # mapping = ...(context_variables)
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
-            intervals = {}
-            predicate_found = len(intervals) > self.min_interval_count and sum(intervals.values()) > self.min_trace_count
-            self.predicates_found.append(1 if predicate_found else 0)
+            try:
+                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator(pred, context_variables)
+                predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
+                self.predicates_found.append(1 if predicate_found else 0)
+
+            except compile_predicate_statistics_split_args.PredicateNotImplementedException:
+                self.predicates_found.append(1)
+
+    def _get_all_inner_keys(self):
+        return ['all', 'prop']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # TODO: should this be 0 or 1 if none are found?
         if len(self.predicates_found) == 0:
-            return 0
-        return sum(self.predicates_found) / len(self.predicates_found)
+            return dict(all=0, prop=0)
+
+        return dict(all=all(self.predicates_found), prop=sum(self.predicates_found) / len(self.predicates_found))
 
 
 # TODO: decide if we might want different thresholds between these two?
@@ -677,21 +691,21 @@ class PredicateFoundInData(FitnessTerm):
 
 class SetupSuperPredicateFoundInData(PredicateFoundInData):
     def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
         super().__init__({'setup_game_conserved': 'conserved_pred', 'setup_game_optional': 'optional_pred'},
-                         'setup_super_predicate', min_trace_count, min_interval_count)
+                         'setup', min_trace_count, min_interval_count, min_total_interval_state_count)
 
 
 class PreferencesPredicateFoundInData(PredicateFoundInData):
     def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
 
         super().__init__({'once': 'once_pred', 'once_measure': 'once_measure_pred',
                           'hold': 'hold_pred', 'while_hold': 'hold_pred',
                           'at_end': 'at_end_pred',},
-                         'preferences', min_trace_count, min_interval_count)
-
-
+                         'preferences', min_trace_count, min_interval_count, min_total_interval_state_count)
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2409,6 +2423,12 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
+
+    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
+    fitness.register(setup_predicate_found_in_data)
+
+    preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
+    fitness.register(preferences_predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)

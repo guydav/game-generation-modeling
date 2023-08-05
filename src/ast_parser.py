@@ -337,6 +337,24 @@ class ASTDepthParser(ASTParser):
         return kwargs['depth']
 
 
+class ASTPredicateFunctionCounter(ASTParser):
+    def __init__(self):
+        self.counts = defaultdict(int)
+
+    def _handle_ast(self, ast, **kwargs):
+        rule = ast.parseinfo.rule  # type: ignore
+        if rule == 'function_eval':
+            inner_rule = ast.func.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('function_', '')] += 1
+
+        elif rule == 'predicate':
+            inner_rule = ast.pred.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('predicate_', '')] += 1
+
+        return super()._handle_ast(ast, **kwargs)
+
+
+
 VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
 
 
@@ -670,14 +688,15 @@ class ASTSamplePostprocessor(ASTParser):
         self.variable_index = 0
         self.preference_mapping = {}
         self.variable_mapping = {}
+        self.parseinfo_index = 0
 
-    def __call__(self, ast, **kwargs):
+    def __call__(self, ast, should_deepcopy_initial: bool = True, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
             self._new_parse()
-
-            ast = ast_utils.deepcopy_ast(ast)
+            if should_deepcopy_initial:
+                ast = ast_utils.deepcopy_ast(ast)
 
         super().__call__(ast, **kwargs)
 
@@ -686,6 +705,10 @@ class ASTSamplePostprocessor(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
+
+        new_parseinfo = tatsu.infos.ParseInfo(None, rule, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index)
+        ast_utils.replace_child(ast, 'parseinfo', new_parseinfo)
+        self.parseinfo_index += 1
 
         if rule == 'preference':
             pref_name = ast.pref_name

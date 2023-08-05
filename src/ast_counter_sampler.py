@@ -1605,8 +1605,13 @@ def main(args):
         samplers = {}
         for pc in args.prior_count:
             length_prior = {n: pc for n in LENGTH_PRIOR}
-            samplers[f'prior{pc}'] = ASTSampler(grammar_parser, counter, seed=args.random_seed,  # type: ignore
-                                                prior_rule_count=pc, prior_token_count=pc, length_prior=length_prior)  # type: ignore
+            samplers[f'prior{pc}'] = ASTSampler(
+                grammar_parser, counter,
+                max_sample_depth=args.max_sample_depth,
+                max_sample_nodes=args.max_sample_nodes,
+                seed=args.random_seed,  # type: ignore
+                prior_rule_count=pc, prior_token_count=pc,
+                length_prior=length_prior)  # type: ignore
 
 
     if args.sampling_method == MLE_SAMPLING:

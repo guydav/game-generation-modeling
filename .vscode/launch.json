@@ -179,9 +179,9 @@
             "request": "launch",
             "program": "${file}",
             "args": [
-                "--sample-parallel",
-                "--parallel-n-workers", "15",
-                "--parallel-chunksize", "50",
+                // "--sample-parallel",
+                // "--parallel-n-workers", "15",
+                // "--parallel-chunksize", "50",
                 "--should-tqdm",
                 "--output-name", "map_elites_debugging_6f02c33_changed_local_context_prop_rules",
                 "--initial-proposal-type", "1",
@@ -194,6 +194,8 @@
                 "--map-elites-custom-behavioral-features-key", "specific_predicates_setup",
                 "--map-elites-use-crossover",
                 "--map-elites-use-cognitive-operators",
+                "--map-elites-good-threshold", "58.7",
+                "--map-elites-great-threshold", "61.5",
                 "--sampler-prior-count", "2",
                 "--sampler-prior-count", "20",
                 "--save-interval", "512",
@@ -203,6 +205,19 @@
             "console": "integratedTerminal",
             // "notes": "--parse-counter",
             // "justMyCode": false,
+        },
+        {
+            "name": "Python: ngrams hyperparameters",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--min-n", "10",
+                "--max-n", "10",
+                "--evaluate-sections"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
         },
     ]
 }

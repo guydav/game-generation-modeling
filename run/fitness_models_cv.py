@@ -33,6 +33,7 @@ parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED)
 parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
+parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
 parser.add_argument('--output-activation', type=str, default=None)
 parser.add_argument('--output-scaling', type=float, default=1.0)
@@ -80,6 +81,11 @@ def main(args: argparse.Namespace):
         raise ValueError('Some original games have different numbers of regrowths: {original_game_counts}')
 
     feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove)
+
+    if args.ignore_features:
+        logger.debug(f'Ignoring features: {args.ignore_features}')
+        feature_columns = [c for c in feature_columns if c not in args.ignore_features]
+
     logger.debug(f'Fitting models with {len(feature_columns)} features')
 
     with open(args.cv_settings_json, 'r') as f:

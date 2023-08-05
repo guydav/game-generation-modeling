@@ -453,7 +453,7 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
     for sub_types in variable_types:
         objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] if var_type in OBJECTS_BY_ROOM_AND_TYPE[domain] else
                        # If the variable type is a specific named object, we include the type name, to match behavior in the predicate statistics
-                       [var_type] if var_type in SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain] else
+                       SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain][var_type] if var_type in SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain] else
                        []
                        for var_type in sub_types], [])
         grouped_objects.append([obj for obj in objects if obj not in used_objects])

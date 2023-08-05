@@ -472,15 +472,15 @@ class CommonSensePredicateStatisticsSplitArgs():
         specific_objects = list(object_ids_to_specific_names.keys())
 
         # Remap the arg ids and types for the specific objects
-        sub_df = game_df.loc[(game_df["arg_1_id"].isin(specific_objects)) | (game_df["arg_2_id"].isin(specific_objects))]
+        sub_df = game_df.loc[(game_df["arg_1_id"].isin(specific_objects)) | (game_df["arg_2_id"].isin(specific_objects))].copy()
         for idx, row in sub_df.iterrows():
             if row["arg_1_id"] in object_ids_to_specific_names:
-                sub_df.at[idx, "arg_1_id"] = object_ids_to_specific_names[row["arg_1_id"]]
-                sub_df.at[idx, "arg_1_type"] = row["arg_1_id"]
+                sub_df.at[idx, "arg_1_type"] = object_ids_to_specific_names[row["arg_1_id"]]
+                # sub_df.at[idx, "arg_1_id"] = row["arg_1_type"]
 
             if row["arg_2_id"] in object_ids_to_specific_names:
-                sub_df.at[idx, "arg_2_id"] = object_ids_to_specific_names[row["arg_2_id"]]
-                sub_df.at[idx, "arg_2_type"] = row["arg_2_id"]
+                sub_df.at[idx, "arg_2_type"] = object_ids_to_specific_names[row["arg_2_id"]]
+                # sub_df.at[idx, "arg_2_id"] = sub_df.at[idx, "arg_2_type"]
 
         # ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 
@@ -957,13 +957,16 @@ if __name__ == '__main__':
     ]
 
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
-                                                    # trace_names=CURRENT_TEST_TRACE_NAMES,
-                                                    trace_names=FULL_PARTICIPANT_TRACE_SET,
+                                                    trace_names=CURRENT_TEST_TRACE_NAMES,
+                                                    # trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=False)
-    out = stats.filter(test_pred_agent_as_arg, {"?b": ["block"], "?c": ["chair"]})
-    _print_results_as_expected_intervals(out)
+                                                    overwrite=True)
+
+    exit()
+
+    # out = stats.filter(test_pred_agent_as_arg, {"?b": ["block"], "?c": ["chair"]})
+    # _print_results_as_expected_intervals(out)
 
     # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
     # for var_type in variable_type_usage:

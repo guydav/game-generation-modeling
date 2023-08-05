@@ -7,7 +7,7 @@ import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -535,7 +535,7 @@ TOUCH_DISTANCE_THRESHOLD = 0.15
 
 
 def _building_touch(agent: AgentState, building: BuildingPseudoObject, other_object: typing.Union[ObjectState, PseudoObject]):
-    if other_object.object_id in building.building_objects:
+    if not isinstance(other_object, AgentState) and other_object.object_id in building.building_objects:
         return False
 
     return any([_pred_touch(agent, [building_obj, other_object]) for building_obj in building.building_objects.values()])
@@ -630,9 +630,26 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-    objects_touch = _pred_touch(agent, objects)
 
-    if objects_touch:
+    if isinstance(upper_object, AgentState):
+        if not agent.touching_floor:
+            return False
+
+        if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
+            return False
+
+        rug_pseudo_object = UNITY_PSEUDO_OBJECTS[RUG]
+
+        rug_position, rug_extents = rug_pseudo_object.position, rug_pseudo_object.bbox_extents
+        agent_on_rug = rug_position[0] - rug_extents[0] <= agent.position[0] <= rug_position[0] + rug_extents[0] and \
+            rug_position[2] - rug_extents[2] <= agent.position[2] <= rug_position[2] + rug_extents[2]
+
+        return not agent_on_rug if 'Floor' in lower_object.object_id else agent_on_rug
+
+    if isinstance(lower_object, AgentState):
+        return False
+
+    if _pred_touch(agent, objects):
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
         upper_object_bbox_center = upper_object.bbox_center

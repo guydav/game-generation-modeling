@@ -1,8 +1,10 @@
-from collections import defaultdict
+import cachetools
+import cProfile
 from functools import reduce
 import glob
 import gzip
 import hashlib
+import io
 from itertools import groupby, permutations, product, repeat, starmap
 import json
 import os
@@ -10,7 +12,7 @@ import pandas as pd
 import pathlib
 import pickle
 import polars as pl
-import re
+import pstats
 import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
@@ -72,12 +74,16 @@ TYPE_REMAP = {
 }
 
 DEBUG = False
-PROFILE = False
+PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
+
+CACHE_MAX_SIZE = 1024
+
+DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 
 class PredicateNotImplementedException(Exception):
     pass
@@ -142,7 +148,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
             # add additional columns here
-            self.data = pd.DataFrame(columns=['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals'])  # type: ignore
+            self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore
             self.trace_lengths_and_domains = {}
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
@@ -485,17 +491,189 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
-            used_variables = set()
-            result = self._inner_filter(predicate, mapping, used_variables)
-            sorted_variables = sorted(used_variables)
-            return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
-                    for row_dict in result.to_dicts()}
+            result, used_variables = self._inner_filter(predicate, mapping)
+            n_traces = result.select("trace_id").unique().shape[0]
+            total_intervals = result.select(pl.col('intervals').list.lengths()).sum().item()
+            # TODO: if we also want mean/total interval length we can do that too, with a bit more polars manipulation
+            return n_traces, total_intervals
+            # sorted_variables = sorted(used_variables)
+            # return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
+            #         for row_dict in result.to_dicts()}
         except PredicateNotImplementedException as e:
             # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
             raise e
 
+    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
+        predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
-    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], used_variables: typing.Set[str]) -> pl.DataFrame:
+        if predicate_name not in self.predicates:
+            raise PredicateNotImplementedException(predicate_name)
+
+        variables = extract_variables(predicate)  # type: ignore
+        used_variables = set(variables)
+
+        if DEBUG: start = time.perf_counter()
+
+        # Restrict the mapping to just the referenced variables and expand meta-types
+        relevant_arg_mapping = {}
+        for var in variables:
+            if var in mapping:
+                relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
+
+            # This handles variables which are referenced directly, like the desk and bed
+            elif not var.startswith("?"):
+                relevant_arg_mapping[var] = [var]
+
+        filter_expr = pl.col("predicate") == predicate_name
+        rename_mapping = {}
+        for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
+            filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
+            rename_mapping[f"arg_{i + 1}_id"] = arg_var
+
+        # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
+        predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
+
+        # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
+        # Added a drop of the predicate column which we no longer need here -- discovered it's still here while debugging yesterday
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")] + ['predicate'])
+
+        if DEBUG:
+            end = time.perf_counter()
+            print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")  # type: ignore
+
+        return predicate_df, used_variables
+
+    def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
+        and_args = predicate["and_args"]
+        if isinstance(and_args, tatsu.ast.AST):
+            and_args = [and_args]
+
+        sub_predicate_dfs = []
+        used_variables = set()
+        for and_arg in and_args:  # type: ignore
+            try:
+                sub_predicate_df, sub_used_variables = self._inner_filter(and_arg, mapping)
+                sub_predicate_dfs.append(sub_predicate_df)
+                used_variables |= sub_used_variables
+
+            except PredicateNotImplementedException as e:
+                continue
+
+        if len(sub_predicate_dfs) == 0:
+            raise PredicateNotImplementedException("All sub-predicates of the and were not implemented")
+
+        predicate_df = sub_predicate_dfs[0]
+
+        if DEBUG: start = time.perf_counter()
+        for sub_predicate_df in sub_predicate_dfs[1:]:
+            # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
+            shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
+
+            # Join the two dataframes based on the trace identifier, domain, and shared variable columns
+            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
+
+            # Replace the intervals column with the intersection of the current intervals and the new ones from the sub-predicate
+            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(
+                self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+
+            # Remove all the 'right-hand' columns added by the join
+            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+
+            # Remove any rows with empty intervals
+            predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+
+        if DEBUG:
+            end = time.perf_counter()
+            print(f"Time to AND: {'%.5f' % (end - start)}s")  # type: ignore
+
+        return predicate_df, used_variables
+
+    def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
+        or_args = predicate["or_args"]
+        if isinstance(or_args, tatsu.ast.AST):
+            or_args = [or_args]
+
+        sub_predicate_dfs = []
+        used_variables = set()
+
+        for or_arg in or_args:  # type: ignore
+            try:
+                sub_predicate_df, sub_used_variables = self._inner_filter(or_arg, mapping)
+                sub_predicate_dfs.append(sub_predicate_df)
+                used_variables |= sub_used_variables
+
+            except PredicateNotImplementedException as e:
+                continue
+
+        if len(sub_predicate_dfs) == 0:
+            raise PredicateNotImplementedException("All sub-predicates of the por were not implemented")
+
+        predicate_df = sub_predicate_dfs[0]
+
+        if DEBUG: start = time.perf_counter()
+        for sub_predicate_df in sub_predicate_dfs[1:]:
+            # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
+            shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
+            predicate_df = predicate_df.join(sub_predicate_df, how="outer", on=["trace_id", "domain"] + shared_var_columns)
+            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+            predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+
+        if DEBUG:
+            end = time.perf_counter()
+            print(f"Time to OR: {'%.5f' % (end - start)}s")  # type: ignore
+
+        return predicate_df, used_variables
+
+    def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
+        try:
+            predicate_df, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
+        except PredicateNotImplementedException as e:
+            raise PredicateNotImplementedException(f"Sub-predicate of the not ({e.args}) was not implemented")
+
+        if DEBUG: start = time.perf_counter()
+
+        # For each trace ID, and each assignment of the vars that exist in the sub_predicate_df so far:
+        relevant_vars = [c for c in predicate_df.columns if c in used_variables]
+        relevant_var_mapping = {var: mapping[var] for var in relevant_vars}
+        variable_types = tuple(tuple(relevant_var_mapping[var]) for var in relevant_var_mapping.keys())
+
+        # For each cartesian product of the valid assignments for those vars given the domain
+        possible_arg_assignments = [self._object_assignments(domain, variable_types) for domain in self.domains]
+
+        possible_assignments_df = pl.DataFrame(dict(domain=self.domains, assignments=possible_arg_assignments, intervals=[[]] * len(self.domains)),
+                                                schema=dict(domain=None, assignments=None, intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
+
+        potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
+        potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
+            'domain', 'trace_id', 'trace_length',
+            pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
+
+        # Now, for each possible combination of args on each trace / domain, 'intervals' will contain the truth intervals if
+        # they exist and null otherwise, and 'intervals_right' will contain the empty interval
+        predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=["trace_id", "domain"] + relevant_vars)
+
+        # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
+        predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+
+        # Invert intervals will then flip them to be the entire length of the trace
+        predicate_df.replace("intervals", predicate_df.select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")] + ['trace_length'])
+
+        if DEBUG:
+            end = time.perf_counter()
+            print(f"Time to NOT: {'%.5f' % (end - start)}s")  # type: ignore
+
+        return predicate_df, used_variables
+
+    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
+        '''
+        Returns a string that uniquely identifies the predicate and mapping
+        '''
+        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
+
+    @cachetools.cached(cache=cachetools.LRUCache(maxsize=CACHE_MAX_SIZE), key=_predicate_and_mapping_cache_key)
+    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
@@ -517,151 +695,22 @@ class CommonSensePredicateStatisticsSplitArgs():
         #         return self.predicate_interval_cache[ast_str]
 
         if predicate_rule == "predicate":
-            predicate_name = extract_predicate_function_name(predicate)  # type: ignore
-
-            if predicate_name not in self.predicates:
-                raise PredicateNotImplementedException(predicate_name)
-
-            variables = extract_variables(predicate)  # type: ignore
-            used_variables.update(variables)
-
-            if DEBUG: start = time.perf_counter()
-
-            # Restrict the mapping to just the referenced variables and expand meta-types
-            relevant_arg_mapping = {}
-            for var in variables:
-                if var in mapping:
-                    relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
-
-                # This handles variables which are referenced directly, like the desk and bed
-                elif not var.startswith("?"):
-                    relevant_arg_mapping[var] = [var]
-
-            filter_expr = pl.col("predicate") == predicate_name
-            rename_mapping = {}
-            for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
-                # TODO: think about what to do about directly quantified variables here
-                filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
-                rename_mapping[f"arg_{i + 1}_id"] = arg_var
-
-            # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
-            predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
-
-            # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
-            # Added a drop of the predicate column which we no longer need here -- discovered it's still here while debugging yesterday
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")] + ['predicate'])
-
-            if DEBUG:
-                end = time.perf_counter()
-                print(f"Time per collect '{predicate_name}': {'%.5f' % (end - start)}s")  # type: ignore
+            return self._handle_predicate(predicate, mapping)
 
         elif predicate_rule == "super_predicate":
-            predicate_df = self._inner_filter(predicate["pred"], mapping, used_variables)  # type: ignore
+            return self._inner_filter(predicate["pred"], mapping)  # type: ignore
 
         elif predicate_rule == "super_predicate_and":
-            and_args = predicate["and_args"]
-            if isinstance(and_args, tatsu.ast.AST):
-                and_args = [and_args]
-
-            sub_predicate_dfs = [self._inner_filter(and_arg, mapping, used_variables) for and_arg in and_args]  # type: ignore
-
-            predicate_df = sub_predicate_dfs[0]
-
-            if DEBUG: start = time.perf_counter()
-            for sub_predicate_df in sub_predicate_dfs[1:]:
-                # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
-                shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
-
-                # Join the two dataframes based on the trace identifier, domain, and shared variable columns
-                predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
-
-                # Replace the intervals column with the intersection of the current intervals and the new ones from the sub-predicate
-                predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(
-                    self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
-
-                # Remove all the 'right-hand' columns added by the join
-                predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
-
-                # Remove any rows with empty intervals
-                predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
-
-            if DEBUG:
-                end = time.perf_counter()
-                print(f"Time to AND: {'%.5f' % (end - start)}s")  # type: ignore
+            return self._handle_and(predicate, mapping)
 
         elif predicate_rule == "super_predicate_or":
-            or_args = predicate["or_args"]
-            if isinstance(or_args, tatsu.ast.AST):
-                or_args = [or_args]
-
-            sub_predicate_dfs = [self._inner_filter(or_arg, mapping, used_variables) for or_arg in or_args]  # type: ignore
-
-            predicate_df = sub_predicate_dfs[0]
-
-            if DEBUG: start = time.perf_counter()
-            for sub_predicate_df in sub_predicate_dfs[1:]:
-                # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
-                shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
-                predicate_df = predicate_df.join(sub_predicate_df, how="outer", on=["trace_id", "domain"] + shared_var_columns)
-                predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
-                predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
-                predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
-
-            if DEBUG:
-                end = time.perf_counter()
-                print(f"Time to OR: {'%.5f' % (end - start)}s")  # type: ignore
+            return self._handle_or(predicate, mapping)
 
         elif predicate_rule == "super_predicate_not":
-            predicate_df = self._inner_filter(predicate["not_args"], mapping, used_variables)  # type: ignore
-            if DEBUG: start = time.perf_counter()
+            return self._handle_not(predicate, mapping)
 
-            # For each trace ID, and each assignment of the vars that exist in the sub_predicate_df so far:
-            relevant_vars = [c for c in predicate_df.columns if c in used_variables]
-            relevant_var_mapping = {var: mapping[var] for var in relevant_vars}
-            variable_types = tuple(tuple(relevant_var_mapping[var]) for var in relevant_var_mapping.keys())
-
-            # For each cartesian product of the valid assignments for those vars given the domain
-            possible_arg_assignments = [self._object_assignments(domain, variable_types) for domain in self.domains]
-
-            possible_assignments_df = pl.DataFrame(dict(domain=self.domains, assignments=possible_arg_assignments, intervals=[[]] * len(self.domains)),
-                                                   schema=dict(domain=None, assignments=None, intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
-
-            potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
-            potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
-                'domain', 'trace_id', 'trace_length',
-                pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
-
-            # trace_ids = []
-            # domains = []
-            # assignment_columns = {var: [] for var in relevant_vars}
-            # for trace_id, (_, domain) in self.trace_lengths_and_domains.items():
-
-            #     possible_arg_assignments = self._object_assignments(domain, variable_types)
-            #     trace_ids.extend([trace_id] * len(possible_arg_assignments))
-            #     domains.extend([domain] * len(possible_arg_assignments))
-            #     for arg_ids in possible_arg_assignments:
-            #         for var, id in zip(relevant_vars, arg_ids):
-            #             assignment_columns[var].append(id)
-
-            # intervals = [[] for _ in range(len(trace_ids))]
-
-            # # If they're missing in the sub_predicate_df, add them, with an empty interval
-            # potential_missing_values_df = pl.DataFrame(dict(trace_id=trace_ids, domain=domains, intervals=intervals, **assignment_columns))
-
-            # Now, for each possible combination of args on each trace / domain, 'intervals' will contain the truth intervals if
-            # they exist and null otherwise, and 'intervals_right' will contain the empty interval
-            predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=["trace_id", "domain"] + relevant_vars)
-
-            # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
-            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
-
-            # Invert intervals will then flip them to be the entire length of the trace
-            predicate_df.replace("intervals", predicate_df.select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")] + ['trace_length'])
-
-            if DEBUG:
-                end = time.perf_counter()
-                print(f"Time to NOT: {'%.5f' % (end - start)}s")  # type: ignore
+        elif predicate_rule in ["super_predicate_exists", "super_predicate_forall", "function_comparison"]:
+            raise PredicateNotImplementedException(predicate_rule)
 
         # elif predicate_rule == "super_predicate_exists":
         #     variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"])  # type: ignore
@@ -736,7 +785,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         # if predicate_rule in self.cache_rules:
         #     self.predicate_interval_cache[ast_str] = interval_mapping
 
-        return predicate_df
 
 
 
@@ -865,59 +913,79 @@ if __name__ == '__main__':
     block_desk_test_mapping = {"?b": ["block"]}
     all_block_test_mapping = {"?b1": ["block"], "?b2": ["block"]}
 
+    test_predicates_and_mappings = [
+        (test_pred_1, test_mapping),
+        (test_pred_1, block_desk_test_mapping),
+        (test_pred_2, test_mapping),
+        (test_pred_or, block_test_mapping),
+        (test_pred_or, all_block_test_mapping),
+        (test_pred_desk_or, test_mapping),
+        (test_pred_desk_or, block_desk_test_mapping),
+        (agent_adj_predicate, agent_adj_mapping),
+    ]
+
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
-                                                    trace_names=CURRENT_TEST_TRACE_NAMES,
-                                                    # trace_names=FULL_PARTICIPANT_TRACE_SET,
+                                                    # trace_names=CURRENT_TEST_TRACE_NAMES,
+                                                    trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True)
-    out = stats.filter(test_pred_2, test_mapping)
-    _print_results_as_expected_intervals(out)
+                                                    overwrite=False)
+    # out = stats.filter(test_pred_2, test_mapping)
+    # _print_results_as_expected_intervals(out)
 
-    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    for var_type in variable_type_usage:
-        if var_type in META_TYPES:
-            continue
-        var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
+    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    # for var_type in variable_type_usage:
+    #     if var_type in META_TYPES:
+    #         continue
+    #     var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
 
-        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
-        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
+    #     prefix = "[+]" if len(var_intervals) > 0 else "[-]"
+    #     print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
-    exit()
+    # exit()
 
 
-    trace_paths = glob.glob(f"{get_project_dir()}/reward-machine/traces/participant-traces/*.json")
+    # trace_paths = glob.glob(f"{get_project_dir()}/reward-machine/traces/participant-traces/*.json")
 
-    stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
-                                           "super_predicate_or", "super_predicate_not"], overwrite=False)
-    out = stats.filter(agent_adj_predicate, agent_adj_mapping)
-    _print_results_as_expected_intervals(out)
+    # stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
+    #                                        "super_predicate_or", "super_predicate_not"], overwrite=False)
+    # out = stats.filter(agent_adj_predicate, agent_adj_mapping)
+    # _print_results_as_expected_intervals(out)
 
-    exit()
+    # exit()
 
     tracer = None
+    profile = None
     if PROFILE:
-        tracer = VizTracer(10000000)
-        tracer.start()
+        # tracer = VizTracer(10000000, ignore_c_function=True, ignore_frozen=True)
+        # tracer.start()
+        profile = cProfile.Profile()
+        profile.enable()
 
-    test_out = stats.filter(test_pred_desk_or, block_desk_test_mapping)
-    _print_results_as_expected_intervals(test_out)
-    start = time.perf_counter()
     N_ITER = 100
     for i in range(N_ITER):
         # print(f"\n====================")
-        inner_start = time.perf_counter()
-        stats.filter(test_pred_2, test_mapping)
+
+        for test_pred, test_mapping in test_predicates_and_mappings:
+            # print(f"Testing {test_pred} with mapping {test_mapping}")
+            out = stats.filter(test_pred, test_mapping)
+            # _print_results_as_expected_intervals(out)
         # inner_end = time.perf_counter()
         # print(f"Time per iteration: {'%.5f' % (inner_end - inner_start)}s")
-    end = time.perf_counter()
-    print(f"Time per iteration: {'%.5f' % ((end - start) / N_ITER)}s")
 
-    if tracer is not None:
-        tracer.stop()
-        profile_output_path = os.path.join(get_project_dir(), 'reward-machine/temp/viztracer_split_args.json')
-        print(f'Saving profile to {profile_output_path}')
-        tracer.save(profile_output_path)
+    if profile is not None:
+        profile.disable()
+        s = io.StringIO()
+        sortby = pstats.SortKey.CUMULATIVE
+        ps = pstats.Stats(profile, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+
+    # if tracer is not None:
+        # tracer.stop()
+        # profile_output_path = os.path.join(get_project_dir(), 'reward-machine/temp/viztracer_split_args.json')
+        # print(f'Saving profile to {profile_output_path}')
+        # tracer.save(profile_output_path)
 
     exit()
 

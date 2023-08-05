@@ -646,7 +646,6 @@ class PredicateFoundInData(FitnessTerm):
         self.min_total_interval_state_count = min_total_interval_state_count
 
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs()
-        # TODO: instantiate reference to predicate_data_estimator
 
     def game_start(self) -> None:
         self.predicates_found = []
@@ -668,7 +667,7 @@ class PredicateFoundInData(FitnessTerm):
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
             try:
-                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator(pred, context_variables)
+                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {})
                 predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 self.predicates_found.append(1 if predicate_found else 0)
 
@@ -681,9 +680,10 @@ class PredicateFoundInData(FitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # TODO: should this be 0 or 1 if none are found?
         if len(self.predicates_found) == 0:
+            # logger.warning(f'No predicates found for {self.header}')
             return dict(all=0, prop=0)
 
-        return dict(all=all(self.predicates_found), prop=sum(self.predicates_found) / len(self.predicates_found))
+        return dict(all=int(all(self.predicates_found)), prop=sum(self.predicates_found) / len(self.predicates_found))
 
 
 # TODO: decide if we might want different thresholds between these two?

@@ -18,6 +18,14 @@
                 ))
             )
         )
+        (preference blockNextToAgent
+            (exists (?b - block ?c - chair)
+                (at-end (not (or
+                    (agent_holds ?b)
+                    (in_motion ?c)
+                )))
+            )
+        )
 ))
 (:scoring (+
     (* (count blockOnBlock) 1)

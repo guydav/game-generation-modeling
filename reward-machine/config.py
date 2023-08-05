@@ -21,6 +21,7 @@ BUILDING_TYPE = 'building'
 FEW_OBJECTS_ROOM = 'few'
 MEDIUM_OBJECTS_ROOM = 'medium'
 MANY_OBJECTS_ROOM = 'many'
+ROOMS = [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]
 
 OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     "alarm_clock": [
@@ -246,6 +247,9 @@ OBJECTS_BY_ROOM_AND_TYPE = {
             "LongCylinderBlock|-02.93|+00.19|-01.93",
             "LongCylinderBlock|-02.94|+00.19|-02.24"
         ],
+        "pillow": [
+            "Pillow|-02.03|+00.68|-00.42",
+        ],
         "pyramid_block": [
             "PyramidBlock|-02.95|+01.61|-02.20",
             "PyramidBlock|-02.95|+01.61|-02.66",
@@ -282,6 +286,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "pink_dodgeball": ['Dodgeball|-02.97|+01.29|-02.28'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
         "tan_cube_block": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
     },
@@ -293,6 +298,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "red_dodgeball": ['Dodgeball|-02.60|+00.13|-02.18'],
         "red_pyramid_block": ['PyramidBlock|+00.93|+01.78|-02.89'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|+00.70|+01.61|-02.91'],
     },
@@ -310,6 +316,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "red_pyramid_block": ['PyramidBlock|-02.96|+01.61|-02.44'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", ],
         "tan_cube_block": ['CubeBlock|-02.96|+01.26|-01.72'],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|-02.97|+01.26|-01.94'],
         "yellow_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.66'],
@@ -326,7 +333,11 @@ OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM = {
 
 # Add the shared objects to each of the room domains
 for room_type in OBJECTS_BY_ROOM_AND_TYPE:
-    OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
+    for object_type, object_list in OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE.items():
+        if object_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]:
+            OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type].extend(object_list)
+        else:
+            OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type] = object_list[:]
 
 # A list of all objects that can be referred to directly as variables inside of a game
 NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
@@ -356,7 +367,7 @@ GAME_OBJECT_EXCLUDED_TYPES += list(META_TYPES.keys())
 
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
-for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
+for domain in ROOMS:
     OBJECTS_BY_ROOM_AND_TYPE[domain]["agent"] = ["agent"]
     for collection in COLORS, ORIENTATIONS, SIDES:
         OBJECTS_BY_ROOM_AND_TYPE[domain].update({item: [item] for item in collection})

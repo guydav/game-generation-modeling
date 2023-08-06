@@ -24,8 +24,11 @@ if __name__ == '__main__':
     featurizer = build_fitness_featurizer(args)
     np.seterr(all='raise')
 
-    for i in tqdm(range(len(game_asts))):
+    for i in tqdm(range(51, len(game_asts))):
+        print(f'Parsing game #{i}')
         _ = featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=False)
+        # TODO: check if the agent is ever both agent to the desk and ?s - sliding door
+        # TODO: check if the agent is ever adjacent to either the door and the green_golfball
 
     d = featurizer.to_df()
     print(d[[c for c in d.columns if 'predicate_found_in_data_' in c]].describe())

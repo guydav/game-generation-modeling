@@ -2040,7 +2040,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on ?o agent)
+                    (on ?o agent)  ; TODO: this is impossible -- consider revising to adjacent?
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2061,7 +2061,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on ?o agent)
+                    (on ?o agent)  ; TODO: this is impossible -- consider revising to adjacent?
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2249,7 +2249,7 @@
     (preference ballKnocksTeddy (exists (?b - ball ?t - teddy_bear ?c - chair)
         (then
             (once (and
-                (on ?c agent)
+                (on ?c agent)  ; TODO: this is impossible -- consider revising to adjacent?
                 (adjacent ?c desk)
                 (agent_holds ?b)
                 (object_orientation ?t upright)

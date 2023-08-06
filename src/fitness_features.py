@@ -645,7 +645,9 @@ class PredicateFoundInData(FitnessTerm):
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
 
-        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs()
+        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+            trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+        )
 
     def game_start(self) -> None:
         self.predicates_found = []
@@ -667,9 +669,12 @@ class PredicateFoundInData(FitnessTerm):
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
             try:
-                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {})
+                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}
+                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 self.predicates_found.append(1 if predicate_found else 0)
+                if not predicate_found:
+                    logger.info(f'{"Found" if predicate_found else "Not found"}: predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces, {n_intervals} intervals, and {total_interval_states} total interval states')
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
                 self.predicates_found.append(1)

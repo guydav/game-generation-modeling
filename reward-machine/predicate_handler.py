@@ -632,9 +632,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
 
     if isinstance(upper_object, AgentState):
-        if not agent.touching_floor:
-            return False
-
         if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
             return False
 
@@ -644,7 +641,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         agent_on_rug = rug_position[0] - rug_extents[0] <= agent.position[0] <= rug_position[0] + rug_extents[0] and \
             rug_position[2] - rug_extents[2] <= agent.position[2] <= rug_position[2] + rug_extents[2]
 
-        return not agent_on_rug if 'Floor' in lower_object.object_id else agent_on_rug
+        return agent_on_rug if 'Rug' in lower_object.object_id else not agent_on_rug
 
     if isinstance(lower_object, AgentState):
         return False

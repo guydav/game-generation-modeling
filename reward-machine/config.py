@@ -347,23 +347,32 @@ COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "p
 ORIENTATIONS = ["diagonal", "sideways", "upright", "upside_down"]
 SIDES = ["back", "front", "front_left_corner", "left", "right"]
 
+COLOR = 'color'
+ORIENTATION = 'orientation'
+SIDE = 'side'
 
+NON_OBJECT_TYPES = [COLOR, ORIENTATION, SIDE]
 
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
                         "tall_rectangular_block", "triangle_block"],
-              "color": COLORS,
-              "orientation": ORIENTATIONS,
-              "side": SIDES}
+              COLOR: COLORS,
+              ORIENTATION: ORIENTATIONS,
+              SIDE: SIDES}
 
 TYPES_TO_META_TYPE = {sub_type: meta_type for meta_type, sub_types in META_TYPES.items() for sub_type in sub_types}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
-GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
+# GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
+#                               "poster", "shelf", "side_table", "window", "wall", "agent"]
+GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "floor", "main_light_switch", "mirror",
                               "poster", "shelf", "side_table", "window", "wall", "agent"]
+GAME_OBJECT_EXCLUDED_TYPES.append("building")  # the fictional building type should not be included in game objects
 GAME_OBJECT_EXCLUDED_TYPES += COLORS + ORIENTATIONS + SIDES
 GAME_OBJECT_EXCLUDED_TYPES += list(META_TYPES.keys())
+
+GAME_OBJECT = "game_object"
 
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
@@ -372,18 +381,18 @@ for domain in ROOMS:
     for collection in COLORS, ORIENTATIONS, SIDES:
         OBJECTS_BY_ROOM_AND_TYPE[domain].update({item: [item] for item in collection})
 
-
     for meta_type, object_types in META_TYPES.items():
         OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] = []
         for object_type in object_types:
             if object_type in OBJECTS_BY_ROOM_AND_TYPE[domain]:
                 OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
 
-    OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = []
+    OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] = []
     for object_type in OBJECTS_BY_ROOM_AND_TYPE[domain]:
         if object_type not in GAME_OBJECT_EXCLUDED_TYPES:
-            OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
-    OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"])))
+            OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
+
+    OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT])))
 
 # A list of all object types (including meta types)
 ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys()) + \

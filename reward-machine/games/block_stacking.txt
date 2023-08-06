@@ -26,6 +26,31 @@
                 )))
             )
         )
+        (preference objectInDrawer
+            (exists (?g - game_object)
+                (at-end (and
+                    (in top_drawer ?g)
+                    (not (open top_drawer))
+                ))
+            )
+        )
+        (preference objectInMotion
+            (exists (?g - game_object)
+                (at-end (or
+                    (agent_holds ?g)
+                    (in_motion ?g)
+                ))
+            )
+        )
+        (preference agentMultipleAdjacent
+            (exists (?s - sliding_door ?b - ball)
+                (at-end (and
+                    (adjacent agent ?s)
+                    (adjacent agent desk)
+                    (agent_holds ?b)
+                ))
+            )
+        )
 ))
 (:scoring (+
     (* (count blockOnBlock) 1)

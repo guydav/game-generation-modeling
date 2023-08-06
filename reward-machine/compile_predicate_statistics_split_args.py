@@ -20,7 +20,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM
+from config import COLORS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -205,11 +205,12 @@ class CommonSensePredicateStatisticsSplitArgs():
             for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
                 meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
                 for object in objects_of_type:
-                    same_type_args.append((object, obj_type, obj_type, 'object_type'))
+                    same_type_args.append((object, obj_type, obj_type, obj_type))
                     if meta_type is not None:
-                        same_type_args.append((object, obj_type, meta_type, 'object_type'))
+                        same_type_args.append((object, obj_type, meta_type, meta_type))
                     if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
-                        same_type_args.append((object, obj_type, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object], 'object_type'))
+                        specific_type = OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object]
+                        same_type_args.append((object, obj_type, specific_type, specific_type))
 
                 for first_object, second_object in permutations(objects_of_type, 2):
                     same_type_args.append((first_object, obj_type, second_object, obj_type))
@@ -403,6 +404,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
                     for arg_set in possible_args:
                         arg_assignments = permutations(arg_set) if predicate != 'object_orientation' else [(arg_set[0], orientation) for orientation in ORIENTATIONS]
+                        # TODO: similar things for colors and side, if that ever comes back
 
                         for arg_ids in arg_assignments:
 
@@ -419,9 +421,9 @@ class CommonSensePredicateStatisticsSplitArgs():
                                     args.append(UNITY_PSEUDO_OBJECTS[obj_id])
                                     arg_types.append(UNITY_PSEUDO_OBJECTS[obj_id].object_type.lower())
 
-                                elif obj_id in ORIENTATIONS:
+                                elif (obj_id in ORIENTATIONS) or (obj_id in COLORS) or (obj_id in SIDES):
                                     args.append(obj_id)
-                                    arg_types.append("orientation")
+                                    arg_types.append(obj_id)
 
                                 else:
                                     args.append(most_recent_object_states[obj_id])
@@ -473,16 +475,32 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         # Remap the arg ids and types for the specific objects
         sub_df = game_df.loc[(game_df["arg_1_id"].isin(specific_objects)) | (game_df["arg_2_id"].isin(specific_objects))].copy()
+        specific_object_new_rows = []
         for idx, row in sub_df.iterrows():
-            if row["arg_1_id"] in object_ids_to_specific_names:
+            first_arg_specific = row["arg_1_id"] in object_ids_to_specific_names
+            second_arg_specific = row["arg_2_id"] in object_ids_to_specific_names
+
+            # If both are specific, we need to create three copies of the row --
+            # one each with the first arg, second arg, and both args replaced with the specific names
+            if first_arg_specific and second_arg_specific:
+                row_dict = row.to_dict()
+                first_arg_copy = row_dict.copy()
+                second_arg_copy = row_dict.copy()
+                first_arg_copy["arg_1_type"] = object_ids_to_specific_names[row["arg_1_id"]]
+                second_arg_copy["arg_2_type"] = object_ids_to_specific_names[row["arg_2_id"]]
+                specific_object_new_rows.append(first_arg_copy)
+                specific_object_new_rows.append(second_arg_copy)
+                # fall through to the other cases to create the row with both copied
+
+            if first_arg_specific:
                 sub_df.at[idx, "arg_1_type"] = object_ids_to_specific_names[row["arg_1_id"]]
                 # sub_df.at[idx, "arg_1_id"] = row["arg_1_type"]
 
-            if row["arg_2_id"] in object_ids_to_specific_names:
+            if second_arg_specific:
                 sub_df.at[idx, "arg_2_type"] = object_ids_to_specific_names[row["arg_2_id"]]
                 # sub_df.at[idx, "arg_2_id"] = sub_df.at[idx, "arg_2_type"]
 
-        # ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
+        specific_objects_new_rows_df = pd.DataFrame(specific_object_new_rows)
 
         # Add the same_types intervals
         same_type_records = [
@@ -493,7 +511,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         same_type_df = pd.DataFrame(same_type_records)
 
         # Combine the resulting dataframes and add them to the overall dataframe
-        self.data = pd.concat([self.data, game_df, sub_df, same_type_df], ignore_index=True)  # type: ignore
+        self.data = pd.concat([self.data, game_df, specific_objects_new_rows_df, sub_df, same_type_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
@@ -542,7 +560,11 @@ class CommonSensePredicateStatisticsSplitArgs():
         filter_expr = pl.col("predicate") == predicate_name
         rename_mapping = {}
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
-            filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
+            # if it can be the generic object type, we filter for it specifically
+            if GAME_OBJECT in arg_types:
+                filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(GAME_OBJECT_EXCLUDED_TYPES).is_not()
+            else:
+                filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
             rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
         # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
@@ -916,6 +938,8 @@ if __name__ == '__main__':
     game = open(get_project_dir() + '/reward-machine/games/ball_to_bin_from_bed.txt').read()
     game_ast = grammar_parser.parse(game)  # type: ignore
 
+    test_pred_orientation = game_ast[3][1]['setup']['and_args'][0]['setup']['exists_args']['setup']['statement']['conserved_pred']['pred']['and_args'][0]['pred']
+
     # should be: (and (in_motion ?b) (not (agent_holds ?b)))
     test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred']
 
@@ -931,6 +955,11 @@ if __name__ == '__main__':
     test_pred_or = block_stacking_game_ast[3][1]['preferences'][0]['definition']['pref_body']['body']['exists_args']['then_funcs'][2]['seq_func']['hold_pred']
     test_pred_desk_or = block_stacking_game_ast[3][1]['preferences'][1]['definition']['pref_body']['body']['exists_args']['at_end_pred']
     test_pred_agent_as_arg = block_stacking_game_ast[3][1]['preferences'][2]['definition']['pref_body']['body']['exists_args']['at_end_pred']
+    # test these with ?g - game_object
+    test_pred_object_in_top_drawer = block_stacking_game_ast[3][1]['preferences'][3]['definition']['pref_body']['body']['exists_args']['at_end_pred']
+    test_pred_agent_adjacent = block_stacking_game_ast[3][1]['preferences'][4]['definition']['pref_body']['body']['exists_args']['at_end_pred']
+    # test with ?s - sliding_door
+    test_pred_agent_adjacent = block_stacking_game_ast[3][1]['preferences'][5]['definition']['pref_body']['body']['exists_args']['at_end_pred']
 
     BALL_TO_BIN_FROM_BED_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/FhhBELRaBFiGGvX0YG7W-preCreateGame-rerecorded.json')
     agent_adj_game = open(get_project_dir() + '/reward-machine/games/test_agent_door_adjacent.txt').read()
@@ -961,33 +990,25 @@ if __name__ == '__main__':
                                                     # trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True)
+                                                    overwrite=True
+                                                    )
+
+    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    for var_type in variable_type_usage:
+        if var_type in META_TYPES:
+            continue
+        var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
+
+        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
+        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
     exit()
 
-    # out = stats.filter(test_pred_agent_as_arg, {"?b": ["block"], "?c": ["chair"]})
+    out = stats.filter(test_pred_agent_adjacent, {"?s": ["sliding_door"], "?b": ["ball"]})
+    print(out)
     # _print_results_as_expected_intervals(out)
 
-    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    # for var_type in variable_type_usage:
-    #     if var_type in META_TYPES:
-    #         continue
-    #     var_intervals = stats.data.filter(pl.col("arg_1_type") == var_type)
-
-    #     prefix = "[+]" if len(var_intervals) > 0 else "[-]"
-    #     print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
-
-    # exit()
-
-
-    # trace_paths = glob.glob(f"{get_project_dir()}/reward-machine/traces/participant-traces/*.json")
-
-    # stats = CommonSensePredicateStatisticsSplitArgs(cache_dir, trace_paths, cache_rules=["predicate", "super_predicate_and",
-    #                                        "super_predicate_or", "super_predicate_not"], overwrite=False)
-    # out = stats.filter(agent_adj_predicate, agent_adj_mapping)
-    # _print_results_as_expected_intervals(out)
-
-    # exit()
+    exit()
 
     tracer = None
     profile = None

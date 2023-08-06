@@ -559,12 +559,22 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         filter_expr = pl.col("predicate") == predicate_name
         rename_mapping = {}
+        drop_columns = []
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(GAME_OBJECT_EXCLUDED_TYPES).is_not()
             else:
                 filter_expr &= pl.col(f"arg_{i + 1}_type").is_in(arg_types)
+
+            # verify that if we query "same_type" and the second argument is a type, we only take the correct rows
+            # we then also drop it from the DF as passed forward
+            # TODO: figure out if there are any other predicates that require the same behavior
+            if predicate_name == "same_type" and i == 1 and not arg_var.startswith("?"):
+                filter_expr &= pl.col(f"arg_{i + 1}_id") == arg_var
+                drop_columns.append(arg_var)
+                used_variables.remove(arg_var)
+
             rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
         # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
@@ -572,7 +582,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
         # Added a drop of the predicate column which we no longer need here -- discovered it's still here while debugging yesterday
-        predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")] + ['predicate'])
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.startswith("arg_")] + drop_columns)
 
         if DEBUG:
             end = time.perf_counter()
@@ -986,8 +996,8 @@ if __name__ == '__main__':
     ]
 
     stats = CommonSensePredicateStatisticsSplitArgs(cache_dir=DEFAULT_CACHE_DIR,
-                                                    trace_names=CURRENT_TEST_TRACE_NAMES,
-                                                    # trace_names=FULL_PARTICIPANT_TRACE_SET,
+                                                    # trace_names=CURRENT_TEST_TRACE_NAMES,
+                                                    trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
                                                     overwrite=True

@@ -519,8 +519,10 @@ PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
     "agent_crouches": "the agent is crouching",
     "agent_holds": "the agent is holding {0}",
+    "between": "{1} is between {0} and {2}",
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
+    "faces": "{0} is facing {1}",
     "on": "{1} is on {0}",
     "touch": "{0} touches {1}"
 }
@@ -537,7 +539,7 @@ class PreferenceDescriber():
         self.variable_type_mapping = extract_variable_type_mapping(self.body["exists_vars"]["variables"])
         self.variable_type_mapping["agent"] = ["agent"]
 
-        self.temporal_predicates = [func["seq_func"] for func in self.body["exists_args"]["body"]["then_funcs"]]
+        self.temporal_predicates = [func['seq_func'] for func in self.body["exists_args"]["then_funcs"]]
 
         self.engine = inflect.engine()
 
@@ -603,9 +605,11 @@ class PreferenceDescriber():
     def describe_predicate(self, predicate) -> str:
         predicate_rule = predicate["parseinfo"].rule
 
+        # breakpoint()
+
         if predicate_rule == "predicate":
 
-            name = predicate["pred_name"]
+            name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
@@ -673,3 +677,19 @@ class PreferenceDescriber():
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
         return ''
+
+if __name__ == '__main__':
+    import tatsu.grammars
+    DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
+    grammar = open(DEFAULT_GRAMMAR_PATH).read()
+    grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
+
+    game = open(get_project_dir() + '/reward-machine/games/game-15.txt').read()
+    game_ast = grammar_parser.parse(game)  # type: ignore
+
+    preference = game_ast[4][1]['preferences'][0]['definition']
+
+    # should be: (and (in_motion ?b) (not (agent_holds ?b)))
+    # test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred']
+
+    PreferenceDescriber(preference).describe()

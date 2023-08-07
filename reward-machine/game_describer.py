@@ -64,7 +64,7 @@ class GameDescriber():
                 info_dict["terminal"] = ast["terminal"]
 
             elif rule == "scoring_expr":
-                info_dict["scoring"] = ast["scoring"]
+                info_dict["scoring"] = ast
 
     def _predicate_type(self, predicate: tatsu.ast.AST) -> PredicateType:
         '''
@@ -85,6 +85,25 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: predicate does not have a temporal logic type: {predicate.keys()}")
+        
+    def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
+        '''
+        Helper function to extract the name of the preference being scored, as well as any of the object types that have been
+        passed to it using the ":" syntax
+        '''
+        name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
+        preference_name = name_and_types["pref_name"]
+
+        if isinstance(name_and_types["object_types"], tatsu.ast.AST):
+            object_types = [name_and_types["object_types"]["type_name"]]  # type: ignore
+
+        elif isinstance(name_and_types["object_types"], list):
+            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]  # type: ignore
+
+        else:
+            object_types = None
+
+        return str(preference_name), object_types
 
     def _describe_setup(self, setup_ast: tatsu.ast.AST, condition_type: typing.Optional[str] = None):
         '''
@@ -280,6 +299,7 @@ class GameDescriber():
 
             comparison_operator = predicate["comp"]["comp_op"] # type: ignore
             comp_arg_1 = predicate["comp"]["arg_1"]["arg"] # type: ignore
+            comp_arg_2 = predicate["comp"]["arg_2"]["arg"] # type: ignore
 
             if isinstance(comp_arg_1, tatsu.ast.AST):
 
@@ -287,8 +307,7 @@ class GameDescriber():
                 variables = extract_variables(comp_arg_1)
 
                 comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)  # type: ignore
-
-            comp_arg_2 = predicate["comp"]["arg_2"]["arg"]
+     
             if isinstance(comp_arg_1, tatsu.ast.AST):
                 name = comp_arg_2["func_name"]
                 variables = extract_variables(comp_arg_2)
@@ -310,16 +329,158 @@ class GameDescriber():
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
         return ''
+    
+    def _describe_terminal(self, terminal_ast: typing.Optional[tatsu.ast.AST]):
+        '''
+        Determine whether the terminal conditions of the game have been met
+        '''
+        if terminal_ast is None:
+            return False
+
+        rule = terminal_ast["parseinfo"].rule  # type: ignore
+
+        if rule == "terminal":
+            return self._describe_terminal(terminal_ast["terminal"])
+
+        elif rule == "terminal_not":
+            return f"it's not the case that {self._describe_terminal(terminal_ast['not_args'])}" # type: ignore
+        
+        elif rule == "super_predicate_and":
+            return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["and_args"]]) # type: ignore
+
+        elif rule == "super_predicate_or":
+            return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["or_args"]], conj="or") # type: ignore
+
+        elif rule == "terminal_comp":
+            comparison_operator = terminal_ast["op"]
+
+            expr_1 = self._describe_scoring(terminal_ast["expr_1"]["expr"]) # type: ignore
+            expr_2 = self._describe_scoring(terminal_ast["expr_2"]["expr"]) # type: ignore
+
+            if comparison_operator == "=":
+                return f"{expr_1} is equal to {expr_2}" # type: ignore
+            elif comparison_operator == "<":
+                return f"{expr_1} is less than {expr_2}" # type: ignore
+            elif comparison_operator == "<=":
+                return f"{expr_1} is less than or equal to {expr_2}" # type: ignore
+            elif comparison_operator == ">":
+                return f"{expr_1} is greater than {expr_2}" # type: ignore
+            elif comparison_operator == ">=":
+                return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
+
+        else:
+            raise ValueError(f"Error: Unknown terminal rule '{rule}'")
+        
+    def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]):
+
+        if isinstance(scoring_ast, str):
+            return scoring_ast
+
+        rule = scoring_ast["parseinfo"].rule  # type: ignore
+
+        if rule in ("scoring_expr", "scoring_expr_or_number"): 
+            return self._describe_scoring(scoring_ast["expr"]) # type: ignore
+
+        elif rule == "scoring_multi_expr":
+            operator = scoring_ast["op"] # type: ignore
+            expressions = scoring_ast["expr"] # type: ignore
+
+            if isinstance(expressions, tatsu.ast.AST):
+                return self._describe_scoring(expressions)
+
+            elif isinstance(expressions, list):
+                if operator == "+":
+                    return f"the sum of {self.engine.join([self._describe_scoring(expression) for expression in expressions])}"
+
+                elif operator == "*":
+                    return f"the product of {self.engine.join([self._describe_scoring(expression) for expression in expressions])}"
+
+        elif rule == "scoring_binary_expr":
+            operator = scoring_ast["op"] # type: ignore
+
+            expr_1 = self._describe_scoring(scoring_ast["expr_1"]) # type: ignore
+            expr_2 = self._describe_scoring(scoring_ast["expr_2"]) # type: ignore
+
+            if operator == "-":
+                return f"{expr_1} minus {expr_2}"
+            elif operator == "/":
+                return f"{expr_1} divided by {expr_2}"
+
+        elif rule == "scoring_neg_expr":
+            return f"negative {self._describe_scoring(scoring_ast['expr'])}" # type: ignore
+        
+        elif rule == "scoring_comparison":
+            raise NotImplementedError("Comparison scoring not yet implemented")
+        
+        elif rule == "preference_eval":
+            return self._describe_scoring(scoring_ast["count_method"]) # type: ignore
+        
+        elif rule == "scoring_external_maximize":
+            # maximized_preferences = self._extract_scoring_preferences(scoring_expression)
+            raise NotImplementedError("External maximization not yet implemented")
+        
+        elif rule == "scoring_external_minimize":
+            raise NotImplementedError("External minimization not yet implemented")
+        
+        elif rule == "count":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+
+            if object_types is None:
+                return f"the number of times '{preference_name}' has been satisfied"
+            else:
+                return f"the number of times '{preference_name}' has been satisfied with specific variable types {self.engine.join(object_types)}"
+            
+        elif rule == "count_overlapping":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            if object_types is None:
+                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals"
+            else:
+                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals with specific variable types {self.engine.join(object_types)}"
+
+        elif rule == "count_once":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            if object_types is None:
+                return f"whether '{preference_name}' has been satisfied at least once"
+            else:
+                return f"whether '{preference_name}' has been satisfied at least once with specific variable types {self.engine.join(object_types)}"
+            
+        elif rule == "count_once_per_objects":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            if object_types is None:
+                return f"the number of times '{preference_name}' has been satisfied with different objects"
+            else:
+                raise ValueError("Error: count_once_per_objects does not support specific object types (I think?)")
+            
+        elif rule == "count_measure":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            if object_types is None:
+                return f"the sum of all values measured during satisfactions of '{preference_name}'"
+            else:
+                raise ValueError("Error: count_measure does not support specific object types (I think?)")
+            
+        elif rule == "count_unique_positions":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            if object_types is None:
+                return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions"
+            
+        elif rule == "count_same_positions":
+            raise NotImplementedError("count_same_positions not yet implemented")
+        
+        elif rule == "count_once_per_external_objects":
+            raise NotImplementedError("count_once_per_external_objects not yet implemented")
+        
+        else:
+            raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
 
     def describe(self, game_text):
-        game_ast = self.grammar_parser.parse(game_text)
+        game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text))
         
         game_info = {}
         self._extract_game_info(game_ast, game_info)
 
         if game_info.get("setup") is not None:
-            setup_description, _ = self._describe_setup(game_info["setup"])
             print("=====================================GAME SETUP=====================================")
+            setup_description, _ = self._describe_setup(game_info["setup"])
             print(f"\nIn order to set up the game, {setup_description}")
 
 
@@ -327,7 +488,17 @@ class GameDescriber():
             print("\n=====================================PREFERENCES=====================================")
             for idx, preference in enumerate(game_info["preferences"][0]):
                 description = self._describe_preference(preference)
-                print(f"\n###Preference {idx+1}: {description}")
+                print(f"\n### Preference {idx+1}: {description}")
+
+        if game_info.get("terminal") is not None:
+            print("\n=====================================TERMINAL CONDITIONS=====================================")
+            terminal_description = self._describe_terminal(game_info["terminal"])
+            print(f"\nThe game ends when {terminal_description}")
+
+        if game_info.get("scoring") is not None:
+            print("\n=====================================SCORING=====================================")
+            scoring_description = self._describe_scoring(game_info["scoring"])
+            print(f"\nAt the end of the game, the player's score is {scoring_description}")
 
 if __name__ == '__main__':
     game = open("./reward-machine/games/game-15.txt", "r").read()

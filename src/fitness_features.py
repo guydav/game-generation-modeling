@@ -625,6 +625,7 @@ PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
 PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
 
+FULL_DATASET_TRACES_HASH = '028b3733'
 
 class PredicateFoundInData(FitnessTerm):
     min_interval_count: int
@@ -637,7 +638,8 @@ class PredicateFoundInData(FitnessTerm):
     def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
+                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH):
 
         super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
         self.rules_to_child_keys = rules_to_child_keys
@@ -647,6 +649,7 @@ class PredicateFoundInData(FitnessTerm):
 
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
             # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+            force_trace_names_hash=trace_names_hash
         )
 
     def game_start(self) -> None:
@@ -2654,7 +2657,7 @@ def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
 
 def game_iterator():
     for src_file in args.test_files:
-        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False, log_every_change=False):  # type: ignore
+        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False, log_every_change=True):  # type: ignore
             yield game, src_file
 
 

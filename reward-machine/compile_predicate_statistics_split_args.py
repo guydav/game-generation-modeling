@@ -7,6 +7,7 @@ import hashlib
 import io
 from itertools import groupby, permutations, product, repeat, starmap
 import json
+import logging
 import os
 import pandas as pd
 import pathlib
@@ -32,6 +33,11 @@ from ast_parser import PREFERENCES
 from ast_printer import ast_section_to_string
 from building_handler import BuildingHandler
 from predicate_handler import PREDICATE_LIBRARY_RAW
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     ("agent_crouches", 0),
@@ -119,6 +125,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT,
                  in_progress_traces_filename_format: str = DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT,
+                 force_trace_names_hash: typing.Optional[str] = None,
                  overwrite: bool = False, trace_hash_n_characters: int = 8):
 
         self.cache_dir = cache_dir
@@ -131,7 +138,11 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.same_type_arg_cache = {}
 
         # Compute hash of trace names
-        trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
+        if force_trace_names_hash is not None:
+            logger.info(f"Forcing trace names hash to {force_trace_names_hash}")
+            trace_names_hash = force_trace_names_hash
+        else:
+            trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
@@ -140,15 +151,18 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         if os.path.exists(stats_filename) and not overwrite:
             self.data = pd.read_pickle(stats_filename)  # type: ignore
-            print(f'Loaded data with shape {self.data.shape} from {stats_filename}')
+            logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
             with open_method(trace_lengths_and_domains_filename, 'rb') as f:
                 self.trace_lengths_and_domains = pickle.load(f)
 
         else:
+            if force_trace_names_hash is not None:
+                raise ValueError("Must not specify force_trace_names_hash if cache file does not exist")
+
             if base_trace_path is None:
                 raise ValueError("Must specify base_trace_path if cache file does not exist")
 
-            print(f"No cache file found at {stats_filename}, building from scratch...")
+            logger.info(f"No cache file found at {stats_filename}, building from scratch...")
 
             trace_paths = list(sorted([os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]))
 
@@ -160,19 +174,19 @@ class CommonSensePredicateStatisticsSplitArgs():
                 in_progress_trace_paths = []
 
             if len(in_progress_trace_paths) == len(trace_paths):
-                print(f"Foud as many in progres traces as there are total, so starting over")
+                logger.info(f"Foud as many in progres traces as there are total, so starting over")
                 in_progress_trace_paths = []
 
             if len(in_progress_trace_paths) > 0:
                 trace_paths = [trace_path for trace_path in trace_paths if trace_path not in in_progress_trace_paths]
-                print(f"Found {len(in_progress_trace_paths)} in progress traces, resuming processing with {len(trace_paths)} traces remaining")
+                logger.info(f"Found {len(in_progress_trace_paths)} in progress traces, resuming processing with {len(trace_paths)} traces remaining")
                 self.data = pd.read_pickle(stats_filename)  # type: ignore
-                print(f'Loaded data with shape {self.data.shape} from {stats_filename}')
+                logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
                 with open_method(trace_lengths_and_domains_filename, 'rb') as f:
                     self.trace_lengths_and_domains = pickle.load(f)
 
             else:
-                print(f"No in progress traces found, starting from scratch")
+                logger.info(f"No in progress traces found, starting from scratch")
                 # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
                 # add additional columns here
                 self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore

@@ -28,7 +28,7 @@
         )
         (preference objectInDrawer
             (exists (?g - game_object)
-                (at-end (and
+                (at-end (or
                     (in top_drawer ?g)
                     (not (open top_drawer))
                 ))

@@ -13,6 +13,7 @@ import pandas as pd
 import pathlib
 import pickle
 import polars as pl
+pl.enable_string_cache(True)
 import pstats
 import tatsu, tatsu.ast, tatsu.grammars
 import time
@@ -209,10 +210,22 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         self.domains = list(self.data['domain'].unique())  # type: ignore
         self.predicates = list(self.data['predicate'].unique())  # type: ignore
+
         self._trace_lengths_and_domains_to_df()
+        self.data = pl.from_pandas(
+            self.data, schema_overrides=dict(
+                predicate=pl.Categorical,
+                trace_id=pl.Categorical,
+                domain=pl.Categorical,
+                arg_1_id=pl.Categorical,
+                arg_1_type=pl.Categorical,
+                arg_2_id=pl.Categorical,
+                arg_2_type=pl.Categorical
+            )
+        )
 
         # Convert to polars
-        self.data = pl.from_pandas(self.data)
+        # self.data = pl.from_pandas(self.data)
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []
@@ -224,11 +237,14 @@ class CommonSensePredicateStatisticsSplitArgs():
             trace_lengths.append(length)
             domains.append(domain)
 
-        self.trace_lengths_and_domains_df = pl.DataFrame({
-            'trace_id': trace_ids,
-            'trace_length': trace_lengths,
-            'domain': domains
-        })
+        self.trace_lengths_and_domains_df = pl.DataFrame(dict(
+            trace_id=trace_ids,
+            trace_length=trace_lengths,
+            domain=domains,
+        ), schema_overrides=dict(
+            trace_id=pl.Categorical,
+            domain=pl.Categorical,
+        ))
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
@@ -736,7 +752,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         possible_arg_assignments = [self._object_assignments(domain, variable_types) for domain in self.domains]
 
         possible_assignments_df = pl.DataFrame(dict(domain=self.domains, assignments=possible_arg_assignments, intervals=[[]] * len(self.domains)),
-                                                schema=dict(domain=None, assignments=None, intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
+                                                schema=dict(domain=pl.Categorical, assignments=pl.List(pl.List(pl.Categorical)), intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
 
         potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
         potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
@@ -1047,21 +1063,21 @@ if __name__ == '__main__':
                                                     trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True
+                                                    # overwrite=True
                                                     )
 
-    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    for var_type in variable_type_usage:
-        if var_type in META_TYPES:
-            continue
-        var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
+    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    # for var_type in variable_type_usage:
+    #     if var_type in META_TYPES:
+    #         continue
+    #     var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
 
-        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
-        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
+    #     prefix = "[+]" if len(var_intervals) > 0 else "[-]"
+    #     print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
-    exit()
+    # exit()
 
-    out = stats.filter(test_pred_agent_adjacent, {"?s": ["sliding_door"], "?b": ["ball"]})
+    out = stats.filter(test_pred_object_in_top_drawer, {"?g": ["game_object"]})
     print(out)
     # _print_results_as_expected_intervals(out)
 

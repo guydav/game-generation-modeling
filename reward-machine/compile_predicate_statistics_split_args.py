@@ -231,7 +231,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         if 'same_type' in self.predicates:
             self.predicates.remove('same_type')
             self.data = self.data.filter(pl.col('predicate') != 'same_type')
-            print(f'After filtering out same_type, data has shape {self.data.shape}')
+            logger.info(f'After filtering out same_type, data has shape {self.data.shape}')
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []

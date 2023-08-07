@@ -12,7 +12,8 @@ sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix()
 import ast_printer
 import ast_parser
 
-from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject, FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM
+from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM, \
+    PseudoObject, FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM
 
 PROJECT_NAME = 'game-generation-modeling'
 
@@ -450,7 +451,11 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
 
     grouped_objects = []
     for sub_types in variable_types:
-        objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] for var_type in sub_types], [])
+        objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] if var_type in OBJECTS_BY_ROOM_AND_TYPE[domain] else
+                       # If the variable type is a specific named object, we include the type name, to match behavior in the predicate statistics
+                       SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain][var_type] if var_type in SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain] else
+                       []
+                       for var_type in sub_types], [])
         grouped_objects.append([obj for obj in objects if obj not in used_objects])
 
     assignments = list(itertools.product(*grouped_objects))

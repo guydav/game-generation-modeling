@@ -21,6 +21,7 @@ BUILDING_TYPE = 'building'
 FEW_OBJECTS_ROOM = 'few'
 MEDIUM_OBJECTS_ROOM = 'medium'
 MANY_OBJECTS_ROOM = 'many'
+ROOMS = [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]
 
 OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     "alarm_clock": [
@@ -246,6 +247,9 @@ OBJECTS_BY_ROOM_AND_TYPE = {
             "LongCylinderBlock|-02.93|+00.19|-01.93",
             "LongCylinderBlock|-02.94|+00.19|-02.24"
         ],
+        "pillow": [
+            "Pillow|-02.03|+00.68|-00.42",
+        ],
         "pyramid_block": [
             "PyramidBlock|-02.95|+01.61|-02.20",
             "PyramidBlock|-02.95|+01.61|-02.66",
@@ -282,6 +286,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "pink_dodgeball": ['Dodgeball|-02.97|+01.29|-02.28'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
         "tan_cube_block": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
     },
@@ -293,6 +298,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "red_dodgeball": ['Dodgeball|-02.60|+00.13|-02.18'],
         "red_pyramid_block": ['PyramidBlock|+00.93|+01.78|-02.89'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|+00.70|+01.61|-02.91'],
     },
@@ -310,6 +316,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "red_pyramid_block": ['PyramidBlock|-02.96|+01.61|-02.44'],
         "sliding_door": ["Window|+02.28|+00.93|-03.18", ],
         "tan_cube_block": ['CubeBlock|-02.96|+01.26|-01.72'],
+        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|-02.97|+01.26|-01.94'],
         "yellow_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.66'],
@@ -326,7 +333,11 @@ OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM = {
 
 # Add the shared objects to each of the room domains
 for room_type in OBJECTS_BY_ROOM_AND_TYPE:
-    OBJECTS_BY_ROOM_AND_TYPE[room_type].update(OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE)
+    for object_type, object_list in OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE.items():
+        if object_type in OBJECTS_BY_ROOM_AND_TYPE[room_type]:
+            OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type].extend(object_list)
+        else:
+            OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type] = object_list[:]
 
 # A list of all objects that can be referred to directly as variables inside of a game
 NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
@@ -336,31 +347,39 @@ COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "p
 ORIENTATIONS = ["diagonal", "sideways", "upright", "upside_down"]
 SIDES = ["back", "front", "front_left_corner", "left", "right"]
 
+COLOR = 'color'
+ORIENTATION = 'orientation'
+SIDE = 'side'
 
+NON_OBJECT_TYPES = [COLOR, ORIENTATION, SIDE]
 
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
                         "tall_rectangular_block", "triangle_block"],
-              "color": COLORS,
-              "orientation": ORIENTATIONS,
-              "side": SIDES}
+              COLOR: COLORS,
+              ORIENTATION: ORIENTATIONS,
+              SIDE: SIDES}
 
 TYPES_TO_META_TYPE = {sub_type: meta_type for meta_type, sub_types in META_TYPES.items() for sub_type in sub_types}
 
 # List of types that are *not* included in "game_object" -- easier than listing out all the types that are
-GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
+# GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "desktop", "lamp", "drawer", "floor", "main_light_switch", "mirror",
+#                               "poster", "shelf", "side_table", "window", "wall", "agent"]
+GAME_OBJECT_EXCLUDED_TYPES = ["bed", "blinds", "desk", "floor", "main_light_switch", "mirror",
                               "poster", "shelf", "side_table", "window", "wall", "agent"]
+GAME_OBJECT_EXCLUDED_TYPES.append("building")  # the fictional building type should not be included in game objects
 GAME_OBJECT_EXCLUDED_TYPES += COLORS + ORIENTATIONS + SIDES
 GAME_OBJECT_EXCLUDED_TYPES += list(META_TYPES.keys())
 
+GAME_OBJECT = "game_object"
+
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
-for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
+for domain in ROOMS:
     OBJECTS_BY_ROOM_AND_TYPE[domain]["agent"] = ["agent"]
     for collection in COLORS, ORIENTATIONS, SIDES:
         OBJECTS_BY_ROOM_AND_TYPE[domain].update({item: [item] for item in collection})
-
 
     for meta_type, object_types in META_TYPES.items():
         OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] = []
@@ -368,11 +387,12 @@ for domain in [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]:
             if object_type in OBJECTS_BY_ROOM_AND_TYPE[domain]:
                 OBJECTS_BY_ROOM_AND_TYPE[domain][meta_type] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
 
-    OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = []
+    OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] = []
     for object_type in OBJECTS_BY_ROOM_AND_TYPE[domain]:
         if object_type not in GAME_OBJECT_EXCLUDED_TYPES:
-            OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
-    OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain]["game_object"])))
+            OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] += OBJECTS_BY_ROOM_AND_TYPE[domain][object_type]
+
+    OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT] = sorted(list(set(OBJECTS_BY_ROOM_AND_TYPE[domain][GAME_OBJECT])))
 
 # A list of all object types (including meta types)
 ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys()) + \

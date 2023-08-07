@@ -7,7 +7,7 @@ import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -535,7 +535,7 @@ TOUCH_DISTANCE_THRESHOLD = 0.15
 
 
 def _building_touch(agent: AgentState, building: BuildingPseudoObject, other_object: typing.Union[ObjectState, PseudoObject]):
-    if other_object.object_id in building.building_objects:
+    if not isinstance(other_object, AgentState) and other_object.object_id in building.building_objects:
         return False
 
     return any([_pred_touch(agent, [building_obj, other_object]) for building_obj in building.building_objects.values()])
@@ -545,7 +545,9 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     assert len(objects) == 2
 
     first_pseudo = isinstance(objects[0], PseudoObject)
+    first_agent = isinstance(objects[0], AgentState)
     second_pseudo = isinstance(objects[1], PseudoObject)
+    second_agent = isinstance(objects[1], AgentState)
 
     # TODO (GD 2022-09-27): the logic here to decide which wall to attribute the collision here is incomoplete;
     # right now it assigns it to the nearest wall, but that could be incorrect, if the ball hit the wall at an angle
@@ -565,16 +567,24 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         elif second_building:
             return _building_touch(agent, objects[1], objects[0])  # type: ignore
 
-    # TODO (GT 2023-07-31): do we have a way to detect this? Does the agent show up on an object's touching_objects list?
-    elif isinstance(objects[0], AgentState) or isinstance(objects[1], AgentState):
-        return False
-
     elif first_pseudo:
         obj = typing.cast(ObjectState, objects[1])
         pseudo_obj = typing.cast(PseudoObject, objects[0])
 
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
+
+        if second_agent:
+            if pseudo_obj.object_id == DOOR_ID:
+                return agent.touching_side and _pred_adjacent(agent, objects)
+
+            if pseudo_obj.object_id == WALL_ID:
+                return agent.touching_side and _pred_adjacent(agent, objects) \
+                    and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
+
+            if pseudo_obj.object_id == RUG_ID:
+                return agent.touching_floor and _pred_on(agent, [pseudo_obj, obj]) \
+                    and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
 
         return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
@@ -586,8 +596,27 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
         if isinstance(pseudo_obj, BuildingPseudoObject):
             return _building_touch(agent, pseudo_obj, obj)
 
+        if first_agent:
+            if pseudo_obj.object_id == DOOR_ID:
+                return agent.touching_side and _pred_adjacent(agent, objects)
+
+            if pseudo_obj.object_id == WALL_ID:
+                return agent.touching_side and _pred_adjacent(agent, objects) \
+                    and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
+
+            if pseudo_obj.object_id == RUG_ID:
+                return agent.touching_floor and _pred_on(agent, [pseudo_obj, obj]) \
+                    and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
+
         return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
+
+    # gd1279: the agent appears as `FPSController` in the touching objects of the object it is touching
+    elif first_agent:
+        return 'FPSController' in objects[1].touching_objects  # type: ignore
+
+    elif second_agent:
+        return 'FPSController' in objects[0].touching_objects  # type: ignore
 
     else:
         return objects[1].object_id in objects[0].touching_objects or objects[0].object_id in objects[1].touching_objects  # type: ignore
@@ -601,9 +630,23 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-    objects_touch = _pred_touch(agent, objects)
 
-    if objects_touch:
+    if isinstance(upper_object, AgentState):
+        if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
+            return False
+
+        rug_pseudo_object = UNITY_PSEUDO_OBJECTS[RUG]
+
+        rug_position, rug_extents = rug_pseudo_object.position, rug_pseudo_object.bbox_extents
+        agent_on_rug = rug_position[0] - rug_extents[0] <= agent.position[0] <= rug_position[0] + rug_extents[0] and \
+            rug_position[2] - rug_extents[2] <= agent.position[2] <= rug_position[2] + rug_extents[2]
+
+        return agent_on_rug if 'Rug' in lower_object.object_id else not agent_on_rug
+
+    if isinstance(lower_object, AgentState):
+        return False
+
+    if _pred_touch(agent, objects):
         # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
 
         upper_object_bbox_center = upper_object.bbox_center

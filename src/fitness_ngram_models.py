@@ -183,8 +183,11 @@ class NGramTrieModel:
 
         # return node.count
 
-    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False):
+    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False, stupid_backoff_discount: typing.Optional[float] = None):
         if stupid_backoff:
+            if stupid_backoff_discount is None:
+                stupid_backoff_discount = self.stupid_backoff_discount
+
             discount_factor = 1.0
             start_index = 0
             n = min(self.n, len(ngram))
@@ -196,7 +199,7 @@ class NGramTrieModel:
                 if ngram_count > 0:
                     break
                 start_index += 1
-                discount_factor *= self.stupid_backoff_discount
+                discount_factor *= stupid_backoff_discount
 
             if start_index == n:
                 ret_val = 0
@@ -217,19 +220,21 @@ class NGramTrieModel:
 
     def _transform_ngrams(self, ngrams: typing.Sequence[typing.Tuple[str, ...]],
                   stupid_backoff: bool = True, log: bool = False,
+                  stupid_backoff_discount: typing.Optional[float] = None,
                   reduction: str = 'mean'):
 
         if len(ngrams) == 0:
             return None
 
-        scores = [self._score_ngram(ngram, stupid_backoff, log) for ngram in ngrams]
+        scores = [self._score_ngram(ngram, stupid_backoff, log, stupid_backoff_discount) for ngram in ngrams]
         if reduction == 'mean':
             return np.mean(scores)
 
         return scores
 
-    def transform(self, game_texts: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False,):
-        return np.array([self._transform_ngrams(self._text_to_ngrams(text), stupid_backoff, log)
+    def transform(self, game_texts: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False,
+                  stupid_backoff_discount: typing.Optional[float] = None):
+        return np.array([self._transform_ngrams(self._text_to_ngrams(text), stupid_backoff, log, stupid_backoff_discount)
                          for text in game_texts])
 
     def fit_transform(self, game_texts: typing.Sequence[str]):
@@ -276,7 +281,8 @@ class NGramTrieModel:
               input_ngrams: typing.Optional[typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]]] = None,
               k: typing.Optional[int] = None, stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
+              top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+              stupid_backoff_discount: typing.Optional[float] = None):
 
         if input_text is None and input_ngrams is None:
             raise ValueError('Must provide either text or ngrams')
@@ -302,10 +308,10 @@ class NGramTrieModel:
         input_ngrams = typing.cast(typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]], input_ngrams)
 
         if use_top_k and score_all:
-            output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
+            output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, stupid_backoff_discount, reduction='mean')
                       for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
         else:
-            output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
+            output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, stupid_backoff_discount, reduction='mean'))
 
         if k is not None:
             if k != self.k:

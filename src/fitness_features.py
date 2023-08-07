@@ -35,6 +35,9 @@ from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieMode
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
 import room_and_object_types
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
+import compile_predicate_statistics_split_args
+
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -307,7 +310,7 @@ class ASTFitnessFeaturizer:
         for term in self.full_ast_registry:
             term.update(full_ast, 'full_ast', context=context.copy())
 
-        ast_full_text = ast_printer.ast_to_string(full_ast, ' ')  # type: ignore
+        ast_full_text = typing.cast(str, ast_printer.ast_to_string(full_ast, ' '))   # type: ignore
         for term in self.full_text_registry:
             term.parse_full_text(ast_full_text)
 
@@ -471,8 +474,6 @@ class VariablesDefinedTerm(VariableBasedFitnessTerm):
         # return self.defined_count / (self.defined_count + self.undefined_count)
 
 
-
-
 class AllVariablesUsed(VariableBasedFitnessTerm):
     defined_variables: typing.Set[typing.Tuple[str, str, int]]
     used_variables: typing.Set[typing.Tuple[str, str, int]]
@@ -622,25 +623,31 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
 
 PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
+PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 200
 
 
 class PredicateFoundInData(FitnessTerm):
     min_interval_count: int
     min_trace_count: int
     predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
-                                              typing.Dict[typing.Tuple[str, typing.Tuple[str, ...]], typing.List[typing.List[int]]]]
+                                              typing.Tuple[int, int, int]]
     predicates_found: typing.List[int]
     rules_to_child_keys: typing.Dict[str, str]
 
     def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
 
         super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
         self.rules_to_child_keys = rules_to_child_keys
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
-        # TODO: instantiate reference to predicate_data_estimator
+        self.min_total_interval_state_count = min_total_interval_state_count
+
+        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+            trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+        )
 
     def game_start(self) -> None:
         self.predicates_found = []
@@ -661,15 +668,27 @@ class PredicateFoundInData(FitnessTerm):
             # mapping = ...(context_variables)
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
-            intervals = {}
-            predicate_found = len(intervals) > self.min_interval_count and sum(intervals.values()) > self.min_trace_count
-            self.predicates_found.append(1 if predicate_found else 0)
+            try:
+                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}
+                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
+                predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
+                self.predicates_found.append(1 if predicate_found else 0)
+                if not predicate_found:
+                    logger.info(f'{"Found" if predicate_found else "Not found"}: predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces, {n_intervals} intervals, and {total_interval_states} total interval states')
+
+            except compile_predicate_statistics_split_args.PredicateNotImplementedException:
+                self.predicates_found.append(1)
+
+    def _get_all_inner_keys(self):
+        return ['all', 'prop']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # TODO: should this be 0 or 1 if none are found?
         if len(self.predicates_found) == 0:
-            return 0
-        return sum(self.predicates_found) / len(self.predicates_found)
+            # logger.warning(f'No predicates found for {self.header}')
+            return dict(all=0, prop=0)
+
+        return dict(all=int(all(self.predicates_found)), prop=sum(self.predicates_found) / len(self.predicates_found))
 
 
 # TODO: decide if we might want different thresholds between these two?
@@ -677,21 +696,21 @@ class PredicateFoundInData(FitnessTerm):
 
 class SetupSuperPredicateFoundInData(PredicateFoundInData):
     def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
         super().__init__({'setup_game_conserved': 'conserved_pred', 'setup_game_optional': 'optional_pred'},
-                         'setup_super_predicate', min_trace_count, min_interval_count)
+                         'setup', min_trace_count, min_interval_count, min_total_interval_state_count)
 
 
 class PreferencesPredicateFoundInData(PredicateFoundInData):
     def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT):
+                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
 
         super().__init__({'once': 'once_pred', 'once_measure': 'once_measure_pred',
                           'hold': 'hold_pred', 'while_hold': 'hold_pred',
                           'at_end': 'at_end_pred',},
-                         'preferences', min_trace_count, min_interval_count)
-
-
+                         'preferences', min_trace_count, min_interval_count, min_total_interval_state_count)
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -995,6 +1014,28 @@ class NoVariablesRepeated(FitnessTerm):
         return self.count_with_repeats != 0
 
 
+class RepeatedVariableTypeInEither(FitnessTerm):
+    repeated_type_found: bool = False
+
+    def __init__(self):
+        super().__init__(VARIABLE_TYPE_DEF_RULES_PATTERN, 'repeated_variable_type_in_either')
+
+    def game_start(self) -> None:
+        self.repeated_type_found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            var_type = ast.var_type.type  # type: ignore
+            if isinstance(var_type, tatsu.ast.AST):
+                type_names = var_type.type_names
+                if isinstance(type_names, list):
+                    if len(set(type_names)) < len(type_names):
+                        self.repeated_type_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.repeated_type_found
+
+
 ALL_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or|_not)$')
 MULTI_BOOLEAN_RULE_PATTERN = re.compile(r'[\w_]+(_and|_or)$')
 LOGICALS_CHILD_KEY_OPTIONS = ['pred', 'setup', 'terminal']
@@ -1132,17 +1173,18 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            self.scoring_expression_to_count[ast_printer.ast_section_to_string(ast, ast_parser.SCORING)] += 1
+            key = typing.cast(str, ast_printer.ast_section_to_string(ast, ast_parser.SCORING))
+            self.scoring_expression_to_count[key] += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.scoring_expression_to_count) == 0:
-            return dict(max=0, exist=0)
+            return dict(exist=0)  # max=0,
 
         values = [v - 1 for v in self.scoring_expression_to_count.values()]
-        return dict(max=max(values), exist=int(any(v > 0 for v in values)))
+        return dict(exist=int(any(v > 0 for v in values)))  # max=max(values),
 
     def _get_all_inner_keys(self) -> typing.List[str]:
-        return ['max', 'exist']
+        return ['exist']  # ['max', 'exist']
 
 
 
@@ -1286,6 +1328,70 @@ class DisjointSeqFuncPredicateTerm(FitnessTerm):
         if len(seq_func_terms) > 1:
             for i, j in itertools.combinations(range(len(seq_func_terms)), 2):
                 if len(seq_func_terms[i].intersection(seq_func_terms[j])) == 0:
+                    self.disjoint_found = True
+                    return
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.disjoint_found
+
+
+class DisjointAtEndPredicateTerm(FitnessTerm):
+    disjoint_found: bool
+    term_tracker: ASTPredicateTermTracker
+
+    def __init__(self):
+        super().__init__(('at_end',), 'disjoint_at_end_found')
+        self.disjoint_found = False
+        self.term_tracker = ASTPredicateTermTracker()
+
+    def game_start(self) -> None:
+        self.disjoint_found = False
+
+    def _find_ast_predicate_terms(self, ast: tatsu.ast.AST):
+        rule = ast.parseinfo.rule  # type: ignore
+
+        if rule == 'super_predicate':
+            self._find_ast_predicate_terms(ast.pred)  # type: ignore
+            return
+
+        if rule in ('predicate', 'function_comparison'):
+            self.current_at_end_term_sets.append(self.term_tracker(ast))
+            return
+
+        child_key = None
+
+        if rule == 'super_predicate_and':
+            child_key = 'and_args'
+        elif rule == 'super_predicate_or':
+            child_key = 'or_args'
+        elif rule == 'super_predicate_not':
+            child_key = 'not_args'
+        elif rule == 'super_predicate_exists':
+            child_key = 'exists_args'
+        elif rule == 'super_predicate_forall':
+            child_key = 'forall_args'
+
+        if child_key is None:
+            raise ValueError(f'No child key found for rule {rule} in {ast}')
+
+        child_or_children = ast[child_key]
+
+        if isinstance(child_or_children, tatsu.ast.AST):
+            self._find_ast_predicate_terms(child_or_children)
+
+        else:
+            for child in child_or_children:  # type: ignore
+                self._find_ast_predicate_terms(child)
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.current_at_end_term_sets = []
+        self._find_ast_predicate_terms(ast.at_end_pred)  # type: ignore
+
+        term_sets = [terms for terms in self.current_at_end_term_sets if len(terms) > 0]
+
+        if len(term_sets) > 1:
+            for i in range(len(term_sets)):
+                if all(len(term_sets[i].intersection(term_sets[j])) == 0 for j in range(len(term_sets)) if i != j):
                     self.disjoint_found = True
                     return
 
@@ -2042,7 +2148,7 @@ class CompositionalityStructureCounter(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            ast_str = ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES)
+            ast_str = typing.cast(str, ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES))
             for args in self.args_pattern.findall(ast_str):
                 ast_str = ast_str.replace(args, ' '.join(map(lambda x: self.variable_replacement, args.split(" "))), 1)
 
@@ -2139,24 +2245,24 @@ class SectionNodeCount(SectionCountTerm):
         return self.node_count
 
 
-class SectionMaxWidth(SectionCountTerm):
-    max_width: int = 0
+# class SectionMaxWidth(SectionCountTerm):
+#     max_width: int = 0
 
-    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
-        super().__init__(section, f'max_width_{section}', thresholds)
-        self.max_width = 0
+#     def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+#         super().__init__(section, f'max_width_{section}', thresholds)
+#         self.max_width = 0
 
-    def game_start(self) -> None:
-        self.max_width = 0
+#     def game_start(self) -> None:
+#         self.max_width = 0
 
-    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
-            for child_key in ast:
-                if isinstance(ast[child_key], list):
-                    self.max_width = max(self.max_width, len(ast[child_key]))  # type: ignore
+#     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+#         if isinstance(ast, tatsu.ast.AST):
+#             for child_key in ast:
+#                 if isinstance(ast[child_key], list):
+#                     self.max_width = max(self.max_width, len(ast[child_key]))  # type: ignore
 
-    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return self.max_width
+#     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+#         return self.max_width
 
 
 SECTION_COUNT_THRESHOLDS = {
@@ -2178,23 +2284,23 @@ SECTION_COUNT_THRESHOLDS = {
         ast_parser.TERMINAL: [0.0, 9.0, 11.0, 50.0],  # [0.0, 0.0, 10.0, 50.0]
         ast_parser.SCORING: [4.0, 16.0, 32.0, 134.0],  # [4.0, 4.0, 28.0, 134.0]
     },
-    SectionMaxWidth: {
-        ast_parser.SETUP: [0.0, 1.0, 3.0, 10.0],
-        ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
-        ast_parser.TERMINAL: [0.0, 2.0, 3.0, 4.0],  # [0.0, 0.0, 0.0, 4.0]
-        ast_parser.SCORING: [0.0, 2.0, 3.0, 12.0],
-    }
+    # SectionMaxWidth: {
+    #     ast_parser.SETUP: [0.0, 1.0, 3.0, 10.0],
+    #     ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10], # TODO: change to [2.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
+    #     ast_parser.TERMINAL: [0.0, 2.0, 3.0, 4.0],  # [0.0, 0.0, 0.0, 4.0]
+    #     ast_parser.SCORING: [0.0, 2.0, 3.0, 12.0],
+    # }
 }
 
 
 def build_section_count_fitness_terms(sections: typing.Sequence[str] = ast_parser.SECTION_KEYS,
-    term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount, SectionMaxWidth),
-    thresholds: typing.Optional[typing.Dict[typing.Callable, typing.Dict[str, typing.Sequence[float]]]] = SECTION_COUNT_THRESHOLDS,
+    # term_classes: typing.Sequence[typing.Callable] = (SectionMaxDepth, SectionMeanDepth, SectionNodeCount, SectionMaxWidth),
+    thresholds: typing.Optional[typing.Dict[typing.Callable, typing.Dict[str, typing.Sequence[float]]]] = SECTION_COUNT_THRESHOLDS,  # type: ignore
     ) -> typing.Sequence[FitnessTerm]:
     if thresholds is None:
         thresholds = {}
 
-    return [term_class(section, thresholds[term_class][section] if term_class in thresholds else None) for term_class in term_classes for section in sections]
+    return [term_class(section, thresholds[term_class][section] if term_class in thresholds else None) for term_class in thresholds for section in sections]
 
 SECTION_EXISTS_SECTIONS = (ast_parser.SETUP, ast_parser.TERMINAL)
 
@@ -2410,6 +2516,12 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
+    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
+    fitness.register(setup_predicate_found_in_data)
+
+    preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
+    fitness.register(preferences_predicate_found_in_data)
+
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)
 
@@ -2440,6 +2552,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_repeated_variables_in_predicate = NoVariablesRepeated()
     fitness.register(no_repeated_variables_in_predicate)
 
+    repeated_variable_type_in_either = RepeatedVariableTypeInEither()
+    fitness.register(repeated_variable_type_in_either)
+
     no_nested_logicals = NoNestedLogicals()
     fitness.register(no_nested_logicals)
 
@@ -2466,6 +2581,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     disjoint_seq_funcs = DisjointSeqFuncPredicateTerm()
     fitness.register(disjoint_seq_funcs)
+
+    disjoint_at_end_preds = DisjointAtEndPredicateTerm()
+    fitness.register(disjoint_at_end_preds)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used)

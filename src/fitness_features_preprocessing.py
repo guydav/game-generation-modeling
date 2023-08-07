@@ -31,12 +31,14 @@ BINARIZE_IGNORE_FEATURES = set([
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
-    'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
+    'repeated_variables_found', 'repeated_variable_type_in_either',
+    'nested_logicals_found', 'identical_logical_children_found',
     'identical_scoring_children_found', 'identical_scoring_expressions_found',
     'two_number_operation_found', 'single_argument_multi_operation_found',
     'tautological_expression_found', 'redundant_expression_found',
     'redundant_scoring_terminal_expression_found', 'at_end_found',
-    'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
+    'identical_consecutive_seq_func_predicates_found',
+    'disjoint_seq_funcs_found', 'disjoint_at_end_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [

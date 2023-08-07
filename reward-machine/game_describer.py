@@ -231,9 +231,8 @@ class GameDescriber():
                         description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
 
                     elif temporal_type == PredicateType.ONCE_MEASURE:
-                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}"
-
-                        # TODO: describe which measurement is performed
+                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}."
+                        description += f" In addition, measure and record {self._describe_predicate(temporal_predicate['measurement'])}"
 
                     elif temporal_type == PredicateType.HOLD:
                         description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
@@ -324,6 +323,12 @@ class GameDescriber():
                 return f"{comp_arg_1} is greater than {comp_arg_2}"
             elif comparison_operator == ">=":
                 return f"{comp_arg_1} is greater than or equal to {comp_arg_2}"
+            
+        elif predicate_rule == "function_eval":
+            name = extract_predicate_function_name(predicate)
+            variables = extract_variables(predicate)
+
+            return FUNCTION_DESCRIPTIONS[name].format(*variables)
 
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
@@ -390,10 +395,10 @@ class GameDescriber():
 
             elif isinstance(expressions, list):
                 if operator == "+":
-                    return f"the sum of {self.engine.join([self._describe_scoring(expression) for expression in expressions])}"
+                    return f"the sum of {self.engine.join([f'({self._describe_scoring(expression)})' for expression in expressions])}"
 
                 elif operator == "*":
-                    return f"the product of {self.engine.join([self._describe_scoring(expression) for expression in expressions])}"
+                    return f"the product of {self.engine.join([f'({self._describe_scoring(expression)})' for expression in expressions])}"
 
         elif rule == "scoring_binary_expr":
             operator = scoring_ast["op"] # type: ignore
@@ -501,6 +506,6 @@ class GameDescriber():
             print(f"\nAt the end of the game, the player's score is {scoring_description}")
 
 if __name__ == '__main__':
-    game = open("./reward-machine/games/game-15.txt", "r").read()
+    game = open("./reward-machine/games/throw_measure_dist.txt", "r").read()
     game_describer = GameDescriber()
     game_describer.describe(game)

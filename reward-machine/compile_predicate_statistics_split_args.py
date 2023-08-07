@@ -721,6 +721,9 @@ class CommonSensePredicateStatisticsSplitArgs():
         if len(sub_predicate_dfs) == 0:
             raise PredicateNotImplementedException("All sub-predicates of the and were not implemented")
 
+        if len(sub_predicate_dfs) == 1:
+            return sub_predicate_dfs[0], used_variables
+
         predicate_df = sub_predicate_dfs[0]
 
         suffixes = []
@@ -730,7 +733,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
 
-            suffix = f"_{i + 1}"
+            suffix = f"_{i}"
             suffixes.append(suffix)
             intervals_columns.append(f"intervals{suffix}")
 
@@ -776,6 +779,9 @@ class CommonSensePredicateStatisticsSplitArgs():
         if len(sub_predicate_dfs) == 0:
             raise PredicateNotImplementedException("All sub-predicates of the por were not implemented")
 
+        if len(sub_predicate_dfs) == 1:
+            return sub_predicate_dfs[0], used_variables
+
         relevant_vars = list(used_variables)
         # Building this dataframe to explicitly represent all potential assignments, instead of implicitly representing them as nulls
         # as the implicit nulls were making it really hard to write the logic for the (not (or ...)) case
@@ -789,7 +795,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
 
-            suffix = f"_{i + 1}"
+            suffix = f"_{i}"
             suffixes.append(suffix)
             intervals_columns.append(f"intervals{suffix}")
 

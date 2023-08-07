@@ -3,6 +3,7 @@ import typing
 import inflect
 import tatsu, tatsu.ast, tatsu.grammars
 
+from preference_handler import PredicateType
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -65,6 +66,26 @@ class GameDescriber():
             elif rule == "scoring_expr":
                 info_dict["scoring"] = ast["scoring"]
 
+    def _predicate_type(self, predicate: tatsu.ast.AST) -> PredicateType:
+        '''
+        Returns the temporal logic type of a given predicate
+        '''
+        if "once_pred" in predicate.keys():
+            return PredicateType.ONCE
+
+        elif "once_measure_pred" in predicate.keys():
+            return PredicateType.ONCE_MEASURE
+
+        elif "hold_pred" in predicate.keys():
+
+            if "while_preds" in predicate.keys():
+                return PredicateType.HOLD_WHILE
+
+            return PredicateType.HOLD
+
+        else:
+            raise ValueError(f"Error: predicate does not have a temporal logic type: {predicate.keys()}")
+
     def _describe_setup(self, setup_ast: tatsu.ast.AST, condition_type: typing.Optional[str] = None):
         '''
         Describe the setup of the game, including conditions that need to be satisfied once (game-optional)
@@ -73,7 +94,6 @@ class GameDescriber():
 
         rule = setup_ast["parseinfo"].rule  # type: ignore
 
-        print(f"Setup rule = {rule}")
         if rule == "setup":
             return self._describe_setup(typing.cast(tatsu.ast.AST, setup_ast["setup"]), condition_type)
 
@@ -102,7 +122,7 @@ class GameDescriber():
                 if len(optional_conditions) > 0:
                     description += "\n\nand in addition, "
 
-                description += "the following must all be true for all time steps:"
+                description += "the following must all be true for every time step:"
                 description += "\n- " + "\n- ".join(conserved_conditions)
 
             return description, None
@@ -118,7 +138,6 @@ class GameDescriber():
                 new_variables.append(f"an object {var} of type {self.engine.join(types, conj='or')}")
 
             text, condition_type = self._describe_setup(setup_ast["exists_args"], condition_type) # type: ignore
-            print(f"exists text = {text}")
 
             return f"there exists {self.engine.join(new_variables)}, such that {text}", condition_type # type: ignore
 
@@ -144,6 +163,77 @@ class GameDescriber():
         else:
             raise ValueError(f"Unknown setup expression rule: {rule}")
 
+    def _describe_preference(self, preference_ast: tatsu.ast.AST):
+        '''
+        Describe a particular preference of game, calling out whether it uses an external forall
+        '''
+
+        description = ""
+
+        pref_def = typing.cast(tatsu.ast.AST, preference_ast["definition"])
+        rule = pref_def["parseinfo"].rule   # type: ignore
+
+        if rule == "preference":
+            name = typing.cast(str, pref_def["pref_name"])
+            description += f"'{name}'"
+
+            body = pref_def["pref_body"]["body"] # type: ignore
+
+            if body.parseinfo.rule == "pref_body_exists":
+
+                variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
+                description += "\nThe variables required by this preference are:"
+                for var, types in variable_type_mapping.items():
+                    description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            else:
+                raise NotImplementedError(f"Unknown preference body rule: {body.parseinfo.rule}")
+
+            description += "\n\nThis preference is satisfied when:"
+
+            if body["exists_args"].parseinfo.rule == "at_end":
+                description += f"\n- in the final game state, {self._describe_predicate(body['exists_args']['at_end_pred'])}" # type: ignore
+
+            elif body["exists_args"].parseinfo.rule == "then":
+
+                temporal_predicates = [func['seq_func'] for func in body["exists_args"]["then_funcs"]]
+                for idx, temporal_predicate in enumerate(temporal_predicates):
+                    if len(temporal_predicates) == 1:
+                        description += "\n- "
+                    elif idx == 0:
+                        description += f"\n- first, "
+                    elif idx == len(temporal_predicates) - 1:
+                        description += f"\n- finally, "
+                    else:
+                        description += f"\n- next, "
+
+                    temporal_type = self._predicate_type(temporal_predicate)
+                    if temporal_type == PredicateType.ONCE:
+                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
+
+                    elif temporal_type == PredicateType.ONCE_MEASURE:
+                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}"
+
+                        # TODO: describe which measurement is performed
+
+                    elif temporal_type == PredicateType.HOLD:
+                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                    elif temporal_type == PredicateType.HOLD_WHILE:
+                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                        if isinstance(temporal_predicate["while_preds"], list):
+                            while_desc = self.engine.join(['a state where (' + self._describe_predicate(pred) + ')' for pred in temporal_predicate['while_preds']])
+                            description += f" Additionally, during this sequence there is {while_desc} (in that order)."
+                        else:
+                            description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
+                    
+
+            return description
+
+        # This case handles externall forall preferences
+        elif rule == "pref_forall":
+            raise NotImplementedError("External forall preferences are not yet supported")
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
         
@@ -230,8 +320,14 @@ class GameDescriber():
         if game_info.get("setup") is not None:
             setup_description, _ = self._describe_setup(game_info["setup"])
             print("=====================================GAME SETUP=====================================")
-            print(f"The setup conditions are as follows: {setup_description}")
+            print(f"\nIn order to set up the game, {setup_description}")
 
+
+        if game_info.get("preferences") is not None:
+            print("\n=====================================PREFERENCES=====================================")
+            for idx, preference in enumerate(game_info["preferences"][0]):
+                description = self._describe_preference(preference)
+                print(f"\n###Preference {idx+1}: {description}")
 
 if __name__ == '__main__':
     game = open("./reward-machine/games/game-15.txt", "r").read()

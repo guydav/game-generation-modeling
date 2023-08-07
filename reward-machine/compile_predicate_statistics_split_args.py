@@ -727,8 +727,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             suffixes.append(suffix)
             intervals_columns.append(f"intervals{suffix}")
 
-            # Join the two dataframes based on the trace identifier, domain, and shared variable columns
-            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns, suffix=suffix)
+            # Join the two dataframes based on the trace identifier, and shared variable columns
+            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id"] + shared_var_columns, suffix=suffix)
 
             if predicate_df.shape[0] == 0:
                 return predicate_df, used_variables
@@ -786,7 +786,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             suffixes.append(suffix)
             intervals_columns.append(f"intervals{suffix}")
 
-            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id", "domain"] + shared_var_columns, suffix=suffix)
+            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id"] + shared_var_columns, suffix=suffix)
 
         predicate_df.replace("intervals", predicate_df.select(pl.concat_list(intervals_columns).alias("intervals")).to_series())
 
@@ -833,7 +833,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         # Now, for each possible combination of args on each trace / domain, 'intervals' will contain the truth intervals if
         # they exist and null otherwise, and 'intervals_right' will contain the empty interval'
-        join_columns = ["trace_id", "domain"]
+        join_columns = ["trace_id"]
         if "trace_length" in predicate_df.columns:
             join_columns.append("trace_length")
 

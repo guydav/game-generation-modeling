@@ -6,7 +6,7 @@ from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
 from predicate_handler import ObjectState, _pred_in_motion
 from utils import FullState, AgentState, BuildingPseudoObject
 
-MAX_BUILDINGS = 20
+MAX_BUILDINGS = 50
 
 for domain in ROOMS:
     OBJECTS_BY_ROOM_AND_TYPE[domain][BUILDING_TYPE] = [f'building_{i}' for i in range(MAX_BUILDINGS)]
@@ -17,6 +17,7 @@ UNITY_PSEUDO_OBJECTS.update({f'building_{i}': BuildingPseudoObject(f'building_{i
 class BuildingHandler:
     active_buildings: typing.Set[str]  # buildings that are currently active
     building_ids: typing.List[str]
+    building_id_set: typing.Set[str]
     building_valid_objects: typing.Set[str]  # objects that have been held by the agent at some point or another
     currently_held_object_id: str
     objects_to_buildings: typing.Dict[str, str]
@@ -30,6 +31,7 @@ class BuildingHandler:
         self.max_buildings = max_buildings
 
         self.building_ids = [f'building_{i}' for i in range(max_buildings)]
+        self.building_id_set = set(self.building_ids)
         OBJECTS_BY_ROOM_AND_TYPE[domain][BUILDING_TYPE] = self.building_ids
         UNITY_PSEUDO_OBJECTS.update({f'building_{i}': BuildingPseudoObject(f'building_{i}') for i in range(max_buildings)})
 

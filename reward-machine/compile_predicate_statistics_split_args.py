@@ -79,6 +79,7 @@ PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
+DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
@@ -117,6 +118,7 @@ class CommonSensePredicateStatisticsSplitArgs():
                  base_trace_path: typing.Union[str, pathlib.Path] = DEFAULT_BASE_TRACE_PATH,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT,
+                 in_progress_traces_filename_format: str = DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT,
                  overwrite: bool = False, trace_hash_n_characters: int = 8):
 
         self.cache_dir = cache_dir
@@ -133,6 +135,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
+        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
         open_method = gzip.open if stats_filename.endswith('.gz') else open
 
         if os.path.exists(stats_filename) and not overwrite:
@@ -147,19 +150,48 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             print(f"No cache file found at {stats_filename}, building from scratch...")
 
-            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]
+            trace_paths = list(sorted([os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]))
 
-            # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
-            # add additional columns here
-            self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore
-            self.trace_lengths_and_domains = {}
+            if os.path.exists(in_progress_traces_filename):
+                with open(in_progress_traces_filename, 'rb') as f:
+                    in_progress_trace_paths = pickle.load(f)
+
+            else:
+                in_progress_trace_paths = []
+
+            if len(in_progress_trace_paths) == len(trace_paths):
+                print(f"Foud as many in progres traces as there are total, so starting over")
+                in_progress_trace_paths = []
+
+            if len(in_progress_trace_paths) > 0:
+                trace_paths = [trace_path for trace_path in trace_paths if trace_path not in in_progress_trace_paths]
+                print(f"Found {len(in_progress_trace_paths)} in progress traces, resuming processing with {len(trace_paths)} traces remaining")
+                self.data = pd.read_pickle(stats_filename)  # type: ignore
+                print(f'Loaded data with shape {self.data.shape} from {stats_filename}')
+                with open_method(trace_lengths_and_domains_filename, 'rb') as f:
+                    self.trace_lengths_and_domains = pickle.load(f)
+
+            else:
+                print(f"No in progress traces found, starting from scratch")
+                # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
+                # add additional columns here
+                self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore
+                self.trace_lengths_and_domains = {}
+
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
+                self.data.to_pickle(stats_filename)
 
-            self.data.to_pickle(stats_filename)
-            with open_method(trace_lengths_and_domains_filename, 'wb') as f:
-                pickle.dump(self.trace_lengths_and_domains, f)
+                with open_method(trace_lengths_and_domains_filename, 'wb') as f:
+                    pickle.dump(self.trace_lengths_and_domains, f)
+
+                in_progress_trace_paths.append(trace_path)
+                with open(in_progress_traces_filename, 'wb') as f:
+                    pickle.dump(in_progress_trace_paths, f)
+
+            # if we've reached the end, remove the in-progress file
+            os.remove(in_progress_traces_filename)
 
         self.domains = list(self.data['domain'].unique())  # type: ignore
         self.predicates = list(self.data['predicate'].unique())  # type: ignore
@@ -219,7 +251,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return self.same_type_arg_cache[room_type]
 
-    def _get_room_objects(self, trace) -> set:
+    def _get_room_objects(self, trace) -> typing.Set[str]:
         '''
         Returns the set of objects in the room type of the given trace, excluding pseudo-objects,
         colors, and the agent
@@ -397,7 +429,8 @@ class CommonSensePredicateStatisticsSplitArgs():
                         if state.agent_state_changed:
                             changed_this_step.append("agent")
 
-                        possible_args = list(product(*([changed_this_step] + list(repeat(room_objects, n_args - 1)))))
+                        room_objects_with_active_buildings_only = room_objects - (building_handler.building_id_set - building_handler.active_buildings)
+                        possible_args = list(product(*([changed_this_step] + list(repeat(room_objects_with_active_buildings_only, n_args - 1)))))
 
                         # Filter out any sets of arguments with duplicates
                         possible_args = [arg_set for arg_set in possible_args if len(set(arg_set)) == len(arg_set)]

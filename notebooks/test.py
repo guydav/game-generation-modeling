@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     for i in range(0, len(game_asts)):
     # for i in tqdm(range(0, len(game_asts))):
-    #     print(f'Parsing game #{i}')
+        print(f'Parsing game #{i}')
         _ = featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=False)
 
     d = featurizer.to_df()

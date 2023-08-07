@@ -623,7 +623,7 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
 
 PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
-PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 200
+PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
 
 
 class PredicateFoundInData(FitnessTerm):
@@ -646,7 +646,7 @@ class PredicateFoundInData(FitnessTerm):
         self.min_total_interval_state_count = min_total_interval_state_count
 
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+            # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
         )
 
     def game_start(self) -> None:
@@ -673,8 +673,8 @@ class PredicateFoundInData(FitnessTerm):
                 n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 self.predicates_found.append(1 if predicate_found else 0)
-                if not predicate_found:
-                    logger.info(f'{"Found" if predicate_found else "Not found"}: predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces, {n_intervals} intervals, and {total_interval_states} total interval states')
+                if not predicate_found:  # n_traces == 0:
+                    logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces | {n_intervals} intervals | {total_interval_states} total interval states')
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
                 self.predicates_found.append(1)
@@ -2516,8 +2516,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
-    fitness.register(setup_predicate_found_in_data)
+    setup_predicate_found_in_data_200 = SetupSuperPredicateFoundInData()
+    fitness.register(setup_predicate_found_in_data_200)
 
     preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
     fitness.register(preferences_predicate_found_in_data)

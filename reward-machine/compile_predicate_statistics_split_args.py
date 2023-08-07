@@ -100,6 +100,10 @@ class PredicateNotImplementedException(Exception):
     pass
 
 
+class MissingVariableException(Exception):
+    pass
+
+
 def stable_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
@@ -661,6 +665,9 @@ class CommonSensePredicateStatisticsSplitArgs():
             # This handles variables which are referenced directly, like the desk and bed
             elif not var.startswith("?"):
                 relevant_arg_mapping[var] = [var]
+
+            else:
+                raise MissingVariableException(f"Variable {var} is not in the mapping")
 
         filter_expr = pl.col("predicate") == predicate_name
         rename_mapping = {}

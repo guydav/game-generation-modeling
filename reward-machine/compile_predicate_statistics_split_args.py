@@ -113,7 +113,7 @@ class CommonSensePredicateStatisticsSplitArgs():
     domains: typing.List[str]
     predicates: typing.List[str]
     room_objects_cache: typing.Dict[str, typing.Set[str]]
-    same_type_arg_cache: typing.Dict[str, typing.List[typing.Tuple[str, str, str, str]]]
+    # same_type_arg_cache: typing.Dict[str, typing.List[typing.Tuple[str, str, str, str]]]
     trace_lengths_and_domains: typing.Dict[str, typing.Tuple[int, str]]
     trace_lengths_and_domains_df: pl.DataFrame
 
@@ -136,7 +136,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.object_assignment_cache = {}
         self.predicate_interval_cache = {}
         self.room_objects_cache = {}
-        self.same_type_arg_cache = {}
+        # self.same_type_arg_cache = {}
 
         # Compute hash of trace names
         if force_trace_names_hash is not None:
@@ -227,6 +227,12 @@ class CommonSensePredicateStatisticsSplitArgs():
         # Convert to polars
         # self.data = pl.from_pandas(self.data)
 
+        # Removing support for same_type until I regenerate cache -- it's ~80% of the records in the DB
+        if 'same_type' in self.predicates:
+            self.predicates.remove('same_type')
+            self.data = self.data.filter(pl.col('predicate') != 'same_type')
+            print(f'After filtering out same_type, data has shape {self.data.shape}')
+
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []
         trace_lengths = []
@@ -259,27 +265,27 @@ class CommonSensePredicateStatisticsSplitArgs():
         else:
             raise ValueError(f"Unrecognized domain: {domain}")
 
-    def _get_room_same_type_args(self, trace) -> typing.List[typing.Tuple[str, str, str, str]]:
-        room_type = self._domain_key(trace['scene'])
-        if room_type not in self.same_type_arg_cache:
-            same_type_args = []
+    # def _get_room_same_type_args(self, trace) -> typing.List[typing.Tuple[str, str, str, str]]:
+    #     room_type = self._domain_key(trace['scene'])
+    #     if room_type not in self.same_type_arg_cache:
+    #         same_type_args = []
 
-            for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
-                meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
-                for object in objects_of_type:
-                    same_type_args.append((object, obj_type, obj_type, obj_type))
-                    if meta_type is not None:
-                        same_type_args.append((object, obj_type, meta_type, meta_type))
-                    if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
-                        specific_type = OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object]
-                        same_type_args.append((object, obj_type, specific_type, specific_type))
+    #         for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
+    #             meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
+    #             for object in objects_of_type:
+    #                 same_type_args.append((object, obj_type, obj_type, obj_type))
+    #                 if meta_type is not None:
+    #                     same_type_args.append((object, obj_type, meta_type, meta_type))
+    #                 if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
+    #                     specific_type = OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object]
+    #                     same_type_args.append((object, obj_type, specific_type, specific_type))
 
-                for first_object, second_object in permutations(objects_of_type, 2):
-                    same_type_args.append((first_object, obj_type, second_object, obj_type))
+    #             for first_object, second_object in permutations(objects_of_type, 2):
+    #                 same_type_args.append((first_object, obj_type, second_object, obj_type))
 
-            self.same_type_arg_cache[room_type] = same_type_args
+    #         self.same_type_arg_cache[room_type] = same_type_args
 
-        return self.same_type_arg_cache[room_type]
+    #     return self.same_type_arg_cache[room_type]
 
     def _get_room_objects(self, trace) -> typing.Set[str]:
         '''
@@ -340,6 +346,16 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return (self._intersect_intervals(intervals[0], intervals[1]),)
 
+    def _intersect_many_intervals_tuple(self, intervals: typing.Tuple[typing.List[typing.List[int]], ...]):
+        if any(not i for i in intervals):
+            return ([],)
+
+        output_intervals = intervals[0]
+        for other_intervals in intervals[1:]:
+            output_intervals = self._intersect_intervals(output_intervals, other_intervals)
+            if not output_intervals: break
+
+        return (output_intervals,)
 
     def _union_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
@@ -371,6 +387,30 @@ class CommonSensePredicateStatisticsSplitArgs():
             retval = self._union_intervals(intervals[0], intervals[1])
 
         return (retval, )
+
+    def _union_many_intervals(self, intervals_list: typing.List[typing.List[typing.List[int]]]):
+        '''
+        Given two lists of [start, end] intervals, returns the list of intervals in which either is true
+        '''
+        all_intervals = sorted(sum(intervals_list, []))
+        unions = []
+
+        for start, end in all_intervals:
+            if unions != [] and unions[-1][1] >= start - 1:
+                unions[-1][1] = max(unions[-1][1], end)
+            else:
+                unions.append([start, end])
+
+        return unions
+
+    def _union_many_intervals_tuple(self, intervals: typing.Tuple[typing.List[typing.List[int]], ...]):
+        intervals_list = [i for i in intervals if i]
+        if len(intervals_list) == 0:
+            return ([],)
+        elif len(intervals_list) == 1:
+            return (intervals_list[0],)
+
+        return (self._union_many_intervals(intervals_list),)
 
     def _invert_intervals(self, intervals: typing.List[typing.List[int]], length: int):
         if not intervals or intervals[0] is None:
@@ -566,15 +606,15 @@ class CommonSensePredicateStatisticsSplitArgs():
         specific_objects_new_rows_df = pd.DataFrame(specific_object_new_rows)
 
         # Add the same_types intervals
-        same_type_records = [
-            dict(predicate='same_type', arg_1_id=arg_1_id, arg_1_type=arg_1_type, arg_2_id=arg_2_id, arg_2_type=arg_2_type,
-                 trace_id=full_trace_id, domain=domain_key, intervals=[[0, replay_len]])
-            for arg_1_id, arg_1_type, arg_2_id, arg_2_type in self._get_room_same_type_args(trace)
-        ]
-        same_type_df = pd.DataFrame(same_type_records)
+        # same_type_records = [
+        #     dict(predicate='same_type', arg_1_id=arg_1_id, arg_1_type=arg_1_type, arg_2_id=arg_2_id, arg_2_type=arg_2_type,
+        #          trace_id=full_trace_id, domain=domain_key, intervals=[[0, replay_len]])
+        #     for arg_1_id, arg_1_type, arg_2_id, arg_2_type in self._get_room_same_type_args(trace)
+        # ]
+        # same_type_df = pd.DataFrame(same_type_records)
 
         # Combine the resulting dataframes and add them to the overall dataframe
-        self.data = pd.concat([self.data, game_df, specific_objects_new_rows_df, sub_df, same_type_df], ignore_index=True)  # type: ignore
+        self.data = pd.concat([self.data, game_df, specific_objects_new_rows_df, sub_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
@@ -622,7 +662,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         filter_expr = pl.col("predicate") == predicate_name
         rename_mapping = {}
-        drop_columns = []
+        drop_columns = ['predicate']
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
@@ -633,10 +673,10 @@ class CommonSensePredicateStatisticsSplitArgs():
             # verify that if we query "same_type" and the second argument is a type, we only take the correct rows
             # we then also drop it from the DF as passed forward
             # TODO: figure out if there are any other predicates that require the same behavior
-            if predicate_name == "same_type" and i == 1 and not arg_var.startswith("?"):
-                filter_expr &= pl.col(f"arg_{i + 1}_id") == arg_var
-                drop_columns.append(arg_var)
-                used_variables.remove(arg_var)
+            # if predicate_name == "same_type" and i == 1 and not arg_var.startswith("?"):
+            #     filter_expr &= pl.col(f"arg_{i + 1}_id") == arg_var
+            #     drop_columns.append(arg_var)
+            #     used_variables.remove(arg_var)
 
             rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
@@ -655,7 +695,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         and_args = predicate["and_args"]
-        if isinstance(and_args, tatsu.ast.AST):
+        if not isinstance(and_args, list):
             and_args = [and_args]
 
         sub_predicate_dfs = []
@@ -674,26 +714,32 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         predicate_df = sub_predicate_dfs[0]
 
+        suffixes = []
+        intervals_columns = ['intervals']
         if DEBUG: start = time.perf_counter()
-        for sub_predicate_df in sub_predicate_dfs[1:]:
+        for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
             # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
 
+            suffix = f"_{i + 1}"
+            suffixes.append(suffix)
+            intervals_columns.append(f"intervals{suffix}")
+
             # Join the two dataframes based on the trace identifier, domain, and shared variable columns
-            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
+            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns, suffix=suffix)
 
             if predicate_df.shape[0] == 0:
                 return predicate_df, used_variables
 
-            # Replace the intervals column with the intersection of the current intervals and the new ones from the sub-predicate
-            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(
-                self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        # Replace the intervals column with the intersection of all intervals columns
+        predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(
+            self._intersect_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
 
-            # Remove all the 'right-hand' columns added by the join
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+        # Remove all the 'right-hand' columns added by the joins
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
-            # Remove any rows with empty intervals
-            predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+        # Remove any rows with empty intervals
+        predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         if DEBUG:
             end = time.perf_counter()
@@ -703,7 +749,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         or_args = predicate["or_args"]
-        if isinstance(or_args, tatsu.ast.AST):
+        if not isinstance(or_args, list):
             or_args = [or_args]
 
         sub_predicate_dfs = []
@@ -726,13 +772,22 @@ class CommonSensePredicateStatisticsSplitArgs():
         # as the implicit nulls were making it really hard to write the logic for the (not (or ...)) case
         predicate_df = self._build_potential_missing_values_df(mapping, relevant_vars)
 
+        suffixes = []
+        intervals_columns = ['intervals']
+
         if DEBUG: start = time.perf_counter()
-        for sub_predicate_df in sub_predicate_dfs:
+        for i, sub_predicate_df in enumerate(sub_predicate_dfs):
             # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
-            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id", "domain"] + shared_var_columns)
-            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+
+            suffix = f"_{i + 1}"
+            suffixes.append(suffix)
+            intervals_columns.append(f"intervals{suffix}")
+
+            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id", "domain"] + shared_var_columns, suffix=suffix)
+
+        predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(self._union_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
         # Only filter out rows with no intervals after joining with all sub-predicates
         predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
@@ -780,11 +835,9 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + relevant_vars)
 
-        # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
-        predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
-
+        # Fulling null values instead of union-ing with the null intervals because it's much faster (.apply is really expensive)
         # Invert intervals will then flip them to be the entire length of the trace
-        predicate_df.replace("intervals", predicate_df.select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+        predicate_df.replace("intervals", predicate_df.with_columns(pl.col("intervals").fill_null(value=[])).select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
         predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")] + ['trace_length'])
 
         if DEBUG:

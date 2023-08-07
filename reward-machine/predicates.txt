@@ -10,7 +10,7 @@
 
 [agent_crouches]			| requires direct reporting from Unity, but should be straightforward
 
-[between]					| another tough one. could maybe be computed from each object's bounding box? I'm not even sure how to compute this one easily in Unity... 
+[between]					| another tough one. could maybe be computed from each object's bounding box? I'm not even sure how to compute this one easily in Unity...
 
 [broken]					| another Unity state?
 

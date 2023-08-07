@@ -25,16 +25,22 @@ TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/trac
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
 THROW_WITH_STACKED_BLOCKS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
+CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
+# TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
+TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
+
 REPLAY_NESTING_KEYS = (
-    'participants-v2-develop', 
+    'participants-v2-develop',
     '17tSEDmCvGp1uKVEh5iq',
-    'subCollection', 
+    'subCollection',
     'participants-v2-develop/17tSEDmCvGp1uKVEh5iq/replay-preCreateGame'
 )
 
 def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[str]] = REPLAY_NESTING_KEYS):
     with open(path, 'r') as f:
         trace = json.load(f)
+        if not isinstance(trace, list) and 'replay' in trace:
+            trace = trace['replay']
 
     simple = isinstance(trace, list)
 
@@ -58,7 +64,7 @@ def _load_trace(path: str, replay_nesting_keys: typing.Optional[typing.Sequence[
                 yield (event, (idx == len(batch['events']) - 1) and (batch_idx == len(trace) - 1)) # make sure we're in the last batch and the last event
 
 def load_game(game_name: str):
-    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt') 
+    game_path = pathlib.Path(get_project_dir() + f'/reward-machine/games/{game_name}.txt')
     with open(game_path, 'r') as f:
         game = f.read()
     return game
@@ -92,8 +98,13 @@ TEST_GAME_LIBRARY = {
 }
 
 if __name__ == "__main__":
-    game_handler = GameHandler(TEST_GAME_LIBRARY['throw-block-cache-test'])
-    trace_path = THROW_WITH_STACKED_BLOCKS_TRACE.resolve().as_posix()
+
+
+    # game = TEST_GAME_LIBRARY['throw-block-cache-test']
+    game = TEST_GAME_LIBRARY['test-ball-from-bed']
+    game_handler = GameHandler(game)
+    # trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
+    trace_path = '/Users/guydavidson/Downloads/hRlEvjz5alx99uwENncs-preCreateGame.json'
 
     score = None
 
@@ -116,9 +127,3 @@ if __name__ == "__main__":
         print(key + ":")
         for sat in val:
             print(f"\t{sat}")
-            # print(f"\t\t{', '.join(sorted(sat.mapping.values()))}")
-
-            # if ", ".join(sorted(sat.mapping.values())) in used_mappings:
-            #     print("DUPLICATE MAPPING")
-            #     exit()
-            # used_mappings.add(", ".join(sorted(sat.mapping.values())))

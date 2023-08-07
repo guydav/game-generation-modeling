@@ -10,10 +10,20 @@ import typing
 
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 import ast_printer
+import ast_parser
 
-from config import ALL_OBJECT_TYPES, COLORS, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, PseudoObject
+from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM, \
+    PseudoObject, FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM
 
 PROJECT_NAME = 'game-generation-modeling'
+
+
+DOMAIN_REMAPPING = {
+    'FloorPlan326_physics_semi_sparse_few_new_objects': FEW_OBJECTS_ROOM,
+    'FloorPlan326_physics_semi_sparse_new_objects': MEDIUM_OBJECTS_ROOM,
+    'FloorPlan326_physics_semi_sparse_many_new_objects': MANY_OBJECTS_ROOM,
+}
+
 
 
 def get_project_dir(project_name: str = PROJECT_NAME):
@@ -23,7 +33,7 @@ def get_project_dir(project_name: str = PROJECT_NAME):
 def _vec_dict_to_array(vec: typing.Dict[str, float]):
     if 'x' not in vec or 'y' not in vec:
         raise ValueError(f'x and y must be in vec dict; received {vec}')
-    
+
     if 'z' in vec:
         if 'w' in vec:
             # TODO (GD 2022-10-16): decide if this should be wxyz or xyzw
@@ -66,7 +76,7 @@ class AgentState(typing.NamedTuple):
             angle_int=state_dict['angleInt'],
             bbox_center=_vec_dict_to_array(state_dict['bboxCenter']) if 'bboxCenter' in state_dict else None,
             bbox_extents=_vec_dict_to_array(state_dict['bboxExtents']) if 'bboxExtents' in state_dict else None,
-            camera_local_rotation=_vec_dict_to_array(state_dict['cameraLocalRotation']) if 'cameraLocalRotation' in state_dict 
+            camera_local_rotation=_vec_dict_to_array(state_dict['cameraLocalRotation']) if 'cameraLocalRotation' in state_dict
                                   else _vec_dict_to_array(state_dict['cameraLocalRoation']), # manually handle typo in old traces
             camera_rotation_euler_angles=_vec_dict_to_array(state_dict['cameraRotationEulerAngles']),
             crouching=state_dict['crouching'],
@@ -90,6 +100,7 @@ class ObjectState(typing.NamedTuple):
     angular_velocity: np.ndarray  # x, y, z
     bbox_center: np.ndarray  #  x, y, z
     bbox_extents:  np.ndarray  # x, y, z
+    initial_rotation: typing.Optional[np.ndarray]  # x, y, z
     is_broken: bool
     is_open: bool
     is_toggled: bool
@@ -99,14 +110,14 @@ class ObjectState(typing.NamedTuple):
     position: np.ndarray  # x, y, z
     rotation: np.ndarray  # x, y, z
     touching_objects: typing.List[str]
-    contained_objects: typing.List[str]
+    contained_objects: typing.Optional[typing.List[str]]
     velocity: np.ndarray  # x, y, z
 
     @staticmethod
     def from_state_dict(state_dict: typing.Dict[str, typing.Any]):
         # Manually handle the floor, which is not placed correctly in the Unity scene
         if state_dict['objectId'] == 'Floor|+00.00|+00.00|+00.00':
-            state_dict['position'] = {'x': 0, 'y': 0, 'z': 0}
+            state_dict['position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
             state_dict['bboxCenter'] = {'x': 0.16, 'y': -0.1, 'z': -0.185}
             state_dict['bboxExtents'] = {'x': 3.65, 'y': 0.1, 'z': 2.75}
 
@@ -117,13 +128,14 @@ class ObjectState(typing.NamedTuple):
             is_broken=state_dict['isBroken'],
             is_open=state_dict['isOpen'],
             is_toggled=state_dict['isToggled'],
+            initial_rotation=None,
             name=state_dict['name'],
             object_id=state_dict['objectId'],
             object_type=state_dict['objectType'],
             position=_vec_dict_to_array(state_dict['position']),
             rotation=_vec_dict_to_array(state_dict['rotation']),
             touching_objects=state_dict['touchingObjects'],
-            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None, # old traces don't have containedObjects
+            contained_objects=state_dict['containedObjects'] if 'containedObjects' in state_dict else None,  # old traces don't have containedObjects
             velocity=_vec_dict_to_array(state_dict['velocity']),
         )
 
@@ -191,7 +203,7 @@ class BuildingPseudoObject(PseudoObject):
     building_objects: typing.Dict[str, ObjectState]  # a collection of the objects in the building
     min_corner: np.ndarray
     max_corner: np.ndarray
-    
+
     def __init__(self, building_id: str):
         super().__init__(building_id, BUILDING_TYPE, building_id, np.zeros(3), np.zeros(3), np.zeros(3))
         self.building_objects = {}
@@ -203,7 +215,7 @@ class BuildingPseudoObject(PseudoObject):
         '''
         Add a new object to the building and update the building's position and bounding box
         '''
-        self.building_objects[obj.object_id] = obj        
+        self.building_objects[obj.object_id] = obj
         obj_min, obj_max = _extract_object_limits(obj)
 
         if not self.position_valid:
@@ -216,7 +228,7 @@ class BuildingPseudoObject(PseudoObject):
             self.max_corner = np.maximum(obj_max, self.max_corner)  # type: ignore
 
         self._update_position_from_corners()
-        
+
     def _update_position_from_corners(self) -> None:
         self.position = self.bbox_center = (self.min_corner + self.max_corner) / 2  # type: ignore
         self.bbox_extents = (self.max_corner - self.min_corner) / 2  # type: ignore
@@ -224,18 +236,18 @@ class BuildingPseudoObject(PseudoObject):
     def remove_object(self, obj: ObjectState):
         if obj.object_id not in self.building_objects:
             raise ValueError(f'Object {obj.object_id} is not in building {self.name}')
-        
+
         del self.building_objects[obj.object_id]
 
         if len(self.building_objects) == 0:
             self.position_valid = False
-        
+
         else:
-            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj) 
+            object_minima, object_maxima = list(zip(*[_extract_object_limits(curr_obj)
                 for curr_obj in self.building_objects.values()]))
-            
-            self.min_corner = np.min(object_minima, axis=0)  
-            self.max_corner = np.max(object_maxima, axis=0)  
+
+            self.min_corner = np.min(object_minima, axis=0)
+            self.max_corner = np.max(object_maxima, axis=0)
             self._update_position_from_corners()
 
 
@@ -262,6 +274,7 @@ def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_pos: str 
     bbox_center = object.bbox_center
     bbox_extents = object.bbox_extents
 
+    y = None
     if isinstance(y_pos, int) or isinstance(y_pos, float):
         y = y_pos
     elif y_pos == 'center':
@@ -299,10 +312,22 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
+def _point_in_top_half(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
+    '''
+    Returns whether a point is contained with the top half of the bounding box of the provided object
+    '''
+
+    bbox_center = object.bbox_center
+    bbox_extents = object.bbox_extents
+
+    low_corner = np.array([bbox_center[0] - bbox_extents[0], bbox_center[1] - (bbox_extents[1] / 2), bbox_center[2] - bbox_extents[2]])
+    high_corner = bbox_center + bbox_extents
+
+    return np.all(point >= low_corner) and np.all(point <= high_corner)
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
     '''
-    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types 
+    Given a list of variables (a type of AST), extract the mapping from variable names to variable types. Variable types
     are returned in lists, even in cases where there is only one possible for the variable in order to handle cases
     where multiple types are linked together with an (either) clause
 
@@ -325,16 +350,33 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
             variables[var_info["var_names"]] = var_type_name
         else:
             var_names = typing.cast(typing.Sequence[str], var_names)
-            for var_name in var_names: 
+            for var_name in var_names:
                 variables[var_name] = var_type_name
-        
+
 
     return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
 
 
+def extract_predicate_function_name(ast: tatsu.ast.AST):
+    if 'pred' in ast:
+        rule = ast.pred.parseinfo.rule  # type: ignore
+        name = rule.replace('predicate_', '')
+
+    elif 'func' in ast:
+        rule = ast.func.parseinfo.rule  # type: ignore
+        name = rule.replace('function_', '')
+
+    else:
+        raise ValueError(f'AST does not have a "pred" or "func" attribute: {ast}')
+
+    if name[-1].isdigit():
+        name = name[:-2]
+
+    return name
+
 def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
     '''
-    Recursively extract every variable referenced in the predicate (including inside functions 
+    Recursively extract every variable referenced in the predicate (including inside functions
     used within the predicate)
     '''
     if predicate is None:
@@ -361,14 +403,14 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
                 # Different structure for predicate args vs. function args
                 if isinstance(predicate["term"], tatsu.ast.AST):
-                    pred_vars += [predicate["term"]["arg"]]  # type: ignore 
+                    pred_vars += [predicate["term"]["arg"]]  # type: ignore
                 else:
                     pred_vars += [predicate["term"]]
 
             elif key == "var_names":
                 pred_vars += [predicate["var_names"]] # type: ignore
 
-            # We don't want to capture any variables within an (exists) or (forall) that's inside 
+            # We don't want to capture any variables within an (exists) or (forall) that's inside
             # the preference, since those are not globally required -- see evaluate_predicate()
             elif key == "exists_vars":
                 exists_forall_vars += extract_variables(predicate[key])
@@ -393,8 +435,8 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
                            used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):
     '''
     Given a room type / domain (few, medium, or many) and a list of lists of variable types,
-    returns a list of every possible assignment of objects in the room to those types. For 
-    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return 
+    returns a list of every possible assignment of objects in the room to those types. For
+    instance, if variable_types is [(beachball, dodgeball), (bin,)], then this will return
     every pair of objects consisting of one beachball or dodgeball and one bin.
 
     An optional used_objects argument specifies a list of objects that have already been assigned to
@@ -404,9 +446,16 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
     if used_objects is None:
         used_objects = []
 
+    if domain in DOMAIN_REMAPPING:
+        domain = DOMAIN_REMAPPING[domain]
+
     grouped_objects = []
     for sub_types in variable_types:
-        objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] for var_type in sub_types], [])
+        objects = sum([OBJECTS_BY_ROOM_AND_TYPE[domain][var_type] if var_type in OBJECTS_BY_ROOM_AND_TYPE[domain] else
+                       # If the variable type is a specific named object, we include the type name, to match behavior in the predicate statistics
+                       SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain][var_type] if var_type in SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain] else
+                       []
+                       for var_type in sub_types], [])
         grouped_objects.append([obj for obj in objects if obj not in used_objects])
 
     assignments = list(itertools.product(*grouped_objects))
@@ -416,12 +465,12 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
 
     return filtered_assignments
 
-def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> str:
+def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> typing.Tuple[str, str]:
     """
-    Maps from a predicate / function and an object mapping to the key that represents them in the cache. 
+    Maps from a predicate / function and an object mapping to the key that represents them in the cache.
     """
     ast_printer.reset_buffers()
-    ast_printer.PARSE_DICT[ast_printer.PREFERENCES_KEY](ast)
+    ast_printer.PARSE_DICT[ast_parser.PREFERENCES](ast)
 
     # flush the line buffer
     ast_printer._indent_print('', 0, ast_printer.DEFAULT_INCREMENT, None)
@@ -431,11 +480,11 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
 
     return ast_str, mapping_str
 
-def is_type_or_color(variable: str):
+def is_type_color_side_orientation(variable: str):
     '''
     Returns whether the variable is a type or color
     '''
-    return (variable in ALL_OBJECT_TYPES or variable in COLORS) and (variable not in NAMED_OBJECTS)
+    return any(variable in collection for collection in (ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS)) and (variable not in NAMED_OBJECTS)
 
 def get_object_types(obj: ObjectState):
     '''
@@ -470,8 +519,10 @@ PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
     "agent_crouches": "the agent is crouching",
     "agent_holds": "the agent is holding {0}",
+    "between": "{1} is between {0} and {2}",
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
+    "faces": "{0} is facing {1}",
     "on": "{1} is on {0}",
     "touch": "{0} touches {1}"
 }
@@ -488,7 +539,7 @@ class PreferenceDescriber():
         self.variable_type_mapping = extract_variable_type_mapping(self.body["exists_vars"]["variables"])
         self.variable_type_mapping["agent"] = ["agent"]
 
-        self.temporal_predicates = [func["seq_func"] for func in self.body["exists_args"]["body"]["then_funcs"]]
+        self.temporal_predicates = [func['seq_func'] for func in self.body["exists_args"]["then_funcs"]]
 
         self.engine = inflect.engine()
 
@@ -554,9 +605,11 @@ class PreferenceDescriber():
     def describe_predicate(self, predicate) -> str:
         predicate_rule = predicate["parseinfo"].rule
 
+        # breakpoint()
+
         if predicate_rule == "predicate":
 
-            name = predicate["pred_name"]
+            name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
@@ -624,4 +677,19 @@ class PreferenceDescriber():
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
 
         return ''
-        
+
+if __name__ == '__main__':
+    import tatsu.grammars
+    DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
+    grammar = open(DEFAULT_GRAMMAR_PATH).read()
+    grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
+
+    game = open(get_project_dir() + '/reward-machine/games/game-15.txt').read()
+    game_ast = grammar_parser.parse(game)  # type: ignore
+
+    preference = game_ast[4][1]['preferences'][0]['definition']
+
+    # should be: (and (in_motion ?b) (not (agent_holds ?b)))
+    # test_pred_1 = game_ast[4][1]['preferences'][0]['definition']['forall_pref']['preferences']['pref_body']['body']['exists_args']['then_funcs'][1]['seq_func']['hold_pred']
+
+    PreferenceDescriber(preference).describe()

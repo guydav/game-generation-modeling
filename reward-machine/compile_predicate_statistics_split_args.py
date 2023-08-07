@@ -620,18 +620,20 @@ class CommonSensePredicateStatisticsSplitArgs():
         try:
             result, used_variables = self._inner_filter(predicate, mapping)
             n_traces = result.select("trace_id").unique().shape[0]
-            if n_traces == 0:
-                return 0, 0, 0
+            # if n_traces == 0:
+            #     return 0, 0, 0
 
-            n_intervals = result.select(pl.col("intervals").list.lengths()).sum().item()
-            if n_intervals == 0:
-                return 0, 0, 0
+            return n_traces
 
-            total_interval_states = result.select("intervals").explode("intervals") \
-                .select(pl.col("intervals").list.to_struct(fields=["start", "end"])) \
-                .unnest("intervals").select(pl.col("end") - pl.col("start")).sum().item()
-            # TODO: we could also similarlty extract, mean, or mean per trace, or...
-            return n_traces, n_intervals, total_interval_states
+            # n_intervals = result.select(pl.col("intervals").list.lengths()).sum().item()
+            # if n_intervals == 0:
+            #     return 0, 0, 0
+
+            # total_interval_states = result.select("intervals").explode("intervals") \
+            #     .select(pl.col("intervals").list.to_struct(fields=["start", "end"])) \
+            #     .unnest("intervals").select(pl.col("end") - pl.col("start")).sum().item()
+            # # TODO: we could also similarlty extract, mean, or mean per trace, or...
+            # return n_traces, n_intervals, total_interval_states
             # sorted_variables = sorted(used_variables)
             # return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
             #         for row_dict in result.to_dicts()}
@@ -732,14 +734,14 @@ class CommonSensePredicateStatisticsSplitArgs():
                 return predicate_df, used_variables
 
         # Replace the intervals column with the intersection of all intervals columns
-        predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(
-            self._intersect_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        # predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(
+        #     self._intersect_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
 
         # Remove all the 'right-hand' columns added by the joins
         predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
         # Remove any rows with empty intervals
-        predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+        # predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         if DEBUG:
             end = time.perf_counter()
@@ -786,11 +788,13 @@ class CommonSensePredicateStatisticsSplitArgs():
 
             predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id", "domain"] + shared_var_columns, suffix=suffix)
 
-        predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(self._union_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        predicate_df.replace("intervals", predicate_df.select(pl.concat_list(intervals_columns).alias("intervals")).to_series())
+
+        # predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(self._union_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
         predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
         # Only filter out rows with no intervals after joining with all sub-predicates
-        predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+        # predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         if DEBUG:
             end = time.perf_counter()
@@ -835,9 +839,16 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + relevant_vars)
 
+        # With the simplified approach, we only want to select the rows where the intervals are null
+        # Or rows where the sum of the interval is not the trace length (== one intervals, which is the entire trace)
+        # To basically eliminate predicates that are live for the entire trace
+        predicate_df = predicate_df.filter(pl.col("intervals").is_null() | \
+                                           pl.col("intervals").list.lengths() == 0 | \
+                                           ~(pl.col("intervals").list.first().list.sum() == pl.col("trace_length")))
+
         # Fulling null values instead of union-ing with the null intervals because it's much faster (.apply is really expensive)
         # Invert intervals will then flip them to be the entire length of the trace
-        predicate_df.replace("intervals", predicate_df.with_columns(pl.col("intervals").fill_null(value=[])).select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+        # predicate_df.replace("intervals", predicate_df.with_columns(pl.col("intervals").fill_null(value=[])).select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
         predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")] + ['trace_length'])
 
         if DEBUG:

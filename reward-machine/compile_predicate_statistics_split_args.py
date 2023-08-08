@@ -90,7 +90,7 @@ DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.p
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
-CACHE_MAX_SIZE = 2048
+MAX_CACHE_SIZE = 2048
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
@@ -228,6 +228,12 @@ class CommonSensePredicateStatisticsSplitArgs():
             )
         )
 
+        self.cache = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
+        self._handle_predicate = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_predicate)
+        self._handle_and = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_and)
+        self._handle_or = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_or)
+        self._handle_not = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_not)
+
         # Convert to polars
         # self.data = pl.from_pandas(self.data)
 
@@ -314,7 +320,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         '''
         return (domain, tuple(variable_types), tuple(used_objects) if used_objects is not None else None)
 
-    @cachetools.cached(cache=cachetools.LRUCache(maxsize=CACHE_MAX_SIZE), key=_object_assignments_cache_key)
+    @cachetools.cached(cache=cachetools.LRUCache(maxsize=MAX_CACHE_SIZE), key=_object_assignments_cache_key)
     def _object_assignments(self, domain, variable_types, used_objects = None):
         '''
         Wrapper around get_object_assignments in order to cache outputs
@@ -892,7 +898,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    @cachetools.cached(cache=cachetools.LRUCache(maxsize=CACHE_MAX_SIZE), key=_predicate_and_mapping_cache_key)
     def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true

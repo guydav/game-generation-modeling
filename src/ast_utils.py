@@ -162,14 +162,19 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False, force_from_cache: bool = False):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
+    logger.info(f'Loading from cache file: {cache_path}')
     grammar_hash = fixed_hash(grammar_parser._to_str())
 
     if os.path.exists(cache_path):
         with gzip.open(cache_path, 'rb') as f:
             cache = pickle.load(f)
+
+        logger.info(f'Finished loading cache file: {cache_path}')
     else:
         cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
+
+        logger.info(f'No cache file found, creating new cache file for: {cache_path}')
 
     cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}

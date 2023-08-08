@@ -2670,9 +2670,10 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str, int]) -> None:
+def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
     game, src_file = game_src_file_n_workers
     process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
+    logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
     row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
     temp_csv_writers[process_index].writerow(row)  # type: ignore
 

@@ -9,6 +9,7 @@ from itertools import groupby, permutations, product, repeat, starmap
 import json
 import logging
 import os
+import operator
 import pandas as pd
 import pathlib
 import pickle
@@ -111,6 +112,12 @@ def stable_hash(str_data: str):
 def stable_hash_list(list_data: typing.Sequence[str]):
     return stable_hash('\n'.join(sorted(list_data)))
 
+
+def _predicate_and_mapping_cache_key(predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
+    '''
+    Returns a string that uniquely identifies the predicate and mapping
+    '''
+    return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
 class CommonSensePredicateStatisticsSplitArgs():
     data: pl.DataFrame
@@ -229,10 +236,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         )
 
         self.cache = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
-        self._handle_predicate = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_predicate)
-        self._handle_and = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_and)
-        self._handle_or = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_or)
-        self._handle_not = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._handle_not)
 
         # Convert to polars
         # self.data = pl.from_pandas(self.data)
@@ -652,6 +655,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
             raise e
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
@@ -709,6 +713,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return predicate_df, used_variables
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
@@ -767,6 +772,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return predicate_df, used_variables
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
@@ -854,6 +860,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return potential_missing_values_df
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         try:
             predicate_df, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
@@ -891,12 +898,6 @@ class CommonSensePredicateStatisticsSplitArgs():
             print(f"Time to NOT: {'%.5f' % (end - start)}s")  # type: ignore
 
         return predicate_df, used_variables
-
-    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
-        '''
-        Returns a string that uniquely identifies the predicate and mapping
-        '''
-        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
     def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         '''

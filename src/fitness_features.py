@@ -2662,10 +2662,11 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
+def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str, int]) -> None:
+    game, src_file = game_src_file_n_workers
     process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
-    row = featurizers[process_index].parse(*game_and_src_file, return_row=True, preprocess_row=False)  # type: ignore
-    temp_csv_writers[process_index].writerow(row)
+    row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
+    temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
 def game_iterator():
@@ -2712,6 +2713,11 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
 
     return featurizer
 
+
+def test_multiprocessing_globals(index: int):
+    print(f'index: {index}, process_index: {multiprocessing.current_process()._identity[0] - 1 % args.n_workers}')
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
@@ -2757,7 +2763,11 @@ if __name__ == '__main__':
         logger.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
             logger.info('Pool started')
-            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
+            # for _ in tqdm(p.imap_unordered(test_multiprocessing_globals, range(100), chunksize=args.chunksize), total=100):  # type: ignore
+            #     continue
+
+            # exit()
+            for _ in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
                 continue
                 # if headers is None:
                 #     headers = list(row.keys())

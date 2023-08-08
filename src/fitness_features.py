@@ -635,6 +635,8 @@ class PredicateFoundInData(FitnessTerm):
     predicates_found: typing.List[int]
     rules_to_child_keys: typing.Dict[str, str]
 
+    _predicate_data_estimator = None
+
     def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
@@ -647,10 +649,13 @@ class PredicateFoundInData(FitnessTerm):
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
 
-        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
-            force_trace_names_hash=trace_names_hash
-        )
+        if PredicateFoundInData._predicate_data_estimator is None:
+            PredicateFoundInData._predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+                # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+                force_trace_names_hash=trace_names_hash
+            )
+
+        self.predicate_data_estimator = PredicateFoundInData._predicate_data_estimator
 
     def game_start(self) -> None:
         self.predicates_found = []
@@ -678,8 +683,8 @@ class PredicateFoundInData(FitnessTerm):
                 n_traces = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = n_traces >= self.min_trace_count
                 self.predicates_found.append(1 if predicate_found else 0)
-                if not predicate_found:  # n_traces == 0:
-                    logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
+                # if not predicate_found:  # n_traces == 0:
+                #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
                 self.predicates_found.append(1)

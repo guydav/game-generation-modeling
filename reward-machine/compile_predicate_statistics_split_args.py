@@ -90,7 +90,7 @@ DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.p
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
-CACHE_MAX_SIZE = 1024
+CACHE_MAX_SIZE = 2048
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
@@ -308,17 +308,18 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return self.room_objects_cache[room_type]
 
-    def _object_assignments(self, domain, variable_types, used_objects=[]):
+    def _object_assignments_cache_key(self, domain, variable_types, used_objects = None):
+        '''
+        Returns a key for the object assignments cache
+        '''
+        return (domain, tuple(variable_types), tuple(used_objects) if used_objects is not None else None)
+
+    @cachetools.cached(cache=cachetools.LRUCache(maxsize=CACHE_MAX_SIZE), key=_object_assignments_cache_key)
+    def _object_assignments(self, domain, variable_types, used_objects = None):
         '''
         Wrapper around get_object_assignments in order to cache outputs
         '''
-
-        key = (domain, tuple(variable_types), tuple(used_objects))
-        if key not in self.object_assignment_cache:
-            object_assignments = get_object_assignments(domain, variable_types, used_objects=used_objects)
-            self.object_assignment_cache[key] = object_assignments
-
-        return self.object_assignment_cache[key]
+        return get_object_assignments(domain, variable_types, used_objects=used_objects)
 
     def _intersect_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''

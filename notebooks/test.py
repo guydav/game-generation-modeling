@@ -21,7 +21,7 @@ from src.fitness_features import *
 
 
 PROFILE = False
-MEMORY_TRACE = True
+MEMORY_TRACE = False
 
 
 if __name__ == '__main__':
@@ -29,8 +29,8 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
 
-    if MEMORY_TRACE:
-        tracemalloc.start()
+    # if MEMORY_TRACE:
+    #     tracemalloc.start()
 
     args = Namespace(no_binarize=False, no_merge=False, use_specific_objects_ngram_model=False)
     featurizer = build_fitness_featurizer(args)
@@ -43,17 +43,20 @@ if __name__ == '__main__':
         profile.enable()
 
     if MEMORY_TRACE:
-        size, peak = tracemalloc.get_traced_memory()
-        print(f'After creating featurizer | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
-        tracemalloc.reset_peak()
+        tracemalloc.start(25)
+    #     size, peak = tracemalloc.get_traced_memory()
+    #     print(f'After creating featurizer | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
+    #     tracemalloc.reset_peak()
 
     start = time.perf_counter()
-    # for i in range(0, len(game_asts)):
-    for i in range(53, 54):
+    for i in range(0, len(game_asts)):
+    # for i in range(53, 54):
     # for i in tqdm(range(0, len(game_asts))):
-        first_snapshot = tracemalloc.take_snapshot()
+        # first_snapshot = tracemalloc.take_snapshot()
+
         print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
-        _ = featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=True, preprocess_row=False)
+        featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=True, preprocess_row=False)
+
         if MEMORY_TRACE:
             # gc.collect()
             size, peak = tracemalloc.get_traced_memory()
@@ -61,13 +64,11 @@ if __name__ == '__main__':
             tracemalloc.reset_peak()
             print()
 
-        second_snapshot = tracemalloc.take_snapshot()
-
-        top_stats = second_snapshot.compare_to(first_snapshot, 'lineno')
-
-        print("[ Top 10 differences ]")
-        for stat in top_stats[:10]:
-            print(stat)
+        # second_snapshot = tracemalloc.take_snapshot()
+        # top_stats = second_snapshot.compare_to(first_snapshot, 'lineno')
+        # print("[ Top 10 differences ]")
+        # for stat in top_stats[:10]:
+        #     print(stat)
 
 
     end = time.perf_counter()
@@ -77,6 +78,19 @@ if __name__ == '__main__':
         size, peak = tracemalloc.get_traced_memory()
         print(f'After finishing to parse | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
         tracemalloc.reset_peak()
+
+        # print('=' * 100)
+
+        # snapshot = tracemalloc.take_snapshot()
+        # top_stats = snapshot.statistics('traceback')
+        # # pick the biggest memory block
+        # for block_index in range(5):
+        #     stat = top_stats[block_index]
+        #     print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
+        #     for line in stat.traceback.format():
+        #         print(line)
+
+        #     print('=' * 100)
 
     if profile is not None:
         profile.disable()

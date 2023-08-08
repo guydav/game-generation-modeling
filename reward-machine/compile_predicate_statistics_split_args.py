@@ -113,11 +113,6 @@ def stable_hash_list(list_data: typing.Sequence[str]):
     return stable_hash('\n'.join(sorted(list_data)))
 
 
-def _predicate_and_mapping_cache_key(predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
-    '''
-    Returns a string that uniquely identifies the predicate and mapping
-    '''
-    return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
 class CommonSensePredicateStatisticsSplitArgs():
     data: pl.DataFrame
@@ -654,6 +649,13 @@ class CommonSensePredicateStatisticsSplitArgs():
         except PredicateNotImplementedException as e:
             # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
             raise e
+
+    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
+        '''
+        Returns a string that uniquely identifies the predicate and mapping
+        '''
+        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
+
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:

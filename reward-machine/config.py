@@ -15,6 +15,7 @@ DOOR = 'door'
 RUG = 'rug'
 RUG_ALT_NAME = 'HighFrictionTrigger'
 
+ROOM_CENTER = 'room_center'
 
 BUILDING_TYPE = 'building'
 
@@ -125,7 +126,8 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     EAST_WALL: [EAST_WALL],
     WEST_WALL: [WEST_WALL],
     DOOR: [DOOR],
-    RUG: [RUG]
+    RUG: [RUG],
+    ROOM_CENTER: [ROOM_CENTER],
 }
 
 
@@ -448,6 +450,8 @@ DOOR_TYPE = 'door'
 RUG_ID = 'FP326:Rug'
 RUG_TYPE = 'rug'
 
+
+
 # TODO: I think the ceiling also might be one, and maybe the floor or some other fixed furniture?
 # Wall width is about 0.15, ceiling height is about 2.7
 UNITY_PSEUDO_OBJECTS = {
@@ -455,6 +459,8 @@ UNITY_PSEUDO_OBJECTS = {
         SOUTH_WALL: PseudoObject(WALL_ID, WALL_TYPE, SOUTH_WALL, position=np.array([0.1875, 1.35, -3.1]), extents=np.array([3.2875, 1.35, 0.075]), rotation=np.zeros(3)),            # has the window
         EAST_WALL: PseudoObject(WALL_ID, WALL_TYPE, EAST_WALL, position=np.array([3.475, 1.35, 1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the desk
         WEST_WALL: PseudoObject(WALL_ID, WALL_TYPE, WEST_WALL, position=np.array([-3.1, 1.35, -1.2125]), extents=np.array([0.075, 1.35, 1.8875]), rotation=np.array([0, 90, 0])),   # has the bed
+
+        ROOM_CENTER: PseudoObject(ROOM_CENTER, ROOM_CENTER, ROOM_CENTER, position=np.array([0.1875, 0, -1.2125]), extents=np.array([0.1, 0, 0.1]), rotation=np.zeros(3)),
 
         DOOR: PseudoObject(DOOR_ID, DOOR_TYPE, DOOR, position=np.array([0.448, 1.35, 0.675]), extents=np.array([0.423, 1.35, 0.075]), rotation=np.zeros(3)),
 

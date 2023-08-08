@@ -6,7 +6,7 @@ from config import BUILDING_TYPE, OBJECTS_BY_ROOM_AND_TYPE, UNITY_PSEUDO_OBJECTS
 from predicate_handler import ObjectState, _pred_in_motion
 from utils import FullState, AgentState, BuildingPseudoObject
 
-MAX_BUILDINGS = 50
+MAX_BUILDINGS = 35  # max in data so far
 
 for domain in ROOMS:
     OBJECTS_BY_ROOM_AND_TYPE[domain][BUILDING_TYPE] = [f'building_{i}' for i in range(MAX_BUILDINGS)]

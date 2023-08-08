@@ -77,6 +77,7 @@ parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
 parser.add_argument('--maxtasksperchild', default=None)
+parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
 
 
 logger = logging.getLogger(__name__)
@@ -688,6 +689,11 @@ class PredicateFoundInData(FitnessTerm):
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
                 self.predicates_found.append(1)
+
+            except compile_predicate_statistics_split_args.MissingVariableException:
+                # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
+                pass
+
 
     def _get_all_inner_keys(self):
         return ['all', 'prop']
@@ -2526,8 +2532,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    setup_predicate_found_in_data_200 = SetupSuperPredicateFoundInData()
-    fitness.register(setup_predicate_found_in_data_200)
+    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
+    fitness.register(setup_predicate_found_in_data)
 
     preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
     fitness.register(preferences_predicate_found_in_data)
@@ -2664,7 +2670,9 @@ def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
 
 def game_iterator():
     for src_file in args.test_files:
-        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False, log_every_change=True):  # type: ignore
+        for game in cached_load_and_parse_games_from_file(src_file,
+                                                          grammar_parser,  # type: ignore
+                                                          use_tqdm=False, log_every_change=True, force_from_cache=True):
             yield game, src_file
 
 
@@ -2749,7 +2757,7 @@ if __name__ == '__main__':
         logger.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
             logger.info('Pool started')
-            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):  # type: ignore
+            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
                 continue
                 # if headers is None:
                 #     headers = list(row.keys())

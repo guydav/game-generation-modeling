@@ -150,14 +150,10 @@ class NoParseinfoTokenizerModelContext(tatsu.grammars.ModelContext):
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
     use_tqdm: bool, relative_path: typing.Optional[str] = None,
     save_updates_every: int = -1, log_every_change: bool = True,
-    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False):
+    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False, force_from_cache: bool = False):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
     grammar_hash = fixed_hash(grammar_parser._to_str())
-
-    game_iter = load_games_from_file(games_file_path)
-    if use_tqdm:
-        game_iter = tqdm.tqdm(game_iter)
 
     if os.path.exists(cache_path):
         with gzip.open(cache_path, 'rb') as f:
@@ -180,6 +176,19 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
 
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
+
+    if force_from_cache:
+        if grammar_changed:
+            raise ValueError('Cannot force from cache when grammar changed')
+
+        for game_id in cache[CACHE_ASTS_KEY]:
+            yield cache[CACHE_ASTS_KEY][game_id]
+
+        return
+
+    game_iter = load_games_from_file(games_file_path)
+    if use_tqdm:
+        game_iter = tqdm.tqdm(game_iter)
 
     for game in game_iter:
         game_id = _extract_game_id(game)

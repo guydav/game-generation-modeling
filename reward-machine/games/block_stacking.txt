@@ -12,9 +12,9 @@
         )
         (preference blockNextToOrOnDesk
             (exists (?b - block)
-                (at-end (or
-                    (on desk ?b)
-                    (adjacent desk ?b)
+                (at-end (and
+                    (on top_shelf ?b)
+                    (on floor agent)
                 ))
             )
         )
@@ -30,7 +30,7 @@
             (exists (?g - game_object)
                 (at-end (or
                     (in top_drawer ?g)
-                    (not (open top_drawer))
+                    (open top_drawer)
                 ))
             )
         )

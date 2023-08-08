@@ -118,7 +118,7 @@ def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str
         logger.debug(f'Creating cache folder: {CACHE_FOLDER}')
         os.makedirs(CACHE_FOLDER, exist_ok=True)
 
-    name, _ = os.path.splitext(os.path.basename(file_path))
+    name = os.path.basename(file_path).split('.', 1)[0]
     # if relative_path is not None:
     #     return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
     # else:
@@ -128,7 +128,16 @@ def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str
 def _extract_game_id(game_str: str):
     start = game_str.find('(game') + 6
     end = game_str.find(')', start)
-    return game_str[start:end]
+    full_game_id = game_str[start:end]
+
+    # If it's a long name produced by a regrowth, truncate it at <id>-<index>-<regrowth-index>
+    first_dash_index = full_game_id.find('-')
+    second_dash_index = full_game_id.find('-', first_dash_index + 1)
+    third_dash_index = full_game_id.find('-', second_dash_index + 1)
+    if second_dash_index != -1:
+        return full_game_id[:third_dash_index]
+
+    return full_game_id
 
 
 def fixed_hash(str_data: str):

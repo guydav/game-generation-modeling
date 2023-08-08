@@ -741,6 +741,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id"] + shared_var_columns, suffix=suffix)
 
             if predicate_df.shape[0] == 0:
+                predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
                 return predicate_df, used_variables
 
         # Replace the intervals column with the intersection of all intervals columns
@@ -779,9 +780,6 @@ class CommonSensePredicateStatisticsSplitArgs():
         if len(sub_predicate_dfs) == 0:
             raise PredicateNotImplementedException("All sub-predicates of the por were not implemented")
 
-        if len(sub_predicate_dfs) == 1:
-            return sub_predicate_dfs[0], used_variables
-
         relevant_vars = list(used_variables)
         # Building this dataframe to explicitly represent all potential assignments, instead of implicitly representing them as nulls
         # as the implicit nulls were making it really hard to write the logic for the (not (or ...)) case
@@ -816,6 +814,9 @@ class CommonSensePredicateStatisticsSplitArgs():
         return predicate_df, used_variables
 
     def _build_potential_missing_values_df(self, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], relevant_vars: typing.List[str]):
+        if len(relevant_vars) == 0:
+            raise MissingVariableException("Attempting to build missing values df with no relevant variables")
+
         # For each trace ID, and each assignment of the vars that exist in the sub_predicate_df so far:
         relevant_var_mapping = {var: mapping[var] if var.startswith("?") else [var] for var in relevant_vars}
         variable_types = tuple(tuple(relevant_var_mapping[var]) for var in relevant_var_mapping.keys())
@@ -824,12 +825,25 @@ class CommonSensePredicateStatisticsSplitArgs():
         possible_arg_assignments = [self._object_assignments(domain, variable_types) for domain in self.domains]
 
         possible_assignments_df = pl.DataFrame(dict(domain=self.domains, assignments=possible_arg_assignments, intervals=[[]] * len(self.domains)),
-                                                schema=dict(domain=pl.Categorical, assignments=pl.List(pl.List(pl.Categorical)), intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
+                                                    schema=dict(domain=pl.Categorical, assignments=pl.List(pl.List(pl.Categorical)), intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
 
-        potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
-        potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
-            'domain', 'trace_id', 'trace_length',
-            pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
+        try:
+            if all(len(assignment) == 0 for assignment in possible_arg_assignments):
+                raise MissingVariableException("No possible assignments for any variable")
+
+            potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
+            potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
+                'domain', 'trace_id', 'trace_length',
+                pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
+
+        except Exception as e:
+            print("mapping", mapping)
+            print("relevant_var_mapping:", relevant_var_mapping)
+            print("variable_types:", variable_types)
+            print("possible_arg_assignments:", possible_arg_assignments)
+            print("assignments", possible_assignments_df.select('assignments').to_series().to_numpy())
+            print()
+            raise e
 
         return potential_missing_values_df
 
@@ -850,7 +864,8 @@ class CommonSensePredicateStatisticsSplitArgs():
         if "trace_length" in predicate_df.columns:
             join_columns.append("trace_length")
 
-        predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + relevant_vars)
+        predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + list(used_variables & set(predicate_df.columns)))
+
 
         # With the simplified approach, we only want to select the rows where the intervals are null
         # Or rows where the sum of the interval is not the trace length (== one intervals, which is the entire trace)

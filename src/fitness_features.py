@@ -686,7 +686,7 @@ class PredicateFoundInData(FitnessTerm):
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
             try:
-                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}
+                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping)

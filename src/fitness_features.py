@@ -76,7 +76,7 @@ parser.add_argument('--use-specific-objects-ngram-model', action='store_true')
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
-DEFAULT_START_METHOD = 'fork'
+DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
 parser.add_argument('--maxtasksperchild', default=None)
 parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
@@ -151,15 +151,19 @@ class ASTFitnessFeaturizer:
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
     section_keys: typing.List[str]
     section_registry: typing.Dict[str, typing.List[FitnessTerm]]
+    temp_file_output_paths: typing.Dict[int, str]
+    temp_files: typing.Dict[int, typing.TextIO]
+    temp_file_writer_dict: typing.Dict[int, csv.DictWriter]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]]
 
-    def __init__(self, preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]] = None,
+    def __init__(self, args: argparse.Namespace, preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]] = None,
         default_headers: typing.Sequence[str] = DEFAULT_HEADERS,
         list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
         section_keys: typing.Sequence[str] = ast_parser.SECTION_KEYS,
         real_games_src_file: str = REAL_GAMES_SRC_FILE,
         compute_real_min_max_feature_patterns: typing.Sequence[typing.Union[str, re.Pattern]] = tuple()):
 
+        self.args = args
         self.preprocessors = preprocessors
         self.default_headers = default_headers
         self.headers = list(default_headers)
@@ -182,6 +186,14 @@ class ASTFitnessFeaturizer:
         self.df_keys = []
         self.all_column_keys = None
         self.columns_to_terms = None  # type: ignore
+
+        self.temp_file_output_paths = {}
+        self.temp_files = {}
+        self.temp_file_writer_dict = {}
+
+    def __del__(self):
+        for _, temp_file in self.temp_files.items():
+            temp_file.close()
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -293,6 +305,28 @@ class ASTFitnessFeaturizer:
                 self.columns_to_terms[key] = term
 
         return self.all_column_keys
+
+    def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
+        with multiprocessing.Pool(self.args.n_workers) as p:
+            logger.info('Pool started')
+
+            for row in tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize), total=self.args.expected_total_row_count):
+                pass
+
+    def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
+        game, src_file = game_and_src_file
+        row = self.parse(game, src_file, return_row=True, preprocess_row=False)
+        process_index = multiprocessing.current_process()._identity[0] - 1 % self.args.n_workers
+        if process_index not in self.temp_file_writer_dict:
+            temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{process_index}.temp.csv')
+            self.temp_file_output_paths[process_index] = temp_output_path
+            temp_file = open(temp_output_path, 'w', newline='')
+            self.temp_files[process_index] = temp_file
+            temp_csv_writer = csv.DictWriter(temp_file, self.get_all_column_keys())
+            self.temp_file_writer_dict[process_index] = temp_csv_writer
+
+        self.temp_file_writer_dict[process_index].writerow(row)  # type: ignore
+
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -2520,7 +2554,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     if not args.no_merge:
         preprocessors.append(MergeFitnessFeatures(COMMON_SENSE_PREDICATES_FUNCTIONS))
 
-    fitness = ASTFitnessFeaturizer(preprocessors=preprocessors)
+    fitness = ASTFitnessFeaturizer(args, preprocessors=preprocessors)
 
     all_variables_defined = VariablesDefinedTerm()
     fitness.register(all_variables_defined)
@@ -2670,12 +2704,12 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
-    game, src_file = game_src_file_n_workers
-    process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
-    logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
-    row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
-    temp_csv_writers[process_index].writerow(row)  # type: ignore
+# def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
+#     game, src_file = game_src_file_n_workers
+#     process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
+#     logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
+#     row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
+#     temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
 def game_iterator():
@@ -2725,6 +2759,7 @@ def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths
     featurizer.rows_df = rows_df.reset_index(drop=True)
 
 
+
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
     if args.existing_featurizer_path is not None:
         logger.info(f'Loading featurizer from {args.existing_featurizer_path}')
@@ -2735,6 +2770,7 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
         featurizer = build_fitness_featurizer(args)
 
     return featurizer
+
 
 
 def test_multiprocessing_globals(index: int):
@@ -2768,9 +2804,8 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
 
     if args.n_workers > 1:
-        featurizers = [build_or_load_featurizer(args) for _ in range(args.n_workers)]
-        headers = get_headers(args, featurizers[0])
-        # headers = featurizers[0].get_all_column_keys()
+        featurizer = build_or_load_featurizer(args)
+        headers = get_headers(args, featurizer)
 
         if not os.path.exists(TEMP_DIR):
             os.makedirs(TEMP_DIR, exist_ok=True)
@@ -2779,33 +2814,15 @@ if __name__ == '__main__':
         for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
             os.remove(file)
 
-        temp_output_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{i}.temp.csv') for i in range(args.n_workers)]
-        temp_files = [open(temp_output_path, 'w', newline='') for temp_output_path in temp_output_paths]
-        temp_csv_writers = [csv.DictWriter(temp_file, headers) for temp_file in temp_files]
+        logger.info(f'About to start pool by calling parse_iterator_parallel with {args.n_workers} workers')
+        featurizer.parse_iterator_parallel(game_iterator())  # type: ignore
 
-        # TODO: consider rewriting with asyncio instead of multiprocessing
-
-        logger.info(f'About to start pool with {args.n_workers} workers')
-        with multiprocessing.Pool(args.n_workers) as p:
-            logger.info('Pool started')
-            # for _ in tqdm(p.imap_unordered(test_multiprocessing_globals, range(100), chunksize=args.chunksize), total=100):  # type: ignore
-            #     continue
-
-            # exit()
-            for _ in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
-                continue
-                # if headers is None:
-                #     headers = list(row.keys())
-                # rows.append(row)
-
-        for temp_file in temp_files:
+        for temp_file in featurizer.temp_files.values():
             temp_file.close()
 
-        featurizer = featurizers[0]
-        # featurizer.rows = rows
-        temp_files_to_featurizer(featurizer, temp_output_paths, headers)
-        # for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
-        #     os.remove(file)
+        temp_file_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{process_index}.temp.csv')
+                           for process_index in range(args.n_workers)]
+        temp_files_to_featurizer(featurizer, temp_file_paths, headers)
 
     else:
         featurizer = build_or_load_featurizer(args)
@@ -2885,6 +2902,9 @@ if __name__ == '__main__':
 
     one_mean_features_str = '\n'.join([f'    - {feature}' for feature in one_mean_features])
     logger.debug(f'The following features have a mean of 1 over the real games:\n{one_mean_features_str}\n')
+
+    logger.debug('Predicate found in data features:')
+    logger.debug(df[[c for c in df.columns if 'predicate_found_in_data_' in c]].describe())
 
     logger.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')

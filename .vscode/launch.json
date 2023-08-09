@@ -5,13 +5,15 @@
     "version": "0.2.0",
     "configurations": [
 
-
         {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: Current File With Args",
@@ -30,6 +32,9 @@
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: Fitness features",
@@ -49,6 +54,9 @@
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: n-gram model",
@@ -68,6 +76,9 @@
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: schema validation",
@@ -77,7 +88,10 @@
             "args": [
                 "-s", "./schema/game_schema_with_refs.json",
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: latex doc",
@@ -93,6 +107,9 @@
             ],
             "console": "integratedTerminal",
             // "notes": "\"-n\", \"61541833a06877a656163b10\"",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: room object types",
@@ -104,6 +121,9 @@
             ],
             "console": "integratedTerminal",
             // "notes": "\"-n\", \"61541833a06877a656163b10\"",
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: ast sampling",
@@ -127,6 +147,9 @@
             "console": "integratedTerminal",
             // "notes": "--parse-counter",
             // "justMyCode": false,
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: ast sampling LARGE",
@@ -158,6 +181,9 @@
             "console": "integratedTerminal",
             // "notes": "--parse-counter",
             // "justMyCode": false,
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: mcmc regrowth sampling",
@@ -172,6 +198,9 @@
             "console": "integratedTerminal",
             // "notes": "--parse-counter",
             // "justMyCode": false,
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
         {
             "name": "Python: evolutionary search",
@@ -205,6 +234,9 @@
             "console": "integratedTerminal",
             // "notes": "--parse-counter",
             // "justMyCode": false,
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache",
+            }
         },
         {
             "name": "Python: ngrams hyperparameters",
@@ -218,6 +250,9 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
+            "env": {
+                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+            }
         },
     ]
 }

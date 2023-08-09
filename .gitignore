@@ -32,3 +32,5 @@ reward-machine/temp/**/*
 reward-machine/traces/participant-traces/*.json
 reward-machine/traces/participant-traces/*.zip
 reward-machine/.DS_Store
+run/test.py
+.vscode/launch.json

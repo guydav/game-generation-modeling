@@ -7,11 +7,14 @@ import hashlib
 import io
 from itertools import groupby, permutations, product, repeat, starmap
 import json
+import logging
 import os
+import operator
 import pandas as pd
 import pathlib
 import pickle
 import polars as pl
+pl.enable_string_cache(True)
 import pstats
 import tatsu, tatsu.ast, tatsu.grammars
 import time
@@ -32,6 +35,11 @@ from ast_parser import PREFERENCES
 from ast_printer import ast_section_to_string
 from building_handler import BuildingHandler
 from predicate_handler import PREDICATE_LIBRARY_RAW
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     ("agent_crouches", 0),
@@ -79,16 +87,21 @@ PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
+DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
-CACHE_MAX_SIZE = 1024
+MAX_CACHE_SIZE = 2048
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
 
 
 class PredicateNotImplementedException(Exception):
+    pass
+
+
+class MissingVariableException(Exception):
     pass
 
 
@@ -100,12 +113,13 @@ def stable_hash_list(list_data: typing.Sequence[str]):
     return stable_hash('\n'.join(sorted(list_data)))
 
 
+
 class CommonSensePredicateStatisticsSplitArgs():
     data: pl.DataFrame
     domains: typing.List[str]
     predicates: typing.List[str]
     room_objects_cache: typing.Dict[str, typing.Set[str]]
-    same_type_arg_cache: typing.Dict[str, typing.List[typing.Tuple[str, str, str, str]]]
+    # same_type_arg_cache: typing.Dict[str, typing.List[typing.Tuple[str, str, str, str]]]
     trace_lengths_and_domains: typing.Dict[str, typing.Tuple[int, str]]
     trace_lengths_and_domains_df: pl.DataFrame
 
@@ -117,6 +131,8 @@ class CommonSensePredicateStatisticsSplitArgs():
                  base_trace_path: typing.Union[str, pathlib.Path] = DEFAULT_BASE_TRACE_PATH,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT,
+                 in_progress_traces_filename_format: str = DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT,
+                 force_trace_names_hash: typing.Optional[str] = None,
                  overwrite: bool = False, trace_hash_n_characters: int = 8):
 
         self.cache_dir = cache_dir
@@ -126,47 +142,104 @@ class CommonSensePredicateStatisticsSplitArgs():
         self.object_assignment_cache = {}
         self.predicate_interval_cache = {}
         self.room_objects_cache = {}
-        self.same_type_arg_cache = {}
+        # self.same_type_arg_cache = {}
 
         # Compute hash of trace names
-        trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
+        if force_trace_names_hash is not None:
+            logger.info(f"Forcing trace names hash to {force_trace_names_hash}")
+            trace_names_hash = force_trace_names_hash
+        else:
+            trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
+        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
         open_method = gzip.open if stats_filename.endswith('.gz') else open
 
         if os.path.exists(stats_filename) and not overwrite:
             self.data = pd.read_pickle(stats_filename)  # type: ignore
-            print(f'Loaded data with shape {self.data.shape} from {stats_filename}')
+            logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
             with open_method(trace_lengths_and_domains_filename, 'rb') as f:
                 self.trace_lengths_and_domains = pickle.load(f)
 
         else:
+            if force_trace_names_hash is not None:
+                raise ValueError("Must not specify force_trace_names_hash if cache file does not exist")
+
             if base_trace_path is None:
                 raise ValueError("Must specify base_trace_path if cache file does not exist")
 
-            print(f"No cache file found at {stats_filename}, building from scratch...")
+            logger.info(f"No cache file found at {stats_filename}, building from scratch...")
 
-            trace_paths = [os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]
+            trace_paths = list(sorted([os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]))
 
-            # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
-            # add additional columns here
-            self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore
-            self.trace_lengths_and_domains = {}
+            if os.path.exists(in_progress_traces_filename):
+                with open(in_progress_traces_filename, 'rb') as f:
+                    in_progress_trace_paths = pickle.load(f)
+
+            else:
+                in_progress_trace_paths = []
+
+            if len(in_progress_trace_paths) == len(trace_paths):
+                logger.info(f"Foud as many in progres traces as there are total, so starting over")
+                in_progress_trace_paths = []
+
+            if len(in_progress_trace_paths) > 0:
+                trace_paths = [trace_path for trace_path in trace_paths if trace_path not in in_progress_trace_paths]
+                logger.info(f"Found {len(in_progress_trace_paths)} in progress traces, resuming processing with {len(trace_paths)} traces remaining")
+                self.data = pd.read_pickle(stats_filename)  # type: ignore
+                logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
+                with open_method(trace_lengths_and_domains_filename, 'rb') as f:
+                    self.trace_lengths_and_domains = pickle.load(f)
+
+            else:
+                logger.info(f"No in progress traces found, starting from scratch")
+                # TODO (gd1279): if we ever decide to support 3- or 4- argument predicates, we'll need to
+                # add additional columns here
+                self.data = pd.DataFrame(columns=DEFAULT_COLUMNS)  # type: ignore
+                self.trace_lengths_and_domains = {}
+
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
+                self.data.to_pickle(stats_filename)
 
-            self.data.to_pickle(stats_filename)
-            with open_method(trace_lengths_and_domains_filename, 'wb') as f:
-                pickle.dump(self.trace_lengths_and_domains, f)
+                with open_method(trace_lengths_and_domains_filename, 'wb') as f:
+                    pickle.dump(self.trace_lengths_and_domains, f)
+
+                in_progress_trace_paths.append(trace_path)
+                with open(in_progress_traces_filename, 'wb') as f:
+                    pickle.dump(in_progress_trace_paths, f)
+
+            # if we've reached the end, remove the in-progress file
+            os.remove(in_progress_traces_filename)
 
         self.domains = list(self.data['domain'].unique())  # type: ignore
         self.predicates = list(self.data['predicate'].unique())  # type: ignore
+
         self._trace_lengths_and_domains_to_df()
+        self.data = pl.from_pandas(
+            self.data, schema_overrides=dict(
+                predicate=pl.Categorical,
+                trace_id=pl.Categorical,
+                domain=pl.Categorical,
+                arg_1_id=pl.Categorical,
+                arg_1_type=pl.Categorical,
+                arg_2_id=pl.Categorical,
+                arg_2_type=pl.Categorical
+            )
+        )
+
+        self.cache = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
 
         # Convert to polars
-        self.data = pl.from_pandas(self.data)
+        # self.data = pl.from_pandas(self.data)
+
+        # Removing support for same_type until I regenerate cache -- it's ~80% of the records in the DB
+        if 'same_type' in self.predicates:
+            self.predicates.remove('same_type')
+            self.data = self.data.filter(pl.col('predicate') != 'same_type')
+            logger.info(f'After filtering out same_type, data has shape {self.data.shape}')
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []
@@ -178,11 +251,14 @@ class CommonSensePredicateStatisticsSplitArgs():
             trace_lengths.append(length)
             domains.append(domain)
 
-        self.trace_lengths_and_domains_df = pl.DataFrame({
-            'trace_id': trace_ids,
-            'trace_length': trace_lengths,
-            'domain': domains
-        })
+        self.trace_lengths_and_domains_df = pl.DataFrame(dict(
+            trace_id=trace_ids,
+            trace_length=trace_lengths,
+            domain=domains,
+        ), schema_overrides=dict(
+            trace_id=pl.Categorical,
+            domain=pl.Categorical,
+        ))
 
     def _predicate_key(self, predicate: str, args: typing.Sequence[str]) -> str:
         return f"{predicate}-({','.join(args)})"
@@ -197,29 +273,29 @@ class CommonSensePredicateStatisticsSplitArgs():
         else:
             raise ValueError(f"Unrecognized domain: {domain}")
 
-    def _get_room_same_type_args(self, trace) -> typing.List[typing.Tuple[str, str, str, str]]:
-        room_type = self._domain_key(trace['scene'])
-        if room_type not in self.same_type_arg_cache:
-            same_type_args = []
+    # def _get_room_same_type_args(self, trace) -> typing.List[typing.Tuple[str, str, str, str]]:
+    #     room_type = self._domain_key(trace['scene'])
+    #     if room_type not in self.same_type_arg_cache:
+    #         same_type_args = []
 
-            for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
-                meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
-                for object in objects_of_type:
-                    same_type_args.append((object, obj_type, obj_type, obj_type))
-                    if meta_type is not None:
-                        same_type_args.append((object, obj_type, meta_type, meta_type))
-                    if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
-                        specific_type = OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object]
-                        same_type_args.append((object, obj_type, specific_type, specific_type))
+    #         for obj_type, objects_of_type in OBJECTS_BY_ROOM_AND_TYPE[room_type].items():
+    #             meta_type = TYPES_TO_META_TYPE.get(obj_type, None)
+    #             for object in objects_of_type:
+    #                 same_type_args.append((object, obj_type, obj_type, obj_type))
+    #                 if meta_type is not None:
+    #                     same_type_args.append((object, obj_type, meta_type, meta_type))
+    #                 if object in OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type]:
+    #                     specific_type = OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM[room_type][object]
+    #                     same_type_args.append((object, obj_type, specific_type, specific_type))
 
-                for first_object, second_object in permutations(objects_of_type, 2):
-                    same_type_args.append((first_object, obj_type, second_object, obj_type))
+    #             for first_object, second_object in permutations(objects_of_type, 2):
+    #                 same_type_args.append((first_object, obj_type, second_object, obj_type))
 
-            self.same_type_arg_cache[room_type] = same_type_args
+    #         self.same_type_arg_cache[room_type] = same_type_args
 
-        return self.same_type_arg_cache[room_type]
+    #     return self.same_type_arg_cache[room_type]
 
-    def _get_room_objects(self, trace) -> set:
+    def _get_room_objects(self, trace) -> typing.Set[str]:
         '''
         Returns the set of objects in the room type of the given trace, excluding pseudo-objects,
         colors, and the agent
@@ -236,17 +312,18 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return self.room_objects_cache[room_type]
 
-    def _object_assignments(self, domain, variable_types, used_objects=[]):
+    def _object_assignments_cache_key(self, domain, variable_types, used_objects = None):
+        '''
+        Returns a key for the object assignments cache
+        '''
+        return (domain, tuple(variable_types), tuple(used_objects) if used_objects is not None else None)
+
+    @cachetools.cached(cache=cachetools.LRUCache(maxsize=MAX_CACHE_SIZE), key=_object_assignments_cache_key)
+    def _object_assignments(self, domain, variable_types, used_objects = None):
         '''
         Wrapper around get_object_assignments in order to cache outputs
         '''
-
-        key = (domain, tuple(variable_types), tuple(used_objects))
-        if key not in self.object_assignment_cache:
-            object_assignments = get_object_assignments(domain, variable_types, used_objects=used_objects)
-            self.object_assignment_cache[key] = object_assignments
-
-        return self.object_assignment_cache[key]
+        return get_object_assignments(domain, variable_types, used_objects=used_objects)
 
     def _intersect_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
@@ -278,6 +355,16 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return (self._intersect_intervals(intervals[0], intervals[1]),)
 
+    def _intersect_many_intervals_tuple(self, intervals: typing.Tuple[typing.List[typing.List[int]], ...]):
+        if any(not i for i in intervals):
+            return ([],)
+
+        output_intervals = intervals[0]
+        for other_intervals in intervals[1:]:
+            output_intervals = self._intersect_intervals(output_intervals, other_intervals)
+            if not output_intervals: break
+
+        return (output_intervals,)
 
     def _union_intervals(self, intervals_1: typing.List[typing.List[int]], intervals_2: typing.List[typing.List[int]]):
         '''
@@ -309,6 +396,30 @@ class CommonSensePredicateStatisticsSplitArgs():
             retval = self._union_intervals(intervals[0], intervals[1])
 
         return (retval, )
+
+    def _union_many_intervals(self, intervals_list: typing.List[typing.List[typing.List[int]]]):
+        '''
+        Given two lists of [start, end] intervals, returns the list of intervals in which either is true
+        '''
+        all_intervals = sorted(sum(intervals_list, []))
+        unions = []
+
+        for start, end in all_intervals:
+            if unions != [] and unions[-1][1] >= start - 1:
+                unions[-1][1] = max(unions[-1][1], end)
+            else:
+                unions.append([start, end])
+
+        return unions
+
+    def _union_many_intervals_tuple(self, intervals: typing.Tuple[typing.List[typing.List[int]], ...]):
+        intervals_list = [i for i in intervals if i]
+        if len(intervals_list) == 0:
+            return ([],)
+        elif len(intervals_list) == 1:
+            return (intervals_list[0],)
+
+        return (self._union_many_intervals(intervals_list),)
 
     def _invert_intervals(self, intervals: typing.List[typing.List[int]], length: int):
         if not intervals or intervals[0] is None:
@@ -397,7 +508,8 @@ class CommonSensePredicateStatisticsSplitArgs():
                         if state.agent_state_changed:
                             changed_this_step.append("agent")
 
-                        possible_args = list(product(*([changed_this_step] + list(repeat(room_objects, n_args - 1)))))
+                        room_objects_with_active_buildings_only = room_objects - (building_handler.building_id_set - building_handler.active_buildings)
+                        possible_args = list(product(*([changed_this_step] + list(repeat(room_objects_with_active_buildings_only, n_args - 1)))))
 
                         # Filter out any sets of arguments with duplicates
                         possible_args = [arg_set for arg_set in possible_args if len(set(arg_set)) == len(arg_set)]
@@ -503,32 +615,34 @@ class CommonSensePredicateStatisticsSplitArgs():
         specific_objects_new_rows_df = pd.DataFrame(specific_object_new_rows)
 
         # Add the same_types intervals
-        same_type_records = [
-            dict(predicate='same_type', arg_1_id=arg_1_id, arg_1_type=arg_1_type, arg_2_id=arg_2_id, arg_2_type=arg_2_type,
-                 trace_id=full_trace_id, domain=domain_key, intervals=[[0, replay_len]])
-            for arg_1_id, arg_1_type, arg_2_id, arg_2_type in self._get_room_same_type_args(trace)
-        ]
-        same_type_df = pd.DataFrame(same_type_records)
+        # same_type_records = [
+        #     dict(predicate='same_type', arg_1_id=arg_1_id, arg_1_type=arg_1_type, arg_2_id=arg_2_id, arg_2_type=arg_2_type,
+        #          trace_id=full_trace_id, domain=domain_key, intervals=[[0, replay_len]])
+        #     for arg_1_id, arg_1_type, arg_2_id, arg_2_type in self._get_room_same_type_args(trace)
+        # ]
+        # same_type_df = pd.DataFrame(same_type_records)
 
         # Combine the resulting dataframes and add them to the overall dataframe
-        self.data = pd.concat([self.data, game_df, specific_objects_new_rows_df, sub_df, same_type_df], ignore_index=True)  # type: ignore
+        self.data = pd.concat([self.data, game_df, specific_objects_new_rows_df, sub_df], ignore_index=True)  # type: ignore
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
             result, used_variables = self._inner_filter(predicate, mapping)
             n_traces = result.select("trace_id").unique().shape[0]
-            if n_traces == 0:
-                return 0, 0, 0
+            # if n_traces == 0:
+            #     return 0, 0, 0
 
-            n_intervals = result.select(pl.col("intervals").list.lengths()).sum().item()
-            if n_intervals == 0:
-                return 0, 0, 0
+            return n_traces
 
-            total_interval_states = result.select("intervals").explode("intervals") \
-                .select(pl.col("intervals").list.to_struct(fields=["start", "end"])) \
-                .unnest("intervals").select(pl.col("end") - pl.col("start")).sum().item()
-            # TODO: we could also similarlty extract, mean, or mean per trace, or...
-            return n_traces, n_intervals, total_interval_states
+            # n_intervals = result.select(pl.col("intervals").list.lengths()).sum().item()
+            # if n_intervals == 0:
+            #     return 0, 0, 0
+
+            # total_interval_states = result.select("intervals").explode("intervals") \
+            #     .select(pl.col("intervals").list.to_struct(fields=["start", "end"])) \
+            #     .unnest("intervals").select(pl.col("end") - pl.col("start")).sum().item()
+            # # TODO: we could also similarlty extract, mean, or mean per trace, or...
+            # return n_traces, n_intervals, total_interval_states
             # sorted_variables = sorted(used_variables)
             # return {(row_dict['trace_id'], tuple([f'{k}->{row_dict[k]}' for k in sorted_variables])): row_dict['intervals']
             #         for row_dict in result.to_dicts()}
@@ -536,6 +650,14 @@ class CommonSensePredicateStatisticsSplitArgs():
             # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
             raise e
 
+    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
+        '''
+        Returns a string that uniquely identifies the predicate and mapping
+        '''
+        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
+
+
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
@@ -557,9 +679,12 @@ class CommonSensePredicateStatisticsSplitArgs():
             elif not var.startswith("?"):
                 relevant_arg_mapping[var] = [var]
 
+            else:
+                raise MissingVariableException(f"Variable {var} is not in the mapping")
+
         filter_expr = pl.col("predicate") == predicate_name
         rename_mapping = {}
-        drop_columns = []
+        drop_columns = ['predicate']
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
@@ -570,10 +695,10 @@ class CommonSensePredicateStatisticsSplitArgs():
             # verify that if we query "same_type" and the second argument is a type, we only take the correct rows
             # we then also drop it from the DF as passed forward
             # TODO: figure out if there are any other predicates that require the same behavior
-            if predicate_name == "same_type" and i == 1 and not arg_var.startswith("?"):
-                filter_expr &= pl.col(f"arg_{i + 1}_id") == arg_var
-                drop_columns.append(arg_var)
-                used_variables.remove(arg_var)
+            # if predicate_name == "same_type" and i == 1 and not arg_var.startswith("?"):
+            #     filter_expr &= pl.col(f"arg_{i + 1}_id") == arg_var
+            #     drop_columns.append(arg_var)
+            #     used_variables.remove(arg_var)
 
             rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
@@ -590,9 +715,10 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return predicate_df, used_variables
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         and_args = predicate["and_args"]
-        if isinstance(and_args, tatsu.ast.AST):
+        if not isinstance(and_args, list):
             and_args = [and_args]
 
         sub_predicate_dfs = []
@@ -609,28 +735,38 @@ class CommonSensePredicateStatisticsSplitArgs():
         if len(sub_predicate_dfs) == 0:
             raise PredicateNotImplementedException("All sub-predicates of the and were not implemented")
 
+        if len(sub_predicate_dfs) == 1:
+            return sub_predicate_dfs[0], used_variables
+
         predicate_df = sub_predicate_dfs[0]
 
+        suffixes = []
+        intervals_columns = ['intervals']
         if DEBUG: start = time.perf_counter()
-        for sub_predicate_df in sub_predicate_dfs[1:]:
+        for i, sub_predicate_df in enumerate(sub_predicate_dfs[1:]):
             # Collect all variables which appear in both the current predicate (which will be expanded) and the sub-predicate
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
 
-            # Join the two dataframes based on the trace identifier, domain, and shared variable columns
-            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id", "domain"] + shared_var_columns)
+            suffix = f"_{i}"
+            suffixes.append(suffix)
+            intervals_columns.append(f"intervals{suffix}")
+
+            # Join the two dataframes based on the trace identifier, and shared variable columns
+            predicate_df = predicate_df.join(sub_predicate_df, how="inner", on=["trace_id"] + shared_var_columns, suffix=suffix)
 
             if predicate_df.shape[0] == 0:
+                predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
                 return predicate_df, used_variables
 
-            # Replace the intervals column with the intersection of the current intervals and the new ones from the sub-predicate
-            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(
-                self._intersect_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        # Replace the intervals column with the intersection of all intervals columns
+        # predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(
+        #     self._intersect_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
 
-            # Remove all the 'right-hand' columns added by the join
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+        # Remove all the 'right-hand' columns added by the joins
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
-            # Remove any rows with empty intervals
-            predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+        # Remove any rows with empty intervals
+        # predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         if DEBUG:
             end = time.perf_counter()
@@ -638,9 +774,10 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return predicate_df, used_variables
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         or_args = predicate["or_args"]
-        if isinstance(or_args, tatsu.ast.AST):
+        if not isinstance(or_args, list):
             or_args = [or_args]
 
         sub_predicate_dfs = []
@@ -663,16 +800,27 @@ class CommonSensePredicateStatisticsSplitArgs():
         # as the implicit nulls were making it really hard to write the logic for the (not (or ...)) case
         predicate_df = self._build_potential_missing_values_df(mapping, relevant_vars)
 
+        suffixes = []
+        intervals_columns = ['intervals']
+
         if DEBUG: start = time.perf_counter()
-        for sub_predicate_df in sub_predicate_dfs:
+        for i, sub_predicate_df in enumerate(sub_predicate_dfs):
             # Same procedure as with 'and', above, except a union instead of an intersection for the intervals
             shared_var_columns = [c for c in (set(predicate_df.columns) & set(sub_predicate_df.columns) & used_variables)]
-            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id", "domain"] + shared_var_columns)
-            predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
-            predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")])
+
+            suffix = f"_{i}"
+            suffixes.append(suffix)
+            intervals_columns.append(f"intervals{suffix}")
+
+            predicate_df = predicate_df.join(sub_predicate_df, how="left", on=["trace_id"] + shared_var_columns, suffix=suffix)
+
+        predicate_df.replace("intervals", predicate_df.select(pl.concat_list(intervals_columns).alias("intervals")).to_series())
+
+        # predicate_df.replace("intervals", predicate_df.select(*intervals_columns).apply(self._union_many_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)['column_0'])
+        predicate_df = predicate_df.drop([c for c in predicate_df.columns if any(c.endswith(suffix) for suffix in suffixes)])
 
         # Only filter out rows with no intervals after joining with all sub-predicates
-        predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
+        # predicate_df = predicate_df.filter(pl.col("intervals").list.lengths() > 0)
 
         if DEBUG:
             end = time.perf_counter()
@@ -681,6 +829,9 @@ class CommonSensePredicateStatisticsSplitArgs():
         return predicate_df, used_variables
 
     def _build_potential_missing_values_df(self, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], relevant_vars: typing.List[str]):
+        if len(relevant_vars) == 0:
+            raise MissingVariableException("Attempting to build missing values df with no relevant variables")
+
         # For each trace ID, and each assignment of the vars that exist in the sub_predicate_df so far:
         relevant_var_mapping = {var: mapping[var] if var.startswith("?") else [var] for var in relevant_vars}
         variable_types = tuple(tuple(relevant_var_mapping[var]) for var in relevant_var_mapping.keys())
@@ -689,15 +840,29 @@ class CommonSensePredicateStatisticsSplitArgs():
         possible_arg_assignments = [self._object_assignments(domain, variable_types) for domain in self.domains]
 
         possible_assignments_df = pl.DataFrame(dict(domain=self.domains, assignments=possible_arg_assignments, intervals=[[]] * len(self.domains)),
-                                                schema=dict(domain=None, assignments=None, intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
+                                                    schema=dict(domain=pl.Categorical, assignments=pl.List(pl.List(pl.Categorical)), intervals=pl.List(pl.List(pl.Int64))))  # type: ignore
 
-        potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
-        potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
-            'domain', 'trace_id', 'trace_length',
-            pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
+        try:
+            if all(len(assignment) == 0 for assignment in possible_arg_assignments):
+                raise MissingVariableException("No possible assignments for any variable")
+
+            potential_missing_values_df = self.trace_lengths_and_domains_df.join(possible_assignments_df, how="left", on="domain")
+            potential_missing_values_df = potential_missing_values_df.explode('assignments').select(
+                'domain', 'trace_id', 'trace_length',
+                pl.col("assignments").list.to_struct(fields=relevant_vars), 'intervals').unnest('assignments')
+
+        except Exception as e:
+            print("mapping", mapping)
+            print("relevant_var_mapping:", relevant_var_mapping)
+            print("variable_types:", variable_types)
+            print("possible_arg_assignments:", possible_arg_assignments)
+            print("assignments", possible_assignments_df.select('assignments').to_series().to_numpy())
+            print()
+            raise e
 
         return potential_missing_values_df
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         try:
             predicate_df, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
@@ -711,17 +876,23 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         # Now, for each possible combination of args on each trace / domain, 'intervals' will contain the truth intervals if
         # they exist and null otherwise, and 'intervals_right' will contain the empty interval'
-        join_columns = ["trace_id", "domain"]
+        join_columns = ["trace_id"]
         if "trace_length" in predicate_df.columns:
             join_columns.append("trace_length")
 
-        predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + relevant_vars)
+        predicate_df = predicate_df.join(potential_missing_values_df, how="outer", on=join_columns + list(used_variables & set(predicate_df.columns)))
 
-        # Union with the empty intervals will do nothing when they exist, and leave an empty interval when they don't
-        predicate_df.replace("intervals", predicate_df.select("intervals", "intervals_right").apply(self._union_intervals_tuple, INTERVALS_LIST_POLARS_TYPE)["column_0"])
 
+        # With the simplified approach, we only want to select the rows where the intervals are null
+        # Or rows where the sum of the interval is not the trace length (== one intervals, which is the entire trace)
+        # To basically eliminate predicates that are live for the entire trace
+        predicate_df = predicate_df.filter(pl.col("intervals").is_null() | \
+                                           pl.col("intervals").list.lengths() == 0 | \
+                                           ~(pl.col("intervals").list.first().list.sum() == pl.col("trace_length")))
+
+        # Fulling null values instead of union-ing with the null intervals because it's much faster (.apply is really expensive)
         # Invert intervals will then flip them to be the entire length of the trace
-        predicate_df.replace("intervals", predicate_df.select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
+        # predicate_df.replace("intervals", predicate_df.with_columns(pl.col("intervals").fill_null(value=[])).select("intervals", "trace_length").apply(self._invert_intervals_tuple_apply, INTERVALS_LIST_POLARS_TYPE)["column_0"])
         predicate_df = predicate_df.drop([c for c in predicate_df.columns if c.endswith("_right")] + ['trace_length'])
 
         if DEBUG:
@@ -730,13 +901,6 @@ class CommonSensePredicateStatisticsSplitArgs():
 
         return predicate_df, used_variables
 
-    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
-        '''
-        Returns a string that uniquely identifies the predicate and mapping
-        '''
-        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
-
-    @cachetools.cached(cache=cachetools.LRUCache(maxsize=CACHE_MAX_SIZE), key=_predicate_and_mapping_cache_key)
     def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
@@ -1000,21 +1164,21 @@ if __name__ == '__main__':
                                                     trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True
+                                                    # overwrite=True
                                                     )
 
-    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    for var_type in variable_type_usage:
-        if var_type in META_TYPES:
-            continue
-        var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
+    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    # for var_type in variable_type_usage:
+    #     if var_type in META_TYPES:
+    #         continue
+    #     var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
 
-        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
-        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
+    #     prefix = "[+]" if len(var_intervals) > 0 else "[-]"
+    #     print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
-    exit()
+    # exit()
 
-    out = stats.filter(test_pred_agent_adjacent, {"?s": ["sliding_door"], "?b": ["ball"]})
+    out = stats.filter(test_pred_object_in_top_drawer, {"?g": ["game_object"]})
     print(out)
     # _print_results_as_expected_intervals(out)
 

@@ -458,12 +458,12 @@ def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.S
                        for var_type in sub_types], [])
         grouped_objects.append([obj for obj in objects if obj not in used_objects])
 
-    assignments = list(itertools.product(*grouped_objects))
+    assignments = itertools.product(*grouped_objects)
 
     # Filter out any assignments that have duplicate objects
-    filtered_assignments = list(filter(lambda assignment: len(set(assignment)) == len(assignment), assignments))
+    filtered_assignments = filter(lambda assignment: len(set(assignment)) == len(assignment), assignments)
 
-    return filtered_assignments
+    return list(filtered_assignments)
 
 def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str, str]) -> typing.Tuple[str, str]:
     """

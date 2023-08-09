@@ -1,4 +1,5 @@
 boolean.py
+cachetools
 GitPython
 inflect
 ipython
@@ -9,6 +10,8 @@ msgpack
 nltk
 numpy
 pandas
+polars
+pyarrow
 pytest
 python_Levenshtein
 scikit_learn

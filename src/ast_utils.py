@@ -118,7 +118,7 @@ def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str
         logger.debug(f'Creating cache folder: {CACHE_FOLDER}')
         os.makedirs(CACHE_FOLDER, exist_ok=True)
 
-    name, _ = os.path.splitext(os.path.basename(file_path))
+    name = os.path.basename(file_path).split('.', 1)[0]
     # if relative_path is not None:
     #     return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
     # else:
@@ -128,7 +128,16 @@ def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str
 def _extract_game_id(game_str: str):
     start = game_str.find('(game') + 6
     end = game_str.find(')', start)
-    return game_str[start:end]
+    full_game_id = game_str[start:end]
+
+    # If it's a long name produced by a regrowth, truncate it at <id>-<index>-<regrowth-index>
+    first_dash_index = full_game_id.find('-')
+    second_dash_index = full_game_id.find('-', first_dash_index + 1)
+    third_dash_index = full_game_id.find('-', second_dash_index + 1)
+    if second_dash_index != -1:
+        return full_game_id[:third_dash_index]
+
+    return full_game_id
 
 
 def fixed_hash(str_data: str):
@@ -150,21 +159,22 @@ class NoParseinfoTokenizerModelContext(tatsu.grammars.ModelContext):
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
     use_tqdm: bool, relative_path: typing.Optional[str] = None,
     save_updates_every: int = -1, log_every_change: bool = True,
-    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False):
+    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False, force_from_cache: bool = False):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
+    logger.info(f'Loading from cache file: {cache_path}')
     grammar_hash = fixed_hash(grammar_parser._to_str())
-
-    game_iter = load_games_from_file(games_file_path)
-    if use_tqdm:
-        game_iter = tqdm.tqdm(game_iter)
 
     if os.path.exists(cache_path):
         with gzip.open(cache_path, 'rb') as f:
             cache = pickle.load(f)
+
+        logger.info(f'Finished loading cache file: {cache_path}')
     else:
         cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
+
+        logger.info(f'No cache file found, creating new cache file for: {cache_path}')
 
     cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
@@ -180,6 +190,19 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
 
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
+
+    if force_from_cache:
+        if grammar_changed:
+            raise ValueError('Cannot force from cache when grammar changed')
+
+        for game_id in cache[CACHE_ASTS_KEY]:
+            yield cache[CACHE_ASTS_KEY][game_id]
+
+        return
+
+    game_iter = load_games_from_file(games_file_path)
+    if use_tqdm:
+        game_iter = tqdm.tqdm(game_iter)
 
     for game in game_iter:
         game_id = _extract_game_id(game)

@@ -76,7 +76,11 @@ parser.add_argument('--use-specific-objects-ngram-model', action='store_true')
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
+DEFAULT_START_METHOD = 'fork'
+parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
 parser.add_argument('--maxtasksperchild', default=None)
+parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
+parser.add_argument('--single-process-n-rows-to-temp-file', type=int, default=None)
 
 
 logger = logging.getLogger(__name__)
@@ -623,8 +627,9 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
 
 PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
-PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 200
+PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
 
+FULL_DATASET_TRACES_HASH = '028b3733'
 
 class PredicateFoundInData(FitnessTerm):
     min_interval_count: int
@@ -634,10 +639,13 @@ class PredicateFoundInData(FitnessTerm):
     predicates_found: typing.List[int]
     rules_to_child_keys: typing.Dict[str, str]
 
+    _predicate_data_estimator = None
+
     def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
+                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
+                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH):
 
         super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
         self.rules_to_child_keys = rules_to_child_keys
@@ -645,8 +653,17 @@ class PredicateFoundInData(FitnessTerm):
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
 
+        # if PredicateFoundInData._predicate_data_estimator is None:
+        #     PredicateFoundInData._predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+        #         # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+        #         force_trace_names_hash=trace_names_hash
+        #     )
+
+        # self.predicate_data_estimator = PredicateFoundInData._predicate_data_estimator
+
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+            # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
+            force_trace_names_hash=trace_names_hash
         )
 
     def game_start(self) -> None:
@@ -669,15 +686,22 @@ class PredicateFoundInData(FitnessTerm):
             # intervals = self.predicate_data_estimator(pred, mapping)
             # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
             try:
-                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}
-                n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
-                predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
+                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
+                # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
+                # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
+                n_traces = self.predicate_data_estimator.filter(pred, mapping)
+                predicate_found = n_traces >= self.min_trace_count
                 self.predicates_found.append(1 if predicate_found else 0)
-                if not predicate_found:
-                    logger.info(f'{"Found" if predicate_found else "Not found"}: predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces, {n_intervals} intervals, and {total_interval_states} total interval states')
+                # if not predicate_found:  # n_traces == 0:
+                #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
                 self.predicates_found.append(1)
+
+            except compile_predicate_statistics_split_args.MissingVariableException:
+                # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
+                pass
+
 
     def _get_all_inner_keys(self):
         return ['all', 'prop']
@@ -2646,15 +2670,19 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_and_src_file: typing.Tuple[tuple, str]) -> None:
+def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
+    game, src_file = game_src_file_n_workers
     process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
-    row = featurizers[process_index].parse(*game_and_src_file, return_row=True, preprocess_row=False)  # type: ignore
-    temp_csv_writers[process_index].writerow(row)
+    logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
+    row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
+    temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
 def game_iterator():
     for src_file in args.test_files:
-        for game in cached_load_and_parse_games_from_file(src_file, grammar_parser, False, log_every_change=False):  # type: ignore
+        for game in cached_load_and_parse_games_from_file(src_file,
+                                                          grammar_parser,  # type: ignore
+                                                          use_tqdm=False, log_every_change=True, force_from_cache=True):
             yield game, src_file
 
 
@@ -2683,6 +2711,20 @@ def extract_negative_index(game_name: str):
     return int(index)
 
 
+def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths: typing.List[str], headers: typing.List[str]):
+    logger.info('About to parse rows from temp files into dataframe')
+    rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
+    rows_df = pd.concat(rows_dfs, sort=False)
+
+    rows_df = rows_df.assign(real=(rows_df.src_file == 'interactive-beta.pddl').astype(int))
+    rows_df = rows_df.assign(game_index=rows_df.game_name.apply(extract_game_index),
+                                negative_index= rows_df.game_name.apply(extract_negative_index), fake=~rows_df.real)
+    rows_df = rows_df.sort_values(by=['fake', 'game_index', 'negative_index'], ignore_index=True).reset_index(drop=True)
+    rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
+
+    featurizer.rows_df = rows_df.reset_index(drop=True)
+
+
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
     if args.existing_featurizer_path is not None:
         logger.info(f'Loading featurizer from {args.existing_featurizer_path}')
@@ -2694,10 +2736,17 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
 
     return featurizer
 
+
+def test_multiprocessing_globals(index: int):
+    print(f'index: {index}, process_index: {multiprocessing.current_process()._identity[0] - 1 % args.n_workers}')
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.test_files:
         args.test_files.extend(DEFAULT_TEST_FILES)
+
+    multiprocessing.set_start_method(args.parallel_start_method, force=True)
 
     for test_file in args.test_files:
         if not os.path.exists(test_file):
@@ -2739,7 +2788,11 @@ if __name__ == '__main__':
         logger.info(f'About to start pool with {args.n_workers} workers')
         with multiprocessing.Pool(args.n_workers) as p:
             logger.info('Pool started')
-            for row in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize)):  # type: ignore
+            # for _ in tqdm(p.imap_unordered(test_multiprocessing_globals, range(100), chunksize=args.chunksize), total=100):  # type: ignore
+            #     continue
+
+            # exit()
+            for _ in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
                 continue
                 # if headers is None:
                 #     headers = list(row.keys())
@@ -2750,25 +2803,44 @@ if __name__ == '__main__':
 
         featurizer = featurizers[0]
         # featurizer.rows = rows
-        logger.info('About to parse rows from temp files into dataframe')
-        rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
-        rows_df = pd.concat(rows_dfs, sort=False)
-
-        rows_df = rows_df.assign(real=(rows_df.src_file == 'interactive-beta.pddl').astype(int))
-        rows_df = rows_df.assign(game_index=rows_df.game_name.apply(extract_game_index),
-                                 negative_index= rows_df.game_name.apply(extract_negative_index), fake=~rows_df.real)
-        rows_df = rows_df.sort_values(by=['fake', 'game_index', 'negative_index'], ignore_index=True).reset_index(drop=True)
-        rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
-
-        featurizer.rows_df = rows_df.reset_index(drop=True)
+        temp_files_to_featurizer(featurizer, temp_output_paths, headers)
         # for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
         #     os.remove(file)
 
     else:
         featurizer = build_or_load_featurizer(args)
-        for test_file in args.test_files:
-            for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):  # type: ignore
-                featurizer.parse(ast, test_file)  # type: ignore
+        headers = get_headers(args, featurizer)
+
+        all_output_paths = []
+
+        if args.single_process_n_rows_to_temp_file is not None:
+            index = 0
+            file_row_count = 0
+            temp_output_path = os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{index}.temp.csv')
+            temp_file = open(temp_output_path, 'w', newline='')
+            temp_csv_writer = csv.DictWriter(temp_file, headers)
+
+            for game, src_file in tqdm(game_iterator(), total=args.expected_total_row_count):
+                row = featurizer.parse(game, src_file, return_row=True, preprocess_row=False)
+                temp_csv_writer.writerow(row)
+                file_row_count += 1
+
+                if file_row_count >= args.single_process_n_rows_to_temp_file:
+                    logger.info(f'Wrote {file_row_count} rows to {temp_output_path}')
+                    temp_file.close()
+                    all_output_paths.append(temp_output_path)
+                    index += 1
+                    file_row_count = 0
+                    temp_output_path = os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{index}.temp.csv')
+                    temp_file = open(temp_output_path, 'w', newline='')
+                    temp_csv_writer = csv.DictWriter(temp_file, headers)
+
+            temp_files_to_featurizer(featurizer, all_output_paths, headers)
+
+        else:
+            for test_file in args.test_files:
+                for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, not args.dont_tqdm):  # type: ignore
+                    featurizer.parse(ast, test_file)  # type: ignore
 
     logger.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)

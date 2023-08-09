@@ -18,7 +18,8 @@ parser.add_argument('-v', '--validate', action='store_true')
 parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
-
+parser.add_argument('--force-rebuild-cache', action='store_true')
+parser.add_argument('--expected-total', type=int, default=None)
 
 def main(args):
     original_recursion_limit = sys.getrecursionlimit()
@@ -27,10 +28,10 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, True, # type: ignore
-                                                       '.', 1024, False)
+    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, # type: ignore
+                                                       '.', 10240, False, force_rebuild=args.force_rebuild_cache)
     if not args.dont_tqdm:
-        test_cases = tqdm.tqdm(test_cases)
+        test_cases = tqdm.tqdm(test_cases, total=args.expected_total)
 
     for ast in test_cases:
         ast_printer.BUFFER = None

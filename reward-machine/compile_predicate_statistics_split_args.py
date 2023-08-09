@@ -126,6 +126,7 @@ class MaxRowsLRUCache(cachetools.LRUCache):
             length = value[0].shape[0]
 
         if length > self.max_rows:
+            # logger.info(f'Rejecting cache entry of type {type(value)} because of length {length}1')
             raise ValueError('Too many rows to cache')
 
         return super().__setitem__(key, value)

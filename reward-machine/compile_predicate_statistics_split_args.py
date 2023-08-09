@@ -91,7 +91,7 @@ DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.p
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
-MAX_CACHE_SIZE = 2048
+MAX_CACHE_SIZE = 512
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
@@ -112,6 +112,28 @@ def stable_hash(str_data: str):
 def stable_hash_list(list_data: typing.Sequence[str]):
     return stable_hash('\n'.join(sorted(list_data)))
 
+
+class MaxRowsLRUCache(cachetools.LRUCache):
+    def __init__(self, maxsize: int, max_rows: int, *args, **kwargs):
+        super().__init__(maxsize, *args, **kwargs)
+        self.max_rows = max_rows
+
+    def __setitem__(self, key, value):
+        if isinstance(value, list):
+            length = len(value)
+
+        else:
+            length = value[0].shape[0]
+
+        if length > self.max_rows:
+            raise ValueError('Too many rows to cache')
+
+        return super().__setitem__(key, value)
+
+    def popitem(self):
+        key, value = super().popitem()
+        del value
+        return key, None
 
 
 class CommonSensePredicateStatisticsSplitArgs():
@@ -230,7 +252,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             )
         )
 
-        self.cache = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)
+        self.cache = MaxRowsLRUCache(maxsize=MAX_CACHE_SIZE, max_rows=MAX_CACHE_SIZE)
+        self.object_assignment_cache = MaxRowsLRUCache(maxsize=MAX_CACHE_SIZE, max_rows=MAX_CACHE_SIZE)
 
         # Convert to polars
         # self.data = pl.from_pandas(self.data)
@@ -318,7 +341,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         '''
         return (domain, tuple(variable_types), tuple(used_objects) if used_objects is not None else None)
 
-    @cachetools.cached(cache=cachetools.LRUCache(maxsize=MAX_CACHE_SIZE), key=_object_assignments_cache_key)
+    @cachetools.cachedmethod(cache=operator.attrgetter('object_assignment_cache'), key=_object_assignments_cache_key)
     def _object_assignments(self, domain, variable_types, used_objects = None):
         '''
         Wrapper around get_object_assignments in order to cache outputs
@@ -657,7 +680,7 @@ class CommonSensePredicateStatisticsSplitArgs():
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
@@ -864,6 +887,7 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[pl.DataFrame, typing.Set[str]]:
+        # raise PredicateNotImplementedException(f'Omitting `not` for now')
         try:
             predicate_df, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
         except PredicateNotImplementedException as e:

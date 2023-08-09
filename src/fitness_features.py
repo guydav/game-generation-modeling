@@ -192,7 +192,7 @@ class ASTFitnessFeaturizer:
         self.temp_file_writer_dict = {}
 
     def __del__(self):
-        for _, temp_file in self.temp_files.items():
+        for temp_file in self.temp_files.values():
             temp_file.close()
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
@@ -317,8 +317,14 @@ class ASTFitnessFeaturizer:
         game, src_file = game_and_src_file
         row = self.parse(game, src_file, return_row=True, preprocess_row=False)
         process_index = multiprocessing.current_process()._identity[0] - 1 % self.args.n_workers
+
         if process_index not in self.temp_file_writer_dict:
-            temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{process_index}.temp.csv')
+            temp_output_path = None
+            path_index = process_index
+            while temp_output_path is None or os.path.exists(temp_output_path):
+                temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{path_index}.temp.csv')
+                path_index += self.args.n_workers
+
             self.temp_file_output_paths[process_index] = temp_output_path
             temp_file = open(temp_output_path, 'w', newline='')
             self.temp_files[process_index] = temp_file
@@ -326,7 +332,6 @@ class ASTFitnessFeaturizer:
             self.temp_file_writer_dict[process_index] = temp_csv_writer
 
         self.temp_file_writer_dict[process_index].writerow(row)  # type: ignore
-
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -687,16 +692,7 @@ class PredicateFoundInData(FitnessTerm):
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
 
-        # if PredicateFoundInData._predicate_data_estimator is None:
-        #     PredicateFoundInData._predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-        #         # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
-        #         force_trace_names_hash=trace_names_hash
-        #     )
-
-        # self.predicate_data_estimator = PredicateFoundInData._predicate_data_estimator
-
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
             force_trace_names_hash=trace_names_hash
         )
 
@@ -2716,7 +2712,7 @@ def game_iterator():
     for src_file in args.test_files:
         for game in cached_load_and_parse_games_from_file(src_file,
                                                           grammar_parser,  # type: ignore
-                                                          use_tqdm=False, log_every_change=True, force_from_cache=True):
+                                                          use_tqdm=False, log_every_change=False, force_from_cache=True):
             yield game, src_file
 
 
@@ -2811,7 +2807,8 @@ if __name__ == '__main__':
             os.makedirs(TEMP_DIR, exist_ok=True)
 
         # rows = []
-        for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
+        temp_file_glob = os.path.join(TEMP_DIR, '*.temp.csv')
+        for file in glob.glob(temp_file_glob):
             os.remove(file)
 
         logger.info(f'About to start pool by calling parse_iterator_parallel with {args.n_workers} workers')
@@ -2820,8 +2817,8 @@ if __name__ == '__main__':
         for temp_file in featurizer.temp_files.values():
             temp_file.close()
 
-        temp_file_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{process_index}.temp.csv')
-                           for process_index in range(args.n_workers)]
+        temp_file_paths = glob.glob(temp_file_glob)
+        logger.info(f'About to combine temp files from the following paths: {temp_file_paths}')
         temp_files_to_featurizer(featurizer, temp_file_paths, headers)
 
     else:
@@ -2862,12 +2859,14 @@ if __name__ == '__main__':
     logger.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)
 
+    logger.info(f'Created dataframe with shape {df.shape}')
+
     logger.debug(df.groupby('src_file').agg([np.mean, np.std]))
 
-    for src_file in df.src_file.unique():
-        zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
-        zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
-        logger.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
+    # for src_file in df.src_file.unique():
+    #     zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
+    #     zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
+    #     logger.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
 
     global_zero_std = df.std(numeric_only=True) == 0
     global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore

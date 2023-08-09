@@ -54,8 +54,8 @@ if __name__ == '__main__':
     # for i in tqdm(range(0, len(game_asts))):
         # first_snapshot = tracemalloc.take_snapshot()
 
-        print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
-        featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=True, preprocess_row=False)
+        # print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
+        featurizer.parse(game_asts[i], 'interactive-beta.pddl')
 
         if MEMORY_TRACE:
             # gc.collect()
@@ -100,5 +100,5 @@ if __name__ == '__main__':
         ps.print_stats()
         print(s.getvalue())
 
-    # d = featurizer.to_df()
-    # print(d[[c for c in d.columns if 'predicate_found_in_data_' in c]].describe())
+    d = featurizer.to_df()
+    print(d[[c for c in d.columns if 'predicate_found_in_data_' in c]].describe())

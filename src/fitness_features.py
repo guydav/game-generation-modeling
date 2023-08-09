@@ -675,96 +675,72 @@ class PredicateFoundInData(FitnessTerm):
     min_trace_count: int
     predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
                                               typing.Tuple[int, int, int]]
-    predicates_found: typing.List[int]
+    predicate_sections: typing.Tuple[str]
+    predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
 
     _predicate_data_estimator = None
 
-    def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
+    def __init__(self, rule: str = 'predicate',
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
-                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH):
+                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH,
+                 predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES)):
 
-        super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
-        self.rules_to_child_keys = rules_to_child_keys
+        super().__init__(rule, f'predicate_found_in_data')
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
+        self.predicate_sections = predicate_sections
 
         self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
             force_trace_names_hash=trace_names_hash
         )
 
     def game_start(self) -> None:
-        self.predicates_found = []
+        self.predicates_found_by_section = {section: [] for section in self.predicate_sections}
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            rule = ast.parseinfo.rule  # type: ignore
-            if rule not in self.rules_to_child_keys:
-                raise ValueError(f'Rule {rule} not in {self.rules_to_child_keys}')
-
-            child_key = self.rules_to_child_keys[rule]
-            if child_key not in ast:
-                raise ValueError(f'Child key {child_key} not in {ast}')
-
-            pred = ast[child_key]
+            pred = ast
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-            # TODO: convert from this format to the one the thing expects the mapping to be in
-            # mapping = ...(context_variables)
-            # intervals = self.predicate_data_estimator(pred, mapping)
-            # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = n_traces >= self.min_trace_count
-                self.predicates_found.append(1 if predicate_found else 0)
+                self.predicates_found_by_section[context[SECTION_CONTEXT_KEY]].append(1 if predicate_found else 0)
                 # if not predicate_found:  # n_traces == 0:
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
             except compile_predicate_statistics_split_args.PredicateNotImplementedException:
-                self.predicates_found.append(1)
+                self.predicates_found_by_section[context[SECTION_CONTEXT_KEY]].append(1)
 
             except compile_predicate_statistics_split_args.MissingVariableException:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 
-
     def _get_all_inner_keys(self):
-        return ['all', 'prop']
+        return [f'{section.replace("(:", "")}_{key}'
+                for section in self.predicate_sections
+                for key in ('all', 'prop')]
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        # TODO: should this be 0 or 1 if none are found?
-        if len(self.predicates_found) == 0:
-            # logger.warning(f'No predicates found for {self.header}')
-            return dict(all=0, prop=0)
+        # TODO: should this be 0 or 1 if none are found? assuming 0 for now
+        result = {}
+        for section, section_predicates_found in self.predicates_found_by_section.items():
+            section_key = section.replace("(:", "")
+            if len(section_predicates_found) == 0:
+                # logger.warning(f'No predicates found for {self.header}')
+                result.update({f'{section_key}_{key}': 0 for key in ('all', 'prop')})
 
-        return dict(all=int(all(self.predicates_found)), prop=sum(self.predicates_found) / len(self.predicates_found))
+            else:
+                result[f'{section_key}_all'] = int(all(section_predicates_found))
+                result[f'{section_key}_prop'] = sum(section_predicates_found) / len(section_predicates_found)
 
-
-# TODO: decide if we might want different thresholds between these two?
-
-
-class SetupSuperPredicateFoundInData(PredicateFoundInData):
-    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
-        super().__init__({'setup_game_conserved': 'conserved_pred', 'setup_game_optional': 'optional_pred'},
-                         'setup', min_trace_count, min_interval_count, min_total_interval_state_count)
-
-
-class PreferencesPredicateFoundInData(PredicateFoundInData):
-    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
-
-        super().__init__({'once': 'once_pred', 'once_measure': 'once_measure_pred',
-                          'hold': 'hold_pred', 'while_hold': 'hold_pred',
-                          'at_end': 'at_end_pred',},
-                         'preferences', min_trace_count, min_interval_count, min_total_interval_state_count)
+        return result
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2570,11 +2546,14 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
-    fitness.register(setup_predicate_found_in_data)
+    predicate_found_in_data = PredicateFoundInData()
+    fitness.register(predicate_found_in_data)
 
-    preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
-    fitness.register(preferences_predicate_found_in_data)
+    # setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
+    # fitness.register(setup_predicate_found_in_data)
+
+    # preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
+    # fitness.register(preferences_predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)

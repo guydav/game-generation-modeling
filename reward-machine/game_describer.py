@@ -350,10 +350,10 @@ class GameDescriber():
         elif rule == "terminal_not":
             return f"it's not the case that {self._describe_terminal(terminal_ast['not_args'])}" # type: ignore
         
-        elif rule == "super_predicate_and":
+        elif rule == "terminal_and":
             return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["and_args"]]) # type: ignore
 
-        elif rule == "super_predicate_or":
+        elif rule == "terminal_or":
             return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["or_args"]], conj="or") # type: ignore
 
         elif rule == "terminal_comp":
@@ -493,7 +493,7 @@ class GameDescriber():
             print("\n=====================================PREFERENCES=====================================")
             for idx, preference in enumerate(game_info["preferences"][0]):
                 description = self._describe_preference(preference)
-                print(f"\n### Preference {idx+1}: {description}")
+                print(f"\nPreference {idx+1}: {description}")
 
         if game_info.get("terminal") is not None:
             print("\n=====================================TERMINAL CONDITIONS=====================================")
@@ -505,7 +505,72 @@ class GameDescriber():
             scoring_description = self._describe_scoring(game_info["scoring"])
             print(f"\nAt the end of the game, the player's score is {scoring_description}")
 
+
+TEST_GAME = """(define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+
+(:constraints (and
+    (preference throwTeddyOntoPillow
+        (exists (?t - teddy_bear ?p - pillow)
+            (then
+                (once (agent_holds ?t))
+                (hold (and (not (agent_holds ?t)) (in_motion ?t)))
+                (once (and (not (in_motion ?t)) (on ?p ?t)))
+            )
+        )
+    )
+    (preference throwAttempt
+        (exists (?t - teddy_bear)
+            (then
+                (once (agent_holds ?t))
+                (hold (and (not (agent_holds ?t)) (in_motion ?t)))
+                (once (not (in_motion ?t)))
+            )
+        )
+    )
+))
+(:terminal
+    (>= (count throwAttempt) 10)
+)
+(:scoring (count throwTeddyOntoPillow)
+))
+"""
+
+TEST_GAME_2 = """(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects-room-v1)  ; 28
+(:setup (and
+    (forall (?c - cube_block) (game-conserved (on rug ?c)))
+))
+(:constraints (and
+    (preference thrownBallReachesEnd
+            (exists (?d - dodgeball)
+                (then
+                    (once (and (agent_holds ?d) (not (on rug agent))))
+                    (hold-while
+                        (and
+                            (not (agent_holds ?d))
+                            (in_motion ?d)
+                            (not (exists (?b - cube_block) (touch ?d ?b)))
+                        )
+                        (above rug ?d)
+                    )
+                    (once (or (touch ?d bed) (touch ?d west_wall)))
+                )
+            )
+        )
+))
+(:terminal (or
+    (>= (total-time) 180)
+    (>= (total-score) 50)
+))
+(:scoring (+
+    (* 10 (count thrownBallReachesEnd))
+    (* (- 5) (count thrownBallHitsBlock:red))
+    (* (- 3) (count thrownBallHitsBlock:green))
+    (* (- 3) (count thrownBallHitsBlock:pink))
+    (- (count thrownBallHitsBlock:yellow))
+    (- (count thrownBallHitsBlock:purple))
+)))"""
+
 if __name__ == '__main__':
-    game = open("./reward-machine/games/throw_measure_dist.txt", "r").read()
+    game = open("./reward-machine/games/game-27.txt", "r").read()
     game_describer = GameDescriber()
-    game_describer.describe(game)
+    game_describer.describe(TEST_GAME)

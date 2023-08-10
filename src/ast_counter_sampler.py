@@ -625,7 +625,9 @@ class ASTSampler:
                  length_prior: typing.Dict[int, int] = LENGTH_PRIOR,
                  min_length_by_rule_and_field: typing.Optional[typing.Dict[typing.Tuple[str, str], int]] = DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD,
                  hardcoded_rules: typing.Dict[str, dict] = HARDCODED_RULES,
-                 verbose: bool = False, rng: typing.Optional[np.random.Generator] = None, seed: int = DEFAULT_RANDOM_SEED):
+                 verbose: bool = False,
+                 rng: typing.Optional[np.random.Generator] = None,
+                 seed: int = DEFAULT_RANDOM_SEED):
 
         self.grammar_parser = grammar_parser
         self.ast_counter = ast_counter

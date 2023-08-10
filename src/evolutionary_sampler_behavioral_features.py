@@ -485,7 +485,7 @@ def build_behavioral_features_featurizer(
         if feature_set not in FEATURE_SETS:
             raise ValueError(f'Invalid feature set: {feature_set}')
 
-        featurizer = FitnessFeaturesBehavioralFeaturizer()
+        featurizer = FitnessFeaturesBehavioralFeaturizer(args)
 
         if feature_set == BASIC_BINNED:
             featurizer.register(NodeCount())

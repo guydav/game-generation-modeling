@@ -711,6 +711,8 @@ class PredicateFoundInData(FitnessTerm):
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
+        if not hasattr(self, 'trace_names_hash'):
+            self.trace_names_hash = FULL_DATASET_TRACES_HASH
         self._init_predicate_data_estimator()
 
     def game_start(self) -> None:

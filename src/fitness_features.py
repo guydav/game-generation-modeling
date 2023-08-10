@@ -695,10 +695,12 @@ class PredicateFoundInData(FitnessTerm):
         self.min_total_interval_state_count = min_total_interval_state_count
         self.predicate_sections = predicate_sections
         self.trace_names_hash = trace_names_hash
+        self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
         self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
         # self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+            use_no_intervals=True,
             force_trace_names_hash=self.trace_names_hash
         )
 

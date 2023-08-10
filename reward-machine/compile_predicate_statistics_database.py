@@ -88,6 +88,7 @@ DEBUG = False
 PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_with_string_intervals_{traces_hash}.pkl.gz'
+NO_INTERVALS_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_no_intervals_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
@@ -169,11 +170,12 @@ class CommonSensePredicateStatisticsDatabse():
     trace_lengths_and_domains_df: pl.DataFrame
 
     def __init__(self,
+                 use_no_intervals: bool = True,
                  cache_dir: typing.Union[str, pathlib.Path] = DEFAULT_CACHE_DIR,
                  trace_names: typing.Sequence[str] = FULL_PARTICIPANT_TRACE_SET,
-                 cache_rules: typing.Optional[typing.Sequence[str]] = None,
                  base_trace_path: typing.Union[str, pathlib.Path] = DEFAULT_BASE_TRACE_PATH,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
+                 no_intervals_cache_filename_format: str = NO_INTERVALS_CACHE_FILE_NAME_FORMAT,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT,
                  in_progress_traces_filename_format: str = DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT,
                  force_trace_names_hash: typing.Optional[str] = None,
@@ -202,7 +204,8 @@ class CommonSensePredicateStatisticsDatabse():
         else:
             trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
-        stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
+        filename_format_to_use = no_intervals_cache_filename_format if use_no_intervals else cache_filename_format
+        stats_filename = os.path.join(cache_dir, filename_format_to_use.format(traces_hash=trace_names_hash))
         trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
         in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
         open_method = gzip.open if stats_filename.endswith('.gz') else open
@@ -288,33 +291,43 @@ class CommonSensePredicateStatisticsDatabse():
         heapq.heappush(self.available_table_indices, table_index)
 
     def _create_databases(self):
-        logger.info("Creating DuckDB databases...")
+        table_exists = duckdb.sql("SELECT count(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='data'").fetchone()[0]  # type: ignore
+
+        if table_exists:
+            logger.info('Skipping creating tables because they already exists')
+            return
+
+        logger.info("Creating DuckDB table...")
+
         # TODO: restore the string_intervals if we restore intervals-based logic
-        data_df = self.data.drop(columns=['intervals', 'string_intervals'])
+        data_df = self.data
+        drop_columns = [c for c in ('intervals', 'string_intervals') if c in data_df.columns]
+        if len(drop_columns) > 0:
+            data_df = data_df.drop(columns=drop_columns)
 
-        duckdb.sql('CREATE TABLE data AS SELECT * FROM data_df')
-        data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
-        logger.info(f"Loaded data, found {data_rows} rows")
-
-        duckdb.sql("CREATE TYPE predicate AS ENUM (SELECT DISTINCT predicate FROM data);")
-        duckdb.sql("CREATE TYPE domain AS ENUM (SELECT DISTINCT domain FROM data);")
-        duckdb.sql("CREATE TYPE trace_id AS ENUM (SELECT DISTINCT trace_id FROM data);")
+        all_predicates = tuple(data_df.predicate.unique())
+        duckdb.sql(f"CREATE TYPE predicate AS ENUM {all_predicates};")
+        all_domains = tuple(data_df.domain.unique())
+        duckdb.sql(f"CREATE TYPE domain AS ENUM {all_domains};")
+        all_trace_ids = tuple(data_df.trace_id.unique())
+        duckdb.sql(f"CREATE TYPE trace_id AS ENUM {all_trace_ids};")
         all_types = tuple([t for t in set(data_df.arg_1_type.unique()) | set(data_df.arg_2_type.unique()) if isinstance(t, str) ])
         duckdb.sql(f"CREATE TYPE arg_type AS ENUM {all_types};")
-        all_ids = tuple([t for t in set(data_df.arg_1_id.unique()) | set(data_df.arg_2_id.unique()) | set(UNITY_PSEUDO_OBJECTS.keys()) if isinstance(t, str)])
+
+        all_ids = set(data_df.arg_1_id.unique()) | set(data_df.arg_2_id.unique()) | set(UNITY_PSEUDO_OBJECTS.keys())
+        for room_types in OBJECTS_BY_ROOM_AND_TYPE.values():
+            for object_types in room_types.values():
+                all_ids.update(object_types)
+
+        all_ids = tuple([t for t in all_ids if isinstance(t, str)])
         duckdb.sql(f"CREATE TYPE arg_id AS ENUM {all_ids};")
+        logger.info("Done creating enums, about to create table")
 
-        duckdb.sql('ALTER TABLE data ALTER predicate TYPE predicate')
-        duckdb.sql('ALTER TABLE data ALTER domain TYPE domain')
-        duckdb.sql('ALTER TABLE data ALTER trace_id TYPE trace_id')
-        duckdb.sql('ALTER TABLE data ALTER arg_1_type TYPE arg_type')
-        duckdb.sql('ALTER TABLE data ALTER arg_2_type TYPE arg_type')
-        duckdb.sql('ALTER TABLE data ALTER arg_1_id TYPE arg_id')
-        duckdb.sql('ALTER TABLE data ALTER arg_2_id TYPE arg_id')
-        # TODO: restore the string_intervals if we restore intervals-based logic
-        # duckdb.sql('ALTER TABLE data ALTER string_intervals TYPE BITSTRING')
+        duckdb.sql("CREATE TABLE DATA(predicate predicate, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id, domain domain);")
 
-        logger.info("Done creating enums")
+        duckdb.sql("INSERT INTO data SELECT * FROM data_df")
+        data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
+        logger.info(f"Loaded data, found {data_rows} rows")
 
         duckdb.create_function("empty_bitstring", self.create_empty_bitstring_function(self.max_length), [], duckdb.typing.BIT)  # type: ignore
 

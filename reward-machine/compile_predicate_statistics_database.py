@@ -7,7 +7,7 @@ import gzip
 import hashlib
 import heapq
 import io
-from itertools import groupby, permutations, product, repeat, starmap
+from itertools import chain, groupby, permutations, product, repeat, starmap
 import json
 import logging
 import os
@@ -291,11 +291,12 @@ class CommonSensePredicateStatisticsDatabse():
         heapq.heappush(self.available_table_indices, table_index)
 
     def _create_databases(self):
-        table_exists = duckdb.sql("SELECT count(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='data'").fetchone()[0]  # type: ignore
-
-        if table_exists:
-            logger.info('Skipping creating tables because they already exists')
-            return
+        table_query = duckdb.sql("SHOW TABLES")
+        if table_query is not None:
+            all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
+            if 'data' in all_tables:
+                logger.info('Skipping creating tables because they already exist')
+                return
 
         logger.info("Creating DuckDB table...")
 
@@ -323,7 +324,7 @@ class CommonSensePredicateStatisticsDatabse():
         duckdb.sql(f"CREATE TYPE arg_id AS ENUM {all_ids};")
         logger.info("Done creating enums, about to create table")
 
-        duckdb.sql("CREATE TABLE DATA(predicate predicate, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id, domain domain);")
+        duckdb.sql("CREATE TABLE data(predicate predicate, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id, domain domain);")
 
         duckdb.sql("INSERT INTO data SELECT * FROM data_df")
         data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore

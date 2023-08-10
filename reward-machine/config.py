@@ -93,7 +93,7 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     ],
     "poster": [
         "Poster|+03.40|+01.70|-00.79",
-        "Poster|+03.40|+01.86|-01.98"
+        "Poster|+03.40|+01.86|-01.98",
     ],
     "shelf": [
         "Shelf|+00.62|+01.01|-02.82",

@@ -37,6 +37,7 @@ import room_and_object_types
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
 import compile_predicate_statistics_split_args
+import compile_predicate_statistics_database
 
 
 parser = argparse.ArgumentParser()
@@ -693,10 +694,22 @@ class PredicateFoundInData(FitnessTerm):
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
         self.predicate_sections = predicate_sections
+        self.trace_names_hash = trace_names_hash
 
-        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            force_trace_names_hash=trace_names_hash
+    def _init_predicate_data_estimator(self):
+        self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
+        # self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+            force_trace_names_hash=self.trace_names_hash
         )
+
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        del state['predicate_data_estimator']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self._init_predicate_data_estimator()
 
     def game_start(self) -> None:
         self.predicates_found_by_section = {section: [] for section in self.predicate_sections}
@@ -705,20 +718,23 @@ class PredicateFoundInData(FitnessTerm):
         if isinstance(ast, tatsu.ast.AST):
             pred = ast
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
+            section = typing.cast(str, context[SECTION_CONTEXT_KEY])
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = n_traces >= self.min_trace_count
-                self.predicates_found_by_section[context[SECTION_CONTEXT_KEY]].append(1 if predicate_found else 0)
+                self.predicates_found_by_section[section].append(1 if predicate_found else 0)
                 # if not predicate_found:  # n_traces == 0:
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
-            except compile_predicate_statistics_split_args.PredicateNotImplementedException:
-                self.predicates_found_by_section[context[SECTION_CONTEXT_KEY]].append(1)
+            except compile_predicate_statistics_database.PredicateNotImplementedException:
+            # except compile_predicate_statistics_split_args.PredicateNotImplementedException:
+                self.predicates_found_by_section[section].append(1)
 
-            except compile_predicate_statistics_split_args.MissingVariableException:
+            except compile_predicate_statistics_database.MissingVariableException:
+            # except compile_predicate_statistics_split_args.MissingVariableException:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 

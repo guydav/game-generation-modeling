@@ -21,7 +21,7 @@ from src.fitness_features import *
 
 
 PROFILE = False
-MEMORY_TRACE = True
+MEMORY_TRACE = False
 
 
 if __name__ == '__main__':

@@ -651,7 +651,10 @@ class CommonSensePredicateStatisticsSplitArgs():
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         try:
-            result, used_variables = self._inner_filter(predicate, mapping)
+            result, _ = self._inner_filter(predicate, mapping)
+            if isinstance(result, int):
+                return result
+
             n_traces = result.select("trace_id").unique().shape[0]
             # if n_traces == 0:
             #     return 0, 0, 0
@@ -727,7 +730,8 @@ class CommonSensePredicateStatisticsSplitArgs():
             rename_mapping[f"arg_{i + 1}_id"] = arg_var
 
         # Returns a dataframe in which the arg_id columns are renamed to the variable names they map to
-        predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
+        return self.data.lazy().filter(filter_expr).select(pl.count()).collect().item(), None   # type: ignore
+        # predicate_df = self.data.filter(filter_expr).rename(rename_mapping)
 
         # We drop the arg_type columns and any un-renamed arg_id columns, since they're no longer needed
         # Added a drop of the predicate column which we no longer need here -- discovered it's still here while debugging yesterday

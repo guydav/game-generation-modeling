@@ -11,6 +11,7 @@ from itertools import groupby, permutations, product, repeat, starmap
 import json
 import logging
 import os
+import operator
 import pandas as pd
 import pathlib
 import pickle
@@ -102,6 +103,10 @@ class PredicateNotImplementedException(Exception):
     pass
 
 
+class MissingVariableException(Exception):
+    pass
+
+
 def stable_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
@@ -128,6 +133,30 @@ class LRUCacheWithCallback(cachetools.LRUCache):
         key, value = super().popitem()
         self.evict_callback(key, value)
         return key, value
+
+
+class MaxRowsLRUCache(cachetools.LRUCache):
+    def __init__(self, maxsize: int, max_rows: int, *args, **kwargs):
+        super().__init__(maxsize, *args, **kwargs)
+        self.max_rows = max_rows
+
+    def __setitem__(self, key, value):
+        if isinstance(value, list):
+            length = len(value)
+
+        else:
+            length = value[0].shape[0]
+
+        if length > self.max_rows:
+            # logger.info(f'Rejecting cache entry of type {type(value)} because of length {length}1')
+            raise ValueError('Too many rows to cache')
+
+        return super().__setitem__(key, value)
+
+    def popitem(self):
+        key, value = super().popitem()
+        del value
+        return key, None
 
 
 class CommonSensePredicateStatisticsDatabse():
@@ -162,8 +191,9 @@ class CommonSensePredicateStatisticsDatabse():
         self.room_objects_cache = {}
         # self.temp_table_index = 0
 
-        self.cache = LRUCacheWithCallback(maxsize=MAX_CACHE_SIZE, evict_callback=self._cache_evict_callback)
-        self._inner_filter = cachetools.cached(cache=self.cache, key=self._predicate_and_mapping_cache_key)(self._inner_filter)
+        self.cache = cachetools.LRUCache(maxsize=MAX_CACHE_SIZE)  # , evict_callback=self._cache_evict_callback)
+        # self.cache = LRUCacheWithCallback(maxsize=MAX_CACHE_SIZE, evict_callback=self._cache_evict_callback)
+        self.object_assignment_cache = MaxRowsLRUCache(maxsize=MAX_CACHE_SIZE, max_rows=MAX_CACHE_SIZE)
 
         # Compute hash of trace names
         if force_trace_names_hash is not None:
@@ -251,7 +281,7 @@ class CommonSensePredicateStatisticsDatabse():
         del self.data
 
     def _cache_evict_callback(self, cache_key, cache_value):
-        logger.info(f"Evicting {cache_key} => {cache_value} from cache")
+        # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
         table_name, _ = cache_value
         duckdb.sql(f"DROP TABLE {table_name}")
         table_index = int(table_name.replace(self.temp_table_prefix, ''))
@@ -259,7 +289,8 @@ class CommonSensePredicateStatisticsDatabse():
 
     def _create_databases(self):
         logger.info("Creating DuckDB databases...")
-        data_df = self.data.drop(columns=['intervals'])
+        # TODO: restore the string_intervals if we restore intervals-based logic
+        data_df = self.data.drop(columns=['intervals', 'string_intervals'])
 
         duckdb.sql('CREATE TABLE data AS SELECT * FROM data_df')
         data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
@@ -280,26 +311,10 @@ class CommonSensePredicateStatisticsDatabse():
         duckdb.sql('ALTER TABLE data ALTER arg_2_type TYPE arg_type')
         duckdb.sql('ALTER TABLE data ALTER arg_1_id TYPE arg_id')
         duckdb.sql('ALTER TABLE data ALTER arg_2_id TYPE arg_id')
-        duckdb.sql('ALTER TABLE data ALTER string_intervals TYPE BITSTRING')
+        # TODO: restore the string_intervals if we restore intervals-based logic
+        # duckdb.sql('ALTER TABLE data ALTER string_intervals TYPE BITSTRING')
 
         logger.info("Done creating enums")
-
-        # duckdb.sql("CREATE TYPE predicate AS ENUM (SELECT predicate FROM data_df);")
-        # duckdb.sql("CREATE TYPE domain AS ENUM (SELECT domain FROM data_df);")
-        # duckdb.sql("CREATE TYPE trace_id AS ENUM (SELECT trace_id FROM data_df);")
-        # all_types = tuple([t for t in set(data_df.arg_1_type.unique()) | set(data_df.arg_2_type.unique()) if isinstance(t, str) ])
-        # duckdb.sql(f"CREATE TYPE arg_type AS ENUM {all_types};")
-        # all_ids = tuple([t for t in set(data_df.arg_1_id.unique()) | set(data_df.arg_2_id.unique()) if isinstance(t, str)])
-        # duckdb.sql(f"CREATE TYPE arg_id AS ENUM {all_ids};")
-
-        # duckdb.sql(f"CREATE TABLE data(predicate predicate, domain domain, trace_id trace_id, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, string_intervals BITSTRING);")
-        # duckdb.sql(f"INSERT INTO data SELECT * FROM data_df;")
-
-        # tld_df = self.trace_lengths_and_domains_df
-        # duckdb.sql('CREATE TABLE trace_lengths_domains(domain domain ) AS SELECT * FROM tld_df')
-        # duckdb.sql('ALTER TABLE trace_lengths_domains ALTER domain TYPE domain')
-        # duckdb.sql('ALTER TABLE trace_lengths_domains ALTER trace_id TYPE trace_id')
-        # duckdb.sql('SELECT * FROM trace_lengths_domains').show()
 
         duckdb.create_function("empty_bitstring", self.create_empty_bitstring_function(self.max_length), [], duckdb.typing.BIT)  # type: ignore
 
@@ -527,17 +542,18 @@ class CommonSensePredicateStatisticsDatabse():
         else:
             raise ValueError(f"Unrecognized domain: {domain}")
 
-    def _object_assignments(self, domain, variable_types, used_objects=[]):
+    def _object_assignments_cache_key(self, domain, variable_types, used_objects = None):
+        '''
+        Returns a key for the object assignments cache
+        '''
+        return (domain, tuple(variable_types), tuple(used_objects) if used_objects is not None else None)
+
+    @cachetools.cachedmethod(cache=operator.attrgetter('object_assignment_cache'), key=_object_assignments_cache_key)
+    def _object_assignments(self, domain, variable_types, used_objects = None):
         '''
         Wrapper around get_object_assignments in order to cache outputs
         '''
-
-        key = (domain, tuple(variable_types), tuple(used_objects))
-        if key not in self.object_assignment_cache:
-            object_assignments = get_object_assignments(domain, variable_types, used_objects=used_objects)
-            self.object_assignment_cache[key] = object_assignments
-
-        return self.object_assignment_cache[key]
+        return get_object_assignments(domain, variable_types, used_objects=used_objects)
 
 
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
@@ -548,11 +564,12 @@ class CommonSensePredicateStatisticsDatabse():
         try:
             # self.temp_table_index = 0
             outcome_table_name, _ = self._inner_filter(predicate, mapping)
-            print(outcome_table_name, self.cache.currsize)
-            n_traces = duckdb.sql(f"SELECT COUNT(DISTINCT(trace_id)) FROM {outcome_table_name}").fetchone()[0]  # type: ignore
+            return outcome_table_name
+            # print(outcome_table_name, self.cache.currsize)
+            # n_traces = duckdb.sql(f"SELECT COUNT(DISTINCT(trace_id)) FROM {outcome_table_name}").fetchone()[0]  # type: ignore
             n_intervals = duckdb.sql(f"SELECT COUNT(*) FROM {outcome_table_name}").fetchone()[0]  # type: ignore
-            n_total_states = duckdb.sql(f"SELECT SUM(bit_count(string_intervals)) FROM {outcome_table_name}").fetchone()[0] # type: ignore
-            return n_traces, n_intervals, n_total_states
+            # n_total_states = duckdb.sql(f"SELECT SUM(bit_count(string_intervals)) FROM {outcome_table_name}").fetchone()[0] # type: ignore
+            return n_intervals # , n_intervals, n_total_states
 
         except PredicateNotImplementedException as e:
             # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
@@ -576,6 +593,13 @@ class CommonSensePredicateStatisticsDatabse():
 
         return empty_bitstring
 
+    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
+        '''
+        Returns a string that uniquely identifies the predicate and mapping
+        '''
+        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
+
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
@@ -595,6 +619,9 @@ class CommonSensePredicateStatisticsDatabse():
             elif not var.startswith("?"):
                 relevant_arg_mapping[var] = [var]
 
+            else:
+                raise MissingVariableException(f"Variable {var} is not in the mapping")
+
         select_items = ["trace_id", "domain", "string_intervals"]
         where_items = [f"predicate='{predicate_name}'"]
 
@@ -611,12 +638,16 @@ class CommonSensePredicateStatisticsDatabse():
 
             select_items.append(f"arg_{i + 1}_id as '{arg_var}'")
 
-        table_name = self._next_temp_table_name()
-        query = f"CREATE TEMP TABLE {table_name} AS SELECT {', '.join(select_items)} FROM data WHERE {' AND '.join(where_items)};"
-        if DEBUG: print(query)
-        duckdb.sql(query)
-        return table_name, used_variables
+        query = f"SELECT COUNT(*) FROM data WHERE {' AND '.join(where_items)};"
+        return duckdb.sql(query).fetchone()[0], None  # type: ignore
 
+        # table_name = self._next_temp_table_name()
+        # query = f"CREATE TEMP TABLE {table_name} AS SELECT {', '.join(select_items)} FROM data WHERE {' AND '.join(where_items)};"
+        # if DEBUG: print(query)
+        # duckdb.sql(query)
+        # return table_name, used_variables
+
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
@@ -681,6 +712,7 @@ class CommonSensePredicateStatisticsDatabse():
         if DEBUG: print(cleanup_query)
         duckdb.sql(cleanup_query)
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
@@ -775,6 +807,7 @@ class CommonSensePredicateStatisticsDatabse():
 
         return table_name
 
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
         try:
             inner_table_name, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
@@ -803,12 +836,6 @@ class CommonSensePredicateStatisticsDatabse():
         self._cleanup_empty_assignments(table_name)
 
         return table_name, used_variables
-
-    def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
-        '''
-        Returns a string that uniquely identifies the predicate and mapping
-        '''
-        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
 
     def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:

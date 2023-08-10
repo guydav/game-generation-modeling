@@ -695,6 +695,7 @@ class PredicateFoundInData(FitnessTerm):
         self.min_total_interval_state_count = min_total_interval_state_count
         self.predicate_sections = predicate_sections
         self.trace_names_hash = trace_names_hash
+        self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
         self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
@@ -709,6 +710,8 @@ class PredicateFoundInData(FitnessTerm):
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
+        if not hasattr(self, 'trace_names_hash'):
+            self.trace_names_hash = FULL_DATASET_TRACES_HASH
         self._init_predicate_data_estimator()
 
     def game_start(self) -> None:

@@ -410,12 +410,10 @@ class PopulationBasedSampler():
         self.output_name = output_name
 
         self.fitness_featurizer_path = fitness_featurizer_path
-        self._fitness_featurizers = [_load_pickle_gzip(fitness_featurizer_path) for _ in range(self.n_processes)]
+        self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
         self.fitness_function_date_id = fitness_function_date_id
         self.fitness_function_model_name = fitness_function_model_name
-        fitness_functions = [load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path) for _ in range(self.n_processes)]
-        self.feature_names = fitness_functions[0][1]
-        self._fitness_functions = [fitness_function[0] for fitness_function in fitness_functions]  # type: ignore
+        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)
         self.flip_fitness_sign = flip_fitness_sign
 
         self.diversity_scorer_type = diversity_scorer_type
@@ -434,40 +432,37 @@ class PopulationBasedSampler():
         self.max_sample_nodes = max_sample_nodes
         self.max_sample_total_size = max_sample_total_size
 
-        self.random_seed = args.random_seed
+        self.random_seed = args.random_seed + self._process_index()
         self.rng = np.random.default_rng(self.random_seed)
 
         # Used to generate the initial population of complete games
         if sampler_kwargs is None:
             sampler_kwargs = {}
         self.sampler_kwargs = sampler_kwargs
-        self.sampler_keys = [f'prior{pc}' for pc in sampler_prior_count]
 
-        self._samplers = [{f'prior{pc}': ASTSampler(self.grammar_parser, self.counter,
+        self.samplers = {f'prior{pc}': ASTSampler(self.grammar_parser, self.counter,
                                                    max_sample_depth=self.max_sample_depth,
                                                    max_sample_nodes=self.max_sample_nodes,
-                                                   seed=args.random_seed + i,   # type: ignore
+                                                   seed=self.random_seed + pc,
                                                    prior_rule_count=pc, prior_token_count=pc,
-                                                   length_prior={n: pc for n in LENGTH_PRIOR},  # type: ignore
+                                                   length_prior={n: pc for n in LENGTH_PRIOR},
                                                    **sampler_kwargs) for pc in sampler_prior_count}
-                         for i in range(self.n_processes)]
-
-        self.first_sampler_key = list(self._samplers[0].keys())[0]
+        self.sampler_keys = list(self.samplers.keys())
+        self.first_sampler_key = self.sampler_keys[0]
 
         self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self._samplers[0][self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
-
+            initial_proposal_type, self.samplers[self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
 
         # Used as the mutation operator to modify existing games
-        self._regrowth_samplers = [RegrowthSampler(samplers, seed=args.random_seed + i, rng=samplers[self.first_sampler_key].rng) for i, samplers in enumerate(self._samplers)]
+        self.regrowth_sampler = RegrowthSampler(self.samplers, seed=self.random_seed, rng=np.random.default_rng(self.random_seed))
 
         # Used to fix the AST context after crossover / mutation
-        self._context_fixers = [ASTContextFixer(samplers[self.first_sampler_key], samplers[self.first_sampler_key].rng) for samplers in self._samplers]
+        self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed))
 
         # Initialize the candidate pools in each genera
         self.candidates = SingleStepResults([], [], [], [], [])
 
-        self._postprocessors = [ast_parser.ASTSamplePostprocessor() for _ in range(self.n_processes)]
+        self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
         self.fitness_metrics_history = []
         self.diversity_metrics_history = []
@@ -533,27 +528,27 @@ class PopulationBasedSampler():
         return identity[0] % self.n_processes
 
     def _sampler(self, rng: np.random.Generator) -> ASTSampler:
-        return self._samplers[self._process_index()][self._choice(self.sampler_keys, rng=rng)]  # type: ignore
+        return self.samplers[self._choice(self.sampler_keys, rng=rng)]  # type: ignore
 
-    @property
-    def regrowth_sampler(self) -> RegrowthSampler:
-        return self._regrowth_samplers[self._process_index()]
+    # @property
+    # def regrowth_sampler(self) -> RegrowthSampler:
+    #     return self._regrowth_samplers[self._process_index()]
 
-    @property
-    def context_fixer(self) -> ASTContextFixer:
-        return self._context_fixers[self._process_index()]
+    # @property
+    # def context_fixer(self) -> ASTContextFixer:
+    #     return self._context_fixers[self._process_index()]
 
-    @property
-    def fitness_featurizer(self) -> ASTFitnessFeaturizer:
-        return self._fitness_featurizers[self._process_index()]
+    # @property
+    # def fitness_featurizer(self) -> ASTFitnessFeaturizer:
+    #     return self._fitness_featurizers[self._process_index()]
 
-    @property
-    def fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
-        return self._fitness_functions[self._process_index()]
+    # @property
+    # def fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
+    #     return self._fitness_functions[self._process_index()]
 
-    @property
-    def postprocessor(self) -> ast_parser.ASTSamplePostprocessor:
-        return self._postprocessors[self._process_index()]
+    # @property
+    # def postprocessor(self) -> ast_parser.ASTSamplePostprocessor:
+    #     return self._postprocessors[self._process_index()]
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
@@ -569,14 +564,18 @@ class PopulationBasedSampler():
             del state['fitness_values']
         return state
 
-    # def __setstate__(self, state):
-    #     if 'population' not in state:
-    #         state['population'] = None
-    #     if 'fitness_values' not in state:
-    #         state['fitness_values'] = None
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Set unique random seed per process X generation index
+        self.random_seed = self.args.random_seed + (self._process_index() * (self.generation_index + 1))
+        self.rng = np.random.default_rng(self.random_seed)
 
-    #     self.__dict__.update(state)
-    #     self.saving = False
+        for sampler_key in self.samplers:
+            self.samplers[sampler_key].rng = np.random.default_rng(self.random_seed + self.samplers[sampler_key].prior_rule_count)
+
+        self.regrowth_sampler.seed = self.random_seed
+        self.regrowth_sampler.rng = np.random.default_rng(self.random_seed)
+        self.context_fixer.rng = np.random.default_rng(self.random_seed)
 
     def save(self, suffix: typing.Optional[str] = None, log_message: bool = True):
         self.saving = True
@@ -1450,17 +1449,12 @@ class PopulationBasedSampler():
 
             self.generation_index += 1
 
-            # This is required because the changes to the rng state happen in the pickled copies in the worker processes
-            # and (potentially?) don't get propagated back here -- so we have to provide a different state for each map call
-            for i, sampler_dict in enumerate(self._samplers):
-                for sampler in sampler_dict.values():
-                    sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
+            # This is required because the changes to the rng state are independent in the worker processes and we might want a different state for each map call
+            for sampler in self.samplers.values():
+                sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index))
 
-            for i, regrowth_sampler in enumerate(self._regrowth_samplers):
-                regrowth_sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
-
-            for i, context_fixer in enumerate(self._context_fixers):
-                context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index) + i)
+            self.regrowth_sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index))
+            self.context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index))
 
             if (save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps) or self.signal_received:
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
@@ -1783,9 +1777,8 @@ class MAPElitesSampler(PopulationBasedSampler):
                 feature_value_counters[feature_name][self._key_value_at_index(key, i)] += 1
 
         logger.info(f'Initialized population with {len(self.population)} games in the archive')
-        logger.info('With the following feature-value occupancy:')
-        for feature_name in self.map_elites_feature_names:
-            logger.info(f'\t{feature_name}: {feature_value_counters[feature_name]}')
+        feature_value_mesage = '\n'.join(['With the following feature-value occupancy:'] + [f'\t{feature_name}: {feature_value_counters[feature_name]}' for feature_name in self.map_elites_feature_names])
+        logger.info(feature_value_mesage)
 
     def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:

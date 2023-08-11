@@ -199,7 +199,7 @@ class CommonSensePredicateStatisticsDatabse():
 
         # Compute hash of trace names
         if force_trace_names_hash is not None:
-            logger.info(f"Forcing trace names hash to {force_trace_names_hash}")
+            # logger.info(f"Forcing trace names hash to {force_trace_names_hash}")
             trace_names_hash = force_trace_names_hash
         else:
             trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
@@ -211,9 +211,7 @@ class CommonSensePredicateStatisticsDatabse():
         open_method = gzip.open if stats_filename.endswith('.gz') else open
 
         if os.path.exists(stats_filename) and not overwrite:
-            logger.info(f"Loading data from {stats_filename}...")
             self.data = pd.read_pickle(stats_filename)  # type: ignore
-            logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
             with open_method(trace_lengths_and_domains_filename, 'rb') as f:
                 self.trace_lengths_and_domains = pickle.load(f)
 
@@ -295,7 +293,7 @@ class CommonSensePredicateStatisticsDatabse():
         if table_query is not None:
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
-                logger.info('Skipping creating tables because they already exist')
+                # logger.info('Skipping creating tables because they already exist')
                 return
 
         logger.info("Creating DuckDB table...")

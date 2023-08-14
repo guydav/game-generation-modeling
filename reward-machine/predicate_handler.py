@@ -8,7 +8,7 @@ import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG, ROOM_CENTER
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -493,6 +493,41 @@ def _pred_generic_predicate_interface(agent: AgentState, objects: typing.Sequenc
     raise NotImplementedError()
 
 
+def _pred_above(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+
+    lower_object = objects[0]
+    upper_object = objects[1]
+
+
+    if isinstance(upper_object, AgentState):
+        # The agent is only above something if the agent is on it (since the agent' can't jump)
+        return _pred_on(agent, objects)
+
+    if isinstance(upper_object, BuildingPseudoObject):
+        # A building cannot be above the agent
+        if isinstance(lower_object, AgentState):
+            return False
+
+        # A building is not above any object that's part of the building
+        if lower_object.object_id in upper_object.building_objects:
+            # Unless it's the bottom object in the building
+            return not any([_pred_on(agent, [building_object, lower_object])
+                for building_object in upper_object.building_objects.values()
+                if building_object.object_id != lower_object.object_id])
+
+        # Otherwise, a building is above an object if an object in the building is above that object
+        return any([_pred_above(agent, [lower_object, building_object])
+            for building_object in upper_object.building_objects.values()
+            ])
+
+    upper_object_center = upper_object.bbox_center
+    lower_object_center, lower_object_extents = lower_object.bbox_center, lower_object.bbox_extents
+    return lower_object_center[0] - lower_object_extents[0] <= agent.position[0] <= lower_object_center[0] + lower_object_extents[0] and \
+            lower_object_center[2] - lower_object_extents[2] <= agent.position[2] <= lower_object_center[2] + lower_object_extents[2] and \
+            upper_object_center[1] > lower_object_center[1] + lower_object_extents[1]
+
+
 def _pred_agent_crouches(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 0
     return agent.crouching
@@ -510,6 +545,18 @@ def _pred_broken(agent: AgentState, objects: typing.Sequence[typing.Union[Object
     if isinstance(objects[0], PseudoObject) or isinstance(objects[0], AgentState):
         return False
     return objects[0].is_broken
+
+
+EQUAL_POSITION_MARGIN = 0.1
+
+def _pred_equal_x_position(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+    return np.isclose(objects[0].position[0], objects[1].position[0], atol=EQUAL_POSITION_MARGIN) or np.isclose(objects[0].bbox_center[0], objects[1].bbox_center[0], atol=EQUAL_POSITION_MARGIN)
+
+
+def _pred_equal_z_position(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+    return np.isclose(objects[0].position[2], objects[1].position[2], atol=EQUAL_POSITION_MARGIN) or np.isclose(objects[0].bbox_center[2], objects[1].bbox_center[2], atol=EQUAL_POSITION_MARGIN)
 
 
 def _pred_open(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
@@ -667,6 +714,12 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
                 return agent.touching_floor and _pred_on(agent, [pseudo_obj, obj]) \
                     and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
 
+            # What does it mean to be touching the room center?
+            if pseudo_obj.object_id == ROOM_CENTER:
+                return False
+
+            raise ValueError(f'Unknown pseudo object type: {pseudo_obj.object_id}')
+
         return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore
 
@@ -688,6 +741,12 @@ def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
             if pseudo_obj.object_id == RUG_ID:
                 return agent.touching_floor and _pred_on(agent, [pseudo_obj, obj]) \
                     and pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)
+
+            # What does it mean to be touching the room center?
+            if pseudo_obj.object_id == ROOM_CENTER:
+                return False
+
+            raise ValueError(f'Unknown pseudo object type: {pseudo_obj.object_id}')
 
         return any(identifier in obj.touching_objects for identifier in pseudo_obj.identifiers) and \
             pseudo_obj is _find_nearest_pseudo_object_of_type(obj, pseudo_obj.object_type)  # type: ignore

@@ -26,7 +26,8 @@ PREDICATE_DESCRIPTIONS = {
 }
 
 FUNCTION_DESCRIPTIONS = {
-    "distance": "the distance between {0} and {1}"
+    "distance": "the distance between {0} and {1}",
+    "distance_side": "the distance between {2} and the {1} of {0}",
 }
 
 class GameDescriber():
@@ -493,11 +494,18 @@ class GameDescriber():
             return self._describe_scoring(scoring_ast["count_method"]) # type: ignore
         
         elif rule == "scoring_external_maximize":
-            # maximized_preferences = self._extract_scoring_preferences(scoring_expression)
-            raise NotImplementedError("External maximization not yet implemented")
+            preference_name, _ = self._extract_name_and_types(scoring_ast['scoring_expr']['expr']['count_method']) # type: ignore
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+
+            internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
+            return f"the maximum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
         
         elif rule == "scoring_external_minimize":
-            raise NotImplementedError("External minimization not yet implemented")
+            preference_name, _ = self._extract_name_and_types(scoring_ast['scoring_expr']['expr']['count_method']) # type: ignore
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+
+            internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
+            return f"the minimum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
         
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore

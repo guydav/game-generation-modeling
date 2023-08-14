@@ -37,6 +37,7 @@ import room_and_object_types
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
 import compile_predicate_statistics_split_args
+import compile_predicate_statistics_database
 
 
 parser = argparse.ArgumentParser()
@@ -76,7 +77,7 @@ parser.add_argument('--use-specific-objects-ngram-model', action='store_true')
 parser.add_argument('--existing-featurizer-path', default=None)
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
-DEFAULT_START_METHOD = 'fork'
+DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
 parser.add_argument('--maxtasksperchild', default=None)
 parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
@@ -151,15 +152,19 @@ class ASTFitnessFeaturizer:
     rule_registry: typing.Dict[str, typing.List[FitnessTerm]]
     section_keys: typing.List[str]
     section_registry: typing.Dict[str, typing.List[FitnessTerm]]
+    temp_file_output_paths: typing.Dict[int, str]
+    temp_files: typing.Dict[int, typing.TextIO]
+    temp_file_writer_dict: typing.Dict[int, csv.DictWriter]
     tuple_registry: typing.Dict[str, typing.List[FitnessTerm]]
 
-    def __init__(self, preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]] = None,
+    def __init__(self, args: argparse.Namespace, preprocessors: typing.Optional[typing.Iterable[FitnessFeaturesPreprocessor]] = None,
         default_headers: typing.Sequence[str] = DEFAULT_HEADERS,
         list_reduce: typing.Callable[[typing.Sequence[Number]], Number] = np.sum,
         section_keys: typing.Sequence[str] = ast_parser.SECTION_KEYS,
         real_games_src_file: str = REAL_GAMES_SRC_FILE,
         compute_real_min_max_feature_patterns: typing.Sequence[typing.Union[str, re.Pattern]] = tuple()):
 
+        self.args = args
         self.preprocessors = preprocessors
         self.default_headers = default_headers
         self.headers = list(default_headers)
@@ -182,6 +187,14 @@ class ASTFitnessFeaturizer:
         self.df_keys = []
         self.all_column_keys = None
         self.columns_to_terms = None  # type: ignore
+
+        self.temp_file_output_paths = {}
+        self.temp_files = {}
+        self.temp_file_writer_dict = {}
+
+    def __del__(self):
+        for temp_file in self.temp_files.values():
+            temp_file.close()
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         # Prevents the rows from being dumped to file when this is pickled
@@ -293,6 +306,33 @@ class ASTFitnessFeaturizer:
                 self.columns_to_terms[key] = term
 
         return self.all_column_keys
+
+    def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
+        with multiprocessing.Pool(self.args.n_workers) as p:
+            logger.info('Pool started')
+
+            for row in tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize), total=self.args.expected_total_row_count):
+                pass
+
+    def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
+        game, src_file = game_and_src_file
+        row = self.parse(game, src_file, return_row=True, preprocess_row=False)
+        process_index = multiprocessing.current_process()._identity[0] - 1 % self.args.n_workers
+
+        if process_index not in self.temp_file_writer_dict:
+            temp_output_path = None
+            path_index = process_index
+            while temp_output_path is None or os.path.exists(temp_output_path):
+                temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{path_index}.temp.csv')
+                path_index += self.args.n_workers
+
+            self.temp_file_output_paths[process_index] = temp_output_path
+            temp_file = open(temp_output_path, 'w', newline='')
+            self.temp_files[process_index] = temp_file
+            temp_csv_writer = csv.DictWriter(temp_file, self.get_all_column_keys())
+            self.temp_file_writer_dict[process_index] = temp_csv_writer
+
+        self.temp_file_writer_dict[process_index].writerow(row)  # type: ignore
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -636,105 +676,91 @@ class PredicateFoundInData(FitnessTerm):
     min_trace_count: int
     predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
                                               typing.Tuple[int, int, int]]
-    predicates_found: typing.List[int]
+    predicate_sections: typing.Tuple[str]
+    predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
 
     _predicate_data_estimator = None
 
-    def __init__(self, rules_to_child_keys: typing.Dict[str, str], header_suffix: str,
+    def __init__(self, rule: str = 'predicate',
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
-                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH):
+                 trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH,
+                 predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES)):
 
-        super().__init__(list(rules_to_child_keys.keys()), f'predicate_found_in_data_{header_suffix}')
-        self.rules_to_child_keys = rules_to_child_keys
+        super().__init__(rule, f'predicate_found_in_data')
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
+        self.predicate_sections = predicate_sections
+        self.trace_names_hash = trace_names_hash
+        self._init_predicate_data_estimator()
 
-        # if PredicateFoundInData._predicate_data_estimator is None:
-        #     PredicateFoundInData._predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-        #         # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
-        #         force_trace_names_hash=trace_names_hash
-        #     )
-
-        # self.predicate_data_estimator = PredicateFoundInData._predicate_data_estimator
-
-        self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            # trace_names=compile_predicate_statistics_split_args.CURRENT_TEST_TRACE_NAMES
-            force_trace_names_hash=trace_names_hash
+    def _init_predicate_data_estimator(self):
+        self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
+        # self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
+            use_no_intervals=True,
+            force_trace_names_hash=self.trace_names_hash
         )
 
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        del state['predicate_data_estimator']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if not hasattr(self, 'trace_names_hash'):
+            self.trace_names_hash = FULL_DATASET_TRACES_HASH
+        self._init_predicate_data_estimator()
+
     def game_start(self) -> None:
-        self.predicates_found = []
+        self.predicates_found_by_section = {section: [] for section in self.predicate_sections}
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            rule = ast.parseinfo.rule  # type: ignore
-            if rule not in self.rules_to_child_keys:
-                raise ValueError(f'Rule {rule} not in {self.rules_to_child_keys}')
-
-            child_key = self.rules_to_child_keys[rule]
-            if child_key not in ast:
-                raise ValueError(f'Child key {child_key} not in {ast}')
-
-            pred = ast[child_key]
+            pred = ast
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
-            # TODO: convert from this format to the one the thing expects the mapping to be in
-            # mapping = ...(context_variables)
-            # intervals = self.predicate_data_estimator(pred, mapping)
-            # TODO: handle `PredicateNotImplementedException` if we decide to reraise it (e.g., catch it and save True?)
+            section = typing.cast(str, context[SECTION_CONTEXT_KEY])
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping)
                 predicate_found = n_traces >= self.min_trace_count
-                self.predicates_found.append(1 if predicate_found else 0)
+                self.predicates_found_by_section[section].append(1 if predicate_found else 0)
                 # if not predicate_found:  # n_traces == 0:
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
-            except compile_predicate_statistics_split_args.PredicateNotImplementedException:
-                self.predicates_found.append(1)
+            except compile_predicate_statistics_database.PredicateNotImplementedException:
+            # except compile_predicate_statistics_split_args.PredicateNotImplementedException:
+                self.predicates_found_by_section[section].append(1)
 
-            except compile_predicate_statistics_split_args.MissingVariableException:
+            except compile_predicate_statistics_database.MissingVariableException:
+            # except compile_predicate_statistics_split_args.MissingVariableException:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 
-
     def _get_all_inner_keys(self):
-        return ['all', 'prop']
+        return [f'{section.replace("(:", "")}_{key}'
+                for section in self.predicate_sections
+                for key in ('all', 'prop')]
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        # TODO: should this be 0 or 1 if none are found?
-        if len(self.predicates_found) == 0:
-            # logger.warning(f'No predicates found for {self.header}')
-            return dict(all=0, prop=0)
+        # TODO: should this be 0 or 1 if none are found? assuming 0 for now
+        result = {}
+        for section, section_predicates_found in self.predicates_found_by_section.items():
+            section_key = section.replace("(:", "")
+            if len(section_predicates_found) == 0:
+                # logger.warning(f'No predicates found for {self.header}')
+                result.update({f'{section_key}_{key}': 0 for key in ('all', 'prop')})
 
-        return dict(all=int(all(self.predicates_found)), prop=sum(self.predicates_found) / len(self.predicates_found))
+            else:
+                result[f'{section_key}_all'] = int(all(section_predicates_found))
+                result[f'{section_key}_prop'] = sum(section_predicates_found) / len(section_predicates_found)
 
-
-# TODO: decide if we might want different thresholds between these two?
-
-
-class SetupSuperPredicateFoundInData(PredicateFoundInData):
-    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
-        super().__init__({'setup_game_conserved': 'conserved_pred', 'setup_game_optional': 'optional_pred'},
-                         'setup', min_trace_count, min_interval_count, min_total_interval_state_count)
-
-
-class PreferencesPredicateFoundInData(PredicateFoundInData):
-    def __init__(self, min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
-                 min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
-                 min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT):
-
-        super().__init__({'once': 'once_pred', 'once_measure': 'once_measure_pred',
-                          'hold': 'hold_pred', 'while_hold': 'hold_pred',
-                          'at_end': 'at_end_pred',},
-                         'preferences', min_trace_count, min_interval_count, min_total_interval_state_count)
+        return result
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2520,7 +2546,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     if not args.no_merge:
         preprocessors.append(MergeFitnessFeatures(COMMON_SENSE_PREDICATES_FUNCTIONS))
 
-    fitness = ASTFitnessFeaturizer(preprocessors=preprocessors)
+    fitness = ASTFitnessFeaturizer(args, preprocessors=preprocessors)
 
     all_variables_defined = VariablesDefinedTerm()
     fitness.register(all_variables_defined)
@@ -2540,11 +2566,14 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
-    fitness.register(setup_predicate_found_in_data)
+    predicate_found_in_data = PredicateFoundInData()
+    fitness.register(predicate_found_in_data)
 
-    preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
-    fitness.register(preferences_predicate_found_in_data)
+    # setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
+    # fitness.register(setup_predicate_found_in_data)
+
+    # preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
+    # fitness.register(preferences_predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)
@@ -2670,19 +2699,19 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     return fitness
 
 
-def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
-    game, src_file = game_src_file_n_workers
-    process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
-    logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
-    row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
-    temp_csv_writers[process_index].writerow(row)  # type: ignore
+# def parse_single_game(game_src_file_n_workers: typing.Tuple[tuple, str]) -> None:
+#     game, src_file = game_src_file_n_workers
+#     process_index = multiprocessing.current_process()._identity[0] - 1 % args.n_workers
+#     logger.info(f'Process {process_index} parsing game {game[1].game_name} from {src_file}')
+#     row = featurizers[process_index].parse(game, src_file, return_row=True, preprocess_row=False)
+#     temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
 def game_iterator():
     for src_file in args.test_files:
         for game in cached_load_and_parse_games_from_file(src_file,
                                                           grammar_parser,  # type: ignore
-                                                          use_tqdm=False, log_every_change=True, force_from_cache=True):
+                                                          use_tqdm=False, log_every_change=False, force_from_cache=True):
             yield game, src_file
 
 
@@ -2725,6 +2754,7 @@ def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths
     featurizer.rows_df = rows_df.reset_index(drop=True)
 
 
+
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
     if args.existing_featurizer_path is not None:
         logger.info(f'Loading featurizer from {args.existing_featurizer_path}')
@@ -2735,6 +2765,7 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
         featurizer = build_fitness_featurizer(args)
 
     return featurizer
+
 
 
 def test_multiprocessing_globals(index: int):
@@ -2768,44 +2799,26 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
 
     if args.n_workers > 1:
-        featurizers = [build_or_load_featurizer(args) for _ in range(args.n_workers)]
-        headers = get_headers(args, featurizers[0])
-        # headers = featurizers[0].get_all_column_keys()
+        featurizer = build_or_load_featurizer(args)
+        headers = get_headers(args, featurizer)
 
         if not os.path.exists(TEMP_DIR):
             os.makedirs(TEMP_DIR, exist_ok=True)
 
         # rows = []
-        for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
+        temp_file_glob = os.path.join(TEMP_DIR, '*.temp.csv')
+        for file in glob.glob(temp_file_glob):
             os.remove(file)
 
-        temp_output_paths = [os.path.join(TEMP_DIR, os.path.basename(args.output_path) + f'_{i}.temp.csv') for i in range(args.n_workers)]
-        temp_files = [open(temp_output_path, 'w', newline='') for temp_output_path in temp_output_paths]
-        temp_csv_writers = [csv.DictWriter(temp_file, headers) for temp_file in temp_files]
+        logger.info(f'About to start pool by calling parse_iterator_parallel with {args.n_workers} workers')
+        featurizer.parse_iterator_parallel(game_iterator())  # type: ignore
 
-        # TODO: consider rewriting with asyncio instead of multiprocessing
-
-        logger.info(f'About to start pool with {args.n_workers} workers')
-        with multiprocessing.Pool(args.n_workers) as p:
-            logger.info('Pool started')
-            # for _ in tqdm(p.imap_unordered(test_multiprocessing_globals, range(100), chunksize=args.chunksize), total=100):  # type: ignore
-            #     continue
-
-            # exit()
-            for _ in tqdm(p.imap_unordered(parse_single_game, game_iterator(), chunksize=args.chunksize), total=args.expected_total_row_count):  # type: ignore
-                continue
-                # if headers is None:
-                #     headers = list(row.keys())
-                # rows.append(row)
-
-        for temp_file in temp_files:
+        for temp_file in featurizer.temp_files.values():
             temp_file.close()
 
-        featurizer = featurizers[0]
-        # featurizer.rows = rows
-        temp_files_to_featurizer(featurizer, temp_output_paths, headers)
-        # for file in glob.glob(os.path.join(TEMP_DIR, '*.temp.csv')):
-        #     os.remove(file)
+        temp_file_paths = glob.glob(temp_file_glob)
+        logger.info(f'About to combine temp files from the following paths: {temp_file_paths}')
+        temp_files_to_featurizer(featurizer, temp_file_paths, headers)
 
     else:
         featurizer = build_or_load_featurizer(args)
@@ -2845,12 +2858,14 @@ if __name__ == '__main__':
     logger.info('Done parsing games, about to convert to dataframe')
     df = featurizer.to_df(use_prior_values=args.existing_featurizer_path is not None)
 
+    logger.info(f'Created dataframe with shape {df.shape}')
+
     logger.debug(df.groupby('src_file').agg([np.mean, np.std]))
 
-    for src_file in df.src_file.unique():
-        zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
-        zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
-        logger.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
+    # for src_file in df.src_file.unique():
+    #     zero_std = df[df.src_file == src_file].std(numeric_only=True) == 0
+    #     zero_std_columns = [c for c in zero_std.index if zero_std[c] and not 'arg_types' in c]  # type: ignore
+    #     logger.debug(f'For src_file {src_file}, the following columns have zero std (excluding arg_types columns): {zero_std_columns}')
 
     global_zero_std = df.std(numeric_only=True) == 0
     global_zero_std_columns = [c for c in global_zero_std.index if global_zero_std[c] and not 'arg_types' in c]  # type: ignore
@@ -2885,6 +2900,9 @@ if __name__ == '__main__':
 
     one_mean_features_str = '\n'.join([f'    - {feature}' for feature in one_mean_features])
     logger.debug(f'The following features have a mean of 1 over the real games:\n{one_mean_features_str}\n')
+
+    logger.debug('Predicate found in data features:')
+    logger.debug(df[[c for c in df.columns if 'predicate_found_in_data_' in c]].describe())
 
     logger.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')

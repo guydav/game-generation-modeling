@@ -115,6 +115,7 @@ class ASTParser:
                 kwargs['global_context']['preference_names'] = defaultdict(int)
 
             kwargs['global_context']['preference_names'][ast.pref_name] += 1
+            kwargs['local_context']['current_preference_name'] = ast.pref_name
 
         elif rule == 'variable_list':
             if isinstance(ast.variables, tatsu.ast.AST):

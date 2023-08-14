@@ -20,6 +20,15 @@ DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--force-rebuild-cache', action='store_true')
 parser.add_argument('--expected-total', type=int, default=None)
+parser.add_argument('--full-rebuild-n-workers', type=int, default=15)
+parser.add_argument('--full-rebuild-chunksize', type=int, default=1250)
+
+
+EXPECTED_TOTAL_COUNT = {
+    './dsl/interactive-beta.pddl': 98,
+    './dsl/ast-real-regrowth-samples-1024.pddl.gz': 98 * 1024,
+}
+
 
 def main(args):
     original_recursion_limit = sys.getrecursionlimit()
@@ -28,10 +37,18 @@ def main(args):
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
 
-    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, # type: ignore
-                                                       '.', 10240, False, force_rebuild=args.force_rebuild_cache)
-    if not args.dont_tqdm:
-        test_cases = tqdm.tqdm(test_cases, total=args.expected_total)
+    if args.expected_total is None:
+        args.expected_total = EXPECTED_TOTAL_COUNT.get(args.test_file, None)
+
+    test_cases = cached_load_and_parse_games_from_file(args.test_file, grammar_parser, not args.dont_tqdm, # type: ignore
+                                                       '.', 10240, False,
+                                                       force_rebuild=args.force_rebuild_cache,
+                                                       full_rebuild_expected_total_count=args.expected_total,
+                                                       full_rebuild_n_workers=args.full_rebuild_n_workers,
+                                                       full_rebuild_chunksize=args.full_rebuild_chunksize,
+                                                       )
+    # if not args.dont_tqdm:
+    #     test_cases = tqdm.tqdm(test_cases, total=args.expected_total)
 
     for ast in test_cases:
         ast_printer.BUFFER = None

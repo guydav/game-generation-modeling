@@ -26,6 +26,7 @@ class GameHandler():
     domain_name: str
     game_name: str
     setup: typing.Optional[tatsu.ast.AST]
+    setup_met : bool
     preferences: typing.List[tatsu.ast.AST]
     terminal: typing.Optional[tatsu.ast.AST]
     scoring: typing.Optional[tatsu.ast.AST]
@@ -34,13 +35,12 @@ class GameHandler():
     preference_satisfactions: typing.Dict[str, typing.List[PreferenceSatisfaction]]
     building_handler: BuildingHandler
 
-    def __init__(self, game: str, grammar_path: str = DEFAULT_GRAMMAR_PATH, verbose: bool = False):
-        grammar = open(grammar_path).read()
-        self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
-
+    def __init__(self, game: typing.Union[str, tatsu.ast.AST], grammar_path: str = DEFAULT_GRAMMAR_PATH, verbose: bool = False,
+                 force_domain: str = ''):
         self.game_name = ''
-        self.domain_name = ''
+        self.domain_name = force_domain
         self.setup = None
+        self.setup_met = False
         self.game_optional_cache = set()
         self.game_conserved_cache = {} # maps from a setup condition to the mapping that satisfied it first
         self.preferences = []
@@ -48,7 +48,13 @@ class GameHandler():
         self.scoring = None
         self.verbose = verbose
 
-        self.game_ast = self.grammar_parser.parse(game)  # type: ignore
+        if isinstance(game, str):
+            grammar = open(grammar_path).read()
+            self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
+            self.game_ast = self.grammar_parser.parse(game)  # type: ignore
+        else:
+            self.game_ast = game
+
         self._extract_game_info(self.game_ast)  # type: ignore
 
         if not self.domain_name:
@@ -119,9 +125,10 @@ class GameHandler():
                 self.game_name = typing.cast(str, ast["game_name"])
 
             elif rule == "domain_def":
-                self.domain_name = ast["domain_name"].split("-")[0]  # type: ignore
-                if self.domain_name not in OBJECTS_BY_ROOM_AND_TYPE:
-                    raise ValueError(f"Error: Domain '{self.domain_name}' not supported (not found in the keys of OBJECTS_BY_ROOM_AND_TYPE: {list(OBJECTS_BY_ROOM_AND_TYPE.keys())}")
+                if not self.domain_name:  # in case I force it in the constructor
+                    self.domain_name = ast["domain_name"].split("-")[0]  # type: ignore
+                    if self.domain_name not in OBJECTS_BY_ROOM_AND_TYPE:
+                        raise ValueError(f"Error: Domain '{self.domain_name}' not supported (not found in the keys of OBJECTS_BY_ROOM_AND_TYPE: {list(OBJECTS_BY_ROOM_AND_TYPE.keys())}")
 
             elif rule == "setup":
                 self.setup = ast["setup"]
@@ -158,7 +165,7 @@ class GameHandler():
 
 
     def process(self, state: FullState, is_final: bool, debug: bool = False,
-        debug_building_handler: bool = False, debug_preference_handlers: bool = False) -> typing.Optional[float]:
+        debug_building_handler: bool = False, debug_preference_handlers: bool = False, ignore_terminals: bool = False) -> typing.Optional[float]:
         '''
         Process a state in a game trajectory by passing it to each of the relevant PreferenceHandlers. If the state is
         the last one in the trajectory or the terminal conditions are met, then we also do scoring
@@ -172,6 +179,7 @@ class GameHandler():
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
         setup = self.evaluate_setup(self.setup, state, default_mapping)
+        self.setup_met = self.setup_met or setup
         if not setup:
 
             # Manually advance 'cur_step' for each PreferenceHandler, since their process() methods aren't being called
@@ -195,7 +203,7 @@ class GameHandler():
 
         # The game is in its last step if the terminal conditions are met or if the trajectory is over. We pass this
         # value to the PredicateHandler so that it can evaluate game-over
-        is_last_step = is_final or self.evaluate_terminals(self.terminal)
+        is_last_step = is_final or (not ignore_terminals and self.evaluate_terminals(self.terminal))
         self.predicate_handler.is_last_step = is_last_step
 
         for preference_name, handlers in self.preference_handlers.items():

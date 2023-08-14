@@ -1,3 +1,4 @@
+import enum
 import numpy as np
 from scipy.spatial import ConvexHull
 from skspatial.objects import Vector
@@ -25,6 +26,12 @@ ACTION_KEY = 'action'
 ORIGINAL_INDEX_KEY = 'originalIndex'
 OBJECT_ID_KEY = 'objectId'
 OBJECT_NAME_KEY = 'name'
+
+
+class PredicateHandlerPredicateNotImplemented(Exception):
+    pass
+
+PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE = np.nan
 
 
 class PredicateHandler:
@@ -81,9 +88,16 @@ class PredicateHandler:
 
         GD 2022-09-29: We decided that since all external callers treat a None as a False, we might as well make it explicit here
         """
-        pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping, force_evaluation=force_evaluation)
+        try:
+            pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping, force_evaluation=force_evaluation)
+        except PredicateHandlerPredicateNotImplemented:
+            pred_value = PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE
 
-        return pred_value if pred_value is not None else False
+        # if this reached all the way up here, we return True, since something not implemented could be True
+        if pred_value == PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE:
+            return True
+
+        return pred_value if pred_value is not None else False  # type: ignore
 
     def _inner_call(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
@@ -107,10 +121,21 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value = self._inner_evaluate_predicate(predicate, state, relevant_mapping, force_evaluation)
+        try:
+            current_state_value = self._inner_evaluate_predicate(predicate, state, relevant_mapping, force_evaluation)
+
+        # if the exception propagated all the way here,
+        except PredicateHandlerPredicateNotImplemented:
+            # TODO: is this the right thing to do? I think so?
+            current_state_value = PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE
+
         if current_state_value is not None:
             self.evaluation_cache[predicate_key] = current_state_value
             self.evaluation_cache_last_updated[predicate_key] = state_index
+
+        # Cache the value above so we don't go into trying to compute it again and if this is the case, reraise to propagate
+        if current_state_value is PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE:
+            raise PredicateHandlerPredicateNotImplemented
 
         return typing.cast(bool, self.evaluation_cache.get(predicate_key, None))
 
@@ -168,6 +193,9 @@ class PredicateHandler:
             if predicate_name == "game_over":
                 return self.is_last_step
 
+            if predicate_name not in PREDICATE_LIBRARY:
+                raise PredicateHandlerPredicateNotImplemented(predicate_name)
+
             # Obtain the functional representation of the base predicate
             predicate_fn = PREDICATE_LIBRARY[predicate_name]  # type: ignore
 
@@ -186,8 +214,12 @@ class PredicateHandler:
             return self._inner_evaluate_predicate(predicate["pred"], state, mapping, force_evaluation)
 
         elif predicate_rule == "super_predicate_not":
-            inner_pred_value = self._inner_call(predicate["not_args"], state, mapping, force_evaluation)
-            return None if inner_pred_value is None else not inner_pred_value
+            try:
+                inner_pred_value = self._inner_call(predicate["not_args"], state, mapping, force_evaluation)
+                return None if inner_pred_value is None else not inner_pred_value
+            # Assume that if a predicate was not implemented, it could be either true or false, so treat it as True
+            except PredicateHandlerPredicateNotImplemented:
+                return True
 
         elif predicate_rule == "super_predicate_and":
             and_args = predicate["and_args"]
@@ -197,12 +229,22 @@ class PredicateHandler:
             # We can't speed this up as much by breaking out of the loop early when we encounter a False, because we don't
             # know if there would be an un-evaluable None later in the loop
             cur_truth_value = True
+            any_arguments_implemented = False
             for sub in and_args:  # type: ignore
-                eval = self._inner_call(sub, state, mapping, force_evaluation)
-                if eval is None:
-                    return None
+                try:
+                    eval = self._inner_call(sub, state, mapping, force_evaluation)
+                    any_arguments_implemented = True
+                    if eval is None:
+                        return None
+
+                except PredicateHandlerPredicateNotImplemented:
+                    continue
 
                 cur_truth_value = cur_truth_value and eval
+
+            # If all child predicates were not implemented, propagate the lack of implementation up
+            if not any_arguments_implemented:
+                raise PredicateHandlerPredicateNotImplemented('All children of AND were not implemented')
 
             return cur_truth_value
 
@@ -212,12 +254,22 @@ class PredicateHandler:
                 or_args = [or_args]
 
             all_none = True
+            any_arguments_implemented = False
             for sub in or_args:  # type: ignore
-                eval = self._inner_call(sub, state, mapping, force_evaluation) # outputs can be True, False, or None
-                if eval:
-                    return True
-                elif eval == False:
-                    all_none = False
+                try:
+                    eval = self._inner_call(sub, state, mapping, force_evaluation) # outputs can be True, False, or None
+                    any_arguments_implemented = True
+                    if eval:
+                        return True
+                    elif eval == False:
+                        all_none = False
+
+                except PredicateHandlerPredicateNotImplemented:
+                    continue
+
+            # If at least one child was not implemented, propagate it up
+            if not any_arguments_implemented:
+                raise PredicateHandlerPredicateNotImplemented('All children of OR were not implemented')
 
             if all_none:
                 return None
@@ -232,12 +284,18 @@ class PredicateHandler:
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
 
             all_none = True
-            for sub_mapping in sub_mappings:
-                eval = self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation)
-                if eval:
-                    return True
-                elif eval == False:
-                    all_none = False
+            try:
+                for sub_mapping in sub_mappings:
+                    eval = self._inner_call(predicate["exists_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                    if eval:
+                        return True
+                    elif eval == False:
+                        all_none = False
+
+            # If the only child (or their conjunction/disjunction) was not implemented, rereaise
+            # The loop can live inside the try block, since it's the same argument over the entire loop
+            except PredicateHandlerPredicateNotImplemented:
+                raise PredicateHandlerPredicateNotImplemented('Children of EXISTS were not implemented')
 
             if all_none:
                 return None
@@ -252,12 +310,17 @@ class PredicateHandler:
             sub_mappings = [dict(zip(variable_type_mapping.keys(), object_assignment)) for object_assignment in object_assignments]
 
             cur_truth_value = True
-            for sub_mapping in sub_mappings:
-                eval = self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation)
-                if eval is None:
-                    return None
+            try:
+                for sub_mapping in sub_mappings:
+                    eval = self._inner_call(predicate["forall_args"], state, {**sub_mapping, **mapping}, force_evaluation)
+                    if eval is None:
+                        return None
 
-                cur_truth_value = cur_truth_value and eval
+                    cur_truth_value = cur_truth_value and eval
+
+            # Same logic as with exists
+            except PredicateHandlerPredicateNotImplemented:
+                raise PredicateHandlerPredicateNotImplemented('Children of FORALL were not implemented')
 
             return cur_truth_value
 
@@ -272,26 +335,44 @@ class PredicateHandler:
 
             # For each comparison argument, evaluate it if it's a function or convert to an int if not
             comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
+            comp_arg_1_implemented = True
             if isinstance(comp_arg_1, tatsu.ast.AST):
-                # If it's an AST, it's a function, so evaluate it
-                comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
+                try:
+                    # If it's an AST, it's a function, so evaluate it
+                    comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
 
-                # If the function is undecidable with the current information, return None
-                if comp_arg_1 is None:
-                    return None
+                    # If the function is undecidable with the current information, return None
+                    if comp_arg_1 is None:
+                        return None
+
+                except PredicateHandlerPredicateNotImplemented:
+                    comp_arg_1_implemented = False
+                    comp_arg_1 = float('-Inf')
 
             comp_arg_1 = float(comp_arg_1)
 
             comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
+            comp_arg_2_implemented = True
             if isinstance(comp_arg_2, tatsu.ast.AST):
-                # If it's an AST, it's a function, so evaluate it
-                comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
+                try:
+                    # If it's an AST, it's a function, so evaluate it
+                    comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
 
-                # If the function is undecidable with the current information, return None
-                if comp_arg_2 is None:
-                    return None
+                    # If the function is undecidable with the current information, return None
+                    if comp_arg_2 is None:
+                        return None
+                except PredicateHandlerPredicateNotImplemented:
+                    comp_arg_2_implemented = False
+                    comp_arg_2 = float('-Inf')
 
             comp_arg_2 = float(comp_arg_2)
+
+            if not comp_arg_1_implemented and not comp_arg_1_implemented:
+                raise PredicateHandlerPredicateNotImplemented('Both arguments of function comparison were not implemented')
+
+            # One was not implemented, so assume the function comparison could be True
+            if comp_arg_1_implemented != comp_arg_2_implemented:
+                return True
 
             if comparison_operator == "=":
                 return comp_arg_1 == comp_arg_2

@@ -8,7 +8,7 @@ import enum
 from utils import extract_variable_type_mapping, extract_predicate_function_name, extract_variables, get_object_assignments, FullState
 from predicate_handler import PredicateHandler
 
-from config import NAMED_OBJECTS
+from config import NAMED_OBJECTS, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 
 class PartialPreferenceSatisfaction(typing.NamedTuple):
     mapping: typing.Dict[str, str]
@@ -109,6 +109,8 @@ class PreferenceHandler:
         # Add all of the explicitly named variables. This includes "agent", but also things like "desk" that
         # can just be referred to explicitly within predicates without quantification beforehand
         self.variable_type_mapping.update({obj: [obj] for obj in NAMED_OBJECTS})
+        # Similarly with the specifically named objects for this room
+        self.variable_type_mapping.update({obj: [obj] for obj in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain]})
 
         self.pref_body_rule = preference_body["parseinfo"].rule  # type: ignore
         if self.pref_body_rule == PreferenceType.THEN.value:
@@ -228,7 +230,8 @@ class PreferenceHandler:
         # If there are new variables, then we iterate overall all possible assignments for them, add them to the
         # existing mapping, and add it to our list of partial preference satisfactions while advancing the predicates
         if len(new_variables) > 0:
-            new_var_types = [self.variable_type_mapping[var] for var in new_variables]
+            # accounting for moving games between rooms, where some variable types referenced in the game might not exist
+            new_var_types = [self.variable_type_mapping[var] if var in self.variable_type_mapping else ([var] if not var.startswith('?') else []) for var in new_variables]
 
             # We extract the set of objects that are already used in this partial satisfaction, so that they do not get reassigned
             # to new variables
@@ -241,14 +244,14 @@ class PreferenceHandler:
 
                 new_partial_preference_satisfactions.append(partial_preference_satisfaction._replace(mapping=new_mapping, current_predicate=new_cur_predicate,
                                                                                                      next_predicate=new_next_predicate, while_sat=0))
-                
-                
+
+
 
         # Otherwise, just advance the predicates but keep the mapping the same
         else:
             new_partial_preference_satisfactions.append(partial_preference_satisfaction._replace(current_predicate=new_cur_predicate, next_predicate=new_next_predicate,
                                                                                                  while_sat=0))
-            
+
     def revert_preference(self, mapping: typing.Dict[str, str], new_partial_preference_satisfactions: typing.List[PartialPreferenceSatisfaction]) -> None:
         '''
         Called when a predicate inside a (then) operator is no longer satisfied and we have to return to

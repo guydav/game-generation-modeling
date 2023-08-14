@@ -29,8 +29,8 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
 
-    # if MEMORY_TRACE:
-    #     tracemalloc.start()
+    if MEMORY_TRACE:
+        tracemalloc.start()
 
     args = Namespace(no_binarize=False, no_merge=False, use_specific_objects_ngram_model=False)
     featurizer = build_fitness_featurizer(args)
@@ -44,9 +44,9 @@ if __name__ == '__main__':
 
     if MEMORY_TRACE:
         tracemalloc.start(25)
-    #     size, peak = tracemalloc.get_traced_memory()
-    #     print(f'After creating featurizer | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
-    #     tracemalloc.reset_peak()
+        size, peak = tracemalloc.get_traced_memory()
+        print(f'After creating featurizer | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
+        tracemalloc.reset_peak()
 
     start = time.perf_counter()
     for i in range(0, len(game_asts)):
@@ -54,15 +54,15 @@ if __name__ == '__main__':
     # for i in tqdm(range(0, len(game_asts))):
         # first_snapshot = tracemalloc.take_snapshot()
 
-        print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
-        featurizer.parse(game_asts[i], 'interactive-beta.pddl', return_row=True, preprocess_row=False)
+        # print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
+        featurizer.parse(game_asts[i], 'interactive-beta.pddl')
 
-        if MEMORY_TRACE:
-            # gc.collect()
-            size, peak = tracemalloc.get_traced_memory()
-            print(f'After current game | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
-            tracemalloc.reset_peak()
-            print()
+        # if MEMORY_TRACE:
+        #     # gc.collect()
+        #     size, peak = tracemalloc.get_traced_memory()
+        #     print(f'After current game | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
+        #     tracemalloc.reset_peak()
+        #     print()
 
         # second_snapshot = tracemalloc.take_snapshot()
         # top_stats = second_snapshot.compare_to(first_snapshot, 'lineno')
@@ -100,5 +100,5 @@ if __name__ == '__main__':
         ps.print_stats()
         print(s.getvalue())
 
-    # d = featurizer.to_df()
-    # print(d[[c for c in d.columns if 'predicate_found_in_data_' in c]].describe())
+    d = featurizer.to_df()
+    print(d[[c for c in d.columns if 'predicate_found_in_data_' in c]].describe())

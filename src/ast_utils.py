@@ -1,10 +1,12 @@
 import argparse
 from collections import namedtuple, deque
+import copy
 from itertools import chain
 import enum
 import gzip
 import hashlib
 import logging
+import multiprocess as multiprocessing
 import numpy as np
 import os
 import pickle
@@ -156,10 +158,95 @@ class NoParseinfoTokenizerModelContext(tatsu.grammars.ModelContext):
         return parseinfo
 
 
+class FullCacheRebuilder:
+    def __init__(self, games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
+                 use_tqdm: bool, remove_parseinfo_tokenizers: bool = True,
+                 expected_total_count: typing.Optional[int] = None,
+                 n_workers: int = 15, chunksize: int = 1250):
+
+        self.games_file_path = games_file_path
+        self.use_tqdm = use_tqdm
+        self.remove_parseinfo_tokenizers = remove_parseinfo_tokenizers
+        self.expected_total_count = expected_total_count
+        self.n_workers = n_workers
+        self.chunksize = chunksize
+
+        self.grammar_parser = copy.deepcopy(grammar_parser)
+        self.config = grammar_parser.config.replace_config(None)
+        self.context = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=self.config)
+
+        # self._grammar_parsers = [copy.deepcopy(grammar_parser) for _ in range(n_workers)]
+        # self._configs = []
+        # self._contexts = []
+
+    #     for grammar_parser in self._grammar_parsers:
+    #         config = None
+    #         context = None
+    #         if self.remove_parseinfo_tokenizers:
+    #             config = grammar_parser.config.replace_config(None)
+    #             context = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=config)
+
+    #         self._configs.append(config)
+    #         self._contexts.append(context)
+
+    # def _process_index(self):
+    #     identity = multiprocessing.current_process()._identity  # type: ignore
+    #     if identity is None or len(identity) == 0:
+    #         return 0
+
+    #     return identity[0] % self.n_workers
+
+    # @property
+    # def grammar_parser(self):
+    #     return self._grammar_parsers[self._process_index()]
+
+    # @property
+    # def config(self):
+    #     return self._configs[self._process_index()]
+
+    # @property
+    # def context(self):
+    #     return self._contexts[self._process_index()]
+
+    def _parse_single_game(self, game):
+        game_id = _extract_game_id(game)
+        game_hash = fixed_hash(game)
+        ast = self.grammar_parser.parse(game, config=self.config, ctx=self.context)
+        # msgpack_ast_restore(msgpack.unpackb(ast_bytes), copy_type=ASTCopyType.FULL)
+        return game_id, game_hash, ast  # msgpack.packb(ast)
+
+    def __call__(self, cache):
+        game_iter = load_games_from_file(self.games_file_path)
+
+        multiprocessing.set_start_method('spawn', force=True)  # type: ignore
+        with multiprocessing.Pool(self.n_workers) as p:  # type: ignore
+            logger.info('Pool started')
+
+            if self.n_workers > 1:
+                result_iter = p.imap_unordered(self._parse_single_game, game_iter, chunksize=self.chunksize)
+
+            else:
+                result_iter = map(self._parse_single_game, game_iter)
+
+            if self.use_tqdm:
+                result_iter = tqdm.tqdm(result_iter, total=self.expected_total_count)
+
+            for game_id, game_hash, ast in result_iter:
+                cache[CACHE_HASHES_KEY][game_id] = game_hash
+                cache[CACHE_ASTS_KEY][game_id] = ast  # msgpack_ast_restore(msgpack.unpackb(ast_bytes), copy_type=ASTCopyType.FULL)
+
+        logger.info(f'Pool ended, cache size is {len(cache[CACHE_HASHES_KEY])}')
+        return cache
+
+
+
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
     use_tqdm: bool, relative_path: typing.Optional[str] = None,
     save_updates_every: int = -1, log_every_change: bool = True,
-    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False, force_from_cache: bool = False):
+    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False,
+    force_from_cache: bool = False,
+    full_rebuild_expected_total_count: typing.Optional[int] = None,
+    full_rebuild_n_workers: int = 15, full_rebuild_chunksize: int = 1250):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
     logger.info(f'Loading from cache file: {cache_path}')
@@ -174,7 +261,12 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         cache = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
 
+        force_rebuild = True
+
         logger.info(f'No cache file found, creating new cache file for: {cache_path}')
+        if force_from_cache:
+            logger.warn('Cannot force from cache when there is not cache; setting force_from_cache = False')
+            force_from_cache = False
 
     cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
             CACHE_DSL_HASH_KEY: grammar_hash}
@@ -190,6 +282,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
 
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
+        force_rebuild = True
 
     if force_from_cache:
         if grammar_changed:
@@ -204,43 +297,61 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     if use_tqdm:
         game_iter = tqdm.tqdm(game_iter)
 
-    for game in game_iter:
-        game_id = _extract_game_id(game)
-        game_hash = fixed_hash(game)
+    if force_rebuild:
+        logger.info('Forcing full rebuild')
+        rebuilder = FullCacheRebuilder(
+            games_file_path, grammar_parser, use_tqdm,
+            remove_parseinfo_tokenizers, full_rebuild_expected_total_count,
+            full_rebuild_n_workers, full_rebuild_chunksize)
 
-        if force_rebuild or grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
-            if not force_rebuild and not grammar_changed and log_every_change:
-                if game_id not in cache[CACHE_HASHES_KEY]:
-                    logger.debug(f'Game not found in cache: {game_id}')
-                else:
-                    logger.debug(f'Game changed: {game_id}')
-            cache_updated = True
+        cache = rebuilder(cache)
 
-            config = None
-            ctx = None
-            if remove_parseinfo_tokenizers:
-                config = grammar_parser.config.replace_config(None)
-                ctx = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=config)
+        with gzip.open(cache_path, 'wb') as f:
+            pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
 
-            ast = grammar_parser.parse(game, config=config, ctx=ctx)
-            cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
-            cache_updates[CACHE_ASTS_KEY][game_id] = ast
-            n_cache_updates += 1
+        # Just rebuilt, so no need to check hashes
+        for game in game_iter:
+            game_id = _extract_game_id(game)
+            yield cache[CACHE_ASTS_KEY][game_id]
 
-        else:
-            ast = cache[CACHE_ASTS_KEY][game_id]
+    else:
+        for game in game_iter:
+            game_id = _extract_game_id(game)
+            game_hash = fixed_hash(game)
 
-        yield ast
+            if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
+                if not grammar_changed and log_every_change:
+                    if game_id not in cache[CACHE_HASHES_KEY]:
+                        logger.debug(f'Game not found in cache: {game_id}')
+                    else:
+                        logger.debug(f'Game changed: {game_id}')
+                cache_updated = True
 
-        if save_updates_every > 0 and n_cache_updates >= save_updates_every:
-            logger.debug(f'Updating cache with {n_cache_updates} new games')
-            cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
-            cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
-            with gzip.open(cache_path, 'wb') as f:
-                pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
-            cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
-                CACHE_DSL_HASH_KEY: grammar_hash}
-            n_cache_updates = 0
+                config = None
+                ctx = None
+                if remove_parseinfo_tokenizers:
+                    config = grammar_parser.config.replace_config(None)
+                    ctx = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=config)
+
+                ast = grammar_parser.parse(game, config=config, ctx=ctx)
+                cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
+                cache_updates[CACHE_ASTS_KEY][game_id] = ast
+                n_cache_updates += 1
+
+            else:
+                ast = cache[CACHE_ASTS_KEY][game_id]
+
+            yield ast
+
+            if save_updates_every > 0 and n_cache_updates >= save_updates_every:
+                logger.debug(f'Updating cache with {n_cache_updates} new games')
+                cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
+                cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
+                with gzip.open(cache_path, 'wb') as f:
+                    pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
+                cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
+                    CACHE_DSL_HASH_KEY: grammar_hash}
+                n_cache_updates = 0
 
     if n_cache_updates > 0:
         logger.debug(f'Updating cache with {n_cache_updates} new games')

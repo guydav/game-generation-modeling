@@ -5,6 +5,7 @@ import tatsu, tatsu.ast, tatsu.grammars
 
 from preference_handler import PredicateType
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
+from ast_utils import cached_load_and_parse_games_from_file
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 
@@ -14,10 +15,12 @@ PREDICATE_DESCRIPTIONS = {
     "agent_crouches": "the agent is crouching",
     "agent_holds": "the agent is holding {0}",
     "between": "{1} is between {0} and {2}",
+    "faces": "{0} is facing {1}",
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
-    "faces": "{0} is facing {1}",
+    "object_orientation": "{0} is oriented {1}",
     "on": "{1} is on {0}",
+    "open": "{0} is open",
     "touch": "{0} touches {1}",
     "toggled_on": "{0} is toggled on",
 }
@@ -32,6 +35,15 @@ class GameDescriber():
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
         self.engine = inflect.engine()
 
+        self.preference_index =  None
+        self.external_forall_preference_mappings = None
+
+    def _indent(self, description: str, num_spaces: int = 4):
+        '''
+        Add a specified number of spaces to each line passed in
+        '''
+        lines = description.split("\n")
+        return "\n".join([f"{' ' * num_spaces}{line}" if line !="" else line for line in lines])
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST], info_dict: typing.Dict):
         '''
@@ -194,64 +206,118 @@ class GameDescriber():
 
         if rule == "preference":
             name = typing.cast(str, pref_def["pref_name"])
-            description += f"'{name}'"
+            description += f"Preference {self.preference_index + 1}: '{name}'"
 
             body = pref_def["pref_body"]["body"] # type: ignore
 
-            if body.parseinfo.rule == "pref_body_exists":
-
-                variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
-                description += "\nThe variables required by this preference are:"
-                for var, types in variable_type_mapping.items():
-                    description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
-
-            else:
-                raise NotImplementedError(f"Unknown preference body rule: {body.parseinfo.rule}")
-
-            description += "\n\nThis preference is satisfied when:"
-
-            if body["exists_args"].parseinfo.rule == "at_end":
-                description += f"\n- in the final game state, {self._describe_predicate(body['exists_args']['at_end_pred'])}" # type: ignore
-
-            elif body["exists_args"].parseinfo.rule == "then":
-
-                temporal_predicates = [func['seq_func'] for func in body["exists_args"]["then_funcs"]]
-                for idx, temporal_predicate in enumerate(temporal_predicates):
-                    if len(temporal_predicates) == 1:
-                        description += "\n- "
-                    elif idx == 0:
-                        description += f"\n- first, "
-                    elif idx == len(temporal_predicates) - 1:
-                        description += f"\n- finally, "
-                    else:
-                        description += f"\n- next, "
-
-                    temporal_type = self._predicate_type(temporal_predicate)
-                    if temporal_type == PredicateType.ONCE:
-                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
-
-                    elif temporal_type == PredicateType.ONCE_MEASURE:
-                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}."
-                        description += f" In addition, measure and record {self._describe_predicate(temporal_predicate['measurement'])}"
-
-                    elif temporal_type == PredicateType.HOLD:
-                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
-
-                    elif temporal_type == PredicateType.HOLD_WHILE:
-                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
-
-                        if isinstance(temporal_predicate["while_preds"], list):
-                            while_desc = self.engine.join(['a state where (' + self._describe_predicate(pred) + ')' for pred in temporal_predicate['while_preds']])
-                            description += f" Additionally, during this sequence there is {while_desc} (in that order)."
-                        else:
-                            description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
-                    
-
-            return description
+            description += self._indent(self._describe_preference_body(body))
+            self.preference_index += 1
 
         # This case handles externall forall preferences
         elif rule == "pref_forall":
-            raise NotImplementedError("External forall preferences are not yet supported")
+
+            forall_vars = pref_def["forall_vars"]
+            forall_pref = pref_def["forall_pref"]
+
+            variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
+
+            # description += "Each of the following preferences are defined inside an external 'forall' statement. This means they each make use of the following variables and, in addition, record the specific objects used for each of those variables:"
+            # for var, types in variable_type_mapping.items():
+            #     description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            sub_preferences = forall_pref["preferences"] # type: ignore
+            if isinstance(sub_preferences, tatsu.ast.AST):
+                sub_preferences = [sub_preferences]
+
+            for sub_idx, sub_preference in enumerate(sub_preferences):
+                name = typing.cast(str, sub_preference["pref_name"])
+
+                self.external_forall_preference_mappings[name] = list(variable_type_mapping.keys()) # type: ignore
+
+                newline = '\n' if sub_idx > 0 else ''
+                description += f"{newline}Preference {self.preference_index + 1}: '{name}'"
+
+                body = sub_preference["pref_body"]["body"] # type: ignore
+
+                description += self._indent(self._describe_preference_body(body, variable_type_mapping))
+                self.preference_index += 1
+        
+        return description
+        
+    def _describe_preference_body(self, body_ast: tatsu.ast.AST, additional_variable_mapping: typing.Dict[str, typing.List[str]] = {}):
+        '''
+        Describe the main body of a preference (i.e. the part after any external-foralls / names). Optionally, additional variable
+        mappings from an external forall can be passed in to be used in the description
+        '''
+
+        description = ""
+
+        if body_ast.parseinfo.rule == "pref_body_exists":
+
+            variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
+            description += "\nThe variables required by this preference are:"
+            
+            for var, types in additional_variable_mapping.items():
+                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            for var, types in variable_type_mapping.items():
+                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            temporal_predicate_ast = body_ast["exists_args"]
+
+        # These cases handle preferences that don't have any variables quantified with an exists (e.g. they're all from an external forall)
+        elif body_ast.parseinfo.rule == "then":
+            temporal_predicate_ast = body_ast
+
+        elif body_ast.parseinfo.rule == "at_end":
+            temporal_predicate_ast = body_ast
+
+        else:
+            raise NotImplementedError(f"Unknown preference body rule: {body_ast.parseinfo.rule}")
+
+        description += "\n\nThis preference is satisfied when:"
+
+        if temporal_predicate_ast.parseinfo.rule == "at_end":
+            description += f"\n- in the final game state, {self._describe_predicate(temporal_predicate_ast['at_end_pred'])}" # type: ignore
+
+        elif temporal_predicate_ast.parseinfo.rule == "then":
+
+            temporal_predicates = [func['seq_func'] for func in temporal_predicate_ast["then_funcs"]]
+            for idx, temporal_predicate in enumerate(temporal_predicates):
+                if len(temporal_predicates) == 1:
+                    description += "\n- "
+                elif idx == 0:
+                    description += f"\n- first, "
+                elif idx == len(temporal_predicates) - 1:
+                    description += f"\n- finally, "
+                else:
+                    description += f"\n- next, "
+
+                temporal_type = self._predicate_type(temporal_predicate)
+                if temporal_type == PredicateType.ONCE:
+                    description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
+
+                elif temporal_type == PredicateType.ONCE_MEASURE:
+                    description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}."
+                    description += f" In addition, measure and record {self._describe_predicate(temporal_predicate['measurement'])}"
+
+                elif temporal_type == PredicateType.HOLD:
+                    description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                elif temporal_type == PredicateType.HOLD_WHILE:
+                    description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                    if isinstance(temporal_predicate["while_preds"], list):
+                        while_desc = self.engine.join(['a state where (' + self._describe_predicate(pred) + ')' for pred in temporal_predicate['while_preds']])
+                        description += f" Additionally, during this sequence there is {while_desc} (in that order)."
+                    else:
+                        description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
+                
+        else:
+            raise ValueError(f"Unknown body exist-args rule: {temporal_predicate_ast.parseinfo.rule}")
+        
+        return description
+
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
         
@@ -301,17 +367,10 @@ class GameDescriber():
             comp_arg_2 = predicate["comp"]["arg_2"]["arg"] # type: ignore
 
             if isinstance(comp_arg_1, tatsu.ast.AST):
-
-                name = comp_arg_1["func_name"]
-                variables = extract_variables(comp_arg_1)
-
-                comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)  # type: ignore
+                comp_arg_1 = self._describe_predicate(comp_arg_1)
      
             if isinstance(comp_arg_1, tatsu.ast.AST):
-                name = comp_arg_2["func_name"]
-                variables = extract_variables(comp_arg_2)
-
-                comp_arg_1 = FUNCTION_DESCRIPTIONS[name].format(*variables)
+                comp_arg_2 = self._describe_predicate(comp_arg_2)
 
             if comparison_operator == "=":
                 return f"{comp_arg_1} is equal to {comp_arg_2}"
@@ -375,7 +434,20 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: Unknown terminal rule '{rule}'")
+
+    def _external_scoring_description(self, preference_name, external_object_types):
+        '''
+        A helper function for describing the special scoring syntax in which variable
+        types are passed with colons after the preference name
+        '''
+        if external_object_types is None:
+            return ""
         
+        specified_variables = self.external_forall_preference_mappings[preference_name][:len(external_object_types)] # type: ignore
+        mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
+
+        return f", where {mapping_description}"
+
     def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]):
 
         if isinstance(scoring_ast, str):
@@ -429,35 +501,30 @@ class GameDescriber():
         
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied"
-            else:
-                return f"the number of times '{preference_name}' has been satisfied with specific variable types {self.engine.join(object_types)}"
-            
+            return f"the number of times '{preference_name}' has been satisfied" + external_scoring_desc
+          
         elif rule == "count_overlapping":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals"
-            else:
-                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals with specific variable types {self.engine.join(object_types)}"
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            
+            return f"the number of times '{preference_name}' has been satisfied in overlapping intervals" + external_scoring_desc
 
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"whether '{preference_name}' has been satisfied at least once"
-            else:
-                return f"whether '{preference_name}' has been satisfied at least once with specific variable types {self.engine.join(object_types)}"
-            
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+   
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied with different objects"
-            else:
-                raise ValueError("Error: count_once_per_objects does not support specific object types (I think?)")
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            
+            return f"the number of times '{preference_name}' has been satisfied with different objects" + external_scoring_desc 
             
         elif rule == "count_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            
             if object_types is None:
                 return f"the sum of all values measured during satisfactions of '{preference_name}'"
             else:
@@ -477,11 +544,22 @@ class GameDescriber():
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
 
-    def describe(self, game_text):
-        game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text))
+    def describe(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
+        '''
+        Generate a description of the provided game text or AST. Description will be split
+        by game section (setup, preferences, terminal, and scoring)
+        '''
+
+        if isinstance(game_text_or_ast, str):
+            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text))
+        else:
+            game_ast = game_text_or_ast
         
         game_info = {}
         self._extract_game_info(game_ast, game_info)
+
+        self.preference_index = 0
+        self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
             print("=====================================GAME SETUP=====================================")
@@ -493,7 +571,7 @@ class GameDescriber():
             print("\n=====================================PREFERENCES=====================================")
             for idx, preference in enumerate(game_info["preferences"][0]):
                 description = self._describe_preference(preference)
-                print(f"\nPreference {idx+1}: {description}")
+                print(f"\n{description}")
 
         if game_info.get("terminal") is not None:
             print("\n=====================================TERMINAL CONDITIONS=====================================")
@@ -571,6 +649,13 @@ TEST_GAME_2 = """(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects
 )))"""
 
 if __name__ == '__main__':
-    game = open("./reward-machine/games/game-27.txt", "r").read()
+    # game = open("./reward-machine/games/game-6.txt", "r").read()
+
+    grammar = open('./dsl/dsl.ebnf').read()
+    grammar_parser = tatsu.compile(grammar)
+    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber()
-    game_describer.describe(TEST_GAME)
+
+    for game in game_asts:
+        game_describer.describe(game)
+        input()

@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import operator
 import os
+import shutil
 import sys
 import tatsu.ast
 from tqdm import tqdm
@@ -32,6 +33,8 @@ from evolutionary_sampler import *
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+logging.getLogger('wandb.docker.auth').setLevel(logging.WARNING)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trace-names-hash', type=str, default=FULL_DATASET_TRACES_HASH)
@@ -49,7 +52,9 @@ parser.add_argument('--tqdm', action='store_true')
 parser.add_argument('--use-trace-intersection', action='store_true')
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1)
-
+parser.add_argument('--copy-traces-to-tmp', action='store_true')
+DEFAULT_START_METHOD = 'spawn'
+parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
 
 FULL_DATASET_TRACES_HASH = '028b3733'
 
@@ -125,7 +130,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
                     self._update_contexts_from_retval(kwargs, retval)
 
 
-MAX_TRACE_CACHE_SIZE = 64
+MAX_TRACE_CACHE_SIZE = 512
 
 
 class TraceGameEvaluator:
@@ -153,7 +158,7 @@ class TraceGameEvaluator:
         self.n_workers = n_workers
         self.chunksize = chunksize
 
-        self.cache = cachetools.LFUCache(maxsize=max_cache_size)
+        self.cache = cachetools.LRUCache(maxsize=max_cache_size)
 
     @cachetools.cachedmethod(operator.attrgetter('cache'))
     def _load_trace(self, trace_id: str):
@@ -185,16 +190,14 @@ class TraceGameEvaluator:
                 if initial_traces:
                     all_traces.update(trace_set)
                     initial_traces = False
-
                 else:
                     all_traces.intersection_update(trace_set)
-
             else:
                 all_traces.update(trace_set)
 
         if print_results: logger.info(f'Found {len(all_traces)} traces')
         if len(all_traces) == 0:
-            logger.info('No traces found')
+            if print_results: logger.info('No traces found')
             return key, -1 if return_key else -1
 
         if self.max_traces_per_game is not None:
@@ -205,7 +208,7 @@ class TraceGameEvaluator:
         stop_count_by_key = {key: 0 for key in expected_keys}
 
         trace_iter = all_traces
-        if self.tqdm:
+        if self.tqdm and self.n_workers <= 1:
             trace_iter = tqdm(trace_iter, desc=f'Traces for key {key}')
 
         for trace in trace_iter:
@@ -272,12 +275,16 @@ class TraceGameEvaluator:
                 with multiprocessing.Pool(self.n_workers) as p:
                     logger.info('Pool started')
 
-                    for key, min_count in tqdm(p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize)):
+                    for key, min_count in tqdm(p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize), desc='MAP-Elites Population', total=len(self.map_elites_model.population)):
                         result_by_key[key] = min_count
 
             else:
                 for key in key_iter:
                     result_by_key[key] = self.handle_single_game(key)
+
+            print('=' * 80)
+            print(result_by_key)
+            print('=' * 80)
 
             print('Summary of results:')
             result_counts = Counter(result_by_key.values())
@@ -286,20 +293,33 @@ class TraceGameEvaluator:
 
 
 def main(args: argparse.Namespace):
-    trace_finder = TraceFinderASTParser(args.trace_names_hash)
-    model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
-    trace_evaluator = TraceGameEvaluator(trace_finder, model, use_trace_intersection=args.use_trace_intersection,
-                                         stop_after_count=args.stop_after_count, max_traces_per_game=args.max_traces_per_game,
-                                         base_trace_path=args.base_trace_path, tqdm=args.tqdm,
-                                         n_workers=args.n_workers, chunksize=args.chunksize)
+    multiprocessing.set_start_method(args.parallel_start_method, force=True)
 
-    key = None
-    if args.single_key is not None:
-        key = tuple(map(int, args.single_key.replace('(', '').replace(')', '').split(',')))
+    try:
+        if args.copy_traces_to_tmp:
+            shutil.rmtree('/tmp/participant_traces', ignore_errors=True)
+            shutil.copytree(args.base_trace_path, '/tmp/participant_traces')
+            logger.info('Copied traces to /tmp/participant_traces')
+            args.base_trace_path = '/tmp/participant_traces'
 
-    trace_evaluator(key, args.max_keys)
+        trace_finder = TraceFinderASTParser(args.trace_names_hash)
+        model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
+        trace_evaluator = TraceGameEvaluator(trace_finder, model, use_trace_intersection=args.use_trace_intersection,
+                                            stop_after_count=args.stop_after_count, max_traces_per_game=args.max_traces_per_game,
+                                            base_trace_path=args.base_trace_path, tqdm=args.tqdm,
+                                            n_workers=args.n_workers, chunksize=args.chunksize)
+
+        key = None
+        if args.single_key is not None:
+            key = tuple(map(int, args.single_key.replace('(', '').replace(')', '').split(',')))
+
+        trace_evaluator(key, args.max_keys)
+
+    finally:
+        if args.copy_traces_to_tmp:
+            shutil.rmtree('/tmp/participant_traces', ignore_errors=True)
+
 
 
 if __name__ == '__main__':
-    args = parser.parse_args()
-    main(args)
+    main(parser.parse_args())

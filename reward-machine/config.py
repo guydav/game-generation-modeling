@@ -26,8 +26,8 @@ ROOMS = [FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM]
 
 OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     "alarm_clock": [
-            "AlarmClock|-01.41|+00.60|+00.45"
-        ],
+        "AlarmClock|-01.41|+00.60|+00.45"
+    ],
     "bed": [
         "Bed|-02.46|00.00|-00.57"
     ],
@@ -343,6 +343,8 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
             OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type].extend(object_list)
         else:
             OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type] = object_list[:]
+
+
 
 # A list of all objects that can be referred to directly as variables inside of a game
 NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch"]  # added the keys of the Pseudo Objects later

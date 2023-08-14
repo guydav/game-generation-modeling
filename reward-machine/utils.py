@@ -385,7 +385,7 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
     if isinstance(predicate, list) or isinstance(predicate, tuple):
         pred_vars = []
         for sub_predicate in predicate:
-            pred_vars += extract_variables(sub_predicate)
+            pred_vars.extend(extract_variables(sub_predicate))
 
         unique_vars = []
         for var in pred_vars:
@@ -403,12 +403,12 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
                 # Different structure for predicate args vs. function args
                 if isinstance(predicate["term"], tatsu.ast.AST):
-                    pred_vars += [predicate["term"]["arg"]]  # type: ignore
+                    pred_vars.append(predicate["term"]["arg"])  # type: ignore
                 else:
-                    pred_vars += [predicate["term"]]
+                    pred_vars.append(predicate["term"])
 
             elif key == "var_names":
-                pred_vars += [predicate["var_names"]] # type: ignore
+                pred_vars.append(predicate["var_names"]) # type: ignore
 
             # We don't want to capture any variables within an (exists) or (forall) that's inside
             # the preference, since those are not globally required -- see evaluate_predicate()
@@ -419,7 +419,7 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
                 exists_forall_vars += extract_variables(predicate[key])
 
             elif key != "parseinfo":
-                pred_vars += extract_variables(predicate[key])
+                pred_vars.extend(extract_variables(predicate[key]))
 
         unique_vars = []
         for var in pred_vars:

@@ -145,7 +145,8 @@ class PreferenceHandler:
         self.partial_preference_satisfactions = []
 
         initial_variables = extract_variables(self.temporal_predicates[0])
-        initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
+        # initial_var_types = [self.variable_type_mapping[var] for var in initial_variables]
+        initial_var_types = [self.variable_type_mapping[var] if var in self.variable_type_mapping else ([var] if not var.startswith('?') else []) for var in initial_variables]
         object_assignments = get_object_assignments(self.domain, initial_var_types)
 
         for object_assignment in object_assignments:

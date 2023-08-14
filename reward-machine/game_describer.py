@@ -397,7 +397,7 @@ class GameDescriber():
             if isinstance(comp_arg_1, tatsu.ast.AST):
                 comp_arg_1 = self._describe_predicate(comp_arg_1)
      
-            if isinstance(comp_arg_1, tatsu.ast.AST):
+            if isinstance(comp_arg_2, tatsu.ast.AST):
                 comp_arg_2 = self._describe_predicate(comp_arg_2)
 
             if comparison_operator == "=":

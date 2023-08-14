@@ -32,6 +32,14 @@ class GameDescriber():
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
         self.engine = inflect.engine()
 
+        self.preference_index = 0
+
+    def _indent(self, description: str, num_spaces: int = 4):
+        '''
+        Add a specified number of spaces to each line passed in
+        '''
+        lines = description.split("\n")
+        return "\n".join([f"{' ' * num_spaces}{line}" if line !="" else line for line in lines])
 
     def _extract_game_info(self, ast: typing.Union[list, tuple, tatsu.ast.AST], info_dict: typing.Dict):
         '''
@@ -194,64 +202,106 @@ class GameDescriber():
 
         if rule == "preference":
             name = typing.cast(str, pref_def["pref_name"])
-            description += f"'{name}'"
+            description += f"Preference {self.preference_index + 1}: '{name}'"
 
             body = pref_def["pref_body"]["body"] # type: ignore
 
-            if body.parseinfo.rule == "pref_body_exists":
-
-                variable_type_mapping = extract_variable_type_mapping(body["exists_vars"]["variables"])
-                description += "\nThe variables required by this preference are:"
-                for var, types in variable_type_mapping.items():
-                    description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
-
-            else:
-                raise NotImplementedError(f"Unknown preference body rule: {body.parseinfo.rule}")
-
-            description += "\n\nThis preference is satisfied when:"
-
-            if body["exists_args"].parseinfo.rule == "at_end":
-                description += f"\n- in the final game state, {self._describe_predicate(body['exists_args']['at_end_pred'])}" # type: ignore
-
-            elif body["exists_args"].parseinfo.rule == "then":
-
-                temporal_predicates = [func['seq_func'] for func in body["exists_args"]["then_funcs"]]
-                for idx, temporal_predicate in enumerate(temporal_predicates):
-                    if len(temporal_predicates) == 1:
-                        description += "\n- "
-                    elif idx == 0:
-                        description += f"\n- first, "
-                    elif idx == len(temporal_predicates) - 1:
-                        description += f"\n- finally, "
-                    else:
-                        description += f"\n- next, "
-
-                    temporal_type = self._predicate_type(temporal_predicate)
-                    if temporal_type == PredicateType.ONCE:
-                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
-
-                    elif temporal_type == PredicateType.ONCE_MEASURE:
-                        description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}."
-                        description += f" In addition, measure and record {self._describe_predicate(temporal_predicate['measurement'])}"
-
-                    elif temporal_type == PredicateType.HOLD:
-                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
-
-                    elif temporal_type == PredicateType.HOLD_WHILE:
-                        description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
-
-                        if isinstance(temporal_predicate["while_preds"], list):
-                            while_desc = self.engine.join(['a state where (' + self._describe_predicate(pred) + ')' for pred in temporal_predicate['while_preds']])
-                            description += f" Additionally, during this sequence there is {while_desc} (in that order)."
-                        else:
-                            description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
-                    
-
-            return description
+            description += self._indent(self._describe_preference_body(body))
+            self.preference_index += 1
 
         # This case handles externall forall preferences
         elif rule == "pref_forall":
-            raise NotImplementedError("External forall preferences are not yet supported")
+
+            forall_vars = pref_def["forall_vars"]
+            forall_pref = pref_def["forall_pref"]
+
+            variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
+
+            # description += "Each of the following preferences are defined inside an external 'forall' statement. This means they each make use of the following variables and, in addition, record the specific objects used for each of those variables:"
+            # for var, types in variable_type_mapping.items():
+            #     description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            sub_preferences = forall_pref["preferences"] # type: ignore
+            if isinstance(sub_preferences, tatsu.ast.AST):
+                sub_preferences = [sub_preferences]
+
+            for sub_idx, sub_preference in enumerate(sub_preferences):
+                name = typing.cast(str, sub_preference["pref_name"])
+                newline = '\n' if sub_idx > 0 else ''
+                description += f"{newline}Preference {self.preference_index + 1}: '{name}'"
+
+                body = sub_preference["pref_body"]["body"] # type: ignore
+
+                description += self._indent(self._describe_preference_body(body, variable_type_mapping))
+                self.preference_index += 1
+        
+        return description
+        
+    def _describe_preference_body(self, body_ast: tatsu.ast.AST, additional_variable_mapping: typing.Dict[str, typing.List[str]] = {}):
+        '''
+        Describe the main body of a preference (i.e. the part after any external-foralls / names). Optionally, additional variable
+        mappings from an external forall can be passed in to be used in the description
+        '''
+
+        description = ""
+
+        if body_ast.parseinfo.rule == "pref_body_exists":
+
+            variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
+            description += "\nThe variables required by this preference are:"
+            
+            for var, types in additional_variable_mapping.items():
+                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+            for var, types in variable_type_mapping.items():
+                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+
+        else:
+            raise NotImplementedError(f"Unknown preference body rule: {body_ast.parseinfo.rule}")
+
+        description += "\n\nThis preference is satisfied when:"
+
+        if body_ast["exists_args"].parseinfo.rule == "at_end":
+            description += f"\n- in the final game state, {self._describe_predicate(body_ast['exists_args']['at_end_pred'])}" # type: ignore
+
+        elif body_ast["exists_args"].parseinfo.rule == "then":
+
+            temporal_predicates = [func['seq_func'] for func in body_ast["exists_args"]["then_funcs"]]
+            for idx, temporal_predicate in enumerate(temporal_predicates):
+                if len(temporal_predicates) == 1:
+                    description += "\n- "
+                elif idx == 0:
+                    description += f"\n- first, "
+                elif idx == len(temporal_predicates) - 1:
+                    description += f"\n- finally, "
+                else:
+                    description += f"\n- next, "
+
+                temporal_type = self._predicate_type(temporal_predicate)
+                if temporal_type == PredicateType.ONCE:
+                    description += f"there is a state where {self._describe_predicate(temporal_predicate['once_pred'])}"
+
+                elif temporal_type == PredicateType.ONCE_MEASURE:
+                    description += f"there is a state where {self._describe_predicate(temporal_predicate['once_measure_pred'])}."
+                    description += f" In addition, measure and record {self._describe_predicate(temporal_predicate['measurement'])}"
+
+                elif temporal_type == PredicateType.HOLD:
+                    description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                elif temporal_type == PredicateType.HOLD_WHILE:
+                    description += f"there is a sequence of one or more states where {self._describe_predicate(temporal_predicate['hold_pred'])}"
+
+                    if isinstance(temporal_predicate["while_preds"], list):
+                        while_desc = self.engine.join(['a state where (' + self._describe_predicate(pred) + ')' for pred in temporal_predicate['while_preds']])
+                        description += f" Additionally, during this sequence there is {while_desc} (in that order)."
+                    else:
+                        description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
+                
+        else:
+            raise ValueError(f"Unknown body exist-args rule: {body_ast['exists_args'].parseinfo.rule}")
+        
+        return description
+
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
         
@@ -493,7 +543,7 @@ class GameDescriber():
             print("\n=====================================PREFERENCES=====================================")
             for idx, preference in enumerate(game_info["preferences"][0]):
                 description = self._describe_preference(preference)
-                print(f"\nPreference {idx+1}: {description}")
+                print(f"\n{description}")
 
         if game_info.get("terminal") is not None:
             print("\n=====================================TERMINAL CONDITIONS=====================================")
@@ -571,6 +621,6 @@ TEST_GAME_2 = """(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects
 )))"""
 
 if __name__ == '__main__':
-    game = open("./reward-machine/games/game-27.txt", "r").read()
+    game = open("./reward-machine/games/game-6.txt", "r").read()
     game_describer = GameDescriber()
-    game_describer.describe(TEST_GAME)
+    game_describer.describe(game)

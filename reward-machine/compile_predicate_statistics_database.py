@@ -44,10 +44,13 @@ logger.setLevel(logging.DEBUG)
 
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
-    ("agent_crouches", 0),
+    ("above", 2),
     ("adjacent", 2),
+    ("agent_crouches", 0),
     ("agent_holds", 1),
     ("broken", 1),
+    ("equal_x_position", 2),
+    ("equal_z_position", 2),
     ("in", 2),
     ("in_motion", 1),
     ("object_orientation", 1),  # as it takes 1 object and an orientation we'll hard-code

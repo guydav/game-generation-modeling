@@ -42,10 +42,13 @@ logger.setLevel(logging.DEBUG)
 
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
-    ("agent_crouches", 0),
+    ("above", 2),
     ("adjacent", 2),
+    ("agent_crouches", 0),
     ("agent_holds", 1),
     ("broken", 1),
+    ("equal_x_position", 2),
+    ("equal_z_position", 2),
     ("in", 2),
     ("in_motion", 1),
     ("object_orientation", 1),  # as it takes 1 object and an orientation we'll hard-code
@@ -1193,22 +1196,22 @@ if __name__ == '__main__':
                                                     trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    # overwrite=True
+                                                    overwrite=True
                                                     )
 
-    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    # for var_type in variable_type_usage:
-    #     if var_type in META_TYPES:
-    #         continue
-    #     var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
+    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    for var_type in variable_type_usage:
+        if var_type in META_TYPES:
+            continue
+        var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))
 
-    #     prefix = "[+]" if len(var_intervals) > 0 else "[-]"
-    #     print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
+        prefix = "[+]" if len(var_intervals) > 0 else "[-]"
+        print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
 
-    # exit()
+    exit()
 
-    out = stats.filter(test_pred_object_in_top_drawer, {"?g": ["game_object"]})
-    print(out)
+    # out = stats.filter(test_pred_object_in_top_drawer, {"?g": ["game_object"]})
+    # print(out)
     # _print_results_as_expected_intervals(out)
 
     exit()

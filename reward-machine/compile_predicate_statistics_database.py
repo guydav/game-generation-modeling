@@ -94,8 +94,6 @@ DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.p
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 
 
-
-
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in  glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
 
@@ -568,23 +566,23 @@ class CommonSensePredicateStatisticsDatabse():
         return get_object_assignments(domain, variable_types, used_objects=used_objects)
 
 
-    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
+    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
         # temp_table_names = [t[0] for t in duckdb.sql('SHOW TABLES').fetchall() if t[0].startswith(self.temp_table_prefix)]
         # for table_name in temp_table_names:
         #     duckdb.sql(f'DROP TABLE {table_name};')
 
         try:
             # self.temp_table_index = 0
-            outcome_table_name, _ = self._inner_filter(predicate, mapping)
-            return outcome_table_name
+            result, _ = self._inner_filter(predicate, mapping, **kwargs)
+            return result
             # print(outcome_table_name, self.cache.currsize)
             # n_traces = duckdb.sql(f"SELECT COUNT(DISTINCT(trace_id)) FROM {outcome_table_name}").fetchone()[0]  # type: ignore
-            n_intervals = duckdb.sql(f"SELECT COUNT(*) FROM {outcome_table_name}").fetchone()[0]  # type: ignore
+            # n_intervals = duckdb.sql(f"SELECT COUNT(*) FROM {result}").fetchone()[0]  # type: ignore
             # n_total_states = duckdb.sql(f"SELECT SUM(bit_count(string_intervals)) FROM {outcome_table_name}").fetchone()[0] # type: ignore
-            return n_intervals # , n_intervals, n_total_states
+            # return n_intervals # , n_intervals, n_total_states
 
         except PredicateNotImplementedException as e:
-            # TODO: decide what we return in this case, or if we pass it through and let the feature handle it
+            # Pass the exception through and let the caller handle it
             raise e
 
     def _table_name(self, index: int):
@@ -612,7 +610,7 @@ class CommonSensePredicateStatisticsDatabse():
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
         if predicate_name not in self.predicates:
@@ -650,8 +648,14 @@ class CommonSensePredicateStatisticsDatabse():
 
             select_items.append(f"arg_{i + 1}_id as '{arg_var}'")
 
-        query = f"SELECT COUNT(*) FROM data WHERE {' AND '.join(where_items)};"
-        return duckdb.sql(query).fetchone()[0], None  # type: ignore
+        select_items = 'DISTINCT(trace_id)' if return_trace_ids else 'COUNT(*)'
+        query = f"SELECT {select_items} FROM data WHERE {' AND '.join(where_items)};"
+
+        if return_trace_ids:
+            return chain.from_iterable(duckdb.sql(query).fetchall()), None  # type: ignore
+
+        else:
+            return duckdb.sql(query).fetchone()[0], None  # type: ignore
 
         # table_name = self._next_temp_table_name()
         # query = f"CREATE TEMP TABLE {table_name} AS SELECT {', '.join(select_items)} FROM data WHERE {' AND '.join(where_items)};"
@@ -660,7 +664,7 @@ class CommonSensePredicateStatisticsDatabse():
         # return table_name, used_variables
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
             and_args = [and_args]
@@ -725,7 +729,7 @@ class CommonSensePredicateStatisticsDatabse():
         duckdb.sql(cleanup_query)
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
             or_args = [or_args]
@@ -820,7 +824,7 @@ class CommonSensePredicateStatisticsDatabse():
         return table_name
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         try:
             inner_table_name, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
         except PredicateNotImplementedException as e:
@@ -850,7 +854,7 @@ class CommonSensePredicateStatisticsDatabse():
         return table_name, used_variables
 
 
-    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]) -> typing.Tuple[str, typing.Set[str]]:
+    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
@@ -862,19 +866,19 @@ class CommonSensePredicateStatisticsDatabse():
         predicate_rule = predicate.parseinfo.rule  # type: ignore
 
         if predicate_rule == "predicate":
-            return self._handle_predicate(predicate, mapping)
+            return self._handle_predicate(predicate, mapping, **kwargs)
 
         elif predicate_rule == "super_predicate":
-            return self._inner_filter(predicate["pred"], mapping)  # type: ignore
+            return self._inner_filter(predicate["pred"], mapping, **kwargs)  # type: ignore
 
         elif predicate_rule == "super_predicate_and":
-            return self._handle_and(predicate, mapping)
+            return self._handle_and(predicate, mapping, **kwargs)
 
         elif predicate_rule == "super_predicate_or":
-            return self._handle_or(predicate, mapping)
+            return self._handle_or(predicate, mapping, **kwargs)
 
         elif predicate_rule == "super_predicate_not":
-            return self._handle_not(predicate, mapping)
+            return self._handle_not(predicate, mapping, **kwargs)
 
         elif predicate_rule in ["super_predicate_exists", "super_predicate_forall", "function_comparison"]:
             raise PredicateNotImplementedException(predicate_rule)

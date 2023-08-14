@@ -54,6 +54,10 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     "desk": [
         "Desk|+03.14|00.00|-01.41"
     ],
+    "desk_shelf": [
+        "Shelf|+03.13|+00.63|-00.56",
+        "Shelf|+03.13|+00.63|-02.27"
+    ],
     "lamp": [
         "DeskLamp|+03.13|+00.79|-00.64"
     ],
@@ -107,6 +111,10 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     ],
     "side_table": [
         "SideTable|-01.52|00.00|+00.41"
+    ],
+    "sliding_door": [
+        "Window|+02.28|+00.93|-03.18",
+        "Window|-01.02|+00.93|-03.19"
     ],
     "watch": [
         "Watch|+03.07|+00.79|-00.45"
@@ -283,10 +291,8 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "blue_cube_block": ['CubeBlock|-00.02|+00.28|-02.83', 'CubeBlock|-00.24|+00.10|-02.83'],
         "blue_dodgeball": ['Dodgeball|-02.95|+01.29|-02.61'],
         "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
-        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
         "pink_dodgeball": ['Dodgeball|-02.97|+01.29|-02.28'],
-        "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
         "tan_cube_block": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
@@ -295,11 +301,9 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
     MEDIUM_OBJECTS_ROOM: {
         "blue_cube_block": ['CubeBlock|+00.50|+01.61|-02.91'],
         "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
-        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
         "red_dodgeball": ['Dodgeball|-02.60|+00.13|-02.18'],
         "red_pyramid_block": ['PyramidBlock|+00.93|+01.78|-02.89'],
-        "sliding_door": ["Window|+02.28|+00.93|-03.18", "Window|-01.02|+00.93|-03.19"],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "yellow_cube_block": ['CubeBlock|+00.70|+01.61|-02.91'],
@@ -309,14 +313,12 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "blue_dodgeball": ['Dodgeball|+00.19|+01.13|-02.80'],
         "blue_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.20'],
         "bottom_shelf": ['Shelf|+00.62|+01.01|-02.82'],
-        "desk_shelf": ["Shelf|+03.13|+00.63|-00.56", "Shelf|+03.13|+00.63|-02.27"],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
         "green_golfball": ['Golfball|+01.05|+01.04|-02.70'],  # Orange is 'Golfball|+00.96|+01.04|-02.70', white is 'Golfball|+01.14|+01.04|-02.70'
         "green_triangular_ramp": ['SmallSlide|-00.81|+00.14|-03.10'],  # tan/brown is 'SmallSlide|-01.31|+00.14|-03.10'
         "pink_dodgeball": ['Dodgeball|+00.70|+01.11|-02.80'],
         "red_dodgeball": ['Dodgeball|+00.44|+01.13|-02.80'],
         "red_pyramid_block": ['PyramidBlock|-02.96|+01.61|-02.44'],
-        "sliding_door": ["Window|+02.28|+00.93|-03.18", ],
         "tan_cube_block": ['CubeBlock|-02.96|+01.26|-01.72'],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
@@ -324,6 +326,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         "yellow_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.66'],
     }
 }
+
 
 OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM = {
     room: {specific_object: name}
@@ -342,7 +345,7 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
             OBJECTS_BY_ROOM_AND_TYPE[room_type][object_type] = object_list[:]
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", NORTH_WALL, EAST_WALL, SOUTH_WALL, WEST_WALL]
+NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch"]  # added the keys of the Pseudo Objects later
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
 COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "pink", "purple", "red", "tan", "white", "yellow"]
@@ -466,3 +469,5 @@ UNITY_PSEUDO_OBJECTS = {
 
         RUG: PseudoObject(RUG_ID, RUG_TYPE, RUG, position=np.array([-1.485, 0.05, -1.673]), extents=np.array([1.338, 0.05, 0.926]), rotation=np.array([0, 90, 0]), alternative_names=[RUG_ALT_NAME]),
 }
+
+NAMED_OBJECTS.extend(UNITY_PSEUDO_OBJECTS.keys())

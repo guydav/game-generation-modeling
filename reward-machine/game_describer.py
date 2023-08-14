@@ -36,7 +36,7 @@ class GameDescriber():
         self.engine = inflect.engine()
 
         self.preference_index =  None
-        self.external_forall_preferences = None
+        self.external_forall_preference_mappings = None
 
     def _indent(self, description: str, num_spaces: int = 4):
         '''
@@ -231,7 +231,8 @@ class GameDescriber():
 
             for sub_idx, sub_preference in enumerate(sub_preferences):
                 name = typing.cast(str, sub_preference["pref_name"])
-                self.external_forall_preferences.append(name) # type: ignore
+
+                self.external_forall_preference_mappings[name] = list(variable_type_mapping.keys()) # type: ignore
 
                 newline = '\n' if sub_idx > 0 else ''
                 description += f"{newline}Preference {self.preference_index + 1}: '{name}'"
@@ -433,7 +434,20 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: Unknown terminal rule '{rule}'")
+
+    def _external_scoring_description(self, preference_name, external_object_types):
+        '''
+        A helper function for describing the special scoring syntax in which variable
+        types are passed with colons after the preference name
+        '''
+        if external_object_types is None:
+            return ""
         
+        specified_variables = self.external_forall_preference_mappings[preference_name][:len(external_object_types)] # type: ignore
+        mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
+
+        return f", where {mapping_description}"
+
     def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]):
 
         if isinstance(scoring_ast, str):
@@ -487,35 +501,30 @@ class GameDescriber():
         
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied"
-            else:
-                return f"the number of times '{preference_name}' has been satisfied with specific variable types {self.engine.join(object_types)}"
-            
+            return f"the number of times '{preference_name}' has been satisfied" + external_scoring_desc
+          
         elif rule == "count_overlapping":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals"
-            else:
-                return f"the number of times '{preference_name}' has been satisfied in overlapping intervals with specific variable types {self.engine.join(object_types)}"
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            
+            return f"the number of times '{preference_name}' has been satisfied in overlapping intervals" + external_scoring_desc
 
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"whether '{preference_name}' has been satisfied at least once"
-            else:
-                return f"whether '{preference_name}' has been satisfied at least once with specific variable types {self.engine.join(object_types)}"
-            
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+   
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied with different objects"
-            else:
-                raise ValueError("Error: count_once_per_objects does not support specific object types (I think?)")
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+            
+            return f"the number of times '{preference_name}' has been satisfied with different objects" + external_scoring_desc 
             
         elif rule == "count_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            
             if object_types is None:
                 return f"the sum of all values measured during satisfactions of '{preference_name}'"
             else:
@@ -550,7 +559,7 @@ class GameDescriber():
         self._extract_game_info(game_ast, game_info)
 
         self.preference_index = 0
-        self.external_forall_preferences = []
+        self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
             print("=====================================GAME SETUP=====================================")

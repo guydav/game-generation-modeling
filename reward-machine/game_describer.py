@@ -19,6 +19,8 @@ PREDICATE_DESCRIPTIONS = {
     "agent_holds": "the agent is holding {0}",
     "between": "{1} is between {0} and {2}",
     "broken": "{0} is broken",
+    "equal_x_position": "{0} and {1} have the same x position",
+    "equal_y_position": "{0} and {1} have the same y position",
     "equal_z_position": "{0} and {1} have the same z position",
     "faces": "{0} is facing {1}",
     "game_over": "it is the last state in the game",
@@ -42,6 +44,9 @@ FUNCTION_DESCRIPTIONS = {
     "building_size": "the number of obects in building {0}",
     "distance": "the distance between {0} and {1}",
     "distance_side": "the distance between {2} and the {1} of {0}",
+    "x_position": "the x position of {0}",
+    "y_position": "the y position of {0}",
+    "z_position": "the z position of {0}",
 }
 
 class GameDescriber():

@@ -38,8 +38,8 @@ logging.getLogger('wandb.docker.auth').setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trace-names-hash', type=str, default=FULL_DATASET_TRACES_HASH)
-parser.add_argument('--map-elites-model-name', type=str)
-parser.add_argument('--map-elites-model-date-id', type=str)
+parser.add_argument('--map-elites-model-name', type=str, required=True)
+parser.add_argument('--map-elites-model-date-id', type=str, required=True)
 parser.add_argument('--map-elites-model-folder', type=str, default='samples')
 parser.add_argument('--relative-path', type=str, default='.')
 parser.add_argument('--base-trace-path', type=str, default=compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH)
@@ -181,6 +181,9 @@ class TraceGameEvaluator:
 
     def handle_single_game(self, key: KeyTypeAnnotation, print_results: bool = False, return_key: bool = True):
         sample = self.map_elites_model.population[key]
+
+        # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
+
         traces_by_key, expected_keys = self.trace_finder(sample)  # type: ignore
 
         all_traces = set()

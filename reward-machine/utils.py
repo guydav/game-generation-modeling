@@ -254,6 +254,7 @@ class BuildingPseudoObject(PseudoObject):
 def _object_location(object: typing.Union[AgentState, ObjectState, PseudoObject]) -> np.ndarray:
     return object.bbox_center if hasattr(object, 'bbox_center') and object.bbox_center is not None else object.position  # type: ignore
 
+
 def _object_corners(object: typing.Union[ObjectState, PseudoObject], y_pos: str = 'center'):
     '''
     Returns the coordinates of each of the 4 corners of the object's bounding box, with the

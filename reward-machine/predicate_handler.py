@@ -31,6 +31,10 @@ OBJECT_NAME_KEY = 'name'
 class PredicateHandlerPredicateNotImplemented(Exception):
     pass
 
+
+class PredicateHandlerVariableNotInMapping(Exception):
+    pass
+
 PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE = np.nan
 
 
@@ -60,6 +64,7 @@ class PredicateHandler:
     def __init__(self, domain: str):
         self.domain = domain
         self._new_game()
+        self.warned_objects = set()
 
     def _new_game(self):
         """
@@ -92,6 +97,12 @@ class PredicateHandler:
             pred_value = self._inner_call(predicate=predicate, state=state, mapping=mapping, force_evaluation=force_evaluation)
         except PredicateHandlerPredicateNotImplemented:
             pred_value = PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE
+        except PredicateHandlerVariableNotInMapping as e:
+            missing_var = e.args[0]
+            if missing_var not in self.warned_objects:
+                print(f"Warning: variable {missing_var} not in mapping with keys {mapping.keys()}")
+                self.warned_objects.add(missing_var)
+            pred_value = False
 
         # if this reached all the way up here, we return True, since something not implemented could be True
         if pred_value == PREDICATE_NOT_IMPLEMENTED_CACHE_VALUE:
@@ -106,6 +117,16 @@ class PredicateHandler:
         # the last if is to account for the case of a variable not already being in the mapping, if, e.g., it's quantified in a further down exists
         # e.g. in the expression "(forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))"
         # when we reach the (game-optional ...) node, the variable ?s isn't in the mapping yet, and will be added later
+        relevant_mapping = {}
+        for var in pred_variables:
+            if is_type_color_side_orientation(var):
+                relevant_mapping[var] = var
+            elif var in mapping:
+                relevant_mapping[var] = mapping[var]
+            elif not var.startswith('?'):
+                raise PredicateHandlerVariableNotInMapping(var)
+
+
         relevant_mapping = {var: var if is_type_color_side_orientation(var) else mapping[var]
                             for var in pred_variables
                             if is_type_color_side_orientation(var) or var in mapping}

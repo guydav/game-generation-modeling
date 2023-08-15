@@ -8,7 +8,7 @@ import typing
 
 from math import prod
 
-from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS
+from config import OBJECTS_BY_ROOM_AND_TYPE, NAMED_OBJECTS, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 from preference_handler import PreferenceHandler, PreferenceSatisfaction
 from predicate_handler import PredicateHandler
 from building_handler import BuildingHandler
@@ -178,6 +178,9 @@ class GameHandler():
 
         # Every named object will exist only once in the room, so we can just directly use index 0
         default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
+        # Update with specifically named objects that exist once in this domain
+        default_mapping.update({obj: SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name][obj][0] for obj in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name]
+                                if obj not in default_mapping and len(SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name][obj]) == 1})
         setup = self.evaluate_setup(self.setup, state, default_mapping)
         self.setup_met = self.setup_met or setup
         if not setup:

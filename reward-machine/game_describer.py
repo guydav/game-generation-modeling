@@ -219,8 +219,6 @@ class GameDescriber():
                 description += "\n- " + "\n- ".join(conserved_conditions)
 
             return description, None
-
-            # return self.engine.join(["(" + self._describe_setup(sub) + ")" for sub in setup_ast["or_args"]], conj="or") # type: ignore
         
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_ast["exists_vars"]["variables"]) # type: ignore
@@ -289,10 +287,6 @@ class GameDescriber():
 
             variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
 
-            # description += "Each of the following preferences are defined inside an external 'forall' statement. This means they each make use of the following variables and, in addition, record the specific objects used for each of those variables:"
-            # for var, types in variable_type_mapping.items():
-            #     description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
-
             sub_preferences = forall_pref["preferences"] # type: ignore
             if isinstance(sub_preferences, tatsu.ast.AST):
                 sub_preferences = [sub_preferences]
@@ -325,10 +319,13 @@ class GameDescriber():
             variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
             description += "\nThe variables required by this preference are:"
             
+            def group_func_external(key):
+                return ";".join(additional_variable_mapping[key])
+
             def group_func(key):
                 return ";".join(variable_type_mapping[key])
 
-            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func), key=group_func):
+            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
                 group = list(group)
                 description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
 
@@ -452,7 +449,6 @@ class GameDescriber():
                 comp_descriptions = [self._describe_predicate(arg) if isinstance(arg, tatsu.ast.AST) else arg for arg in comp_args]
                 description = f"{self.engine.join(comp_descriptions)} are all equal"
 
-                breakpoint()
                 return description
 
             comparison_operator = predicate["comp"]["comp_op"] # type: ignore

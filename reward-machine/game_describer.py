@@ -21,12 +21,15 @@ PREDICATE_DESCRIPTIONS = {
     "object_orientation": "{0} is oriented {1}",
     "on": "{1} is on {0}",
     "open": "{0} is open",
+    "opposite": "{0} is opposite {1}",
+    "same_type": "{0} is of the same type as {1}",
     "touch": "{0} touches {1}",
     "toggled_on": "{0} is toggled on",
 }
 
 FUNCTION_DESCRIPTIONS = {
-    "distance": "the distance between {0} and {1}"
+    "distance": "the distance between {0} and {1}",
+    "distance_side": "the distance between {2} and the {1} of {0}",
 }
 
 class GameDescriber():
@@ -103,19 +106,44 @@ class GameDescriber():
         Helper function to extract the name of the preference being scored, as well as any of the object types that have been
         passed to it using the ":" syntax
         '''
-        name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
-        preference_name = name_and_types["pref_name"]
 
-        if isinstance(name_and_types["object_types"], tatsu.ast.AST):
-            object_types = [name_and_types["object_types"]["type_name"]]  # type: ignore
+        if isinstance(scoring_expression, tatsu.ast.AST):
 
-        elif isinstance(name_and_types["object_types"], list):
-            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]  # type: ignore
+            if "name_and_types" in scoring_expression.keys():
 
+                name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
+                preference_name = name_and_types["pref_name"]
+
+                if isinstance(name_and_types["object_types"], tatsu.ast.AST):
+                    object_types = [name_and_types["object_types"]["type_name"]]  # type: ignore
+
+                elif isinstance(name_and_types["object_types"], list):
+                    object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]  # type: ignore
+
+                else:
+                    object_types = None
+
+                return str(preference_name), object_types
+            
+            else:
+                for key in scoring_expression.keys():
+                    if key != "parseinfo":
+                        preference_name, object_types = self._extract_name_and_types(scoring_expression[key])
+
+                        if preference_name is not None:
+                            return preference_name, object_types
+            
+        elif isinstance(scoring_expression, tuple) or isinstance(scoring_expression, list):
+            for item in scoring_expression:
+                preference_name, object_types = self._extract_name_and_types(item)
+
+                if preference_name is not None:
+                    return preference_name, object_types
+                
         else:
-            object_types = None
-
-        return str(preference_name), object_types
+            return None, None
+        
+        raise ValueError(f"No name found in scoring expression!")
 
     def _describe_setup(self, setup_ast: tatsu.ast.AST, condition_type: typing.Optional[str] = None):
         '''
@@ -369,7 +397,7 @@ class GameDescriber():
             if isinstance(comp_arg_1, tatsu.ast.AST):
                 comp_arg_1 = self._describe_predicate(comp_arg_1)
      
-            if isinstance(comp_arg_1, tatsu.ast.AST):
+            if isinstance(comp_arg_2, tatsu.ast.AST):
                 comp_arg_2 = self._describe_predicate(comp_arg_2)
 
             if comparison_operator == "=":
@@ -487,17 +515,39 @@ class GameDescriber():
             return f"negative {self._describe_scoring(scoring_ast['expr'])}" # type: ignore
         
         elif rule == "scoring_comparison":
-            raise NotImplementedError("Comparison scoring not yet implemented")
+            comparison_operator = scoring_ast["comp"]["op"] # type: ignore
+
+            expr_1 = self._describe_scoring(scoring_ast["comp"]["expr_1"]) # type: ignore
+            expr_2 = self._describe_scoring(scoring_ast["comp"]["expr_2"]) # type: ignore
+
+            if comparison_operator == "=":
+                return f"{expr_1} is equal to {expr_2}" # type: ignore
+            elif comparison_operator == "<":
+                return f"{expr_1} is less than {expr_2}" # type: ignore
+            elif comparison_operator == "<=":
+                return f"{expr_1} is less than or equal to {expr_2}" # type: ignore
+            elif comparison_operator == ">":
+                return f"{expr_1} is greater than {expr_2}" # type: ignore
+            elif comparison_operator == ">=":
+                return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
         
         elif rule == "preference_eval":
             return self._describe_scoring(scoring_ast["count_method"]) # type: ignore
         
         elif rule == "scoring_external_maximize":
-            # maximized_preferences = self._extract_scoring_preferences(scoring_expression)
-            raise NotImplementedError("External maximization not yet implemented")
+            # Extracts the name of the first predicate encountered -- fine since they all share an external forall
+            preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+
+            internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
+            return f"the maximum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
         
         elif rule == "scoring_external_minimize":
-            raise NotImplementedError("External minimization not yet implemented")
+            preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+
+            internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
+            return f"the minimum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
         
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore

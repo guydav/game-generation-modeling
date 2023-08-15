@@ -175,3 +175,13 @@ At the end of the game, the player gets 5 points for every object used to satisf
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
 {0}"""
+
+
+### Additional prompt considerations
+'''
+At the end of the game, the player's score is the sum of (the product of (3), (the number of times 'throwAttempt' has been satisfied is equal to 1), and (whether 'throwOverRamp' has been satisfied at least once)); 
+(the product of (2), (the number of times 'throwAttempt' has been satisfied is equal to 2), and (whether 'throwOverRamp' has been satisfied at least once)); 
+and (the product of (the number of times 'throwAttempt' has been satisfied is greater than or equal to 3) and (whether 'throwOverRamp' has been satisfied at least once))
+
+--> 3 points if you do it in one try, 2 points if you do it in two tries, 1 point if you do it in three or more tries
+'''

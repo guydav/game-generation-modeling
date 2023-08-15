@@ -12,22 +12,32 @@ DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
     "adjacent": "{0} is adjacent to {1}",
+    "adjacent_side_3_args": "{2} is adjacent to the {1} of {0}",
+    "adjacent_side_4_args": "the {1} of {0} is adjacent to the {3} of {2}",
     "agent_crouches": "the agent is crouching",
     "agent_holds": "the agent is holding {0}",
     "between": "{1} is between {0} and {2}",
+    "broken": "{0} is broken",
+    "equal_z_position": "{0} and {1} have the same z position",
     "faces": "{0} is facing {1}",
+    "game_over": "it is the last state in the game",
+    "game_start": "it is the first state in the game",
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
+    "is_setup_object": "{0} is used in the setup",
     "object_orientation": "{0} is oriented {1}",
     "on": "{1} is on {0}",
     "open": "{0} is open",
     "opposite": "{0} is opposite {1}",
+    "rug_color_under": "the color of the rug under {0} is {1}",
+    "same_object": "{0} is the same object as {1}",
     "same_type": "{0} is of the same type as {1}",
     "touch": "{0} touches {1}",
     "toggled_on": "{0} is toggled on",
 }
 
 FUNCTION_DESCRIPTIONS = {
+    "building_size": "the number of obects in building {0}",
     "distance": "the distance between {0} and {1}",
     "distance_side": "the distance between {2} and the {1} of {0}",
 }
@@ -356,6 +366,10 @@ class GameDescriber():
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
+            # Special case for predicates that can have a variable number of arguments
+            if name == "adjacent_side":
+                name += f"_{len(variables)}_args"
+
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
         elif predicate_rule == "super_predicate":
@@ -564,7 +578,8 @@ class GameDescriber():
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
-            return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+            # return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+            return f"min(1, the number of times '{preference_name}' has been satisfied{external_scoring_desc})"
    
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
@@ -582,11 +597,15 @@ class GameDescriber():
             
         elif rule == "count_unique_positions":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions"
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions" + external_scoring_desc
             
         elif rule == "count_same_positions":
-            raise NotImplementedError("count_same_positions not yet implemented")
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the maximum number of satisfactions of '{preference_name}' where stationary objects remain in the same place between satisfactions" + external_scoring_desc
         
         elif rule == "count_once_per_external_objects":
             raise NotImplementedError("count_once_per_external_objects not yet implemented")

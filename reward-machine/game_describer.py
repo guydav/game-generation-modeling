@@ -1,4 +1,5 @@
 import typing
+from itertools import groupby
 
 import inflect
 import tatsu, tatsu.ast, tatsu.grammars
@@ -30,6 +31,7 @@ PREDICATE_DESCRIPTIONS = {
     "open": "{0} is open",
     "opposite": "{0} is opposite {1}",
     "rug_color_under": "the color of the rug under {0} is {1}",
+    "same_color": "{0} is the same color as {1}",
     "same_object": "{0} is the same object as {1}",
     "same_type": "{0} is of the same type as {1}",
     "touch": "{0} touches {1}",
@@ -181,8 +183,6 @@ class GameDescriber():
             description = ""
             conditions_and_types = [self._describe_setup(sub, condition_type) for sub in setup_ast["and_args"]] # type: ignore
 
-            breakpoint()
-
             optional_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "optional"] # type: ignore
             if len(optional_conditions) > 0:
                 description += "the following must all be true for at least one time step:"
@@ -224,10 +224,17 @@ class GameDescriber():
         
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_ast["exists_vars"]["variables"]) # type: ignore
+       
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
 
             new_variables = []
-            for var, types in variable_type_mapping.items():
-                new_variables.append(f"an object {var} of type {self.engine.join(types, conj='or')}")
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                if len(group) == 1:
+                    new_variables.append(f"an object {group[0]} of type {self.engine.join(key.split(';'), conj='or')}")
+                else:
+                    new_variables.append(f"objects {self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}")
 
             text, condition_type = self._describe_setup(setup_ast["exists_args"], condition_type) # type: ignore
 
@@ -318,11 +325,16 @@ class GameDescriber():
             variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
             description += "\nThe variables required by this preference are:"
             
-            for var, types in additional_variable_mapping.items():
-                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
 
-            for var, types in variable_type_mapping.items():
-                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
 
             temporal_predicate_ast = body_ast["exists_args"]
 
@@ -410,9 +422,16 @@ class GameDescriber():
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"]) # type: ignore
 
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
+
             new_variables = []
-            for var, types in variable_type_mapping.items():
-                new_variables.append(f"an object {var} of type {self.engine.join(types, conj='or')}")
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                if len(group) == 1:
+                    new_variables.append(f"an object {group[0]} of type {self.engine.join(key.split(';'), conj='or')}")
+                else:
+                    new_variables.append(f"objects {self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}")
 
             return f"there exists {self.engine.join(new_variables)}, such that {self._describe_predicate(predicate['exists_args'])}" # type: ignore
 
@@ -427,7 +446,17 @@ class GameDescriber():
 
         elif predicate_rule == "function_comparison":
 
+            # Special case for multi-arg equality
+            if predicate["comp"].parseinfo.rule == "multiple_args_equal_comparison":
+                comp_args = [arg["arg"] for arg in predicate["comp"]["equal_comp_args"]] # type: ignore
+                comp_descriptions = [self._describe_predicate(arg) if isinstance(arg, tatsu.ast.AST) else arg for arg in comp_args]
+                description = f"{self.engine.join(comp_descriptions)} are all equal"
+
+                breakpoint()
+                return description
+
             comparison_operator = predicate["comp"]["comp_op"] # type: ignore
+
             comp_arg_1 = predicate["comp"]["arg_1"]["arg"] # type: ignore
             comp_arg_2 = predicate["comp"]["arg_2"]["arg"] # type: ignore
 
@@ -631,7 +660,12 @@ class GameDescriber():
             return f"the maximum number of satisfactions of '{preference_name}' where stationary objects remain in the same place between satisfactions" + external_scoring_desc
         
         elif rule == "count_once_per_external_objects":
-            raise NotImplementedError("count_once_per_external_objects not yet implemented")
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
         
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")

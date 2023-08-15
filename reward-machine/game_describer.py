@@ -179,14 +179,17 @@ class GameDescriber():
         elif rule == "setup_and":
 
             description = ""
-            conditions_and_types = [self._describe_setup(sub) for sub in setup_ast["and_args"]] # type: ignore
+            conditions_and_types = [self._describe_setup(sub, condition_type) for sub in setup_ast["and_args"]] # type: ignore
+
+            breakpoint()
 
             optional_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "optional"] # type: ignore
             if len(optional_conditions) > 0:
                 description += "the following must all be true for at least one time step:"
                 description += "\n- " + "\n- ".join(optional_conditions)
 
-            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved"] # type: ignore
+            # We'll default to calling conditions with ambiguous types "conserved"
+            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved" or condition_type is None] # type: ignore
             if len(conserved_conditions) > 0:
                 if len(optional_conditions) > 0:
                     description += "\n\nand in addition, "
@@ -197,7 +200,27 @@ class GameDescriber():
             return description, None
 
         elif rule == "setup_or":
-            return self.engine.join(["(" + self._describe_setup(sub) + ")" for sub in setup_ast["or_args"]], conj="or") # type: ignore
+
+            description = ""
+            conditions_and_types = [self._describe_setup(sub, condition_type) for sub in setup_ast["or_args"]] # type: ignore
+
+            optional_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "optional"] # type: ignore
+            if len(optional_conditions) > 0:
+                description += "at least one of the following must be true for at least one time step:"
+                description += "\n- " + "\n- ".join(optional_conditions)
+
+            # We'll default to calling conditions with ambiguous types "conserved"
+            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved" or condition_type is None] # type: ignore
+            if len(conserved_conditions) > 0:
+                if len(optional_conditions) > 0:
+                    description += "\n\nand in addition, "
+
+                description += "at least one of the following must be true for every time step:"
+                description += "\n- " + "\n- ".join(conserved_conditions)
+
+            return description, None
+
+            # return self.engine.join(["(" + self._describe_setup(sub) + ")" for sub in setup_ast["or_args"]], conj="or") # type: ignore
         
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_ast["exists_vars"]["variables"]) # type: ignore
@@ -490,7 +513,7 @@ class GameDescriber():
 
         return f", where {mapping_description}"
 
-    def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]):
+    def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]) -> str:
 
         if isinstance(scoring_ast, str):
             return scoring_ast
@@ -620,7 +643,7 @@ class GameDescriber():
         '''
 
         if isinstance(game_text_or_ast, str):
-            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text))
+            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text_or_ast))
         else:
             game_ast = game_text_or_ast
         
@@ -682,39 +705,75 @@ TEST_GAME = """(define (game 61267978e96853d3b974ca53-23) (:domain medium-object
 ))
 """
 
-TEST_GAME_2 = """(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects-room-v1)  ; 28
+TEST_GAME_2 = """(define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
 (:setup (and
-    (forall (?c - cube_block) (game-conserved (on rug ?c)))
+    (exists (?b - building) (and
+        (game-conserved (= (building_size ?b) 6))
+        (forall (?l - block) (or
+            (game-conserved (and
+                    (in ?b ?l)
+                    (not (exists (?l2 - block) (and
+                        (in ?b ?l2)
+                        (not (same_object ?l ?l2))
+                        (same_type ?l ?l2)
+                    )))
+            ))
+            (game-optional (not (exists (?s - shelf) (on ?s ?l))))
+        ))
+    ))
 ))
 (:constraints (and
-    (preference thrownBallReachesEnd
-            (exists (?d - dodgeball)
-                (then
-                    (once (and (agent_holds ?d) (not (on rug agent))))
-                    (hold-while
-                        (and
-                            (not (agent_holds ?d))
-                            (in_motion ?d)
-                            (not (exists (?b - cube_block) (touch ?d ?b)))
-                        )
-                        (above rug ?d)
-                    )
-                    (once (or (touch ?d bed) (touch ?d west_wall)))
-                )
-            )
+    (preference gameBlockFound (exists (?l - block)
+        (then
+            (once (game_start))
+            (hold (not (exists (?b - building) (and (in ?b ?l) (is_setup_object ?b)))))
+            (once (agent_holds ?l))
         )
-))
-(:terminal (or
-    (>= (total-time) 180)
-    (>= (total-score) 50)
+    ))
+    (preference towerFallsWhileBuilding (exists (?b - building ?l1 ?l2 - block)
+        (then
+            (once (and (in ?b ?l1) (agent_holds ?l2) (not (is_setup_object ?b))))
+            (hold-while
+                (and
+                    (not (agent_holds ?l1))
+                    (in ?b ?l1)
+                    (or
+                        (agent_holds ?l2)
+                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
+                    )
+                )
+                (touch ?l1 ?l2)
+            )
+            (hold (and
+                (in_motion ?l1)
+                (not (agent_holds ?l1))
+            ))
+            (once (not (in_motion ?l1)))
+        )
+    ))
+    (preference matchingBuildingBuilt (exists (?b1 ?b2 - building)
+        (at-end (and
+            (is_setup_object ?b1)
+            (not (is_setup_object ?b2))
+            (forall (?l1 ?l2 - block) (or
+                (not (in ?b1 ?l1))
+                (not (in ?b1 ?l2))
+                (not (on ?l1 ?l2))
+                (exists (?l3 ?l4 - block) (and
+                    (in ?b2 ?l3)
+                    (in ?b2 ?l4)
+                    (on ?l3 ?l4)
+                    (same_type ?l1 ?l3)
+                    (same_type ?l2 ?l4)
+                ))
+            ))
+        ))
+    ))
 ))
 (:scoring (+
-    (* 10 (count thrownBallReachesEnd))
-    (* (- 5) (count thrownBallHitsBlock:red))
-    (* (- 3) (count thrownBallHitsBlock:green))
-    (* (- 3) (count thrownBallHitsBlock:pink))
-    (- (count thrownBallHitsBlock:yellow))
-    (- (count thrownBallHitsBlock:purple))
+    (* 5 (count-once-per-objects gameBlockFound))
+    (* 100 (count-once matchingBuildingBuilt))
+    (* (-10) (count towerFallsWhileBuilding))
 )))"""
 
 if __name__ == '__main__':
@@ -724,6 +783,8 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber()
+
+    # game_describer.describe(TEST_GAME_2)
 
     for game in game_asts:
         game_describer.describe(game)

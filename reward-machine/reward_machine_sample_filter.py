@@ -90,7 +90,8 @@ class TraceFinderASTParser(ast_parser.ASTParser):
             self.expected_keys = set()
             self.traces_by_preference_or_section = {}
             self.preferences_or_sections_with_implemented_predicates = set()
-            # self.predicate_strings_by_preference_or_section = defaultdict(set)
+            self.predicate_strings_by_preference_or_section = defaultdict(set)
+            self.not_implemented_predicate_counts = defaultdict(int)
 
         retval = super().__call__(ast, **kwargs)
 
@@ -111,7 +112,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         if ast.parseinfo.rule == 'predicate':  # type: ignore
             context_variables = kwargs['local_context']['mapping'][VARIABLES_CONTEXT_KEY]
             predicate_key = kwargs['local_context']['current_preference_name'] if 'current_preference_name' in kwargs['local_context'] else kwargs[SECTION_CONTEXT_KEY]
-            # self.predicate_strings_by_preference_or_section[predicate_key].add(ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY]))
+            self.predicate_strings_by_preference_or_section[predicate_key].add(ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY]))
 
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
@@ -125,8 +126,8 @@ class TraceFinderASTParser(ast_parser.ASTParser):
                 self.preferences_or_sections_with_implemented_predicates.add(predicate_key)
 
             except compile_predicate_statistics_database.PredicateNotImplementedException:
-                # self.not_implemented_predicate_counts[ast.pred.parseinfo.rule.replace('predicate_', '')] += 1
-                pass
+                self.not_implemented_predicate_counts[ast.pred.parseinfo.rule.replace('predicate_', '')] += 1
+                # pass
 
         else:
             for key in ast:

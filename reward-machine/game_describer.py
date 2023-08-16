@@ -1,4 +1,5 @@
 import typing
+from itertools import groupby
 
 import inflect
 import tatsu, tatsu.ast, tatsu.grammars
@@ -12,24 +13,40 @@ DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
 PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
     "adjacent": "{0} is adjacent to {1}",
+    "adjacent_side_3_args": "{2} is adjacent to the {1} of {0}",
+    "adjacent_side_4_args": "the {1} of {0} is adjacent to the {3} of {2}",
     "agent_crouches": "the agent is crouching",
     "agent_holds": "the agent is holding {0}",
     "between": "{1} is between {0} and {2}",
+    "broken": "{0} is broken",
+    "equal_x_position": "{0} and {1} have the same x position",
+    "equal_y_position": "{0} and {1} have the same y position",
+    "equal_z_position": "{0} and {1} have the same z position",
     "faces": "{0} is facing {1}",
+    "game_over": "it is the last state in the game",
+    "game_start": "it is the first state in the game",
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
+    "is_setup_object": "{0} is used in the setup",
     "object_orientation": "{0} is oriented {1}",
     "on": "{1} is on {0}",
     "open": "{0} is open",
     "opposite": "{0} is opposite {1}",
+    "rug_color_under": "the color of the rug under {0} is {1}",
+    "same_color": "{0} is the same color as {1}",
+    "same_object": "{0} is the same object as {1}",
     "same_type": "{0} is of the same type as {1}",
     "touch": "{0} touches {1}",
     "toggled_on": "{0} is toggled on",
 }
 
 FUNCTION_DESCRIPTIONS = {
+    "building_size": "the number of obects in building {0}",
     "distance": "the distance between {0} and {1}",
     "distance_side": "the distance between {2} and the {1} of {0}",
+    "x_position": "the x position of {0}",
+    "y_position": "the y position of {0}",
+    "z_position": "the z position of {0}",
 }
 
 class GameDescriber():
@@ -169,14 +186,15 @@ class GameDescriber():
         elif rule == "setup_and":
 
             description = ""
-            conditions_and_types = [self._describe_setup(sub) for sub in setup_ast["and_args"]] # type: ignore
+            conditions_and_types = [self._describe_setup(sub, condition_type) for sub in setup_ast["and_args"]] # type: ignore
 
             optional_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "optional"] # type: ignore
             if len(optional_conditions) > 0:
                 description += "the following must all be true for at least one time step:"
                 description += "\n- " + "\n- ".join(optional_conditions)
 
-            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved"] # type: ignore
+            # We'll default to calling conditions with ambiguous types "conserved"
+            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved" or condition_type is None] # type: ignore
             if len(conserved_conditions) > 0:
                 if len(optional_conditions) > 0:
                     description += "\n\nand in addition, "
@@ -187,14 +205,39 @@ class GameDescriber():
             return description, None
 
         elif rule == "setup_or":
-            return self.engine.join(["(" + self._describe_setup(sub) + ")" for sub in setup_ast["or_args"]], conj="or") # type: ignore
+
+            description = ""
+            conditions_and_types = [self._describe_setup(sub, condition_type) for sub in setup_ast["or_args"]] # type: ignore
+
+            optional_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "optional"] # type: ignore
+            if len(optional_conditions) > 0:
+                description += "at least one of the following must be true for at least one time step:"
+                description += "\n- " + "\n- ".join(optional_conditions)
+
+            # We'll default to calling conditions with ambiguous types "conserved"
+            conserved_conditions = [condition for condition, condition_type in conditions_and_types if condition_type == "conserved" or condition_type is None] # type: ignore
+            if len(conserved_conditions) > 0:
+                if len(optional_conditions) > 0:
+                    description += "\n\nand in addition, "
+
+                description += "at least one of the following must be true for every time step:"
+                description += "\n- " + "\n- ".join(conserved_conditions)
+
+            return description, None
         
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_ast["exists_vars"]["variables"]) # type: ignore
+       
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
 
             new_variables = []
-            for var, types in variable_type_mapping.items():
-                new_variables.append(f"an object {var} of type {self.engine.join(types, conj='or')}")
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                if len(group) == 1:
+                    new_variables.append(f"an object {group[0]} of type {self.engine.join(key.split(';'), conj='or')}")
+                else:
+                    new_variables.append(f"objects {self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}")
 
             text, condition_type = self._describe_setup(setup_ast["exists_args"], condition_type) # type: ignore
 
@@ -249,10 +292,6 @@ class GameDescriber():
 
             variable_type_mapping = extract_variable_type_mapping(forall_vars["variables"])  # type: ignore
 
-            # description += "Each of the following preferences are defined inside an external 'forall' statement. This means they each make use of the following variables and, in addition, record the specific objects used for each of those variables:"
-            # for var, types in variable_type_mapping.items():
-            #     description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
-
             sub_preferences = forall_pref["preferences"] # type: ignore
             if isinstance(sub_preferences, tatsu.ast.AST):
                 sub_preferences = [sub_preferences]
@@ -285,11 +324,19 @@ class GameDescriber():
             variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
             description += "\nThe variables required by this preference are:"
             
-            for var, types in additional_variable_mapping.items():
-                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+            def group_func_external(key):
+                return ";".join(additional_variable_mapping[key])
 
-            for var, types in variable_type_mapping.items():
-                description += f"\n- {var}: of type {self.engine.join(types, conj='or')}"
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
+
+            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
+                group = list(group)
+                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
 
             temporal_predicate_ast = body_ast["exists_args"]
 
@@ -356,6 +403,10 @@ class GameDescriber():
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
+            # Special case for predicates that can have a variable number of arguments
+            if name == "adjacent_side":
+                name += f"_{len(variables)}_args"
+
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
         elif predicate_rule == "super_predicate":
@@ -373,9 +424,16 @@ class GameDescriber():
         elif predicate_rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"]) # type: ignore
 
+            def group_func(key):
+                return ";".join(variable_type_mapping[key])
+
             new_variables = []
-            for var, types in variable_type_mapping.items():
-                new_variables.append(f"an object {var} of type {self.engine.join(types, conj='or')}")
+            for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
+                group = list(group)
+                if len(group) == 1:
+                    new_variables.append(f"an object {group[0]} of type {self.engine.join(key.split(';'), conj='or')}")
+                else:
+                    new_variables.append(f"objects {self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}")
 
             return f"there exists {self.engine.join(new_variables)}, such that {self._describe_predicate(predicate['exists_args'])}" # type: ignore
 
@@ -390,7 +448,16 @@ class GameDescriber():
 
         elif predicate_rule == "function_comparison":
 
+            # Special case for multi-arg equality
+            if predicate["comp"].parseinfo.rule == "multiple_args_equal_comparison":
+                comp_args = [arg["arg"] for arg in predicate["comp"]["equal_comp_args"]] # type: ignore
+                comp_descriptions = [self._describe_predicate(arg) if isinstance(arg, tatsu.ast.AST) else arg for arg in comp_args]
+                description = f"{self.engine.join(comp_descriptions)} are all equal"
+
+                return description
+
             comparison_operator = predicate["comp"]["comp_op"] # type: ignore
+
             comp_arg_1 = predicate["comp"]["arg_1"]["arg"] # type: ignore
             comp_arg_2 = predicate["comp"]["arg_2"]["arg"] # type: ignore
 
@@ -476,7 +543,7 @@ class GameDescriber():
 
         return f", where {mapping_description}"
 
-    def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]):
+    def _describe_scoring(self, scoring_ast: typing.Optional[tatsu.ast.AST]) -> str:
 
         if isinstance(scoring_ast, str):
             return scoring_ast
@@ -564,7 +631,8 @@ class GameDescriber():
         elif rule == "count_once":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
-            return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+            # return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
+            return f"min(1, the number of times '{preference_name}' has been satisfied{external_scoring_desc})"
    
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
@@ -582,14 +650,23 @@ class GameDescriber():
             
         elif rule == "count_unique_positions":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            if object_types is None:
-                return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions"
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions" + external_scoring_desc
             
         elif rule == "count_same_positions":
-            raise NotImplementedError("count_same_positions not yet implemented")
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the maximum number of satisfactions of '{preference_name}' where stationary objects remain in the same place between satisfactions" + external_scoring_desc
         
         elif rule == "count_once_per_external_objects":
-            raise NotImplementedError("count_once_per_external_objects not yet implemented")
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+
+            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
         
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
@@ -601,7 +678,7 @@ class GameDescriber():
         '''
 
         if isinstance(game_text_or_ast, str):
-            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text))
+            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text_or_ast))
         else:
             game_ast = game_text_or_ast
         
@@ -663,39 +740,75 @@ TEST_GAME = """(define (game 61267978e96853d3b974ca53-23) (:domain medium-object
 ))
 """
 
-TEST_GAME_2 = """(define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects-room-v1)  ; 28
+TEST_GAME_2 = """(define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
 (:setup (and
-    (forall (?c - cube_block) (game-conserved (on rug ?c)))
+    (exists (?b - building) (and
+        (game-conserved (= (building_size ?b) 6))
+        (forall (?l - block) (or
+            (game-conserved (and
+                    (in ?b ?l)
+                    (not (exists (?l2 - block) (and
+                        (in ?b ?l2)
+                        (not (same_object ?l ?l2))
+                        (same_type ?l ?l2)
+                    )))
+            ))
+            (game-optional (not (exists (?s - shelf) (on ?s ?l))))
+        ))
+    ))
 ))
 (:constraints (and
-    (preference thrownBallReachesEnd
-            (exists (?d - dodgeball)
-                (then
-                    (once (and (agent_holds ?d) (not (on rug agent))))
-                    (hold-while
-                        (and
-                            (not (agent_holds ?d))
-                            (in_motion ?d)
-                            (not (exists (?b - cube_block) (touch ?d ?b)))
-                        )
-                        (above rug ?d)
-                    )
-                    (once (or (touch ?d bed) (touch ?d west_wall)))
-                )
-            )
+    (preference gameBlockFound (exists (?l - block)
+        (then
+            (once (game_start))
+            (hold (not (exists (?b - building) (and (in ?b ?l) (is_setup_object ?b)))))
+            (once (agent_holds ?l))
         )
-))
-(:terminal (or
-    (>= (total-time) 180)
-    (>= (total-score) 50)
+    ))
+    (preference towerFallsWhileBuilding (exists (?b - building ?l1 ?l2 - block)
+        (then
+            (once (and (in ?b ?l1) (agent_holds ?l2) (not (is_setup_object ?b))))
+            (hold-while
+                (and
+                    (not (agent_holds ?l1))
+                    (in ?b ?l1)
+                    (or
+                        (agent_holds ?l2)
+                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
+                    )
+                )
+                (touch ?l1 ?l2)
+            )
+            (hold (and
+                (in_motion ?l1)
+                (not (agent_holds ?l1))
+            ))
+            (once (not (in_motion ?l1)))
+        )
+    ))
+    (preference matchingBuildingBuilt (exists (?b1 ?b2 - building)
+        (at-end (and
+            (is_setup_object ?b1)
+            (not (is_setup_object ?b2))
+            (forall (?l1 ?l2 - block) (or
+                (not (in ?b1 ?l1))
+                (not (in ?b1 ?l2))
+                (not (on ?l1 ?l2))
+                (exists (?l3 ?l4 - block) (and
+                    (in ?b2 ?l3)
+                    (in ?b2 ?l4)
+                    (on ?l3 ?l4)
+                    (same_type ?l1 ?l3)
+                    (same_type ?l2 ?l4)
+                ))
+            ))
+        ))
+    ))
 ))
 (:scoring (+
-    (* 10 (count thrownBallReachesEnd))
-    (* (- 5) (count thrownBallHitsBlock:red))
-    (* (- 3) (count thrownBallHitsBlock:green))
-    (* (- 3) (count thrownBallHitsBlock:pink))
-    (- (count thrownBallHitsBlock:yellow))
-    (- (count thrownBallHitsBlock:purple))
+    (* 5 (count-once-per-objects gameBlockFound))
+    (* 100 (count-once matchingBuildingBuilt))
+    (* (-10) (count towerFallsWhileBuilding))
 )))"""
 
 if __name__ == '__main__':
@@ -705,6 +818,8 @@ if __name__ == '__main__':
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber()
+
+    # game_describer.describe(TEST_GAME_2)
 
     for game in game_asts:
         game_describer.describe(game)

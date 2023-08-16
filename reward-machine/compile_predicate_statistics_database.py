@@ -42,6 +42,8 @@ from predicate_handler import PREDICATE_LIBRARY_RAW
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+logging.getLogger('wandb').setLevel(logging.WARNING)
+
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     ("above", 2),
@@ -206,14 +208,28 @@ class CommonSensePredicateStatisticsDatabse():
             trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         filename_format_to_use = no_intervals_cache_filename_format if use_no_intervals else cache_filename_format
-        stats_filename = os.path.join(cache_dir, filename_format_to_use.format(traces_hash=trace_names_hash))
-        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
-        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
-        open_method = gzip.open if stats_filename.endswith('.gz') else open
+        self.stats_filename = os.path.join(cache_dir, filename_format_to_use.format(traces_hash=trace_names_hash))
+        self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
+        self.in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
 
-        if os.path.exists(stats_filename) and not overwrite:
+        self._init_data_and_database(overwrite=overwrite)
+
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        if 'data' in state: del state['data']
+        if 'trace_lengths_and_domains_df' in state: del state['trace_lengths_and_domains_df']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self._init_data_and_database(False)
+
+    def _init_data_and_database(self, overwrite: bool = False):
+        open_method = gzip.open if self.stats_filename.endswith('.gz') else open
+
+        if os.path.exists(self.stats_filename) and not overwrite:
             self.data = pd.read_pickle(stats_filename)  # type: ignore
-            with open_method(trace_lengths_and_domains_filename, 'rb') as f:
+            with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
                 self.trace_lengths_and_domains = pickle.load(f)
 
         else:
@@ -294,7 +310,7 @@ class CommonSensePredicateStatisticsDatabse():
         if table_query is not None:
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
-                # logger.info('Skipping creating tables because they already exist')
+                logger.info('Skipping creating tables because they already exist')
                 return
 
         logger.info("Creating DuckDB table...")

@@ -38,8 +38,11 @@ logging.getLogger('wandb.docker.auth').setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trace-names-hash', type=str, default=FULL_DATASET_TRACES_HASH)
-parser.add_argument('--map-elites-model-name', type=str, required=True)
-parser.add_argument('--map-elites-model-date-id', type=str, required=True)
+group = parser.add_mutually_exclusive_group(required=True)
+map_elites_subgroup = group.add_argument_group('map-elites')
+map_elites_subgroup.add_argument('--map-elites-model-name', type=str)
+map_elites_subgroup.add_argument('--map-elites-model-date-id', type=str)
+group.add_argument('--run-from-real-games', action='store_true')
 parser.add_argument('--map-elites-model-folder', type=str, default='samples')
 parser.add_argument('--relative-path', type=str, default='.')
 parser.add_argument('--base-trace-path', type=str, default=compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH)
@@ -55,6 +58,9 @@ parser.add_argument('--chunksize', type=int, default=1)
 parser.add_argument('--copy-traces-to-tmp', action='store_true')
 DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
+DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
+parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
+parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')
 
 FULL_DATASET_TRACES_HASH = '028b3733'
 
@@ -79,7 +85,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
-            kwargs['local_context'] = {'mapping': {}}
+            kwargs['local_context'] = {'mapping': {VARIABLES_CONTEXT_KEY: {}}}
             kwargs['global_context'] = {}
             self.expected_keys = set()
             self.traces_by_preference_or_section = {}
@@ -136,20 +142,23 @@ MAX_TRACE_CACHE_SIZE = 512
 class TraceGameEvaluator:
     base_trace_path: str
     chunksize: int
-    map_elites_model: MAPElitesSampler
     max_traces_per_game: typing.Optional[int]
     n_workers: int
+    population: typing.Dict[typing.Union[KeyTypeAnnotation, int], ASTType]
     stop_after_count: int
     trace_finder: TraceFinderASTParser
     use_trace_intersection: bool
 
-    def __init__(self, trace_finder: TraceFinderASTParser, map_elites_model: MAPElitesSampler,
+    def __init__(self, trace_finder: TraceFinderASTParser, population: typing.Union[typing.Dict[KeyTypeAnnotation, ASTType], typing.List[ASTType]],
                  use_trace_intersection: bool = False, stop_after_count: int = DEFAULT_STOP_AFTER_COUNT,
                  max_traces_per_game: typing.Optional[int] = None,
                  base_trace_path: str = compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH,
                  max_cache_size: int = MAX_TRACE_CACHE_SIZE, tqdm: bool = False, n_workers: int = 1, chunksize: int = 1):
         self.trace_finder = trace_finder
-        self.map_elites_model = map_elites_model
+        if isinstance(population, list):
+            population = {idx: sample for idx, sample in enumerate(population)}
+
+        self.population = population
         self.stop_after_count = stop_after_count
         self.use_trace_intersection = use_trace_intersection
         self.max_traces_per_game = max_traces_per_game
@@ -179,8 +188,8 @@ class TraceGameEvaluator:
         for idx, event in enumerate(trace):
             yield (event, idx == len(trace) - 1)
 
-    def handle_single_game(self, key: KeyTypeAnnotation, print_results: bool = False, return_key: bool = True):
-        sample = self.map_elites_model.population[key]
+    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
+        sample = self.population[key]
 
         # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
 
@@ -258,7 +267,7 @@ class TraceGameEvaluator:
 
     def __call__(self, key: typing.Optional[KeyTypeAnnotation], max_keys: typing.Optional[int] = None):
         if key is not None:
-            if key not in self.map_elites_model.population:
+            if key not in self.population:
                 logger.info(f'Key {key} not found')
                 return
 
@@ -266,7 +275,7 @@ class TraceGameEvaluator:
             self.handle_single_game(key, print_results=True)
         else:
             result_by_key = {}
-            key_iter = self.map_elites_model.population.keys()
+            key_iter = self.population.keys()
 
             if max_keys is not None:
                 key_iter = list(key_iter)[:max_keys]
@@ -278,7 +287,7 @@ class TraceGameEvaluator:
                 with multiprocessing.Pool(self.n_workers) as p:
                     logger.info('Pool started')
 
-                    for key, min_count in tqdm(p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize), desc='MAP-Elites Population', total=len(self.map_elites_model.population)):
+                    for key, min_count in tqdm(p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize), desc='MAP-Elites Population', total=len(self.population)):
                         result_by_key[key] = min_count
 
             else:
@@ -305,9 +314,21 @@ def main(args: argparse.Namespace):
             logger.info('Copied traces to /tmp/participant_traces')
             args.base_trace_path = '/tmp/participant_traces'
 
+        if args.run_from_real_games:
+            logger.info('Running from real games')
+            grammar = open(args.grammar_file).read()
+            grammar_parser = tatsu.compile(grammar)
+            population = list(cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, relative_path='.'))  # type: ignore
+
+        else:
+            logger.info(f'Running from MAP-Elites model | {args.map_elites_model_date_id} | {args.map_elites_model_name}')
+            model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
+            population = model.population
+
         trace_finder = TraceFinderASTParser(args.trace_names_hash)
-        model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
-        trace_evaluator = TraceGameEvaluator(trace_finder, model, use_trace_intersection=args.use_trace_intersection,
+
+        trace_evaluator = TraceGameEvaluator(trace_finder, population, # type: ignore
+                                             use_trace_intersection=args.use_trace_intersection,
                                             stop_after_count=args.stop_after_count, max_traces_per_game=args.max_traces_per_game,
                                             base_trace_path=args.base_trace_path, tqdm=args.tqdm,
                                             n_workers=args.n_workers, chunksize=args.chunksize)

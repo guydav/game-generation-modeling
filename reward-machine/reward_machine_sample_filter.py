@@ -25,7 +25,7 @@ sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix()
 import ast_printer
 import ast_parser
 from ast_utils import simplified_context_deepcopy
-from fitness_energy_utils import load_data
+from fitness_energy_utils import load_data, save_data
 from ast_parser import SECTION_CONTEXT_KEY, VARIABLES_CONTEXT_KEY
 from evolutionary_sampler import *
 
@@ -38,11 +38,9 @@ logging.getLogger('wandb.docker.auth').setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trace-names-hash', type=str, default=FULL_DATASET_TRACES_HASH)
-group = parser.add_mutually_exclusive_group(required=True)
-map_elites_subgroup = group.add_argument_group('map-elites')
-map_elites_subgroup.add_argument('--map-elites-model-name', type=str)
-map_elites_subgroup.add_argument('--map-elites-model-date-id', type=str)
-group.add_argument('--run-from-real-games', action='store_true')
+parser.add_argument('--map-elites-model-name', type=str, default=None)
+parser.add_argument('--map-elites-model-date-id', type=str, default=None)
+parser.add_argument('--run-from-real-games', action='store_true')
 parser.add_argument('--map-elites-model-folder', type=str, default='samples')
 parser.add_argument('--relative-path', type=str, default='.')
 parser.add_argument('--base-trace-path', type=str, default=compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH)
@@ -111,19 +109,20 @@ class TraceFinderASTParser(ast_parser.ASTParser):
 
         if ast.parseinfo.rule == 'predicate':  # type: ignore
             context_variables = kwargs['local_context']['mapping'][VARIABLES_CONTEXT_KEY]
-            predicate_key = kwargs['local_context']['current_preference_name'] if 'current_preference_name' in kwargs['local_context'] else kwargs[SECTION_CONTEXT_KEY]
-            self.predicate_strings_by_preference_or_section[predicate_key].add(ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY]))
+            secion_or_preference_key = kwargs['local_context']['current_preference_name'] if 'current_preference_name' in kwargs['local_context'] else kwargs[SECTION_CONTEXT_KEY]
+            predicate_string = ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY])
+            self.predicate_strings_by_preference_or_section[secion_or_preference_key].add(predicate_string)
 
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 trace_ids = self.predicate_data_estimator.filter(ast, mapping, return_trace_ids=True)
 
-                if predicate_key not in self.traces_by_preference_or_section:
-                    self.traces_by_preference_or_section[predicate_key] = set(trace_ids)
+                if secion_or_preference_key not in self.traces_by_preference_or_section:
+                    self.traces_by_preference_or_section[secion_or_preference_key] = set(trace_ids)
                 else:
-                    self.traces_by_preference_or_section[predicate_key].intersection_update(trace_ids)
+                    self.traces_by_preference_or_section[secion_or_preference_key].intersection_update(trace_ids)
 
-                self.preferences_or_sections_with_implemented_predicates.add(predicate_key)
+                self.preferences_or_sections_with_implemented_predicates.add(secion_or_preference_key)
 
             except compile_predicate_statistics_database.PredicateNotImplementedException:
                 self.not_implemented_predicate_counts[ast.pred.parseinfo.rule.replace('predicate_', '')] += 1
@@ -323,6 +322,8 @@ class TraceGameEvaluator:
             for count in sorted(result_counts.keys()):
                 print(f'    - {count}: {result_counts[count]}')
 
+            return result_by_key
+
 
 def main(args: argparse.Namespace):
     multiprocessing.set_start_method(args.parallel_start_method, force=True)
@@ -341,6 +342,8 @@ def main(args: argparse.Namespace):
             population = list(cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, relative_path='.'))  # type: ignore
 
         else:
+            if args.map_elites_model_date_id is None or args.map_elites_model_name is None:
+                raise ValueError('Must provide map elites model date id and name if not running from real games')
             logger.info(f'Running from MAP-Elites model | {args.map_elites_model_date_id} | {args.map_elites_model_name}')
             model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
             population = model.population
@@ -357,7 +360,11 @@ def main(args: argparse.Namespace):
         if args.single_key is not None:
             key = tuple(map(int, args.single_key.replace('(', '').replace(')', '').split(',')))
 
-        trace_evaluator(key, args.max_keys)
+        results = trace_evaluator(key, args.max_keys)
+
+        if results is not None:
+            name = 'real_games' if args.run_from_real_games else f'{args.map_elites_model_name}_{args.map_elites_model_date_id}'
+            save_data(results, folder=args.map_elites_model_folder, name=f'trace_filter_results_{name}', relative_path=args.relative_path)
 
     finally:
         if args.copy_traces_to_tmp:

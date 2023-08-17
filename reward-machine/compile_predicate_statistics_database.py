@@ -296,12 +296,12 @@ class CommonSensePredicateStatisticsDatabse():
 
         self._create_databases()
 
-    def _cache_evict_callback(self, cache_key, cache_value):
-        # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
-        table_name, _ = cache_value
-        duckdb.sql(f"DROP TABLE {table_name}")
-        table_index = int(table_name.replace(self.temp_table_prefix, ''))
-        heapq.heappush(self.available_table_indices, table_index)
+    # def _cache_evict_callback(self, cache_key, cache_value):
+    #     # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
+    #     table_name, _ = cache_value
+    #     duckdb.sql(f"DROP TABLE {table_name}")
+    #     table_index = int(table_name.replace(self.temp_table_prefix, ''))
+    #     heapq.heappush(self.available_table_indices, table_index)
 
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
@@ -309,6 +309,8 @@ class CommonSensePredicateStatisticsDatabse():
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
                 # logger.info('Skipping creating tables because they already exist')
+                self.domains = set(chain.from_iterable(duckdb.sql("SELECT unnest(enum_range(NULL::domain))").fetchall()))  # type: ignore
+                self.predicates = set(chain.from_iterable(duckdb.sql("SELECT unnest(enum_range(NULL::predicate))").fetchall()))  # type: ignore
                 return
 
         logger.info('Loading data before creating database')
@@ -680,7 +682,7 @@ class CommonSensePredicateStatisticsDatabse():
         query = f"SELECT {select_items} FROM data WHERE {' AND '.join(where_items)};"
 
         if return_trace_ids:
-            return chain.from_iterable(duckdb.sql(query).fetchall()), None  # type: ignore
+            return tuple(chain.from_iterable(duckdb.sql(query).fetchall())), None  # type: ignore
 
         else:
             return duckdb.sql(query).fetchone()[0], None  # type: ignore

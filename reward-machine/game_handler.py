@@ -429,7 +429,8 @@ class GameHandler():
                     specififed_object = mapping[variable]
                     object_type = object_types[idx]
 
-                    if specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
+                    # Added the first check to account for moving games between rooms
+                    if object_type not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name] or specififed_object not in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][object_type]:
                         acceptable_sat = False
                         break
 

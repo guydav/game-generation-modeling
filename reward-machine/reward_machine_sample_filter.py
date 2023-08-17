@@ -147,6 +147,7 @@ class TraceGameEvaluator:
     n_workers: int
     population: typing.Dict[typing.Union[KeyTypeAnnotation, int], ASTType]
     stop_after_count: int
+    traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.Set[str], typing.Set[str]]]
     trace_finder: TraceFinderASTParser
     use_trace_intersection: bool
 
@@ -167,6 +168,7 @@ class TraceGameEvaluator:
         self.tqdm = tqdm
         self.n_workers = n_workers
         self.chunksize = chunksize
+        self.traces_by_population_key = {}
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
 
@@ -189,26 +191,33 @@ class TraceGameEvaluator:
         for idx, event in enumerate(trace):
             yield (event, idx == len(trace) - 1)
 
-    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
-        sample = self.population[key]
+    def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.Set[str], typing.Set[str]]:
+        if key not in self.traces_by_population_key:
+            sample = self.population[key]
 
-        # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
+            traces_by_key, expected_keys = self.trace_finder(sample)  # type: ignore
 
-        traces_by_key, expected_keys = self.trace_finder(sample)  # type: ignore
-
-        all_traces = set()
-        initial_traces = True
-        for trace_set in traces_by_key.values():
-            if self.use_trace_intersection:
-                if initial_traces:
-                    all_traces.update(trace_set)
-                    initial_traces = False
+            all_traces = set()
+            initial_traces = True
+            for trace_set in traces_by_key.values():
+                if self.use_trace_intersection:
+                    if initial_traces:
+                        all_traces.update(trace_set)
+                        initial_traces = False
+                    else:
+                        all_traces.intersection_update(trace_set)
                 else:
-                    all_traces.intersection_update(trace_set)
-            else:
-                all_traces.update(trace_set)
+                    all_traces.update(trace_set)
 
-        if print_results: logger.info(f'Found {len(all_traces)} traces')
+            self.traces_by_population_key[key] = all_traces, expected_keys
+
+        return self.traces_by_population_key[key]
+
+    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
+        # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
+        all_traces, expected_keys = self._find_key_traces(key)
+
+        if print_results: logger.info(f'For key {key} found {len(all_traces)} traces')
         if len(all_traces) == 0:
             if print_results: logger.info('No traces found')
             return key, -1 if return_key else -1
@@ -223,6 +232,8 @@ class TraceGameEvaluator:
         trace_iter = all_traces
         if self.tqdm and self.n_workers <= 1:
             trace_iter = tqdm(trace_iter, desc=f'Traces for key {key}')
+
+        sample = self.population[key]
 
         for trace in trace_iter:
             domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
@@ -266,7 +277,9 @@ class TraceGameEvaluator:
         min_count = min(stop_count_by_key.values())
         return key, min_count if return_key else min_count
 
-    def __call__(self, key: typing.Optional[KeyTypeAnnotation], max_keys: typing.Optional[int] = None):
+    def __call__(self, key: typing.Optional[KeyTypeAnnotation],
+                 max_keys: typing.Optional[int] = None,
+                 sort_keys_by_traces: bool = True):
         if key is not None:
             if key not in self.population:
                 logger.info(f'Key {key} not found')
@@ -276,7 +289,13 @@ class TraceGameEvaluator:
             self.handle_single_game(key, print_results=True)
         else:
             result_by_key = {}
-            key_iter = self.population.keys()
+
+            if sort_keys_by_traces:
+                key_iter = sorted(self.population.keys(), key=lambda key: len(self._find_key_traces(key)[0]), reverse=True)
+                print([len(self._find_key_traces(key)[0]) for key in key_iter])
+
+            else:
+                key_iter = self.population.keys()
 
             if max_keys is not None:
                 key_iter = list(key_iter)[:max_keys]

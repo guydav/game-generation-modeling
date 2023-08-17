@@ -227,10 +227,12 @@ class CommonSensePredicateStatisticsDatabse():
     def _init_data_and_database(self, overwrite: bool = False):
         open_method = gzip.open if self.stats_filename.endswith('.gz') else open
 
-        if os.path.exists(self.stats_filename) and not overwrite:
-            self.data = pd.read_pickle(stats_filename)  # type: ignore
-            with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
-                self.trace_lengths_and_domains = pickle.load(f)
+        if not overwrite:
+            if os.path.exists(self.trace_lengths_and_domains_filename):
+                with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
+                    self.trace_lengths_and_domains = pickle.load(f)
+            else:
+                raise ValueError(f"Trace lengths and domains file {self.trace_lengths_and_domains_filename} does not exist")
 
         else:
             raise NotImplemented("TODO: Implement this")
@@ -288,15 +290,11 @@ class CommonSensePredicateStatisticsDatabse():
 
             # # TODO: convert all interval lists to strings
 
-        self.domains = list(self.data['domain'].unique())  # type: ignore
-        self.predicates = list(self.data['predicate'].unique())  # type: ignore
-
         self._trace_lengths_and_domains_to_df()
 
         self.max_length = self.trace_lengths_and_domains_df.select(pl.col('trace_length').max()).item()
 
         self._create_databases()
-        del self.data
 
     def _cache_evict_callback(self, cache_key, cache_value):
         # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
@@ -310,8 +308,17 @@ class CommonSensePredicateStatisticsDatabse():
         if table_query is not None:
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
-                logger.info('Skipping creating tables because they already exist')
+                # logger.info('Skipping creating tables because they already exist')
                 return
+
+        logger.info('Loading data before creating database')
+        if os.path.exists(self.stats_filename):
+            self.data = pd.read_pickle(self.stats_filename)
+        else:
+            raise ValueError(f"Stats file {self.stats_filename} does not exist")
+
+        self.domains = list(self.data['domain'].unique())  # type: ignore
+        self.predicates = list(self.data['predicate'].unique())  # type: ignore
 
         logger.info("Creating DuckDB table...")
 
@@ -346,6 +353,8 @@ class CommonSensePredicateStatisticsDatabse():
         logger.info(f"Loaded data, found {data_rows} rows")
 
         duckdb.create_function("empty_bitstring", self.create_empty_bitstring_function(self.max_length), [], duckdb.typing.BIT)  # type: ignore
+
+        del self.data
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []

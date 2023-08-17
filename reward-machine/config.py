@@ -347,7 +347,7 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
 
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch"]  # added the keys of the Pseudo Objects later
+NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
 COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "pink", "purple", "red", "tan", "white", "yellow"]

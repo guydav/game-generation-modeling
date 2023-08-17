@@ -12,7 +12,7 @@
         )
         (preference blockNextToOrOnDesk
             (exists (?b - block)
-                (at-end (and
+                (at-end (or
                     (on top_shelf ?b)
                     (on floor agent)
                 ))

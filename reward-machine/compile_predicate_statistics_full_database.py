@@ -51,6 +51,8 @@ COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     ("broken", 1),
     ("equal_x_position", 2),
     ("equal_z_position", 2),
+    ("game_start", 0),
+    ("game_over", 0),
     ("in", 2),
     ("in_motion", 1),
     ("object_orientation", 1),  # as it takes 1 object and an orientation we'll hard-code
@@ -118,7 +120,8 @@ def stable_hash_list(list_data: typing.Sequence[str]):
 
 
 DEBUG = False
-MAX_CACHE_SIZE = 2 ** 14
+MAX_CACHE_SIZE = 2 ** 12
+MAX_CHILD_ARGS = 6
 
 
 class CommonSensePredicateStatisticsFullDatabase():
@@ -129,11 +132,13 @@ class CommonSensePredicateStatisticsFullDatabase():
                  force_trace_names_hash: typing.Optional[str] = None,
                  all_trace_ids: typing.List[str] = FULL_PARTICIPANT_TRACE_SET,
                  max_cache_size: int = MAX_CACHE_SIZE,
+                 max_child_args: int = MAX_CHILD_ARGS,
                  ):
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.temp_table_index = -1
         self.temp_table_prefix = 't'
+        self.max_child_args = max_child_args
 
         self.all_trace_ids = all_trace_ids
         self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS])
@@ -142,21 +147,19 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.all_arg_ids = set(reduce(lambda x, y: x + y, [object_types for room_types in OBJECTS_BY_ROOM_AND_TYPE.values() for object_types in room_types.values()]))
         self.all_arg_ids.update(UNITY_PSEUDO_OBJECTS.keys())
 
-        trace_names_hash = force_trace_names_hash
-        stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
-        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
-        open_method = gzip.open if stats_filename.endswith('.gz') else open
-
-        if os.path.exists(stats_filename):
-            self.data = pd.read_pickle(stats_filename)  # type: ignore
-            with open_method(trace_lengths_and_domains_filename, 'rb') as f:
-                self.trace_lengths_and_domains = pickle.load(f)
-
-        else:
-            raise NotImplemented("Trace processing not implemented in this class yet")
+        self.trace_names_hash = force_trace_names_hash
+        self.stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=self.trace_names_hash))
+        self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=self.trace_names_hash))
 
         self._create_databases()
-        del self.data
+
+    # def __getstate__(self) -> typing.Dict[str, typing.Any]:
+    #     state = self.__dict__.copy()
+    #     return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self._create_databases()
 
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
@@ -166,7 +169,25 @@ class CommonSensePredicateStatisticsFullDatabase():
                 # logger.info('Skipping creating tables because they already exist')
                 return
 
+        logger.info("Loading data from files")
+        open_method = gzip.open if self.stats_filename.endswith('.gz') else open
+
+        if os.path.exists(self.stats_filename):
+            data_df = pd.read_pickle(self.stats_filename)
+
+        else:
+            raise ValueError(f"Could not find file {self.stats_filename}")
+
+        if os.path.exists(self.trace_lengths_and_domains_filename):
+            with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
+                trace_lengths_and_domains = pickle.load(f)
+
+        else:
+            raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
+
         logger.info("Creating DuckDB table...")
+        duckdb.sql("set temp_directory='/tmp/duckdb'")
+        duckdb.sql("set max_memory='12GB'")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
@@ -174,9 +195,10 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql(f"CREATE TYPE arg_type AS ENUM {tuple(sorted(self.all_types))};")
         duckdb.sql(f"CREATE TYPE arg_id AS ENUM {tuple(sorted(self.all_arg_ids))};")
 
-        trace_length_and_domain_rows = [(trace_id, domain, length) for (trace_id, (length, domain)) in self.trace_lengths_and_domains.items()]
+        trace_length_and_domain_rows = [(trace_id, domain, length) for (trace_id, (length, domain)) in trace_lengths_and_domains.items()]
         duckdb.sql('CREATE TABLE trace_length_and_domains(trace_id trace_id PRIMARY KEY, domain domain NOT NULL, length INTEGER NOT NULL);')
         duckdb.sql(f'INSERT INTO trace_length_and_domains VALUES {str(tuple(trace_length_and_domain_rows))[1:-1]}')
+        duckdb.sql('CREATE INDEX idx_tld_domain ON trace_length_and_domains (domain)')
 
         duckdb.sql("CREATE TABLE empty_bitstrings(trace_id trace_id PRIMARY KEY, intervals BITSTRING NOT NULL);")
         duckdb.sql("INSERT INTO empty_bitstrings SELECT trace_id, BITSTRING('0', length) as intervals FROM trace_length_and_domains")
@@ -188,17 +210,26 @@ class CommonSensePredicateStatisticsFullDatabase():
                     if object_type in self.all_types:
                         for object_id in object_ids:
                             data_rows.append((domain, object_type, object_id))
+
         duckdb.sql('CREATE TABLE object_type_to_id(domain domain NOT NULL, type arg_type NOT NULL, object_id arg_id NOT NULL);')
         duckdb.sql(f'INSERT INTO object_type_to_id VALUES {str(tuple(data_rows))[1:-1]}')
+        duckdb.sql('CREATE INDEX idx_obj_id_domain ON object_type_to_id (domain)')
+        duckdb.sql('CREATE INDEX idx_obj_id_type ON object_type_to_id (type)')
+        duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
 
-        data_df = self.data
         duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
         duckdb.sql("INSERT INTO data SELECT * FROM data_df")
-        duckdb.sql('CREATE INDEX idx_trace_id ON data (trace_id)')
+
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
+
+        duckdb.sql('CREATE INDEX idx_data_trace_id ON data (trace_id)')
+        duckdb.sql('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id)')
+        duckdb.sql('CREATE INDEX idx_data_arg_2_id ON data (arg_2_id)')
         data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
         logger.info(f"Loaded data, found {data_rows} rows")
         del data_df
-
+        del trace_lengths_and_domains
 
     def _table_name(self, index: int):
         return f"{self.temp_table_prefix}{index}"
@@ -280,6 +311,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         if not isinstance(and_args, list):
             and_args = [and_args]
 
+        if len(and_args) > self.max_child_args:
+            raise PredicateNotImplementedException("Too many and args")
+
         sub_queries = []
         used_variables_by_child = []
         all_used_variables = set()
@@ -343,7 +377,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         if not isinstance(and_args, list):
             and_args = [and_args]
 
-        if len(and_args) > 5:
+        if len(and_args) > self.max_child_args:
             raise PredicateNotImplementedException("Too many and args")
 
         sub_queries = []
@@ -410,6 +444,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
             or_args = [or_args]
+
+        if len(or_args) > self.max_child_args:
+            raise PredicateNotImplementedException("Too many and args")
 
         sub_queries = []
         used_variables_by_child = []

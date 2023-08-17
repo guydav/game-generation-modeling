@@ -38,6 +38,7 @@ import room_and_object_types
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
 import compile_predicate_statistics_split_args
 import compile_predicate_statistics_database
+import compile_predicate_statistics_full_database
 
 
 parser = argparse.ArgumentParser()
@@ -665,6 +666,17 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
                          'setup_quantified_objects_used')
 
 
+PREDICATE_IN_DATA_RULE_TO_CHILD = {
+    'setup_game_conserved': 'conserved_pred',
+    'setup_game_optional': 'optional_pred',
+    'once': 'once_pred',
+    'once_measure': 'once_measure_pred',
+    'hold': 'hold_pred',
+    'while_hold': 'hold_pred',
+    'at_end': 'at_end_pred',
+}
+
+
 PREDICATE_IN_DATA_MIN_TRACE_COUNT = 1
 PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
 PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
@@ -682,14 +694,20 @@ class PredicateFoundInData(FitnessTerm):
 
     _predicate_data_estimator = None
 
-    def __init__(self, rule: str = 'predicate',
+    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
                  trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH,
                  predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES)):
 
-        super().__init__(rule, f'predicate_found_in_data')
+        self.use_full_databse = use_full_databse
+        if self.use_full_databse:
+            rules = list(PREDICATE_IN_DATA_RULE_TO_CHILD.keys())
+        else:
+            rules = [rule]
+
+        super().__init__(rules, f'predicate_found_in_data')
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
@@ -698,11 +716,16 @@ class PredicateFoundInData(FitnessTerm):
         self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
-        self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
-        # self.predicate_data_estimator = compile_predicate_statistics_split_args.CommonSensePredicateStatisticsSplitArgs(
-            use_no_intervals=True,
-            force_trace_names_hash=self.trace_names_hash
-        )
+        if self.use_full_databse:
+            self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+                force_trace_names_hash=self.trace_names_hash
+            )
+
+        else:
+            self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
+                use_no_intervals=True,
+                force_trace_names_hash=self.trace_names_hash
+            )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
@@ -713,6 +736,9 @@ class PredicateFoundInData(FitnessTerm):
         self.__dict__.update(state)
         if not hasattr(self, 'trace_names_hash'):
             self.trace_names_hash = FULL_DATASET_TRACES_HASH
+        if not hasattr(self, 'use_full_databse'):
+            self.use_full_databse = False
+
         self._init_predicate_data_estimator()
 
     def game_start(self) -> None:
@@ -720,25 +746,28 @@ class PredicateFoundInData(FitnessTerm):
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            pred = ast
+            if self.use_full_databse:
+                pred = ast[PREDICATE_IN_DATA_RULE_TO_CHILD[rule]]
+            else:
+                pred = ast
+
+            # print(ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY]))
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             section = typing.cast(str, context[SECTION_CONTEXT_KEY])
             try:
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
-                n_traces = self.predicate_data_estimator.filter(pred, mapping)
+                n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=True)
                 predicate_found = n_traces >= self.min_trace_count
                 self.predicates_found_by_section[section].append(1 if predicate_found else 0)
                 # if not predicate_found:  # n_traces == 0:
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
-            except compile_predicate_statistics_database.PredicateNotImplementedException:
-            # except compile_predicate_statistics_split_args.PredicateNotImplementedException:
+            except (compile_predicate_statistics_database.PredicateNotImplementedException, compile_predicate_statistics_full_database.PredicateNotImplementedException) as e:
                 self.predicates_found_by_section[section].append(1)
 
-            except compile_predicate_statistics_database.MissingVariableException:
-            # except compile_predicate_statistics_split_args.MissingVariableException:
+            except (compile_predicate_statistics_database.MissingVariableException, compile_predicate_statistics_full_database.MissingVariableException) as e:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 

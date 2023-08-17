@@ -121,7 +121,7 @@ def stable_hash_list(list_data: typing.Sequence[str]):
 
 
 DEBUG = False
-MAX_CACHE_SIZE = 2 ** 12
+MAX_CACHE_SIZE = 2 ** 10
 MAX_CHILD_ARGS = 6
 
 
@@ -249,18 +249,6 @@ class CommonSensePredicateStatisticsFullDatabase():
     def _next_temp_table_name(self):
         return self._table_name(self._next_temp_table_index())
 
-    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
-        try:
-            if self.temp_table_index > 2 ** 31:
-                self.temp_table_index = -1
-            result_query, _ = self._inner_filter(predicate, mapping, **kwargs)
-            output_query = f"SELECT count(*) FROM ({result_query})"
-            return duckdb.sql(output_query).fetchone()[0]  # type: ignore
-
-        except PredicateNotImplementedException as e:
-            # Pass the exception through and let the caller handle it
-            raise e
-
     def _predicate_and_mapping_cache_key(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], *args, **kwargs) -> str:
         '''
         Returns a string that uniquely identifies the predicate and mapping
@@ -268,6 +256,25 @@ class CommonSensePredicateStatisticsFullDatabase():
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
+        try:
+            if self.temp_table_index > 2 ** 31:
+                self.temp_table_index = -1
+
+            result_query, _ = self._inner_filter(predicate, mapping, **kwargs)
+
+            if 'return_full_result' in kwargs and kwargs['return_full_result']:
+                output_query = f"SELECT * FROM ({result_query})"
+                return output_query
+            else:
+                output_query = f"SELECT count(*) FROM ({result_query})"
+                return duckdb.sql(output_query).fetchone()[0]  # type: ignore
+
+        except PredicateNotImplementedException as e:
+            # Pass the exception through and let the caller handle it
+            raise e
+
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
@@ -313,7 +320,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         query = f"SELECT {', '.join(select_items)} FROM data WHERE {' AND '.join(where_items)}"
         return query, used_variables
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
@@ -379,7 +386,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         if DEBUG: print(query)
         return query, all_used_variables
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and_de_morgans(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
@@ -447,7 +454,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         return query, all_used_variables
 
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
@@ -588,7 +595,7 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         if DEBUG: print(query)
         return query
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         try:
             inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore

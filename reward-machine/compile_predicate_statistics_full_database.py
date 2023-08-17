@@ -186,8 +186,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        duckdb.sql("set temp_directory='/tmp/duckdb'")
-        duckdb.sql("set max_memory='12GB'")
+        duckdb.sql(f"set temp_directory='/tmp/duckdb/{os.getpid()}'")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
@@ -532,7 +531,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
     def object_assignments_query(self, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]]):
         if len(mapping) == 0:
-            return []
+            return None
 
         if len(mapping) == 1:
             first_key = list(mapping.keys())[0]
@@ -570,13 +569,14 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         object_assignments_query = self.object_assignments_query(relevant_var_mapping)
 
         select_variables = ', '.join(f'object_assignments."{var}" as "{var}"' for var in relevant_vars)
-        query = f"""SELECT trace_length_and_domains.trace_id as trace_id, trace_length_and_domains.domain as domain, {select_variables}, empty_bitstrings.intervals as intervals
-FROM trace_length_and_domains
-JOIN ({object_assignments_query}) AS object_assignments ON (trace_length_and_domains.domain = object_assignments.domain)
-JOIN empty_bitstrings ON (trace_length_and_domains.trace_id = empty_bitstrings.trace_id)
-        """
-        if DEBUG: print(query)
+        query = f"SELECT trace_length_and_domains.trace_id as trace_id, trace_length_and_domains.domain as domain, empty_bitstrings.intervals as intervals, {select_variables} FROM trace_length_and_domains"
 
+        if object_assignments_query is not None:
+            query += f" JOIN ({object_assignments_query}) AS object_assignments ON (trace_length_and_domains.domain = object_assignments.domain)"
+
+        query += " JOIN empty_bitstrings ON (trace_length_and_domains.trace_id = empty_bitstrings.trace_id)"
+
+        if DEBUG: print(query)
         return query
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)

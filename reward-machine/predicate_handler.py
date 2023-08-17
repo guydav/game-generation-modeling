@@ -954,10 +954,10 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     projection = np.array([0, 2])
 
     caster_pos = _object_location(caster)[projection]
-    caster_facing = caster.rotation[projection]
+    caster_rotation =  caster.camera_rotation_euler_angles if isinstance(caster, AgentState) else caster.rotation
+    caster_facing = caster_rotation[projection]
 
     target_pos = _object_location(target)[projection]
-
     target_corners = _object_corners(target, y_pos=0)  # type: ignore
 
     caster_to_target = Vector(target_pos - caster_pos)

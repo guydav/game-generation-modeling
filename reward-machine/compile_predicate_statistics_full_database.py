@@ -97,6 +97,7 @@ NO_INTERVALS_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_no_intervals_{traces
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
+CLUSTER_BASE_TRACE_PATH = '/misc/vlgscratch4/LakeGroup/guy/participant-traces'
 
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
@@ -130,7 +131,7 @@ class CommonSensePredicateStatisticsFullDatabase():
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
                  trace_lengths_filename_format: str = DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT,
                  force_trace_names_hash: typing.Optional[str] = None,
-                 all_trace_ids: typing.List[str] = FULL_PARTICIPANT_TRACE_SET,
+                 trace_folder: typing.Optional[str] = None,
                  max_cache_size: int = MAX_CACHE_SIZE,
                  max_child_args: int = MAX_CHILD_ARGS,
                  ):
@@ -140,7 +141,13 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.temp_table_prefix = 't'
         self.max_child_args = max_child_args
 
-        self.all_trace_ids = all_trace_ids
+        if trace_folder is None:
+            if os.path.exists(CLUSTER_BASE_TRACE_PATH):
+                trace_folder = CLUSTER_BASE_TRACE_PATH
+            else:
+                trace_folder = DEFAULT_BASE_TRACE_PATH
+
+        self.all_trace_ids = [os.path.splitext(os.path.basename(t))[0] for t in glob.glob(os.path.join(trace_folder, '*.json'))]
         self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS])
         self.all_types = set(reduce(lambda x, y: x + y, [list(x.keys()) for x in chain(OBJECTS_BY_ROOM_AND_TYPE.values(), SPECIFIC_NAMED_OBJECTS_BY_ROOM.values())]))
         self.all_types.remove(GAME_OBJECT)

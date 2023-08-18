@@ -128,6 +128,11 @@ class ASTParser:
         elif rule.endswith('variable_type_def'):
             self._update_variable_type_def_kwargs(ast, kwargs)
 
+        self._current_ast_to_contexts_hook(ast, kwargs)
+
+    def _current_ast_to_contexts_hook(self, ast: tatsu.ast.AST, kwargs: typing.Dict[str, typing.Any]):
+        pass
+
     def _variable_type_def_rule_to_context_key(self, rule: str) -> str:
         if rule.startswith('variable'):
             return VARIABLES_CONTEXT_KEY

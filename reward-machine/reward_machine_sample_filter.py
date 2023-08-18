@@ -98,6 +98,12 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         else:
             return retval
 
+    def _current_ast_to_contexts_hook(self, ast: tatsu.ast.AST, kwargs: typing.Dict[str, typing.Any]):
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+
+        if rule == 'preference':
+            kwargs['local_context']['current_preference_name'] = ast.pref_name
+
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         self._current_ast_to_contexts(ast, **kwargs)
         kwargs['local_context']['mapping'] = ast_parser.update_context_variables(ast, kwargs['local_context']['mapping'])

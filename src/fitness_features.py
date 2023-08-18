@@ -2595,14 +2595,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    predicate_found_in_data = PredicateFoundInData()
+    predicate_found_in_data = PredicateFoundInData(use_full_databse=True)
     fitness.register(predicate_found_in_data)
-
-    # setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
-    # fitness.register(setup_predicate_found_in_data)
-
-    # preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
-    # fitness.register(preferences_predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)

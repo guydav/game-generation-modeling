@@ -265,7 +265,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
             if 'return_full_result' in kwargs and kwargs['return_full_result']:
                 output_query = f"SELECT * FROM ({result_query})"
-                return output_query
+                return duckdb.sql(output_query).fetchdf()
             else:
                 output_query = f"SELECT count(*) FROM ({result_query})"
                 return duckdb.sql(output_query).fetchone()[0]  # type: ignore

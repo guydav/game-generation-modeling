@@ -1,11 +1,20 @@
-import typing
 from itertools import groupby
+import os
+import typing
 
+import backoff
 import inflect
+import openai, openai.error
+import tabulate
 import tatsu, tatsu.ast, tatsu.grammars
 
-from preference_handler import PredicateType
+# For some reason utils needs to be imported first?
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
+from describer_lm_prompts import *
+from preference_handler import PredicateType
+
+from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
+from ast_printer import ast_section_to_string
 from ast_utils import cached_load_and_parse_games_from_file
 
 DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
@@ -49,14 +58,53 @@ FUNCTION_DESCRIPTIONS = {
     "z_position": "the z position of {0}",
 }
 
+SETUP_HEADER = "In order to set up the game, "
+PREFERENCES_HEADER = "\nThe preferences of the game are:"
+TERMINAL_HEADER = "\nThe game ends when "
+SCORING_HEADER = "\nAt the end of the game, the player's score is "
+
 class GameDescriber():
-    def __init__(self, grammar_path: str = DEFAULT_GRAMMAR_PATH):
+    def __init__(self, 
+                 grammar_path: str = DEFAULT_GRAMMAR_PATH,
+                 openai_model_str: typing.Optional[str] = None,
+                 max_openai_tokens: int = 512,
+                 openai_temperature: float = 0.0):
+        
         grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
         self.engine = inflect.engine()
 
         self.preference_index =  None
         self.external_forall_preference_mappings = None
+
+        if openai_model_str is not None:
+            self.openai_model_str = openai_model_str
+            openai_key = os.environ.get("OPENAI_TOKEN")
+            if openai_key is None:
+                raise ValueError("Error: OPENAI_TOKEN environment variable is not set")
+            
+            openai.api_key = openai_key
+
+        self.max_openai_tokens = max_openai_tokens
+        self.openai_temperature = openai_temperature
+
+    @backoff.on_exception(backoff.expo, openai.error.RateLimitError)
+    def _query_openai(self, prompt: str):
+        '''
+        Query the specified openai model with the given prompt, and return the response. Assumes
+        that the API key has already been set. Retries with exponentially-increasing delays in 
+        case of rate limit errors
+        '''
+        response = openai.ChatCompletion.create(
+            model=self.openai_model_str,
+            max_tokens=self.max_openai_tokens,
+            temperature=self.openai_temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        reponse_content = response["choices"][0]["message"]["content"]
+
+        return reponse_content
 
     def _indent(self, description: str, num_spaces: int = 4):
         '''
@@ -671,10 +719,35 @@ class GameDescriber():
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
 
-    def describe(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
+    def describe_stage_0(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], format_for_html: bool = False):
         '''
-        Generate a description of the provided game text or AST. Description will be split
-        by game section (setup, preferences, terminal, and scoring)
+        Returns the raw code of each section of the game text or AST. Optionally format the
+        descriptions for display in an HTML page
+        '''
+        if isinstance(game_text_or_ast, str):
+            game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text_or_ast))
+        else:
+            game_ast = game_text_or_ast
+
+        if format_for_html:
+            delimiter = '<br>'
+            formatting = "<pre><code>{0}</code></pre>"
+        else:
+            delimiter = ''
+            formatting = "{0}"
+
+        setup_description = formatting.format(ast_section_to_string(game_ast[3], SETUP, delimiter))
+        preferences_description = formatting.format(ast_section_to_string(game_ast[4], PREFERENCES, delimiter))
+        terminal_description = formatting.format(ast_section_to_string(game_ast[5], TERMINAL, delimiter))
+        scoring_description = formatting.format(ast_section_to_string(game_ast[6], SCORING, delimiter))
+
+        return setup_description, preferences_description, terminal_description, scoring_description
+
+    def describe_stage_1(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
+        '''
+        Generate a "stage 1" description of the provided game text or AST. A stage 1 description is
+        templated based on a series of hard-coded rules. Description will be split by game section 
+        (setup, preferences, terminal, and scoring)
         '''
 
         if isinstance(game_text_or_ast, str):
@@ -689,127 +762,62 @@ class GameDescriber():
         self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
-            print("=====================================GAME SETUP=====================================")
             setup_description, _ = self._describe_setup(game_info["setup"])
-            print(f"\nIn order to set up the game, {setup_description}")
-
+            setup_description = SETUP_HEADER + setup_description
+        else:
+            setup_description = ""
 
         if game_info.get("preferences") is not None:
-            print("\n=====================================PREFERENCES=====================================")
+            preferences_description = PREFERENCES_HEADER
             for idx, preference in enumerate(game_info["preferences"][0]):
-                description = self._describe_preference(preference)
-                print(f"\n{description}")
+                preferences_description +=  f"\n\n{self._describe_preference(preference)}"
+        else:
+            preferences_description = ""
 
         if game_info.get("terminal") is not None:
-            print("\n=====================================TERMINAL CONDITIONS=====================================")
-            terminal_description = self._describe_terminal(game_info["terminal"])
-            print(f"\nThe game ends when {terminal_description}")
+            terminal_description = TERMINAL_HEADER + self._describe_terminal(game_info["terminal"])
+        else:
+            terminal_description = ""
 
         if game_info.get("scoring") is not None:
-            print("\n=====================================SCORING=====================================")
-            scoring_description = self._describe_scoring(game_info["scoring"])
-            print(f"\nAt the end of the game, the player's score is {scoring_description}")
+            scoring_description = SCORING_HEADER + self._describe_scoring(game_info["scoring"])
+        else:
+            scoring_description = ""
 
+        return setup_description, preferences_description, terminal_description, scoring_description
+    
+    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
+        '''
+        Generate a "stage 2" description of the provided game text or AST. A stage 2 description uses
+        an LLM to convert a stage 1 description into more naturalistic language
+        '''
 
-TEST_GAME = """(define (game 61267978e96853d3b974ca53-23) (:domain medium-objects-room-v1)
+        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 2 description"
 
-(:constraints (and
-    (preference throwTeddyOntoPillow
-        (exists (?t - teddy_bear ?p - pillow)
-            (then
-                (once (agent_holds ?t))
-                (hold (and (not (agent_holds ?t)) (in_motion ?t)))
-                (once (and (not (in_motion ?t)) (on ?p ?t)))
-            )
-        )
-    )
-    (preference throwAttempt
-        (exists (?t - teddy_bear)
-            (then
-                (once (agent_holds ?t))
-                (hold (and (not (agent_holds ?t)) (in_motion ?t)))
-                (once (not (in_motion ?t)))
-            )
-        )
-    )
-))
-(:terminal
-    (>= (count throwAttempt) 10)
-)
-(:scoring (count throwTeddyOntoPillow)
-))
-"""
+        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = self.describe_stage_1(game_text_or_ast)
 
-TEST_GAME_2 = """(define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
-(:setup (and
-    (exists (?b - building) (and
-        (game-conserved (= (building_size ?b) 6))
-        (forall (?l - block) (or
-            (game-conserved (and
-                    (in ?b ?l)
-                    (not (exists (?l2 - block) (and
-                        (in ?b ?l2)
-                        (not (same_object ?l ?l2))
-                        (same_type ?l ?l2)
-                    )))
-            ))
-            (game-optional (not (exists (?s - shelf) (on ?s ?l))))
-        ))
-    ))
-))
-(:constraints (and
-    (preference gameBlockFound (exists (?l - block)
-        (then
-            (once (game_start))
-            (hold (not (exists (?b - building) (and (in ?b ?l) (is_setup_object ?b)))))
-            (once (agent_holds ?l))
-        )
-    ))
-    (preference towerFallsWhileBuilding (exists (?b - building ?l1 ?l2 - block)
-        (then
-            (once (and (in ?b ?l1) (agent_holds ?l2) (not (is_setup_object ?b))))
-            (hold-while
-                (and
-                    (not (agent_holds ?l1))
-                    (in ?b ?l1)
-                    (or
-                        (agent_holds ?l2)
-                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
-                    )
-                )
-                (touch ?l1 ?l2)
-            )
-            (hold (and
-                (in_motion ?l1)
-                (not (agent_holds ?l1))
-            ))
-            (once (not (in_motion ?l1)))
-        )
-    ))
-    (preference matchingBuildingBuilt (exists (?b1 ?b2 - building)
-        (at-end (and
-            (is_setup_object ?b1)
-            (not (is_setup_object ?b2))
-            (forall (?l1 ?l2 - block) (or
-                (not (in ?b1 ?l1))
-                (not (in ?b1 ?l2))
-                (not (on ?l1 ?l2))
-                (exists (?l3 ?l4 - block) (and
-                    (in ?b2 ?l3)
-                    (in ?b2 ?l4)
-                    (on ?l3 ?l4)
-                    (same_type ?l1 ?l3)
-                    (same_type ?l2 ?l4)
-                ))
-            ))
-        ))
-    ))
-))
-(:scoring (+
-    (* 5 (count-once-per-objects gameBlockFound))
-    (* 100 (count-once matchingBuildingBuilt))
-    (* (-10) (count towerFallsWhileBuilding))
-)))"""
+        if setup_stage_1 != "":
+            setup_description = self._query_openai(SETUP_STAGE_1_TO_STAGE_2_PROMPT.format(setup_stage_1))
+        else:
+            setup_description = ""
+
+        if preferences_stage_1 != "":
+            preferences_description = self._query_openai(PREFERENCES_STAGE_1_TO_STAGE_2_PROMPT.format(preferences_stage_1))
+        else:
+            preferences_description = ""
+
+        if terminal_stage_1 != "":
+            terminal_description = self._query_openai(TERMINAL_STAGE_1_TO_STAGE_2_PROMPT.format(terminal_stage_1))
+        else:
+            terminal_description = ""
+
+        if scoring_stage_1 != "":
+            scoring_description = self._query_openai(SCORING_STAGE_1_TO_STAGE_2_PROMPT.format(scoring_stage_1))
+        else:
+            scoring_description = ""
+
+        return setup_description, preferences_description, terminal_description, scoring_description
+
 
 if __name__ == '__main__':
     # game = open("./reward-machine/games/game-6.txt", "r").read()
@@ -817,10 +825,69 @@ if __name__ == '__main__':
     grammar = open('./dsl/dsl.ebnf').read()
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
-    game_describer = GameDescriber()
+    game_describer = GameDescriber(openai_model_str="gpt-3.5-turbo")
 
     # game_describer.describe(TEST_GAME_2)
 
     for game in game_asts:
-        game_describer.describe(game)
+
+        
+        setup_stage_0, preferences_stage_0, terminal_stage_0, scoring_stage_0 = game_describer.describe_stage_0(game, format_for_html=True)
+        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = game_describer.describe_stage_1(game)
+        setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = game_describer.describe_stage_2(game)
+
+        data = [[setup_stage_0, setup_stage_1, setup_stage_2],
+                [preferences_stage_0, preferences_stage_1, preferences_stage_2],
+                [terminal_stage_0, terminal_stage_1, terminal_stage_2],
+                [scoring_stage_0, scoring_stage_1, scoring_stage_2]]
+        
+        columns = ["Stage 0", "Stage 1", "Stage 2"]
+
+        table_html = tabulate.tabulate(data, headers=columns, tablefmt="unsafehtml")
+
+        # Replace all newlines inside the <tbody> tags with <br>
+        tbody_start = table_html.find("<tbody>")
+        tbody_end = table_html.find("</tbody>")
+        table_html = table_html[:tbody_start] + table_html[tbody_start:tbody_end].replace("\n", "<br>") + table_html[tbody_end:]
+
+        table_html = table_html.replace('<table>', '<table class="table table-striped table-bordered">')
+        table_html = table_html.replace('<thead>', '<thead class="thead-dark">')
+        table_html = table_html.replace('<th>', '<th scope="col">')
+        
+        style = """
+        <style>
+            .table td, .table th {
+                min-width: 40em;
+                max-width: 60em;
+            }
+            pre {
+                white-space: pre-wrap;
+                max-height: 60em;
+                overflow: auto;
+                display: inline-block;
+            }
+        </style>
+        """
+
+        html_template = f"""
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+            <title>Representative games comparison</title>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+            {style}
+        </head>
+        <body>
+            <div>
+                {table_html}
+            </div>
+            <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+            <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+        </body>
+        """
+
+        with open("./output.html", "w") as file:
+            file.write(html_template)
         input()

@@ -33,9 +33,12 @@ Then, put the hexagonal bin next to the bed and make sure it stays there for the
 
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
-{0}"""
+{0}
 
-CONSTRAINTS_STAGE_1_TO_STAGE_2_PROMPT = """Your task is to convert a templated description of a game's rules (expressed as "preferences") into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
+### NATURAL LANGUAGE DESCRIPTION:
+"""
+
+PREFERENCES_STAGE_1_TO_STAGE_2_PROMPT = """Your task is to convert a templated description of a game's rules (expressed as "preferences") into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
 Use the following examples as a guide:
 
 ### TEMPLATED DESCRIPTION:
@@ -136,7 +139,10 @@ This preference is satisfied when:
 
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
-{0}"""
+{0}
+
+### NATURAL LANGUAGE DESCRIPTION:
+"""
 
 TERMINAL_STAGE_1_TO_STAGE_2_PROMPT = """Your task is to convert a templated description of a game's terminal conditions into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
 Use the following examples as a guide:
@@ -155,7 +161,10 @@ The game ends when 180 seconds have elapsed or the player has scored at least 50
 
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
-{0}"""
+{0}
+
+### NATURAL LANGUAGE DESCRIPTION:
+"""
 
 SCORING_STAGE_1_TO_STAGE_2_PROMPT= """Your task is to convert a templated description of a game's scoring conditions into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
 Use the following examples as a guide:
@@ -174,7 +183,10 @@ At the end of the game, the player gets 5 points for every object used to satisf
 
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
-{0}"""
+{0}
+
+### NATURAL LANGUAGE DESCRIPTION:
+"""
 
 
 ### Additional prompt considerations

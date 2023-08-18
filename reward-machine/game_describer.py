@@ -380,19 +380,37 @@ class GameDescriber():
 
             for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
                 group = list(group)
-                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+                description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
 
             for key, group in groupby(sorted(variable_type_mapping.keys(), key=group_func), key=group_func):
                 group = list(group)
-                description += f"{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+                description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
 
             temporal_predicate_ast = body_ast["exists_args"]
 
         # These cases handle preferences that don't have any variables quantified with an exists (e.g. they're all from an external forall)
         elif body_ast.parseinfo.rule == "then":
+            description += "\nThe variables required by this preference are:"
+
+            def group_func_external(key):
+                return ";".join(additional_variable_mapping[key])
+            
+            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
+                group = list(group)
+                description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+
             temporal_predicate_ast = body_ast
 
         elif body_ast.parseinfo.rule == "at_end":
+            description += "\nThe variables required by this preference are:"
+
+            def group_func_external(key):
+                return ";".join(additional_variable_mapping[key])
+            
+            for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
+                group = list(group)
+                description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
+
             temporal_predicate_ast = body_ast
 
         else:

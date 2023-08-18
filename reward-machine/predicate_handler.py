@@ -439,6 +439,9 @@ class PredicateHandler:
 
         function_name = extract_predicate_function_name(function)  # type: ignore
 
+        if function_name not in FUNCTION_LIBRARY:
+            raise PredicateHandlerPredicateNotImplemented(function_name)
+
         # Obtain the functional representation of the function
         func = FUNCTION_LIBRARY[function_name]
 
@@ -692,6 +695,9 @@ def _building_touch(agent: AgentState, building: BuildingPseudoObject, other_obj
 
 def _pred_touch(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
     assert len(objects) == 2
+
+    if isinstance(objects[0], str) or isinstance(objects[1], str):
+        print(f'String objects in touch?! {objects}')
 
     first_pseudo = isinstance(objects[0], PseudoObject)
     first_agent = isinstance(objects[0], AgentState)
@@ -948,10 +954,10 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     projection = np.array([0, 2])
 
     caster_pos = _object_location(caster)[projection]
-    caster_facing = caster.rotation[projection]
+    caster_rotation =  caster.camera_rotation_euler_angles if isinstance(caster, AgentState) else caster.rotation
+    caster_facing = caster_rotation[projection]
 
     target_pos = _object_location(target)[projection]
-
     target_corners = _object_corners(target, y_pos=0)  # type: ignore
 
     caster_to_target = Vector(target_pos - caster_pos)
@@ -963,12 +969,12 @@ def _pred_faces(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
     # Clearly this won't work, because the caster's rotation is not the same as its facing direction
     angle_to_facing = caster_to_target.angle_signed(caster_facing)
 
-    print("\n" + "=" * 100)
-    print("Caster:", caster.object_id)
-    print("\tRotation:", caster.rotation)
-    print("Target:", target.object_id)
-    print("Angle to corners:", angle_to_corners)
-    print("Angle to facing:", angle_to_facing)
+    # print("\n" + "=" * 100)
+    # print("Caster:", caster.object_id)
+    # print("\tRotation:", caster.rotation)
+    # print("Target:", target.object_id)
+    # print("Angle to corners:", angle_to_corners)
+    # print("Angle to facing:", angle_to_facing)
 
     return min_corner_angle <= angle_to_facing <= max_corner_angle
 

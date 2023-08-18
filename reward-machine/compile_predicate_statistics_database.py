@@ -42,6 +42,8 @@ from predicate_handler import PREDICATE_LIBRARY_RAW
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+logging.getLogger('wandb').setLevel(logging.WARNING)
+
 
 COMMON_SENSE_PREDICATES_AND_FUNCTIONS = (
     ("above", 2),
@@ -206,15 +208,31 @@ class CommonSensePredicateStatisticsDatabse():
             trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
         filename_format_to_use = no_intervals_cache_filename_format if use_no_intervals else cache_filename_format
-        stats_filename = os.path.join(cache_dir, filename_format_to_use.format(traces_hash=trace_names_hash))
-        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
-        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
-        open_method = gzip.open if stats_filename.endswith('.gz') else open
+        self.stats_filename = os.path.join(cache_dir, filename_format_to_use.format(traces_hash=trace_names_hash))
+        self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
+        self.in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
 
-        if os.path.exists(stats_filename) and not overwrite:
-            self.data = pd.read_pickle(stats_filename)  # type: ignore
-            with open_method(trace_lengths_and_domains_filename, 'rb') as f:
-                self.trace_lengths_and_domains = pickle.load(f)
+        self._init_data_and_database(overwrite=overwrite)
+
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        if 'data' in state: del state['data']
+        if 'trace_lengths_and_domains_df' in state: del state['trace_lengths_and_domains_df']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self._init_data_and_database(False)
+
+    def _init_data_and_database(self, overwrite: bool = False):
+        open_method = gzip.open if self.stats_filename.endswith('.gz') else open
+
+        if not overwrite:
+            if os.path.exists(self.trace_lengths_and_domains_filename):
+                with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
+                    self.trace_lengths_and_domains = pickle.load(f)
+            else:
+                raise ValueError(f"Trace lengths and domains file {self.trace_lengths_and_domains_filename} does not exist")
 
         else:
             raise NotImplemented("TODO: Implement this")
@@ -272,22 +290,18 @@ class CommonSensePredicateStatisticsDatabse():
 
             # # TODO: convert all interval lists to strings
 
-        self.domains = list(self.data['domain'].unique())  # type: ignore
-        self.predicates = list(self.data['predicate'].unique())  # type: ignore
-
         self._trace_lengths_and_domains_to_df()
 
         self.max_length = self.trace_lengths_and_domains_df.select(pl.col('trace_length').max()).item()
 
         self._create_databases()
-        del self.data
 
-    def _cache_evict_callback(self, cache_key, cache_value):
-        # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
-        table_name, _ = cache_value
-        duckdb.sql(f"DROP TABLE {table_name}")
-        table_index = int(table_name.replace(self.temp_table_prefix, ''))
-        heapq.heappush(self.available_table_indices, table_index)
+    # def _cache_evict_callback(self, cache_key, cache_value):
+    #     # logger.info(f"Evicting {cache_key} => {cache_value} from cache")
+    #     table_name, _ = cache_value
+    #     duckdb.sql(f"DROP TABLE {table_name}")
+    #     table_index = int(table_name.replace(self.temp_table_prefix, ''))
+    #     heapq.heappush(self.available_table_indices, table_index)
 
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
@@ -295,7 +309,18 @@ class CommonSensePredicateStatisticsDatabse():
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
                 # logger.info('Skipping creating tables because they already exist')
+                self.domains = set(chain.from_iterable(duckdb.sql("SELECT unnest(enum_range(NULL::domain))").fetchall()))  # type: ignore
+                self.predicates = set(chain.from_iterable(duckdb.sql("SELECT unnest(enum_range(NULL::predicate))").fetchall()))  # type: ignore
                 return
+
+        logger.info('Loading data before creating database')
+        if os.path.exists(self.stats_filename):
+            self.data = pd.read_pickle(self.stats_filename)
+        else:
+            raise ValueError(f"Stats file {self.stats_filename} does not exist")
+
+        self.domains = list(self.data['domain'].unique())  # type: ignore
+        self.predicates = list(self.data['predicate'].unique())  # type: ignore
 
         logger.info("Creating DuckDB table...")
 
@@ -330,6 +355,8 @@ class CommonSensePredicateStatisticsDatabse():
         logger.info(f"Loaded data, found {data_rows} rows")
 
         duckdb.create_function("empty_bitstring", self.create_empty_bitstring_function(self.max_length), [], duckdb.typing.BIT)  # type: ignore
+
+        del self.data
 
     def _trace_lengths_and_domains_to_df(self):
         trace_ids = []
@@ -655,7 +682,7 @@ class CommonSensePredicateStatisticsDatabse():
         query = f"SELECT {select_items} FROM data WHERE {' AND '.join(where_items)};"
 
         if return_trace_ids:
-            return chain.from_iterable(duckdb.sql(query).fetchall()), None  # type: ignore
+            return tuple(chain.from_iterable(duckdb.sql(query).fetchall())), None  # type: ignore
 
         else:
             return duckdb.sql(query).fetchone()[0], None  # type: ignore

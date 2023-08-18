@@ -325,7 +325,8 @@ class GameDescriber():
 
         if rule == "preference":
             name = typing.cast(str, pref_def["pref_name"])
-            description += f"Preference {self.preference_index + 1}: '{name}'"
+            description += f"-----Preference {self.preference_index + 1}-----"
+            self.preference_name_to_index[name] = self.preference_index + 1
 
             body = pref_def["pref_body"]["body"] # type: ignore
 
@@ -350,7 +351,8 @@ class GameDescriber():
                 self.external_forall_preference_mappings[name] = list(variable_type_mapping.keys()) # type: ignore
 
                 newline = '\n' if sub_idx > 0 else ''
-                description += f"{newline}Preference {self.preference_index + 1}: '{name}'"
+                description += f"{newline}-----Preference {self.preference_index + 1}-----"
+                self.preference_name_to_index[name] = self.preference_index + 1
 
                 body = sub_preference["pref_body"]["body"] # type: ignore
 
@@ -777,6 +779,7 @@ class GameDescriber():
         self._extract_game_info(game_ast, game_info)
 
         self.preference_index = 0
+        self.preference_name_to_index = {}
         self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
@@ -794,11 +797,21 @@ class GameDescriber():
 
         if game_info.get("terminal") is not None:
             terminal_description = TERMINAL_HEADER + self._describe_terminal(game_info["terminal"])
+
+            # Replace specific preference names with their index
+            for name, index in self.preference_name_to_index.items():
+                terminal_description = terminal_description.replace(name, f"Preference {index}")
+
         else:
             terminal_description = ""
 
         if game_info.get("scoring") is not None:
             scoring_description = SCORING_HEADER + self._describe_scoring(game_info["scoring"])
+
+            # Replace specific preference names with their index
+            for name, index in self.preference_name_to_index.items():
+                scoring_description = scoring_description.replace(name, f"Preference {index}")
+
         else:
             scoring_description = ""
 

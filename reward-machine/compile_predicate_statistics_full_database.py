@@ -242,9 +242,10 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        duckdb.sql(f"set temp_directory='/tmp/duckdb/{os.getpid()}';")
-        duckdb.sql(f"set enable_progress_bar=false;")
-        duckdb.sql(f"set enable_progress_bar_print=false;")
+        duckdb.sql(f"SET temp_directory='/tmp/duckdb/{os.getpid()}';")
+        duckdb.sql("SET enable_progress_bar=false;")
+        duckdb.sql("SET enable_progress_bar_print=false;")
+        duckdb.sql("SET memory_limit='16GB';")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")

@@ -8,7 +8,7 @@ import itertools
 import glob
 import gzip
 import logging
-import multiprocessing
+import multiprocess as multiprocessing
 import os
 import pickle
 import re
@@ -80,9 +80,11 @@ parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
 DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
-parser.add_argument('--maxtasksperchild', default=None)
+parser.add_argument('--maxtasksperchild', default=None, type=int)
 parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
 parser.add_argument('--single-process-n-rows-to-temp-file', type=int, default=None)
+parser.add_argument('--start-index', type=int, default=None)
+parser.add_argument('--end-index', type=int, default=None)
 
 
 logger = logging.getLogger(__name__)
@@ -309,11 +311,17 @@ class ASTFitnessFeaturizer:
         return self.all_column_keys
 
     def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
-        with multiprocessing.Pool(self.args.n_workers) as p:
+        with multiprocessing.Pool(self.args.n_workers, maxtasksperchild=args.maxtasksperchild) as p:
             logger.info('Pool started')
 
-            for row in tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize), total=self.args.expected_total_row_count):
-                pass
+            start_index = args.start_index if args.start_index is not None else 0
+            end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
+
+            pbar = tqdm(total=end_index - start_index, desc='Parsing games', disable=args.dont_tqdm)
+
+            for row in p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize):
+                pbar.update(1)
+                pbar.postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file
@@ -769,6 +777,11 @@ class PredicateFoundInData(FitnessTerm):
 
             except (compile_predicate_statistics_database.MissingVariableException, compile_predicate_statistics_full_database.MissingVariableException) as e:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
+                pass
+
+            except compile_predicate_statistics_database.QueryTimeoutException:
+                # If the query timed out, ignore this predicate for now
+                logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")
                 pass
 
     def _get_all_inner_keys(self):
@@ -2595,7 +2608,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    predicate_found_in_data = PredicateFoundInData()
+    predicate_found_in_data = PredicateFoundInData(use_full_databse=True)
     fitness.register(predicate_found_in_data)
 
     # setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
@@ -2736,12 +2749,16 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 #     temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
-def game_iterator():
+def game_iterator(args: argparse.Namespace):
+    i = 0
     for src_file in args.test_files:
         for game in cached_load_and_parse_games_from_file(src_file,
                                                           grammar_parser,  # type: ignore
                                                           use_tqdm=False, log_every_change=False, force_from_cache=True):
-            yield game, src_file
+            skip = (args.start_index is not None and i < args.start_index) or (args.end_index is not None and i >= args.end_index)
+            if not skip:
+                yield game, src_file
+            i += 1
 
 
 def get_headers(args: argparse.Namespace, featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
@@ -2840,7 +2857,7 @@ if __name__ == '__main__':
             os.remove(file)
 
         logger.info(f'About to start pool by calling parse_iterator_parallel with {args.n_workers} workers')
-        featurizer.parse_iterator_parallel(game_iterator())  # type: ignore
+        featurizer.parse_iterator_parallel(game_iterator(args))  # type: ignore
 
         for temp_file in featurizer.temp_files.values():
             temp_file.close()
@@ -2862,7 +2879,10 @@ if __name__ == '__main__':
             temp_file = open(temp_output_path, 'w', newline='')
             temp_csv_writer = csv.DictWriter(temp_file, headers)
 
-            for game, src_file in tqdm(game_iterator(), total=args.expected_total_row_count):
+            start_index = args.start_index if args.start_index is not None else 0
+            end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
+
+            for game, src_file in tqdm(game_iterator(args), total=end_index - start_index):
                 row = featurizer.parse(game, src_file, return_row=True, preprocess_row=False)
                 temp_csv_writer.writerow(row)
                 file_row_count += 1

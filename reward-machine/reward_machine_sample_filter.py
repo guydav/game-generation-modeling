@@ -1,6 +1,7 @@
 import argparse
 from collections import defaultdict, Counter
 import cachetools
+from datetime import datetime
 import json
 import logging
 import multiprocessing
@@ -53,6 +54,7 @@ parser.add_argument('--tqdm', action='store_true')
 parser.add_argument('--use-trace-intersection', action='store_true')
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1)
+parser.add_argument('--maxtasksperchild', default=None, type=int)
 parser.add_argument('--copy-traces-to-tmp', action='store_true')
 DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
@@ -154,7 +156,8 @@ class TraceGameEvaluator:
                  use_trace_intersection: bool = False, stop_after_count: int = DEFAULT_STOP_AFTER_COUNT,
                  max_traces_per_game: typing.Optional[int] = None,
                  base_trace_path: str = compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH,
-                 max_cache_size: int = MAX_TRACE_CACHE_SIZE, tqdm: bool = False, n_workers: int = 1, chunksize: int = 1):
+                 max_cache_size: int = MAX_TRACE_CACHE_SIZE, tqdm: bool = False,
+                 n_workers: int = 1, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
         self.trace_finder = trace_finder
         if isinstance(population, list):
             population = {idx: sample for idx, sample in enumerate(population)}
@@ -167,6 +170,7 @@ class TraceGameEvaluator:
         self.tqdm = tqdm
         self.n_workers = n_workers
         self.chunksize = chunksize
+        self.maxtasksperchild = maxtasksperchild
         self.traces_by_population_key = {}
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
@@ -303,11 +307,14 @@ class TraceGameEvaluator:
                 key_iter = tqdm(key_iter)
 
             if self.n_workers > 1:
-                with multiprocessing.Pool(self.n_workers) as p:
+                with multiprocessing.Pool(self.n_workers, maxtasksperchild=self.maxtasksperchild) as p:
                     logger.info('Pool started')
+                    pbar = tqdm(desc='MAP-Elites Population', total=len(self.population))
 
-                    for key, min_count in tqdm(p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize), desc='MAP-Elites Population', total=len(self.population)):
+                    for key, min_count in p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize):
                         result_by_key[key] = min_count
+                        pbar.update(1)
+                        pbar.postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
             else:
                 for key in key_iter:
@@ -354,7 +361,8 @@ def main(args: argparse.Namespace):
                                              use_trace_intersection=args.use_trace_intersection,
                                             stop_after_count=args.stop_after_count, max_traces_per_game=args.max_traces_per_game,
                                             base_trace_path=args.base_trace_path, tqdm=args.tqdm,
-                                            n_workers=args.n_workers, chunksize=args.chunksize)
+                                            n_workers=args.n_workers, chunksize=args.chunksize,
+                                            maxtasksperchild=args.maxtasksperchild)
 
         key = None
         if args.single_key is not None:

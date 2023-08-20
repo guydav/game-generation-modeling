@@ -18,6 +18,7 @@ import pickle
 import polars as pl
 pl.enable_string_cache(True)
 import pstats
+import signal
 import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
@@ -112,6 +113,52 @@ class MissingVariableException(Exception):
     pass
 
 
+class QueryTimeoutException(Exception):
+    pass
+
+
+class Timeout:
+    def __init__(self, seconds=1, message="Timed out"):
+        self._seconds = seconds
+        self._message = message
+
+    @property
+    def seconds(self):
+        return self._seconds
+
+    @property
+    def message(self):
+        return self._message
+
+    @property
+    def handler(self):
+        return self._handler
+
+    @handler.setter
+    def handler(self, handler):
+        self._handler = handler
+
+    def handle_timeout(self, *_):
+        raise QueryTimeoutException(self.message)
+
+    def __enter__(self):
+        signal.alarm(self.seconds)
+        return self
+
+    def __exit__(self, *_):
+        signal.alarm(0)
+
+
+def raise_query_timeout(*args, **kwargs):
+    raise QueryTimeoutException("Query timed out")
+
+
+alarm_handler = signal.getsignal(signal.SIGALRM)
+if alarm_handler is not None and alarm_handler is not signal.SIG_DFL and alarm_handler is not signal.SIG_IGN:
+    signal.signal(signal.SIGALRM, raise_query_timeout)
+
+
+
 def stable_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
@@ -121,9 +168,9 @@ def stable_hash_list(list_data: typing.Sequence[str]):
 
 
 DEBUG = False
-MAX_CACHE_SIZE = 2 ** 10
-MAX_CHILD_ARGS = 6
-
+MAX_CACHE_SIZE = 2 ** 12
+MAX_CHILD_ARGS = 4  # 6
+DEFAULT_QUERY_TIMEOUT = 5  # seconds
 
 class CommonSensePredicateStatisticsFullDatabase():
     def __init__(self,
@@ -134,12 +181,14 @@ class CommonSensePredicateStatisticsFullDatabase():
                  trace_folder: typing.Optional[str] = None,
                  max_cache_size: int = MAX_CACHE_SIZE,
                  max_child_args: int = MAX_CHILD_ARGS,
+                 query_timeout: int = DEFAULT_QUERY_TIMEOUT,
                  ):
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.temp_table_index = -1
         self.temp_table_prefix = 't'
         self.max_child_args = max_child_args
+        self.query_timeout = query_timeout
 
         if trace_folder is None:
             if os.path.exists(CLUSTER_BASE_TRACE_PATH):
@@ -257,18 +306,20 @@ class CommonSensePredicateStatisticsFullDatabase():
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
+
         try:
             if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
 
             result_query, _ = self._inner_filter(predicate, mapping, **kwargs)
 
-            if 'return_full_result' in kwargs and kwargs['return_full_result']:
-                output_query = f"SELECT * FROM ({result_query})"
-                return duckdb.sql(output_query).fetchdf()
-            else:
-                output_query = f"SELECT count(*) FROM ({result_query})"
-                return duckdb.sql(output_query).fetchone()[0]  # type: ignore
+            with Timeout(seconds=self.query_timeout):
+                if 'return_full_result' in kwargs and kwargs['return_full_result']:
+                    output_query = f"SELECT * FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                else:
+                    output_query = f"SELECT count(*) FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchone()[0]  # type: ignore
 
         except PredicateNotImplementedException as e:
             # Pass the exception through and let the caller handle it

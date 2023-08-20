@@ -481,11 +481,16 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
 
     return ast_str, mapping_str
 
+
+TYPES_COLORS_ORIENTATIONS_SIDES = set(itertools.chain(ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS))
+NAMED_OBJECT_SET = set(NAMED_OBJECTS)
+
+
 def is_type_color_side_orientation(variable: str):
     '''
     Returns whether the variable is a type or color
     '''
-    return any(variable in collection for collection in (ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS)) and (variable not in NAMED_OBJECTS)
+    return (variable in TYPES_COLORS_ORIENTATIONS_SIDES) and (variable not in NAMED_OBJECT_SET)
 
 def get_object_types(obj: ObjectState):
     '''

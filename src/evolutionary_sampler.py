@@ -1127,7 +1127,6 @@ class PopulationBasedSampler():
             game = mutated_game
 
         if mutated_preference_as_new:
-            # TODO: check that the mutated preference is different from all current preferences
             game_preferences_node = [section_tuple for section_tuple in game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
             game_preferences_node['preferences'].insert(rng.integers(len(game_preferences_node['preferences']) + 1), original_pref_def)  # type: ignore
 
@@ -1340,7 +1339,7 @@ class PopulationBasedSampler():
                 raise e
 
 
-        # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
+        # Parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
         return SingleStepResults([], [], [], [], [])
 
@@ -1854,7 +1853,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         self._update_population_statistics()
 
     def _custom_tqdm_postfix(self):
-        # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
             '# Good': len([True for fitness in self.fitness_values.values() if fitness > self.good_threshold]),

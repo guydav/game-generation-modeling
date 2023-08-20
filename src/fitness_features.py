@@ -319,10 +319,14 @@ class ASTFitnessFeaturizer:
             end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
 
             pbar = tqdm(total=end_index - start_index, desc='Parsing games', disable=args.dont_tqdm)
+            i = 0
 
             for row in p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize):
-                pbar.update(1)
-                pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+                i += 1
+                if i >= 100:
+                    pbar.update(i)
+                    i = 0
+                    pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file

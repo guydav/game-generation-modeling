@@ -780,7 +780,7 @@ class PredicateFoundInData(FitnessTerm):
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 
-            except compile_predicate_statistics_database.QueryTimeoutException:
+            except compile_predicate_statistics_full_database.QueryTimeoutException:
                 # If the query timed out, ignore this predicate for now
                 logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")
                 pass

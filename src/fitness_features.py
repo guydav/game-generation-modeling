@@ -331,22 +331,18 @@ class ASTFitnessFeaturizer:
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file
         row = self.parse(game, src_file, return_row=True, preprocess_row=False)
-        process_index = multiprocessing.current_process()._identity[0] - 1 % self.args.n_workers
+        pid = os.getpid()
 
-        if process_index not in self.temp_file_writer_dict:
-            temp_output_path = None
-            path_index = process_index
-            while temp_output_path is None or os.path.exists(temp_output_path):
-                temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{path_index}.temp.csv')
-                path_index += self.args.n_workers
+        if pid not in self.temp_file_writer_dict:
+            temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{pid}.temp.csv')
 
-            self.temp_file_output_paths[process_index] = temp_output_path
+            self.temp_file_output_paths[pid] = temp_output_path
             temp_file = open(temp_output_path, 'w', newline='')
-            self.temp_files[process_index] = temp_file
+            self.temp_files[pid] = temp_file
             temp_csv_writer = csv.DictWriter(temp_file, self.get_all_column_keys())
-            self.temp_file_writer_dict[process_index] = temp_csv_writer
+            self.temp_file_writer_dict[pid] = temp_csv_writer
 
-        self.temp_file_writer_dict[process_index].writerow(row)  # type: ignore
+        self.temp_file_writer_dict[pid].writerow(row)  # type: ignore
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}

@@ -9,6 +9,7 @@ import glob
 import gzip
 import logging
 import multiprocess as multiprocessing
+from multiprocess import pool as mpp
 import os
 import pickle
 import re
@@ -311,7 +312,7 @@ class ASTFitnessFeaturizer:
         return self.all_column_keys
 
     def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
-        with multiprocessing.Pool(self.args.n_workers, maxtasksperchild=args.maxtasksperchild) as p:
+        with mpp.Pool(self.args.n_workers, maxtasksperchild=args.maxtasksperchild) as p:
             logger.info('Pool started')
 
             start_index = args.start_index if args.start_index is not None else 0
@@ -321,7 +322,7 @@ class ASTFitnessFeaturizer:
 
             for row in p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize):
                 pbar.update(1)
-                pbar.postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+                pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file
@@ -1826,25 +1827,29 @@ PREDICATE_FUNCTION_ARITY_MAP = {
 }
 
 
-class PredicateArgumentSymmetryType(Enum):
-    ALL_ARGUMENTS = 0
-    FIRST_AND_THIRD_ARGUMENTS = 1
+# class PredicateArgumentSymmetryType(Enum):
+#     ALL_ARGUMENTS = 0
+#     FIRST_AND_THIRD_ARGUMENTS = 1
+
+
+ALL_ARGUMENTS = 0
+FIRST_AND_THIRD_ARGUMENTS = 1
 
 
 SYMMETRIC_PREDICATE_ARG_INDICES = {
-    'adjacent': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'adjacent_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'between': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'distance': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'distance_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'equal_x_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'equal_z_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'faces': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'opposite': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_color': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_object': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_type': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'touch': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'adjacent': ALL_ARGUMENTS,
+    'adjacent_side_4': FIRST_AND_THIRD_ARGUMENTS,
+    'between': FIRST_AND_THIRD_ARGUMENTS,
+    'distance': ALL_ARGUMENTS,
+    'distance_side_4': FIRST_AND_THIRD_ARGUMENTS,
+    'equal_x_position': ALL_ARGUMENTS,
+    'equal_z_position': ALL_ARGUMENTS,
+    'faces': ALL_ARGUMENTS,
+    'opposite': ALL_ARGUMENTS,
+    'same_color': ALL_ARGUMENTS,
+    'same_object': ALL_ARGUMENTS,
+    'same_type': ALL_ARGUMENTS,
+    'touch': ALL_ARGUMENTS,
 }
 
 
@@ -2055,14 +2060,14 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
     argument_types_to_count_by_section: typing.Dict[str, typing.Dict[typing.Tuple[str, ...], int]]
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
     predicate_or_function: str
-    symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType]
+    symmetric_predicate_symmetry_types: typing.Dict[str, int]
     type_categories: typing.Sequence[str]
 
     def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES,
         type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
-        symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType] = SYMMETRIC_PREDICATE_ARG_INDICES,
+        symmetric_predicate_symmetry_types: typing.Dict[str, int] = SYMMETRIC_PREDICATE_ARG_INDICES,
         ):
 
         super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
@@ -2113,10 +2118,10 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             for category_product in itertools.product(*term_categories):  # type: ignore
                 if name in self.symmetric_predicate_symmetry_types:
                     symmetry_type = self.symmetric_predicate_symmetry_types[name]
-                    if symmetry_type == PredicateArgumentSymmetryType.ALL_ARGUMENTS:
+                    if symmetry_type == ALL_ARGUMENTS:
                         category_product = tuple(sorted(category_product))
 
-                    elif symmetry_type == PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS:
+                    elif symmetry_type == FIRST_AND_THIRD_ARGUMENTS:
                         if category_product[0] > category_product[2]:
                             category_product = (category_product[2], category_product[1], category_product[0], *category_product[3:])
 

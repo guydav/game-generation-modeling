@@ -204,7 +204,7 @@ class ASTFitnessFeaturizer:
         self.temp_file_writer_dict = {}
 
     def __del__(self):
-        logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
+        if logger is not None: logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
         for temp_file in self.temp_files.values():
             temp_file.close()
 
@@ -353,7 +353,7 @@ class ASTFitnessFeaturizer:
             logger.info(f'Creating temp file for pid {pid} with path {temp_output_path}')
 
             self.temp_file_output_paths[pid] = temp_output_path
-            temp_file = open(temp_output_path, 'w', newline='')
+            temp_file = open(temp_output_path, 'a', newline='')
             self.temp_files[pid] = temp_file
             temp_csv_writer = csv.DictWriter(temp_file, self.get_all_column_keys())
             self.temp_file_writer_dict[pid] = temp_csv_writer
@@ -2810,6 +2810,7 @@ def extract_negative_index(game_name: str):
 def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths: typing.List[str], headers: typing.List[str]):
     logger.info('About to parse rows from temp files into dataframe')
     rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
+    logger.info(f'Temp dataframes have shapes: {[df.shape for df in rows_dfs]}')
     rows_df = pd.concat(rows_dfs, sort=False)
 
     rows_df = rows_df.assign(real=(rows_df.src_file == 'interactive-beta.pddl').astype(int))
@@ -2819,7 +2820,6 @@ def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths
     rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
 
     featurizer.rows_df = rows_df.reset_index(drop=True)
-
 
 
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
@@ -2832,7 +2832,6 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
         featurizer = build_fitness_featurizer(args)
 
     return featurizer
-
 
 
 def test_multiprocessing_globals(index: int):

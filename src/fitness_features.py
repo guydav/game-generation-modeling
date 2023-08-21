@@ -91,6 +91,13 @@ parser.add_argument('--end-index', type=int, default=None)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+mp_logger = multiprocessing.log_to_stderr()
+mp_handler = logging.StreamHandler(sys.stdout)
+mp_handler.setFormatter(logging.Formatter('[%(levelname)s/%(processName)s] %(message)s'))
+for handler in mp_logger.handlers:
+    mp_logger.removeHandler(handler)
+mp_logger.addHandler(mp_handler)
+
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
 
@@ -197,6 +204,7 @@ class ASTFitnessFeaturizer:
         self.temp_file_writer_dict = {}
 
     def __del__(self):
+        logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
         for temp_file in self.temp_files.values():
             temp_file.close()
 
@@ -312,21 +320,28 @@ class ASTFitnessFeaturizer:
         return self.all_column_keys
 
     def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
-        with mpp.Pool(self.args.n_workers, maxtasksperchild=args.maxtasksperchild) as p:
+        with mpp.Pool(self.args.n_workers) as p:  # , maxtasksperchild=args.maxtasksperchild
             logger.info('Pool started')
 
             start_index = args.start_index if args.start_index is not None else 0
             end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
 
-            pbar = tqdm(total=end_index - start_index, desc='Parsing games', disable=args.dont_tqdm)
-            i = 0
+            result_tqdm = tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize),
+                               total=end_index - start_index, desc='Parsing games', disable=args.dont_tqdm)
 
-            for row in p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize):
+            result_tqdm.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+            i = 0
+            for row in result_tqdm:
                 i += 1
                 if i >= 100:
-                    pbar.update(i)
+                    result_tqdm.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
                     i = 0
-                    pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+
+                if any(map(lambda proc: not proc.is_alive(), p._pool)):
+                    logger.warn('Found a dead process!')
+
+            p.close()
+            p.join()
 
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file
@@ -335,6 +350,7 @@ class ASTFitnessFeaturizer:
 
         if pid not in self.temp_file_writer_dict:
             temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{pid}.temp.csv')
+            logger.info(f'Creating temp file for pid {pid} with path {temp_output_path}')
 
             self.temp_file_output_paths[pid] = temp_output_path
             temp_file = open(temp_output_path, 'w', newline='')
@@ -725,16 +741,16 @@ class PredicateFoundInData(FitnessTerm):
         self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
-        if self.use_full_databse:
-            self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-                force_trace_names_hash=self.trace_names_hash
-            )
+        # if self.use_full_databse:
+        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+            force_trace_names_hash=self.trace_names_hash
+        )
 
-        else:
-            self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
-                use_no_intervals=True,
-                force_trace_names_hash=self.trace_names_hash
-            )
+        # else:
+        #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
+        #         use_no_intervals=True,
+        #         force_trace_names_hash=self.trace_names_hash
+        #     )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
@@ -780,9 +796,9 @@ class PredicateFoundInData(FitnessTerm):
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
                 pass
 
-            except compile_predicate_statistics_full_database.QueryTimeoutException:
+            except (compile_predicate_statistics_full_database.QueryTimeoutException, RuntimeError) as e:
                 # If the query timed out, ignore this predicate for now
-                logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")
+                logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")  # type: ignore
                 pass
 
     def _get_all_inner_keys(self):
@@ -2613,7 +2629,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    predicate_found_in_data = PredicateFoundInData(use_full_databse=True)
+    predicate_found_in_data = PredicateFoundInData(use_full_databse=False)
     fitness.register(predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
@@ -2754,10 +2770,16 @@ def game_iterator(args: argparse.Namespace):
         for game in cached_load_and_parse_games_from_file(src_file,
                                                           grammar_parser,  # type: ignore
                                                           use_tqdm=False, log_every_change=False, force_from_cache=True):
-            skip = (args.start_index is not None and i < args.start_index) or (args.end_index is not None and i >= args.end_index)
-            if not skip:
+            before_start = args.start_index is not None and i < args.start_index
+            after_end = args.end_index is not None and i >= args.end_index
+            if after_end:
+                logger.info(f'Reached end index {args.end_index}, stopping')
+                return
+            elif not before_start:
                 yield game, src_file
             i += 1
+
+    logger.info(f'Reached end of game_iterator, stopping')
 
 
 def get_headers(args: argparse.Namespace, featurizer: ASTFitnessFeaturizer) -> typing.List[str]:

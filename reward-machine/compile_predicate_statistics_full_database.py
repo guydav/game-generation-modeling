@@ -18,6 +18,7 @@ import pickle
 import polars as pl
 pl.enable_string_cache(True)
 import pstats
+import shutil
 import signal
 import tatsu, tatsu.ast, tatsu.grammars
 import time
@@ -90,8 +91,7 @@ TYPE_REMAP = {
     "triangleblock": "triangle_block"
 }
 
-DEBUG = False
-PROFILE = True
+
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_bitstring_intervals_{traces_hash}.pkl.gz'
 NO_INTERVALS_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_no_intervals_{traces_hash}.pkl.gz'
@@ -147,15 +147,16 @@ class Timeout:
 
     def __exit__(self, *_):
         signal.alarm(0)
+        pass
 
 
 def raise_query_timeout(*args, **kwargs):
     raise QueryTimeoutException("Query timed out")
 
 
-alarm_handler = signal.getsignal(signal.SIGALRM)
-if alarm_handler is not None and alarm_handler is not signal.SIG_DFL and alarm_handler is not signal.SIG_IGN:
-    signal.signal(signal.SIGALRM, raise_query_timeout)
+# alarm_handler = signal.getsignal(signal.SIGALRM)
+# if alarm_handler is not None and alarm_handler is not signal.SIG_DFL and alarm_handler is not signal.SIG_IGN:
+    # signal.signal(signal.SIGALRM, raise_query_timeout)
 
 
 
@@ -187,8 +188,11 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.temp_table_index = -1
         self.temp_table_prefix = 't'
+        self.temp_dir = None
         self.max_child_args = max_child_args
         self.query_timeout = query_timeout
+
+        signal.signal(signal.SIGALRM, raise_query_timeout)
 
         if trace_folder is None:
             if os.path.exists(CLUSTER_BASE_TRACE_PATH):
@@ -217,6 +221,11 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.__dict__.update(state)
         self._create_databases()
 
+    def __del__(self):
+        if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
+            if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
+            if shutil is not None: shutil.rmtree(self.temp_dir)
+
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
         if table_query is not None:
@@ -224,6 +233,10 @@ class CommonSensePredicateStatisticsFullDatabase():
             if 'data' in all_tables:
                 # logger.info('Skipping creating tables because they already exist')
                 return
+
+        # duckdb.sql('INSTALL postgres_scanner; LOAD postgres_scanner;')
+        # duckdb.sql("CALL POSTGRES_ATTACH('postgresql://gd1279:Mati7878@localhost:33333/fitness')")
+        # return
 
         logger.info("Loading data from files")
         open_method = gzip.open if self.stats_filename.endswith('.gz') else open
@@ -242,10 +255,12 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        duckdb.sql(f"SET temp_directory='/tmp/duckdb/{os.getpid()}';")
+        self.temp_dir = f"/tmp/duckdb/{os.getpid()}"
+        os.makedirs(self.temp_dir, exist_ok=True)
+        duckdb.sql(f"SET temp_directory='{self.temp_dir}';")
         duckdb.sql("SET enable_progress_bar=false;")
         duckdb.sql("SET enable_progress_bar_print=false;")
-        duckdb.sql("SET memory_limit='16GB';")
+        duckdb.sql("SET memory_limit='32GB';")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")

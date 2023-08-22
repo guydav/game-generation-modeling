@@ -360,10 +360,11 @@ class PredicateHandler:
                 arg_values = []
 
                 for arg in args:
-                    if isinstance(arg, tatsu.ast.AST):
+                    inner_arg = arg.arg  # type: ignore
+                    if isinstance(inner_arg, tatsu.ast.AST):
                         try:
                             # If it's an AST, it's a function, so evaluate it
-                            arg_value = self.evaluate_function(arg, state, mapping, force_evaluation)
+                            arg_value = self.evaluate_function(inner_arg, state, mapping, force_evaluation)
 
                             # If the function is undecidable with the current information, return None
                             if arg_value is None:
@@ -377,7 +378,7 @@ class PredicateHandler:
                             all_args_implemented = False
 
                     else:
-                        arg_values.append(arg)
+                        arg_values.append(inner_arg)
 
                     if not any_args_implemented:
                         raise PredicateHandlerPredicateNotImplemented('All arguments of function comparison were not implemented')
@@ -462,7 +463,7 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value =  self._inner_evaluate_function(function, state, mapping, force_evaluation)
+        current_state_value = self._inner_evaluate_function(function, state, mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[function_key] = current_state_value
             self.evaluation_cache_last_updated[function_key] = state_index

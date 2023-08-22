@@ -1843,9 +1843,9 @@ PREDICATE_FUNCTION_ARITY_MAP = {
 }
 
 
-# class PredicateArgumentSymmetryType(Enum):
-#     ALL_ARGUMENTS = 0
-#     FIRST_AND_THIRD_ARGUMENTS = 1
+class PredicateArgumentSymmetryType(Enum):
+    ALL_ARGUMENTS = 0
+    FIRST_AND_THIRD_ARGUMENTS = 1
 
 
 ALL_ARGUMENTS = 0
@@ -2134,10 +2134,10 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             for category_product in itertools.product(*term_categories):  # type: ignore
                 if name in self.symmetric_predicate_symmetry_types:
                     symmetry_type = self.symmetric_predicate_symmetry_types[name]
-                    if symmetry_type == ALL_ARGUMENTS:
+                    if symmetry_type == ALL_ARGUMENTS or symmetry_type == PredicateArgumentSymmetryType.ALL_ARGUMENTS:
                         category_product = tuple(sorted(category_product))
 
-                    elif symmetry_type == FIRST_AND_THIRD_ARGUMENTS:
+                    elif symmetry_type == FIRST_AND_THIRD_ARGUMENTS or symmetry_type == PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS:
                         if category_product[0] > category_product[2]:
                             category_product = (category_product[2], category_product[1], category_product[0], *category_product[3:])
 

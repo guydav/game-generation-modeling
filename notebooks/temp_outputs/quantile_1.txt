@@ -1,0 +1,988 @@
+; Games from quantile #1 with energies in the range [-102.0732 (20%), -100.3218 (40%) ]
+; Game with index 2915 and energy -100.6508
+(define (game 614b603d4da88384282967a7-3-867-nd-12-rd-2-rs-constraints-sk-prior12) (:domain many-objects-room-v1)
+(:constraints
+  (and
+    (forall (?b - building)
+      (and
+        (preference blockInTowerAtEnd
+          (exists (?b10 - dodgeball)
+            (at-end
+              (in ?b ?l)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (external-forall-maximize
+    (count-once-per-objects blockInTowerAtEnd)
+  )
+)
+)
+
+; Game with index 1490 and energy -101.8175
+(define (game 5f77754ba932fb2c4ba181d8-2-466-nd-12-rd-10-rs-constraints-sk-prior22) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (open top_drawer)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b - (either dodgeball golfball) ?t - (either top_drawer hexagonal_bin))
+      (and
+        (preference throwToDrawerOrBin
+          (then
+            (once (and (agent_holds ?b) (adjacent door agent) ) )
+            (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+            (once (not (same_color ?b ?t) ) )
+          )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - (either dodgeball golfball))
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once-per-objects throwAttempt) 6 )
+)
+(:scoring
+  (+ (count-once-per-objects throwToDrawerOrBin:golfball:hexagonal_bin) (* 2 (count-once-per-objects throwToDrawerOrBin:dodgeball:hexagonal_bin) )
+    (* 3 (count-once-per-objects throwToDrawerOrBin:golfball:top_drawer) )
+    (+ (count-once-per-objects throwToDrawerOrBin) (- (count-once-per-objects throwAttempt) )
+    )
+  )
+)
+)
+
+; Game with index 4515 and energy -101.6893
+(define (game 614dec67f6eb129c3a77defd-6-419-nd-15-rd-8-rs-constraints-sk-prior22) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (adjacent ?h bed)
+      )
+    )
+    (forall (?o - (either teddy_bear pillow))
+      (game-conserved
+        (not
+          (on bed ?o)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b - ball)
+      (and
+        (preference throwBallToBin
+          (exists (?h - hexagonal_bin)
+            (then
+              (once (and (agent_holds ?b) (adjacent desk agent) ) )
+              (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+              (once (and (same_object ?b ?b) (not (in_motion ?h) ) (toggled_on ?h) ) )
+            )
+          )
+        )
+      )
+    )
+    (preference failedThrowToBin
+      (exists (?b - ball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?b) (adjacent desk agent) ) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (and (not (in_motion ?b) ) (not (in ?h ?b) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (+ (* 10 (count throwBallToBin:dodgeball) )
+    (* 20 (count throwBallToBin:basketball) )
+    (* 30 (count throwBallToBin:beachball) )
+    (- (count failedThrowToBin) )
+  )
+)
+)
+
+; Game with index 8824 and energy -100.6336
+(define (game 5d29412ab711e9001ab74ece-11-632-nd-26-rd-2-rs-constraints-sk-prior2) (:domain many-objects-room-v1)
+(:constraints
+  (and
+    (forall (?b - building)
+      (and
+        (preference baseBlockInTowerAtEnd
+          (exists (?l - block)
+            (at-end
+              (and
+                (in ?b ?l)
+                (on floor ?l)
+              )
+            )
+          )
+        )
+        (preference blockOnBlockInTowerAtEnd
+          (exists (?l - block)
+            (at-end
+              (and
+                (in ?b ?l)
+                (not
+                  (exists (?o - game_object)
+                    (and
+                      (not
+                        (same_type ?o pillow)
+                      )
+                      (touch ?o ?l)
+                    )
+                  )
+                )
+                (not
+                  (on floor ?l)
+                )
+              )
+            )
+          )
+        )
+        (preference pyramidBlockAtopTowerAtEnd
+          (exists (?p - pyramid_block)
+            (at-end
+              (and
+                (in ?b ?p)
+                (not
+                  (exists (?l - block)
+                    (on ?p ?l)
+                  )
+                )
+                (not
+                  (exists (?o - game_object)
+                    (and
+                      (not
+                        (same_type ?o block)
+                      )
+                      (touch ?o ?p)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (external-forall-maximize
+    (* (count-once pyramidBlockAtopTowerAtEnd) (count-once baseBlockInTowerAtEnd) (+ (count-once baseBlockInTowerAtEnd) (count-once-per-objects blockOnBlockInTowerAtEnd) )
+    )
+  )
+)
+)
+
+; Game with index 3640 and energy -101.8556
+(define (game 5bc79f652885710001a0e82a-5-568-nd-10-rd-2-rs-constraints-sk-prior12) (:domain few-objects-room-v1)
+(:constraints
+  (and
+    (preference throwBallToBin
+      (exists (?d - dodgeball ?d2 - (either teddy_bear hexagonal_bin golfball))
+        (then
+          (once (and (agent_holds ?d) (= (distance ?h agent) 1) ) )
+          (hold (and (not (agent_holds ?d) ) (in_motion ?d) ) )
+          (once (and (not (in_motion ?d) ) (in ?h ?d) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count throwBallToBin)
+)
+)
+
+; Game with index 5307 and energy -101.2997
+(define (game 615b40bb6cdb0f1f6f291f45-8-187-nd-20-rd-2-rs-constraints-sk-prior22) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?c - curved_wooden_ramp)
+      (game-conserved
+        (on floor ?c)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwOverRamp
+      (exists (?d - dodgeball ?c - curved_wooden_ramp)
+        (then
+          (once (and (agent_holds ?d) (< (distance_side ?c front agent) (distance_side bed front_left_corner ?d)) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (on ?c ?d) )
+          (once (and (not (in_motion ?d) ) (< (distance_side ?c back ?d) (distance_side ?c front ?d)) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - ball)
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once throwOverRamp) 1 )
+)
+(:scoring
+  (+ (* 3 (= (count throwAttempt) 1 )
+      (count-once throwOverRamp)
+    )
+    (* 2 (= (count throwAttempt) 2 )
+      (count-once throwOverRamp)
+    )
+    (* (>= (count throwAttempt) 3 )
+      (count-once throwOverRamp)
+    )
+  )
+)
+)
+
+; Game with index 9389 and energy -100.9889
+(define (game 613bb29f16252362f4dc11a3-12-173-nd-10-rd-11-rs-constraints-sk-prior2) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (< (distance room_center ?h) 1)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwToRampToBin
+      (exists (?r - triangular_ramp ?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (adjacent door agent) (agent_crouches ) ) )
+          (once (and (equal_x_position room_center ?d) (and (agent_holds agent) (in ?d agent) (on ?r ?d) ) ) )
+          (once (and (in ?h ?d) (not (in_motion ?d) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count-unique-positions throwToRampToBin)
+)
+)
+
+; Game with index 9658 and energy -100.9656
+(define (game 613bb29f16252362f4dc11a3-12-442-nd-12-rd-9-rs-constraints-sk-prior2) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (< (distance room_center ?h) 1)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwToRampToBin
+      (exists (?r - triangular_ramp ?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (adjacent door agent) (agent_crouches ) ) )
+          (hold-while (same_color ?r west_wall) (touch ?r ?d) )
+          (once (and (in ?h ?d) (not (in_motion ?d) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count-unique-positions throwToRampToBin)
+)
+)
+
+; Game with index 6885 and energy -102.0064
+(define (game 615452aaabb932ada88ef3ca-9-741-nd-15-rd-4-rs-constraints-sk-prior2) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (or
+          (on bed ?h)
+          (exists (?w - wall)
+            (adjacent ?w ?h)
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (or (on bed ?h) (exists (?w1 ?w2 - wall) (and (adjacent ?w1 ?h) (adjacent ?w2 agent) (opposite ?w1 ?w2) ) ) ) ) )
+          (hold (and (not (agent_holds ?d) ) (in_motion ?d) (not (touch floor ?d) ) ) )
+          (once (and (not (in_motion ?d) ) (in ?h ?d) ) )
+        )
+      )
+    )
+    (preference bounceBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (or (on bed ?h) (exists (?w1 ?w2 - wall) (and (adjacent ?w1 ?h) (adjacent ?w2 agent) (opposite ?w1 ?w2) ) ) ) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (touch floor ?d) )
+          (once (and (not (in_motion ?d) ) (and (not (adjacent ?h floor) ) (in_motion ?h) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (+ (count bounceBallToBin) (* 3 (count throwBallToBin) )
+  )
+)
+)
+
+; Game with index 7920 and energy -101.0394
+(define (game 57aa430b4cda6e00018420e9-10-752-nd-14-rd-2-rs-constraints-sk-prior22) (:domain medium-objects-room-v1)
+(:constraints
+  (and
+    (preference throwTeddyOntoPillow
+      (exists (?t - teddy_bear ?p - pillow)
+        (then
+          (once (agent_holds ?t) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (and (not (in_motion ?t) ) (on ?p ?t) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?t - teddy_bear)
+        (then
+          (once (agent_holds desk) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (not (in_motion ?t) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count throwAttempt) 10 )
+)
+(:scoring
+  (count throwTeddyOntoPillow)
+)
+)
+
+; Game with index 6680 and energy -101.8317
+(define (game 615452aaabb932ada88ef3ca-9-536-nd-20-rd-7-rs-constraints-sk-prior12) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (or
+          (on bed ?h)
+          (exists (?w - wall)
+            (adjacent ?w ?h)
+          )
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (or (on bed ?h) (exists (?w1 ?w2 - wall) (and (and (or (agent_crouches ) (touch ?h ?w2) ) (in ?w1 ?h) (< (distance bed ?w1) (distance desk ?h)) ) (agent_holds ?h) (not (> 7 (x_position ?w1)) ) (agent_holds ?w1) ) ) ) ) )
+          (hold (and (not (agent_holds ?d) ) (in_motion ?d) (not (touch floor ?d) ) ) )
+          (once (and (not (in_motion ?d) ) (in ?h ?d) ) )
+        )
+      )
+    )
+    (preference bounceBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (or (on bed ?h) (exists (?w1 ?w2 - wall) (and (adjacent ?w1 ?h) (adjacent ?w2 agent) (opposite ?w1 ?w2) ) ) ) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (touch floor ?d) )
+          (once (and (not (in_motion ?d) ) (in ?h ?d) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (+ (count bounceBallToBin) (* 3 (count throwBallToBin) )
+  )
+)
+)
+
+; Game with index 1192 and energy -100.8297
+(define (game 5f77754ba932fb2c4ba181d8-2-168-nd-5-rd-11-rs-scoring-sk-prior12) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (open top_drawer)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b - (either dodgeball golfball) ?t - (either top_drawer hexagonal_bin))
+      (and
+        (preference throwToDrawerOrBin
+          (then
+            (once (and (agent_holds ?b) (adjacent door agent) ) )
+            (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+            (once (and (not (in_motion ?b) ) (in ?t ?b) ) )
+          )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - (either dodgeball golfball))
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once-per-objects throwAttempt) 6 )
+)
+(:scoring
+  (+ (count-once-per-objects throwToDrawerOrBin:golfball:hexagonal_bin) (* 2 (count-once-per-objects throwToDrawerOrBin:dodgeball:hexagonal_bin) )
+    5
+    (+ (count-once-per-objects throwToDrawerOrBin) (- (count-once-per-objects throwAttempt) )
+    )
+  )
+)
+)
+
+; Game with index 5217 and energy -101.9651
+(define (game 615b40bb6cdb0f1f6f291f45-8-97-nd-21-rd-1-rs-constraints-sk-prior2) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?c - curved_wooden_ramp)
+      (game-conserved
+        (on floor ?c)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwOverRamp
+      (exists (?d - dodgeball ?c - curved_wooden_ramp)
+        (then
+          (once (and (agent_holds ?d) (< (distance_side ?c front agent) (distance_side rug back agent)) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (on ?c ?d) )
+          (once (and (not (in_motion ?d) ) (< (distance_side ?c back ?d) (distance_side ?c front ?d)) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - ball)
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once throwOverRamp) 1 )
+)
+(:scoring
+  (+ (* 3 (= (count throwAttempt) 1 )
+      (count-once throwOverRamp)
+    )
+    (* 2 (= (count throwAttempt) 2 )
+      (count-once throwOverRamp)
+    )
+    (* (>= (count throwAttempt) 3 )
+      (count-once throwOverRamp)
+    )
+  )
+)
+)
+
+; Game with index 4634 and energy -101.7385
+(define (game 614dec67f6eb129c3a77defd-6-538-nd-19-rd-2-rs-constraints-sk-prior22) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (adjacent ?h bed)
+      )
+    )
+    (forall (?o - (either teddy_bear pillow))
+      (game-conserved
+        (not
+          (on bed ?o)
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b - ball)
+      (and
+        (preference throwBallToBin
+          (exists (?h - hexagonal_bin)
+            (then
+              (once (and (agent_holds ?b) (adjacent ?b ?h) ) )
+              (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+              (once (and (not (in_motion ?b) ) (in ?h ?b) ) )
+            )
+          )
+        )
+      )
+    )
+    (preference failedThrowToBin
+      (exists (?b - ball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?b) (adjacent desk agent) ) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (and (not (in_motion ?b) ) (not (in ?h ?b) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (+ (* 10 (count throwBallToBin:dodgeball) )
+    (* 20 (count throwBallToBin:basketball) )
+    (* 30 (count throwBallToBin:beachball) )
+    (- (count failedThrowToBin) )
+  )
+)
+)
+
+; Game with index 2527 and energy -101.3490
+(define (game 614b603d4da88384282967a7-3-479-nd-6-rd-9-rs-constraints-sk-prior2) (:domain many-objects-room-v1)
+(:constraints
+  (and
+    (forall (?b - building)
+      (and
+        (preference blockPickedUp
+          (exists (?o3 - cube_block)
+            (then
+              (hold (in_motion ?o3) )
+              (hold (< (distance ?b ?o3) 1) )
+              (once (< 1 (distance bed ?b)) )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (external-forall-maximize
+    (count-once-per-objects blockInTowerAtEnd)
+  )
+)
+)
+
+; Game with index 4326 and energy -100.4633
+(define (game 614dec67f6eb129c3a77defd-6-230-nd-11-rd-5-rs-setup-sk-prior22) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (adjacent ?h bed)
+      )
+    )
+    (forall (?o - (either teddy_bear pillow))
+      (game-conserved
+        (not
+          (= 9 0 (distance ?o rug))
+        )
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?b - ball)
+      (and
+        (preference throwBallToBin
+          (exists (?h - hexagonal_bin)
+            (then
+              (once (and (agent_holds ?b) (adjacent desk agent) ) )
+              (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+              (once (and (not (in_motion ?b) ) (in ?h ?b) ) )
+            )
+          )
+        )
+      )
+    )
+    (preference failedThrowToBin
+      (exists (?b - ball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?b) (adjacent desk agent) ) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (and (not (in_motion ?b) ) (not (in ?h ?b) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (+ (* 10 (count throwBallToBin:dodgeball) )
+    (* 20 (count throwBallToBin:basketball) )
+    (* 30 (count throwBallToBin:beachball) )
+    (- (count failedThrowToBin) )
+  )
+)
+)
+
+; Game with index 4009 and energy -101.2672
+(define (game 5bc79f652885710001a0e82a-5-937-nd-10-rd-11-rs-constraints-sk-prior12) (:domain few-objects-room-v1)
+(:constraints
+  (and
+    (preference throwBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (= (distance ?h agent) 1) ) )
+          (hold (and (not (agent_holds ?d) ) (in_motion ?d) ) )
+          (hold (on ?h bed) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count throwBallToBin)
+)
+)
+
+; Game with index 5189 and energy -101.4740
+(define (game 615b40bb6cdb0f1f6f291f45-8-69-nd-18-rd-3-rs-constraints-sk-prior2) (:domain few-objects-room-v1)
+(:setup
+  (and
+    (exists (?c - curved_wooden_ramp)
+      (game-conserved
+        (on floor ?c)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwOverRamp
+      (exists (?d - dodgeball ?c - curved_wooden_ramp)
+        (then
+          (once (and (agent_holds ?d) (< (distance_side ?c front agent) (distance_side ?c back agent)) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (on ?c ?d) )
+          (once (and (not (on ?c ?c) ) (< (distance_side ?c back ?d) (distance_side ?c front ?d)) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - ball)
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once throwOverRamp) 1 )
+)
+(:scoring
+  (+ (* 3 (= (count throwAttempt) 1 )
+      (count-once throwOverRamp)
+    )
+    (* 2 (= (count throwAttempt) 2 )
+      (count-once throwOverRamp)
+    )
+    (* (>= (count throwAttempt) 3 )
+      (count-once throwOverRamp)
+    )
+  )
+)
+)
+
+; Game with index 1682 and energy -101.6030
+(define (game 5f77754ba932fb2c4ba181d8-2-658-nd-5-rd-17-rs-constraints-sk-prior12) (:domain many-objects-room-v1)
+(:setup
+  (and
+    (game-conserved
+      (open top_drawer)
+    )
+  )
+)
+(:constraints
+  (and
+    (forall (?t1 - chair ?t1 - hexagonal_bin)
+      (and
+        (preference dodgeballFromRugToBin
+          (then
+            (hold (or (rug_color_under ?t brown) (agent_holds ?t1) ) )
+            (once (in_motion ?t) )
+            (once-measure (in_motion ?t) (distance_side ?t left ?b) )
+          )
+        )
+        (preference greenObjectMovedToRoomCenter
+          (exists (?l1 ?l - hexagonal_bin)
+            (at-end
+              (agent_holds ?t)
+            )
+          )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?b - (either dodgeball golfball))
+        (then
+          (once (agent_holds ?b) )
+          (hold (and (not (agent_holds ?b) ) (in_motion ?b) ) )
+          (once (not (in_motion ?b) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once-per-objects throwAttempt) 6 )
+)
+(:scoring
+  (+ (count-once-per-objects throwToDrawerOrBin:golfball:hexagonal_bin) (* 2 (count-once-per-objects throwToDrawerOrBin:dodgeball:hexagonal_bin) )
+    (* 3 (count-once-per-objects throwToDrawerOrBin:golfball:top_drawer) )
+    (+ (count-once-per-objects throwToDrawerOrBin) (- (count-once-per-objects throwAttempt) )
+    )
+  )
+)
+)
+
+; Game with index 9729 and energy -100.3838
+(define (game 613bb29f16252362f4dc11a3-12-513-nd-4-rd-2-rs-scoring-sk-prior2) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin)
+      (game-conserved
+        (< (distance room_center ?h) 1)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwToRampToBin
+      (exists (?r - triangular_ramp ?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (adjacent door agent) (agent_crouches ) ) )
+          (hold-while (and (not (agent_holds ?d) ) (in_motion ?d) ) (touch ?r ?d) )
+          (once (and (in ?h ?d) (not (in_motion ?d) ) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count-unique-positions throwToRampToBin:blue_dodgeball)
+)
+)
+
+; Game with index 910 and energy -101.4279
+(define (game 6172feb1665491d1efbce164-0-910-nd-10-rd-2-rs-constraints-sk-prior22) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin ?r - triangular_ramp)
+      (game-conserved
+        (< (distance ?h ?r) 1)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwToRampToBin
+      (exists (?h - desktop ?r - triangular_ramp ?h - hexagonal_bin)
+        (then
+          (once (agent_holds ?b) )
+          (hold-while (and (not (agent_holds ?b) ) (in_motion ?b) ) (touch ?b ?r) )
+          (once (and (not (in_motion ?b) ) (in ?h ?b) ) )
+        )
+      )
+    )
+    (preference binKnockedOver
+      (exists (?h - hexagonal_bin)
+        (then
+          (once (object_orientation ?h upright) )
+          (hold (and (not (touch agent ?h) ) (not (agent_holds ?h) ) ) )
+          (once (not (object_orientation ?h upright) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once binKnockedOver) 1 )
+)
+(:scoring
+  (count throwToRampToBin)
+)
+)
+
+; Game with index 8147 and energy -100.7193
+(define (game 57aa430b4cda6e00018420e9-10-979-nd-10-rd-2-rs-constraints-sk-prior2) (:domain medium-objects-room-v1)
+(:constraints
+  (and
+    (preference throwTeddyOntoPillow
+      (exists (?t - teddy_bear ?b - hexagonal_bin)
+        (then
+          (once (agent_holds ?t) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (and (not (in_motion ?t) ) (on ?p ?t) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?t - teddy_bear)
+        (then
+          (once (agent_holds ?t) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (not (in_motion ?t) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count throwAttempt) 10 )
+)
+(:scoring
+  (count throwTeddyOntoPillow)
+)
+)
+
+; Game with index 7366 and energy -101.4281
+(define (game 57aa430b4cda6e00018420e9-10-198-nd-11-rd-1-rs-constraints-sk-prior2) (:domain medium-objects-room-v1)
+(:constraints
+  (and
+    (preference throwTeddyOntoPillow
+      (exists (?t - teddy_bear ?p - pillow)
+        (then
+          (once (agent_holds ?t) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (and (not (in_motion ?t) ) (on ?p ?t) ) )
+        )
+      )
+    )
+    (preference throwAttempt
+      (exists (?t - dodgeball)
+        (then
+          (once (agent_holds ?t) )
+          (hold (and (not (agent_holds ?t) ) (in_motion ?t) ) )
+          (once (not (in_motion ?t) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count throwAttempt) 10 )
+)
+(:scoring
+  (count throwTeddyOntoPillow)
+)
+)
+
+; Game with index 921 and energy -101.6270
+(define (game 6172feb1665491d1efbce164-0-921-nd-15-rd-6-rs-constraints-sk-prior12) (:domain medium-objects-room-v1)
+(:setup
+  (and
+    (exists (?h - hexagonal_bin ?r - triangular_ramp)
+      (game-conserved
+        (< (distance ?h ?r) 1)
+      )
+    )
+  )
+)
+(:constraints
+  (and
+    (preference throwToRampToBin
+      (exists (?b - ball ?r - triangular_ramp ?h - hexagonal_bin)
+        (then
+          (once (agent_holds ?b) )
+          (hold-while (and (not (on ?h bed) ) (in_motion ?b) ) (touch ?b ?r) )
+          (once (and (not (in_motion ?b) ) (in ?h ?b) ) )
+        )
+      )
+    )
+    (preference binKnockedOver
+      (exists (?h - hexagonal_bin)
+        (then
+          (once (object_orientation ?h upright) )
+          (hold (and (not (touch agent ?h) ) (not (agent_holds ?h) ) ) )
+          (once (not (object_orientation ?h upright) ) )
+        )
+      )
+    )
+  )
+)
+(:terminal
+  (>= (count-once binKnockedOver) 1 )
+)
+(:scoring
+  (count throwToRampToBin)
+)
+)
+
+; Game with index 3912 and energy -101.2829
+(define (game 5bc79f652885710001a0e82a-5-840-nd-18-rd-1-rs-constraints-sk-prior2) (:domain few-objects-room-v1)
+(:constraints
+  (and
+    (preference throwBallToBin
+      (exists (?d - dodgeball ?h - hexagonal_bin)
+        (then
+          (once (and (agent_holds ?d) (= (distance ?h agent) (distance door ?d)) ) )
+          (hold (and (not (agent_holds ?d) ) (in_motion ?d) ) )
+          (once (and (not (in_motion ?d) ) (in ?h ?d) ) )
+        )
+      )
+    )
+  )
+)
+(:scoring
+  (count throwBallToBin)
+)
+)

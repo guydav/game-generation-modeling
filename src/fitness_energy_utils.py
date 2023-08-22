@@ -781,8 +781,9 @@ def build_multiple_scoring_function(
 
 
 class ModelRegularizer:
-    def __init__(self, ord: int):
+    def __init__(self, ord: int, threshold: typing.Optional[float] = None):
         self.ord = ord
+        self.threshold = threshold
 
     def __call__(self, model: ModelClasses) -> torch.Tensor:
         if isinstance(model, Pipeline):
@@ -790,6 +791,11 @@ class ModelRegularizer:
 
         if isinstance(model, SklearnFitnessWrapper):
             model = model.model
+
+        if self.threshold is not None and self.ord == 0:
+            weight = torch.zeros_like(model.fc1.weight)
+            weight[model.fc1.weight.abs() > self.threshold] = 1.0
+            return torch.linalg.vector_norm(weight, ord=self.ord)
 
         return torch.linalg.vector_norm(model.fc1.weight, ord=self.ord)
 

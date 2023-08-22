@@ -780,6 +780,26 @@ def build_multiple_scoring_function(
     return MultipleScoringWrapper(evaluators, names)
 
 
+class ModelRegularizer:
+    def __init__(self, ord: int, threshold: typing.Optional[float] = None):
+        self.ord = ord
+        self.threshold = threshold
+
+    def __call__(self, model: ModelClasses) -> torch.Tensor:
+        if isinstance(model, Pipeline):
+            model = model.named_steps['fitness']
+
+        if isinstance(model, SklearnFitnessWrapper):
+            model = model.model
+
+        if self.threshold is not None and self.ord == 0:
+            weight = torch.zeros_like(model.fc1.weight)
+            weight[model.fc1.weight.abs() > self.threshold] = 1.0
+            return torch.linalg.vector_norm(weight, ord=self.ord)
+
+        return torch.linalg.vector_norm(model.fc1.weight, ord=self.ord)
+
+
 default_multiple_scoring = build_multiple_scoring_function(
     [
         wrap_loss_function_to_metric(fitness_sofmin_loss_positive_negative_split, dict(beta=1.0), True),  # type: ignore

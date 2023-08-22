@@ -105,6 +105,16 @@ def main(args: argparse.Namespace):
     else:
         train_kwargs['device'] = args.device
 
+    if 'regularizer' in train_kwargs:
+        if 'regularization_weight' not in train_kwargs:
+            raise ValueError('regularizer is specified but regularization_weight is not')
+
+        threshold = None
+        if 'regularization_threshold' in train_kwargs:
+            threshold = train_kwargs.pop('regularization_threshold')
+
+        train_kwargs['regularizer'] = utils.ModelRegularizer(train_kwargs['regularizer'], threshold)
+
     if 'fitness__loss_function' in param_grid:
         param_grid['fitness__loss_function'] = [getattr(utils, x) for x in param_grid['fitness__loss_function']]
     elif 'loss_function' not in train_kwargs:

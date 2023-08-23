@@ -35,12 +35,12 @@ GAME_OBJECT = 'game_object'
 BALL = 'ball'
 BASKETBALL = 'basketball'
 BEACHBALL = 'beachball'
-BLUE_DODGEBALL = 'blue_dodgeball'
+BLUE_DODGEBALL = 'dodgeball_blue'
 DODGEBALL = 'dodgeball'
 GOLFBALL = 'golfball'
-GREEN_GOLFBALL = 'green_golfball'
-PINK_DODGEBALL = 'pink_dodgeball'
-RED_DODGEBALL = 'red_dodgeball'
+GREEN_GOLFBALL = 'golfball_green'
+PINK_DODGEBALL = 'dodgeball_pink'
+RED_DODGEBALL = 'dodgeball_red'
 
 # BLOCKS
 BLOCK = 'block'
@@ -52,12 +52,12 @@ PYRAMID_BLOCK = 'pyramid_block'
 TALL_CYLINDRICAL_BLOCK = 'tall_cylindrical_block'
 TALL_RECTANGULAR_BLOCK = 'tall_rectangular_block'
 TRIANGLE_BLOCK = 'triangle_block'
-TAN_CUBE_BLOCK = 'tan_cube_block'
-RED_PYRAMID_BLOCK = 'red_pyramid_block'
-BLUE_CUBE_BLOCK = 'blue_cube_block'
-BLUE_PYRAMID_BLOCK = 'blue_pyramid_block'
-YELLOW_PYRAMID_BLOCK = 'yellow_pyramid_block'
-YELLOW_CUBE_BLOCK = 'yellow_cube_block'
+TAN_CUBE_BLOCK = 'cube_block_tan'
+RED_PYRAMID_BLOCK = 'pyramid_block_red'
+BLUE_CUBE_BLOCK = 'cube_block_blue'
+BLUE_PYRAMID_BLOCK = 'pyramid_block_blue'
+YELLOW_PYRAMID_BLOCK = 'pyramid_block_yellow'
+YELLOW_CUBE_BLOCK = 'cube_block_yellow'
 
 # COLORS
 COLOR = 'color'
@@ -101,7 +101,7 @@ TEDDY_BEAR = 'teddy_bear'
 # RAMPS
 CURVED_WOODEN_RAMP = 'curved_wooden_ramp'
 TRIANGULAR_RAMP = 'triangular_ramp'
-GREEN_TRIANGULAR_RAMP = 'green_triangular_ramp'
+GREEN_TRIANGULAR_RAMP = 'triangular_ramp_green'
 
 # RECEPTACLES
 DOGGIE_BED = 'doggie_bed'
@@ -136,13 +136,14 @@ PENCIL = 'pencil'
 WATCH = 'watch'
 
 # SIDES
+SIDE = 'side'
 BACK = 'back'
 FRONT = 'front'
-FRONT_LEFT_CORNER = 'front_left_corner'
 LEFT = 'left'
 RIGHT = 'right'
 
 #  ORIENTATIONS
+ORIENTATION = 'orientation'
 DIAGONAL = 'diagonal'
 SIDEWAYS = 'sideways'
 UPRIGHT = 'upright'
@@ -178,7 +179,7 @@ CATEGORIES_TO_TYPES = {
     ),
     COLORS: (
         COLOR, BLUE, BROWN, GRAY, GREEN,
-        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED,
+        ORANGE, PINK, PURPLE, RED,
         TAN, WHITE, YELLOW,
     ),
     EMPTY_OBJECT: (
@@ -195,7 +196,7 @@ CATEGORIES_TO_TYPES = {
         BOOK, CHAIR, LAPTOP, PILLOW, TEDDY_BEAR,
     ),
     ORIENTATIONS: (
-        DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
+        ORIENTATION, DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
     ),
     RAMPS: (
         CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, GREEN_TRIANGULAR_RAMP,
@@ -209,7 +210,7 @@ CATEGORIES_TO_TYPES = {
         NORTH_WALL, SOUTH_WALL, WEST_WALL,
     ),
     SIDES: (
-        BACK, FRONT, FRONT_LEFT_CORNER, LEFT, RIGHT,
+        SIDE, BACK, FRONT, LEFT, RIGHT,
     ),
     SMALL_OBJECTS: (
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN,
@@ -494,8 +495,8 @@ FULL_ROOMS_TO_OBJECTS = {
 # ROOMS_TO_AVAILABLE_OBJECTS = {
 #     FEW: set([
 #         'agent',
-#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball',
-#         'block', 'cube_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
+#         'ball', 'dodgeball', 'dodgeball_blue', 'dodgeball_pink',
+#         'block', 'cube_block', 'cube_block_yellow', 'cube_block_blue', 'cube_block_tan',
 #         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
@@ -506,9 +507,9 @@ FULL_ROOMS_TO_OBJECTS = {
 #     ]),
 #     MEDIUM: set([
 #         'agent',
-#         'ball', 'basketball', 'beachball', 'dodgeball', 'red_dodgeball',
+#         'ball', 'basketball', 'beachball', 'dodgeball', 'dodgeball_red',
 #         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block',
-#         'yellow_pyramid_block', 'red_pyramid_block', 'yellow_cube_block', 'blue_cube_block',
+#         'pyramid_block_yellow', 'pyramid_block_red', 'cube_block_yellow', 'cube_block_blue',
 #         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
@@ -519,13 +520,13 @@ FULL_ROOMS_TO_OBJECTS = {
 #     ]),
 #     MANY: set([
 #         'agent',
-#         'ball', 'beachball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 'red_dodgeball', 'golfball', 'green_golfball',
+#         'ball', 'beachball', 'dodgeball', 'dodgeball_blue', 'dodgeball_pink', 'dodgeball_red', 'golfball', 'golfball_green',
 #         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 'triangle_block',
-#         'yellow_pyramid_block', 'red_pyramid_block', 'blue_pyramid_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
+#         'pyramid_block_yellow', 'pyramid_block_red', 'pyramid_block_blue', 'cube_block_yellow', 'cube_block_blue', 'cube_block_tan',
 #         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow',
 #         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
 #         'building',  'game_object', '',
-#         'curved_wooden_ramp', 'doggie_bed', 'green_triangular_ramp', 'hexagonal_bin',  'triangular_ramp',
+#         'curved_wooden_ramp', 'doggie_bed', 'triangular_ramp_green', 'hexagonal_bin',  'triangular_ramp',
 #         'laptop', 'pillow', 'teddy_bear',
 #         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
 #         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',

@@ -26,6 +26,7 @@ import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy, deepcopy_ast
 from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping, LOCAL_CONTEXT_PROPAGATING_RULES
 import room_and_object_types
+from room_and_object_types import COLOR, ORIENTATION, SIDE
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -412,10 +413,6 @@ VARIABLE_DEFAULTS = defaultdict(create_sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
-COLOR = 'color'
-ORIENTATION = 'orientation'
-SIDE = 'side'
-
 
 COLOR_VARIABLE_LETTER = 'x'
 ORIENTATION_VARIABLE_LETTER = 'y'
@@ -459,13 +456,28 @@ def _function_names():
     return FUNCTION_NAMES
 
 def _colors():
-    return list(COLORS)
+    l = list(COLORS)
+    l.remove(COLOR)
+    return l
 
 def _orientations():
-    return list(ORIENTATIONS)
+    l = list(ORIENTATIONS)
+    l.remove(ORIENTATION)
+    return l
 
 def _sides():
-    return list(SIDES)
+    l = list(SIDES)
+    l.remove(SIDE)
+    return l
+
+def _color_type():
+    return [COLOR]
+
+def _orientation_type():
+    return [ORIENTATION]
+
+def _side_type():
+    return [SIDE]
 
 def _predicate_names():
     return PREDICATE_NAMES
@@ -487,10 +499,19 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     func_name=defaultdict(_function_names),
     object_type=defaultdict(list),  # TODO: decide if there's a prior here
     object_name=defaultdict(list),  # TODO: decide if there's a prior here
-    location=defaultdict(list),  # TODO: decide if there's a prior here
+    # location=defaultdict(list),  # TODO: decide if there's a prior here
     color=defaultdict(_colors),  # TODO: decide if there's a prior here
     orientation=defaultdict(_orientations),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
     side=defaultdict(_sides),  # TODO: decide if there's a prior here
+    color_type={
+        ('color_type_definition', 'type'): _color_type,
+    },
+    orientation_type={
+        ('orientation_type_definition', 'type'): _orientation_type,
+    },
+    side_type={
+        ('side_type_definition', 'type'): _side_type,
+    },
     predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
@@ -512,13 +533,13 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
 # TODO: consider if we want to try to remove some of these extra steps
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('type_definition', 'type'): 'object_type',
-    ('color_type_definition', 'type'): 'color',
-    ('orientation_type_definition', 'type'): 'orientation',
-    ('side_type_definition', 'type'): 'side',
+    ('color_type_definition', 'type'): 'color_type',
+    ('orientation_type_definition', 'type'): 'orientation_type',
+    ('side_type_definition', 'type'): 'side_type',
     ('comparison_arg', 'arg'): 'number',
     ('predicate_or_function_term', 'term'): ('object_name', 'variable',),
     ('predicate_or_function_color_term', 'term'): ('color', 'color_variable',),
-    ('predicate_or_function_location_term', 'term'): ('location', 'variable',),
+    # ('predicate_or_function_location_term', 'term'): ('location', 'variable',),
     ('predicate_or_function_orientation_term', 'term'): ('orientation', 'orientation_variable',),
     ('predicate_or_function_side_term', 'term'): ('side', 'side_variable',),
     ('predicate_or_function_type_term', 'term'): ('object_type', 'variable',),

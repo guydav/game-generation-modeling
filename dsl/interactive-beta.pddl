@@ -1738,20 +1738,18 @@
 
 (define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
 (:setup (and
-    (exists (?b - building) (and
-        (game-conserved (= (building_size ?b) 6))
+    (forall (?l - block ?s - shelf) (game-optional (not (on ?s ?l))))
+    (exists (?b - building) (game-conserved (and
+        (= (building_size ?b) 6)
         (forall (?l - block) (or
-            (game-conserved (and
-                    (in ?b ?l)
-                    (not (exists (?l2 - block) (and
-                        (in ?b ?l2)
-                        (not (same_object ?l ?l2))
-                        (same_type ?l ?l2)
-                    )))
+            (in ?b ?l)
+            (exists (?l2 - block) (and
+                (in ?b ?l2)
+                (not (same_object ?l ?l2))
+                (same_type ?l ?l2)
             ))
-            (game-optional (not (exists (?s - shelf) (on ?s ?l))))
         ))
-    ))
+    )))
 ))
 (:constraints (and
     (preference gameBlockFound (exists (?l - block)
@@ -1770,7 +1768,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
+                        (in_motion ?l2)
                     )
                 )
                 (touch ?l1 ?l2)

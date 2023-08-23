@@ -106,7 +106,7 @@ def main(args: argparse.Namespace):
         train_kwargs['device'] = args.device
 
     if 'regularizer' in train_kwargs:
-        if 'regularization_weight' not in train_kwargs:
+        if 'regularization_weight' not in train_kwargs and 'fitness__regularization_weight' not in param_grid:
             raise ValueError('regularizer is specified but regularization_weight is not')
 
         threshold = None

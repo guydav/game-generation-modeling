@@ -2,6 +2,7 @@ import argparse
 from collections import defaultdict, Counter
 import cachetools
 from datetime import datetime
+import duckdb
 import json
 import logging
 import multiprocessing
@@ -16,7 +17,7 @@ import pathlib
 import polars as pl
 
 
-import compile_predicate_statistics_database
+import compile_predicate_statistics_full_database
 from game_handler import GameHandler
 from manual_run import _load_trace
 from utils import FullState
@@ -70,7 +71,7 @@ FULL_DATASET_TRACES_HASH = '028b3733'
 class TraceFinderASTParser(ast_parser.ASTParser):
     expected_keys: typing.Set[str]
     not_implemented_predicate_counts: typing.DefaultDict[str, int]
-    predicate_data_estimator: compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse
+    predicate_data_estimator: compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase
     trace_names_hash: str
     traces_by_preference_or_section: typing.Dict[str, typing.Set[str]]
     preferences_or_sections_with_implemented_predicates: typing.Set[str]
@@ -78,8 +79,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
     def __init__(self, trace_names_hash: str = FULL_DATASET_TRACES_HASH):
         self.not_implemented_predicate_counts = defaultdict(int)
         self.trace_names_hash = trace_names_hash
-        self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
-            use_no_intervals=True,
+        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
             force_trace_names_hash=self.trace_names_hash
         )  # type: ignore
 
@@ -134,7 +134,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
 
                 self.preferences_or_sections_with_implemented_predicates.add(secion_or_preference_key)
 
-            except compile_predicate_statistics_database.PredicateNotImplementedException:
+            except compile_predicate_statistics_full_database.PredicateNotImplementedException:
                 self.not_implemented_predicate_counts[ast.pred.parseinfo.rule.replace('predicate_', '')] += 1
                 # pass
 
@@ -248,7 +248,7 @@ class TraceGameEvaluator:
         if print_results: logger.info(f'For key {key} found {len(all_traces)} traces')
         if len(all_traces) == 0:
             if print_results: logger.info('No traces found')
-            return key, -1 if return_key else -1
+            return key, -1, {} if return_key else -1, {}
 
         if self.max_traces_per_game is not None:
             all_traces = list(all_traces)[:self.max_traces_per_game]
@@ -265,7 +265,12 @@ class TraceGameEvaluator:
         sample = self.population[key]
 
         for trace in trace_iter:
-            domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
+            if isinstance(self.trace_finder.predicate_data_estimator, compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase):
+                domain = duckdb.sql(f"SELECT domain FROM trace_length_and_domains WHERE trace_id='{trace}'").fetchone()[0]  # type: ignore
+                if domain is None:
+                    raise ValueError(f'No domain found for trace {trace}')
+            else:
+                domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
             # TODO: figure out what needs to be reset between games to instantiate a game handler only once
             game_handler = GameHandler(sample, force_domain=domain)  # type: ignore
 
@@ -294,10 +299,11 @@ class TraceGameEvaluator:
                 logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
 
             if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
-                return key, self.stop_after_count if return_key else self.stop_after_count
+                return key, self.stop_after_count, counts_by_trace_and_key if return_key else self.stop_after_count, counts_by_trace_and_key
 
         if print_results:
             for preference_name in expected_keys:
+                non_zero_count_traces = {trace: count for trace, count in counts_by_trace_and_key[preference_name].items() if count > 0 and count is not False}
                 print(f'For preference {preference_name}, {len(non_zero_count_traces)} traces have non-zero counts:')
                 for trace, count in non_zero_count_traces.items():
                     print(f'    - {trace}: {count}')
@@ -346,11 +352,11 @@ class TraceGameEvaluator:
                         result_summary_by_key[key] = min_count
                         full_result_by_key[key] = counts_by_trace_and_key
                         pbar.update(1)
-                        pbar.postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+                        pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
             else:
                 for key in key_iter:
-                    min_count, counts_by_trace_and_key = self.handle_single_game(key)
+                    key, min_count, counts_by_trace_and_key = self.handle_single_game(key)
                     result_summary_by_key[key] = min_count
                     full_result_by_key[key] = counts_by_trace_and_key
 

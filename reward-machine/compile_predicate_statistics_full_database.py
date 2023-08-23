@@ -293,8 +293,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
         duckdb.sql("INSERT INTO data SELECT * FROM data_df")
 
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
 
         duckdb.sql('CREATE INDEX idx_data_trace_id ON data (trace_id)')
         duckdb.sql('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id)')
@@ -320,21 +320,34 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
-
         try:
             if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
 
-            result_query, _ = self._inner_filter(predicate, mapping, **kwargs)
+            result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
+
+            if DEBUG: print(result_query)
 
             with Timeout(seconds=self.query_timeout):
                 if 'return_full_result' in kwargs and kwargs['return_full_result']:
-                    output_query = f"SELECT * FROM ({result_query})"
+                    output_query = f"SELECT DISTINCT(*) FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'return_interval_counts' in kwargs and kwargs['return_interval_counts']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, bit_count(intervals) AS 'bit_count', {select_variables} FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'last_interval_bit_set' in kwargs and kwargs['last_interval_bit_set']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, get_bit(intervals, bit_length(intervals)::INTEGER - 1) AS 'last_bit', {select_variables} FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'return_first_state_index' in kwargs and kwargs['return_first_state_index']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query})"
                     return duckdb.sql(output_query).fetchdf()
                 else:
-                    output_query = f"SELECT count(*) FROM ({result_query})"
+                    output_query = f"SELECT COUNT(*) FROM ({result_query})"
                     return duckdb.sql(output_query).fetchone()[0]  # type: ignore
 
         except PredicateNotImplementedException as e:

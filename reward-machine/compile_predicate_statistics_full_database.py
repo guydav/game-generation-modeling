@@ -346,6 +346,11 @@ class CommonSensePredicateStatisticsFullDatabase():
                     select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
                     output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query})"
                     return duckdb.sql(output_query).fetchdf()
+
+                elif 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
+                    output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query})"
+                    return tuple(chain.from_iterable(duckdb.sql(output_query).fetchall()))
+
                 else:
                     output_query = f"SELECT COUNT(*) FROM ({result_query})"
                     return duckdb.sql(output_query).fetchone()[0]  # type: ignore

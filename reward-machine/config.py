@@ -288,42 +288,42 @@ OBJECTS_BY_ROOM_AND_TYPE = {
 
 SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
     FEW_OBJECTS_ROOM: {
-        "blue_cube_block": ['CubeBlock|-00.02|+00.28|-02.83', 'CubeBlock|-00.24|+00.10|-02.83'],
-        "blue_dodgeball": ['Dodgeball|-02.95|+01.29|-02.61'],
+        "cube_block_blue": ['CubeBlock|-00.02|+00.28|-02.83', 'CubeBlock|-00.24|+00.10|-02.83'],
+        "dodgeball_blue": ['Dodgeball|-02.95|+01.29|-02.61'],
         "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "pink_dodgeball": ['Dodgeball|-02.97|+01.29|-02.28'],
-        "tan_cube_block": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
+        "dodgeball_pink": ['Dodgeball|-02.97|+01.29|-02.28'],
+        "cube_block_tan": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
-        "yellow_cube_block": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
+        "cube_block_yellow": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
     },
     MEDIUM_OBJECTS_ROOM: {
-        "blue_cube_block": ['CubeBlock|+00.50|+01.61|-02.91'],
+        "cube_block_blue": ['CubeBlock|+00.50|+01.61|-02.91'],
         "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "red_dodgeball": ['Dodgeball|-02.60|+00.13|-02.18'],
-        "red_pyramid_block": ['PyramidBlock|+00.93|+01.78|-02.89'],
+        "dodgeball_red": ['Dodgeball|-02.60|+00.13|-02.18'],
+        "pyramid_block_red": ['PyramidBlock|+00.93|+01.78|-02.89'],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
-        "yellow_cube_block": ['CubeBlock|+00.70|+01.61|-02.91'],
+        "cube_block_yellow": ['CubeBlock|+00.70|+01.61|-02.91'],
     },
     MANY_OBJECTS_ROOM: {
-        "blue_cube_block": ['CubeBlock|-02.99|+01.26|-01.49'],
-        "blue_dodgeball": ['Dodgeball|+00.19|+01.13|-02.80'],
-        "blue_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.20'],
+        "cube_block_blue": ['CubeBlock|-02.99|+01.26|-01.49'],
+        "dodgeball_blue": ['Dodgeball|+00.19|+01.13|-02.80'],
+        "pyramid_block_blue": ['PyramidBlock|-02.95|+01.61|-02.20'],
         "bottom_shelf": ['Shelf|+00.62|+01.01|-02.82'],
         "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "green_golfball": ['Golfball|+01.05|+01.04|-02.70'],  # Orange is 'Golfball|+00.96|+01.04|-02.70', white is 'Golfball|+01.14|+01.04|-02.70'
-        "green_triangular_ramp": ['SmallSlide|-00.81|+00.14|-03.10'],  # tan/brown is 'SmallSlide|-01.31|+00.14|-03.10'
-        "pink_dodgeball": ['Dodgeball|+00.70|+01.11|-02.80'],
-        "red_dodgeball": ['Dodgeball|+00.44|+01.13|-02.80'],
-        "red_pyramid_block": ['PyramidBlock|-02.96|+01.61|-02.44'],
-        "tan_cube_block": ['CubeBlock|-02.96|+01.26|-01.72'],
+        "golfball_green": ['Golfball|+01.05|+01.04|-02.70'],  # Orange is 'Golfball|+00.96|+01.04|-02.70', white is 'Golfball|+01.14|+01.04|-02.70'
+        "triangular_ramp_green": ['SmallSlide|-00.81|+00.14|-03.10'],  # tan/brown is 'SmallSlide|-01.31|+00.14|-03.10'
+        "dodgeball_pink": ['Dodgeball|+00.70|+01.11|-02.80'],
+        "dodgeball_red": ['Dodgeball|+00.44|+01.13|-02.80'],
+        "pyramid_block_red": ['PyramidBlock|-02.96|+01.61|-02.44'],
+        "cube_block_tan": ['CubeBlock|-02.96|+01.26|-01.72'],
         "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
         "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
-        "yellow_cube_block": ['CubeBlock|-02.97|+01.26|-01.94'],
-        "yellow_pyramid_block": ['PyramidBlock|-02.95|+01.61|-02.66'],
+        "cube_block_yellow": ['CubeBlock|-02.97|+01.26|-01.94'],
+        "pyramid_block_yellow": ['PyramidBlock|-02.95|+01.61|-02.66'],
     }
 }
 

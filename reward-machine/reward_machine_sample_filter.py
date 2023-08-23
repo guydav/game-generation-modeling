@@ -239,8 +239,7 @@ class TraceGameEvaluator:
 
         return self.traces_by_population_key[key]
 
-    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], int, typing.Dict[str, typing.Dict[str, int]]]:
-        # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
+    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
         all_traces, expected_keys = self._find_key_traces(key)
         if self.force_trace_ids:
             all_traces = self.force_trace_ids

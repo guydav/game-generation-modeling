@@ -1,4 +1,5 @@
 import argparse
+from functools import reduce
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ import ast_printer  # for logging
 import ast_parser  # for logging
 from src import fitness_energy_utils as utils
 from src import latest_model_paths
+from src.fitness_features_by_category import FEATURE_CATEGORIES
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -34,6 +36,7 @@ parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED
 parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
 parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
+parser.add_argument('--ignore-categories', type=str, nargs='+', default=[])
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
 parser.add_argument('--output-activation', type=str, default=None)
 parser.add_argument('--output-scaling', type=float, default=1.0)
@@ -85,6 +88,11 @@ def main(args: argparse.Namespace):
     if args.ignore_features:
         logger.debug(f'Ignoring features: {args.ignore_features}')
         feature_columns = [c for c in feature_columns if c not in args.ignore_features]
+
+    if args.ignore_categories:
+        logger.debug(f'Ignoring categories: {args.ignore_categories}')
+        all_ignore_features = set(reduce(lambda x, y: x + y, [FEATURE_CATEGORIES[c] for c in args.ignore_categories], []))
+        feature_columns = [c for c in feature_columns if c not in all_ignore_features]
 
     logger.debug(f'Fitting models with {len(feature_columns)} features')
 

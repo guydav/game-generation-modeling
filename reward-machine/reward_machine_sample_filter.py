@@ -239,7 +239,7 @@ class TraceGameEvaluator:
 
         return self.traces_by_population_key[key]
 
-    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
+    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], int, typing.Dict[str, typing.Dict[str, int]]]:
         # replace_child(sample[3][1]['setup']['and_args'][0]['setup']['forall_args']['setup']['statement']['conserved_pred']['pred']['not_args']['pred']['exists_args']['pred']['and_args'][1]['pred']['pred']['arg_1'], 'term', 'pink_dodgeball')
         all_traces, expected_keys = self._find_key_traces(key)
         if self.force_trace_ids:
@@ -248,7 +248,7 @@ class TraceGameEvaluator:
         if print_results: logger.info(f'For key {key} found {len(all_traces)} traces')
         if len(all_traces) == 0:
             if print_results: logger.info('No traces found')
-            return key, -1, {} if return_key else -1, {}
+            return key, -1, {}
 
         if self.max_traces_per_game is not None:
             all_traces = list(all_traces)[:self.max_traces_per_game]
@@ -299,7 +299,7 @@ class TraceGameEvaluator:
                 logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
 
             if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
-                return key, self.stop_after_count, counts_by_trace_and_key if return_key else self.stop_after_count, counts_by_trace_and_key
+                return key, self.stop_after_count, counts_by_trace_and_key
 
         if print_results:
             for preference_name in expected_keys:
@@ -314,7 +314,7 @@ class TraceGameEvaluator:
                 print(f'    - {trace}: {score}')
 
         min_count = min(stop_count_by_key.values())
-        return key, min_count, counts_by_trace_and_key if return_key else min_count, counts_by_trace_and_key
+        return key, min_count, counts_by_trace_and_key
 
     def __call__(self, key: typing.Optional[KeyTypeAnnotation],
                  max_keys: typing.Optional[int] = None,

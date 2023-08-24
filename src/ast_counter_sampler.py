@@ -555,6 +555,15 @@ PATTERN_TYPE_MAPPINGS = {
 }
 
 
+SINGLE_LITERAL_RULES = set([
+    'color_type',
+    'orientation_type',
+    'side_type',
+    'total_time',
+    'total_score'
+])
+
+
 PRIOR_COUNT = 5
 LENGTH_PRIOR = {i: PRIOR_COUNT for i in range(5)}
 
@@ -591,21 +600,21 @@ HARDCODED_RULES = {
         SAMPLERS: {EMPTY_LIST: sample_empty_list},
         PRODUCTION: ((TOKEN, []),)
     },
-    COLOR: {
-        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
-        TOKEN_POSTERIOR: {c: 1.0 / len(COLORS) for c in COLORS},
-        PRODUCTION: ((TOKEN, SAMPLE),),
-    },
-    ORIENTATION: {
-        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
-        TOKEN_POSTERIOR: {c: 1.0 / len(ORIENTATIONS) for c in ORIENTATIONS},
-        PRODUCTION: ((TOKEN, SAMPLE),),
-    },
-    SIDE: {
-        TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
-        TOKEN_POSTERIOR: {c: 1.0 / len(SIDES) for c in SIDES},
-        PRODUCTION: ((TOKEN, SAMPLE),),
-    },
+    # COLOR: {
+    #     TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+    #     TOKEN_POSTERIOR: {c: 1.0 / len(COLORS) for c in COLORS},
+    #     PRODUCTION: ((TOKEN, SAMPLE),),
+    # },
+    # ORIENTATION: {
+    #     TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+    #     TOKEN_POSTERIOR: {c: 1.0 / len(ORIENTATIONS) for c in ORIENTATIONS},
+    #     PRODUCTION: ((TOKEN, SAMPLE),),
+    # },
+    # SIDE: {
+    #     TYPE_POSTERIOR: {RULE: 0.0, TOKEN: 1.0},
+    #     TOKEN_POSTERIOR: {c: 1.0 / len(SIDES) for c in SIDES},
+    #     PRODUCTION: ((TOKEN, SAMPLE),),
+    # },
 }
 
 class ASTSampler:
@@ -640,6 +649,7 @@ class ASTSampler:
                  length_prior: typing.Dict[int, int] = LENGTH_PRIOR,
                  min_length_by_rule_and_field: typing.Optional[typing.Dict[typing.Tuple[str, str], int]] = DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD,
                  hardcoded_rules: typing.Dict[str, dict] = HARDCODED_RULES,
+                 single_literal_rules: typing.Set[str] = SINGLE_LITERAL_RULES,
                  verbose: bool = False,
                  rng: typing.Optional[np.random.Generator] = None,
                  seed: int = DEFAULT_RANDOM_SEED):
@@ -679,6 +689,7 @@ class ASTSampler:
             rng = np.random.default_rng(seed)  # type: ignore
         self.rng = rng
 
+        self.single_literal_rules = single_literal_rules
         self.rules = {k: v for k, v in hardcoded_rules.items()}
         self.value_patterns = dict(
             any=re.compile(re.escape('(any)')),
@@ -719,7 +730,7 @@ class ASTSampler:
 
         # It's a list, which at this point means it's a list of optional expansion rules
         if isinstance(options, list):
-            self._create_rule_posterior(rule_name, field_name, field_prior, options, field_counter)
+            self.   _create_rule_posterior(rule_name, field_name, field_prior, options, field_counter)
 
         elif not isinstance(options, str):
             if self.verbose: print(f'Unrecognized options type for {rule_name}.{field_name}: {options}')
@@ -917,13 +928,14 @@ class ASTSampler:
                 else:
                     if rule_name == 'predicate_name':
                         rule_prior = dict(rule_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('rule', SAMPLE)])
+
                     else:
                         rule_prior = dict(token_posterior={r: 1.0 / len(rule_prior) for r in rule_prior}, production=[('token', SAMPLE)])
 
 
             elif isinstance(rule_prior, str):
                 # This is a rule that expands only to a single other rule
-                if rule_prior in self.all_rules:
+                if rule_prior in self.all_rules and not rule_name in self.single_literal_rules:
                     rule_prior = dict(rule_posterior={rule_prior: 1}, production=[(RULE, rule_prior)])
 
                 # This is a rule that expands directly to a token

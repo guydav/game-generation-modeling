@@ -503,15 +503,9 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     color=defaultdict(_colors),  # TODO: decide if there's a prior here
     orientation=defaultdict(_orientations),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
     side=defaultdict(_sides),  # TODO: decide if there's a prior here
-    color_type={
-        ('color_type_definition', 'type'): _color_type,
-    },
-    orientation_type={
-        ('orientation_type_definition', 'type'): _orientation_type,
-    },
-    side_type={
-        ('side_type_definition', 'type'): _side_type,
-    },
+    color_type=defaultdict( _color_type),
+    orientation_type=defaultdict(_orientation_type),
+    side_type=defaultdict(_side_type),
     predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,

@@ -772,7 +772,7 @@
 (:setup (and
     (forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
     (game-optional (toggled_on main_light_switch))
-    (game-optional (toggled_on desktop))
+    (forall (?e - desktop) (game-optional (toggled_on ?e)))
 ))
 (:constraints (and
     (preference dodgeballsInPlace
@@ -3226,7 +3226,6 @@
     (exists (?h - hexagonal_bin) (game-conserved (and
         (adjacent south_wall ?h)
         (adjacent west_wall ?h)
-        ; (faces ?h south_west_corner)
     )))
     (forall (?o - (either dodgeball cube_block alarm_clock book)) (game-optional (adjacent ?o desk)))
 ))

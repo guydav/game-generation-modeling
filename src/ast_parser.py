@@ -381,7 +381,17 @@ def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: 
 
         var_type = var_def.var_type.type  # type: ignore
         if isinstance(var_type, tatsu.ast.AST):
-            var_type = var_type.type_names
+            var_type_rule = var_type.parseinfo.rule  # type: ignore
+
+            if var_type_rule.endswith('type'):
+                var_type = var_type.terminal
+
+            elif var_type_rule.startswith('either'):
+                if isinstance(var_type.type_names, tatsu.ast.AST):
+                    var_type = var_type.type_names.terminal
+
+                else:
+                    var_type = [t.terminal for t in var_type.type_names]
 
         if isinstance(var_type, str):
             var_type = [var_type]

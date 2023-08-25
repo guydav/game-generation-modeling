@@ -401,12 +401,20 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
         for key in predicate:
             if key == "term":
+                term = predicate["term"]
 
                 # Different structure for predicate args vs. function args
-                if isinstance(predicate["term"], tatsu.ast.AST):
-                    pred_vars.append(predicate["term"]["arg"])  # type: ignore
+                if isinstance(term, tatsu.ast.AST):
+                    if "terminal" in term:
+                        pred_vars.append(term["terminal"])
+
+                    elif "arg" in term:  # comparison argument
+                        pred_vars.append(term["arg"])  # type: ignore
+
+                    else:
+                        raise ValueError(f'Unexpected predicate term structure in `extract_variables`: {term}')
                 else:
-                    pred_vars.append(predicate["term"])
+                    pred_vars.append(term)
 
             elif key == "var_names":
                 pred_vars.append(predicate["var_names"]) # type: ignore

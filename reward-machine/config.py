@@ -1,13 +1,19 @@
 import numpy as np
+import pathlib
 import typing
+import sys
+
+sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
+import room_and_object_types
+from room_and_object_types import *
 
 
 # ===================================================================================================
 
-NORTH_WALL = 'north_wall'
-SOUTH_WALL = 'south_wall'
-EAST_WALL = 'east_wall'
-WEST_WALL = 'west_wall'
+# NORTH_WALL = 'north_wall'
+# SOUTH_WALL = 'south_wall'
+# EAST_WALL = 'east_wall'
+# WEST_WALL = 'west_wall'
 NAMED_WALLS = [NORTH_WALL, SOUTH_WALL, EAST_WALL, WEST_WALL]
 
 DOOR = 'door'
@@ -286,46 +292,80 @@ OBJECTS_BY_ROOM_AND_TYPE = {
     }
 }
 
+
+SHARED_SPECIFIC_NAMED_OBJECTS = {
+    "bottom_drawer": ["Drawer|-01.52|+00.14|+00.35"],
+    "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
+    "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
+    "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],
+    "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
+    "west_sliding_door": ["Window|-01.02|+00.93|-03.19"],
+}
+
+
 SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
     FEW_OBJECTS_ROOM: {
         "cube_block_blue": ['CubeBlock|-00.02|+00.28|-02.83', 'CubeBlock|-00.24|+00.10|-02.83'],
-        "dodgeball_blue": ['Dodgeball|-02.95|+01.29|-02.61'],
-        "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
-        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "dodgeball_pink": ['Dodgeball|-02.97|+01.29|-02.28'],
-        "cube_block_tan": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
-        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
-        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "cube_block_yellow": ['CubeBlock|+00.20|+00.29|-02.83', 'CubeBlock|-00.02|+00.10|-02.83'],
+        "cube_block_tan": ['CubeBlock|+00.20|+00.10|-02.83', 'CubeBlock|-00.23|+00.28|-02.83'],
+        "dodgeball_blue": ['Dodgeball|-02.95|+01.29|-02.61'],
+        "dodgeball_pink": ['Dodgeball|-02.97|+01.29|-02.28'],
     },
     MEDIUM_OBJECTS_ROOM: {
+        "bridge_block_tan": ['BridgeBlock|+00.63|+01.10|-02.91'],
+        "bridge_block_green": ['BridgeBlock|+01.03|+01.11|-02.88'],
         "cube_block_blue": ['CubeBlock|+00.50|+01.61|-02.91'],
-        "bottom_shelf": ["Shelf|+00.62|+01.01|-02.82"],
-        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "dodgeball_red": ['Dodgeball|-02.60|+00.13|-02.18'],
-        "pyramid_block_red": ['PyramidBlock|+00.93|+01.78|-02.89'],
-        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
-        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
         "cube_block_yellow": ['CubeBlock|+00.70|+01.61|-02.91'],
+        "cylindrical_block_blue": ['CylinderBlock|+01.13|+01.61|-02.89'],
+        "cylindrical_block_green": ['CylinderBlock|+00.93|+01.61|-02.89'],
+        "dodgeball_red": ['Dodgeball|-02.60|+00.13|-02.18'],
+        "flat_block_gray": ['FlatRectBlock|+00.24|+01.57|-02.89'],
+        "flat_block_yellow": ['FlatRectBlock|+00.23|+01.66|-02.88'],
+        "pyramid_block_red": ['PyramidBlock|+00.93|+01.78|-02.89'],
+        "pyramid_block_yellow": ['PyramidBlock|+01.13|+01.78|-02.89'],
+        "tall_cylindrical_block_tan": ['LongCylinderBlock|+00.12|+01.19|-02.89'],
+        "tall_cylindrical_block_yellow": ['LongCylinderBlock|+00.31|+01.19|-02.89'],
+        "triangular_ramp_tan": ['SmallSlide|-00.97|+00.20|-03.02'],
     },
     MANY_OBJECTS_ROOM: {
+        "bridge_block_green": ['BridgeBlock|-02.92|+00.43|-02.52'],
+        "bridge_block_pink": ['BridgeBlock|-02.92|+00.26|-02.52'],
+        "bridge_block_tan": ['BridgeBlock|-02.92|+00.09|-02.52'],
         "cube_block_blue": ['CubeBlock|-02.99|+01.26|-01.49'],
+        "cube_block_tan": ['CubeBlock|-02.96|+01.26|-01.72'],
+        "cube_block_yellow": ['CubeBlock|-02.97|+01.26|-01.94'],
+        "cylindrical_block_blue": ['CylinderBlock|-03.02|+01.62|-01.73'],
+        "cylindrical_block_green": ['CylinderBlock|-02.97|+01.62|-01.50'],
+        "cylindrical_block_tan": ['CylinderBlock|-02.95|+01.62|-01.95'],
+        "flat_block_gray": ['FlatRectBlock|-02.93|+00.15|-02.84'],
+        "flat_block_tan": ['FlatRectBlock|-02.93|+00.25|-02.84'],
+        "flat_block_yellow": ['FlatRectBlock|-02.93|+00.05|-02.84'],
         "dodgeball_blue": ['Dodgeball|+00.19|+01.13|-02.80'],
-        "pyramid_block_blue": ['PyramidBlock|-02.95|+01.61|-02.20'],
-        "bottom_shelf": ['Shelf|+00.62|+01.01|-02.82'],
-        "east_sliding_door": ["Window|+02.28|+00.93|-03.18"],
-        "golfball_green": ['Golfball|+01.05|+01.04|-02.70'],  # Orange is 'Golfball|+00.96|+01.04|-02.70', white is 'Golfball|+01.14|+01.04|-02.70'
-        "triangular_ramp_green": ['SmallSlide|-00.81|+00.14|-03.10'],  # tan/brown is 'SmallSlide|-01.31|+00.14|-03.10'
         "dodgeball_pink": ['Dodgeball|+00.70|+01.11|-02.80'],
         "dodgeball_red": ['Dodgeball|+00.44|+01.13|-02.80'],
+        "golfball_green": ['Golfball|+01.05|+01.04|-02.70'],
+        "golfball_orange": [ 'Golfball|+00.96|+01.04|-02.70'],
+        "golfball_white": ['Golfball|+01.14|+01.04|-02.70'],
+        "pyramid_block_blue": ['PyramidBlock|-02.95|+01.61|-02.20'],
         "pyramid_block_red": ['PyramidBlock|-02.96|+01.61|-02.44'],
-        "cube_block_tan": ['CubeBlock|-02.96|+01.26|-01.72'],
-        "top_drawer": ["Drawer|-01.52|+00.41|+00.35"],  # bottom is "Drawer|-01.52|+00.14|+00.35"
-        "top_shelf": ["Shelf|+00.62|+01.51|-02.82"],
-        "cube_block_yellow": ['CubeBlock|-02.97|+01.26|-01.94'],
         "pyramid_block_yellow": ['PyramidBlock|-02.95|+01.61|-02.66'],
+        "tall_cylindrical_block_green": ['LongCylinderBlock|-02.82|+00.19|-02.09'],
+        "tall_cylindrical_block_tan": ['LongCylinderBlock|-02.93|+00.19|-01.93'],
+        "tall_cylindrical_block_yellow": ['LongCylinderBlock|-02.94|+00.19|-02.24'],
+        "tall_rectangular_block_blue": ['TallRectBlock|-02.95|+02.05|-02.52'],
+        "tall_rectangular_block_green": ['TallRectBlock|-02.95|+02.05|-02.72'],
+        "tall_rectangular_block_tan": ['TallRectBlock|-02.95|+02.05|-02.31'],
+        "triangle_block_blue": ['TriangleBlock|-02.92|+01.23|-02.23'],
+        "triangle_block_green": ['TriangleBlock|-02.95|+01.23|-02.69'],
+        "triangle_block_tan": ['TriangleBlock|-02.94|+01.23|-02.46'],
+        "triangular_ramp_green": ['SmallSlide|-00.81|+00.14|-03.10'],
+        "triangular_ramp_tan": ['SmallSlide|-01.31|+00.14|-03.10'],
     }
 }
+
+
+for room_specific_named_objects in SPECIFIC_NAMED_OBJECTS_BY_ROOM.values():
+    room_specific_named_objects.update(SHARED_SPECIFIC_NAMED_OBJECTS)
 
 
 OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM = {
@@ -347,16 +387,18 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
 
 
 # A list of all objects that can be referred to directly as variables inside of a game
-NAMED_OBJECTS = ["agent", "bed", "desk", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
+# NAMED_OBJECTS = ["agent", "bed", "desk", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
+# NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
+NAMED_OBJECTS = room_and_object_types.DIRECTLY_REFERRED_OBJECTS[:]
 
 # A list of all the colors, which as a hack will also be mapped to themselves, as though they were named objects
-COLORS = ["black", "blue", "brown", "gray", "green", "light_blue", "orange",  "pink", "purple", "red", "tan", "white", "yellow"]
-ORIENTATIONS = ["diagonal", "sideways", "upright", "upside_down"]
-SIDES = ["back", "front", "front_left_corner", "left", "right"]
+COLORS = list(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.COLORS])
+if COLOR in COLORS: COLORS.remove(COLOR)
+ORIENTATIONS = list(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.ORIENTATIONS])
+if ORIENTATION in ORIENTATIONS: ORIENTATIONS.remove(ORIENTATION)
+SIDES = list(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.SIDES])
+if SIDE in SIDES: SIDES.remove(SIDE)
 
-COLOR = 'color'
-ORIENTATION = 'orientation'
-SIDE = 'side'
 
 NON_OBJECT_TYPES = [COLOR, ORIENTATION, SIDE]
 
@@ -364,6 +406,7 @@ NON_OBJECT_TYPES = [COLOR, ORIENTATION, SIDE]
 META_TYPES = {"ball": ["beachball", "basketball", "dodgeball", "golfball"],
               "block": ["bridge_block", "cube_block", "cylindrical_block", "flat_block", "pyramid_block", "tall_cylindrical_block",
                         "tall_rectangular_block", "triangle_block"],
+              "ramp": ["curved_wooden_ramp", ],
               COLOR: COLORS,
               ORIENTATION: ORIENTATIONS,
               SIDE: SIDES}

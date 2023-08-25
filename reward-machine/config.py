@@ -387,6 +387,7 @@ for room_type in OBJECTS_BY_ROOM_AND_TYPE:
 
 
 # A list of all objects that can be referred to directly as variables inside of a game
+# NAMED_OBJECTS = ["agent", "bed", "desk", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
 # NAMED_OBJECTS = ["agent", "bed", "desk", "desktop", "door", "floor", "main_light_switch", "side_table"]  # added the keys of the Pseudo Objects later
 NAMED_OBJECTS = room_and_object_types.DIRECTLY_REFERRED_OBJECTS[:]
 

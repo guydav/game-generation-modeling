@@ -770,7 +770,6 @@ TYPE_DESCRIPTIONS = (
     section_separator_typedesc('Immoveable objects'),
 	TypeDesc('bed'),
     TypeDesc('corner', 'Any of the corners of the room'),
-    TypeDesc('south_west_corner', 'The corner of the room where the south and west walls meet'),
     TypeDesc('door', 'The door out of the room'),
 	TypeDesc('desk'),
     TypeDesc('desk_shelf', 'The shelves under the desk'),

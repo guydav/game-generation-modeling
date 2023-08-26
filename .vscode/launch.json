@@ -12,7 +12,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -26,14 +26,15 @@
                 // "-t", "./dsl/ast-mle-samples-medium.pddl",
                 // "./dsl/interactive-beta.pddl",
                 // "-o", "/tmp/test.csv.gz",
-                // "-p",
+                "-p",
                 "-v",
+                "--full-rebuild-n-workers", "1",
             //    "-c",
                // "-b", "build_temporal_operator_level_extractor", "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
             ],
             "console": "integratedTerminal",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -55,7 +56,7 @@
             ],
             "console": "integratedTerminal",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -77,7 +78,7 @@
             ],
             "console": "integratedTerminal",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -90,7 +91,7 @@
             ],
             "console": "integratedTerminal",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -108,7 +109,7 @@
             "console": "integratedTerminal",
             // "notes": "\"-n\", \"61541833a06877a656163b10\"",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -122,7 +123,7 @@
             "console": "integratedTerminal",
             // "notes": "\"-n\", \"61541833a06877a656163b10\"",
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -135,7 +136,7 @@
                 "--validate-samples",
                 "--parse-counter",
                 "--save-samples",
-                "--num-samples", "1024", // "4096",
+                "--num-samples", "16", // "4096",
                 "--sampling-method", "regrowth",
                 // "--sampling-method", "mle",
                 "--sample-tqdm",
@@ -148,7 +149,7 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -182,7 +183,7 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -199,7 +200,7 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {
@@ -235,7 +236,7 @@
             // "notes": "--parse-counter",
             // "justMyCode": false,
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache",
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache",
             }
         },
         {
@@ -251,7 +252,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "GAME_GENERATION_CACHE": "/tmp/game_generation_cache"
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
         {

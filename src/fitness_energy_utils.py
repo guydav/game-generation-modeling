@@ -1692,7 +1692,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         if notebook:
             display(Markdown('### Rank (Spearman) correlations between metrics:'))
         else:
-            logging.info('Rank (Spearman) correlations between metrics:')
+            logging.debug('Rank (Spearman) correlations between metrics:')
 
         metrics_table = [[''] * n_score_funcs for _ in range(n_score_funcs)]
 

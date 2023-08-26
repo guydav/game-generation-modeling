@@ -21,8 +21,27 @@ from src import fitness_energy_utils as utils
 from src import latest_model_paths
 from src.fitness_features_by_category import FEATURE_CATEGORIES
 
+
+class LevelFilter(logging.Filter):
+    def __init__(self, level, name: str = ""):
+        self.level = level
+
+    def filter(self, record):
+        return record.levelno == self.level
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+logging_handler_out = logging.StreamHandler(sys.stdout)
+logging_handler_out.setLevel(logging.DEBUG)
+logging_handler_out.addFilter(LevelFilter(logging.INFO))
+logger.addHandler(logging_handler_out)
+
+logging_handler_err = logging.StreamHandler(sys.stderr)
+logging_handler_err.setLevel(logging.WARNING)
+logger.addHandler(logging_handler_err)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--fitness-features-file', type=str, default=latest_model_paths.LATEST_FITNESS_FEATURES)
@@ -73,6 +92,14 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float,
 
 
 def main(args: argparse.Namespace):
+    model_name = args.output_name
+    if 'fitness_sweep_' in model_name:
+        model_name = model_name.replace('fitness_sweep_', '')
+
+    model_name = f'{utils.DEFAULT_SAVE_MODEL_NAME}_{model_name}'
+
+    logger.info(f'Starting fitness CV for {model_name}')
+
     logger.info(f'Loading fitness data from {args.fitness_features_file}')
     fitness_df = utils.load_fitness_data(args.fitness_features_file)
     logger.info(f'Unique source files: {fitness_df.src_file.unique()}')
@@ -86,15 +113,15 @@ def main(args: argparse.Namespace):
     feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove)
 
     if args.ignore_features:
-        logger.debug(f'Ignoring features: {args.ignore_features}')
+        logger.info(f'Ignoring features: {args.ignore_features}')
         feature_columns = [c for c in feature_columns if c not in args.ignore_features]
 
     if args.ignore_categories:
-        logger.debug(f'Ignoring categories: {args.ignore_categories}')
+        logger.info(f'Ignoring categories: {args.ignore_categories}')
         all_ignore_features = set(reduce(lambda x, y: x + y, [FEATURE_CATEGORIES[c] for c in args.ignore_categories], []))
         feature_columns = [c for c in feature_columns if c not in all_ignore_features]
 
-    logger.debug(f'Fitting models with {len(feature_columns)} features')
+    logger.info(f'Fitting models with {len(feature_columns)} features')
 
     with open(args.cv_settings_json, 'r') as f:
         cv_settings = json.load(f)
@@ -177,6 +204,7 @@ def main(args: argparse.Namespace):
             full_tensor = utils.df_to_tensor(fitness_df, feature_columns)
             cv.best_estimator_['fitness'].train_kwargs['split_validation_from_train'] = False  # type: ignore
             cv.best_estimator_.fit(full_tensor)  # type: ignore
+            print('Retrained model on full dataset results:')
             print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
 
             full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
@@ -187,11 +215,6 @@ def main(args: argparse.Namespace):
             print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))
             print(torch.quantile(negatives_scores, 0.2))
 
-        model_name = args.output_name
-        if 'fitness_sweep_' in model_name:
-            model_name = model_name.replace('fitness_sweep_', '')
-
-        model_name = f'{utils.DEFAULT_SAVE_MODEL_NAME}_{model_name}'
         utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path)
 
 

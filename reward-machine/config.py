@@ -60,7 +60,7 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     DESK: [
         "Desk|+03.14|00.00|-01.41"
     ],
-    DESK_SHELF: [
+    SHELF_DESK: [
         "Shelf|+03.13|+00.63|-00.56",
         "Shelf|+03.13|+00.63|-02.27"
     ],

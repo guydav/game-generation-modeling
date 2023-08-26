@@ -1702,13 +1702,13 @@
 (define (game 61623853a4ccad551beeb11a-57) (:domain medium-objects-room-v1)  ; 57
 
 (:constraints (and
-    (preference bookOnDeskShelf (exists (?b - book ?d - desk_shelf)
+    (preference bookOnDeskShelf (exists (?b - book ?d - shelf_desk)
         (at-end (and
             (on ?d ?b)
             (not (exists (?o - (either pencil pen cd)) (on ?d ?o)))
         ))
     ))
-    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - desk_shelf)
+    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - shelf_desk)
         (at-end (and
             (on ?d ?o)
             (not (exists (?b - book) (on ?d ?b)))

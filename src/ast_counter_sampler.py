@@ -413,10 +413,10 @@ VARIABLE_DEFAULTS = defaultdict(create_sample_existing_variable)
 VARIABLE_DEFAULTS[('variable_type_def', 'var_names')] = sample_new_variable_factory   # type: ignore
 
 
-
 COLOR_VARIABLE_LETTER = 'x'
 ORIENTATION_VARIABLE_LETTER = 'y'
 SIDE_VARIABLE_LETTER = 'z'
+
 
 def create_color_variable_sampler():
     return SingleLetterExistingVariableSampler(COLOR_VARIABLE_LETTER, COLOR)
@@ -455,20 +455,28 @@ def _multi_operators():
 def _function_names():
     return FUNCTION_NAMES
 
-def _colors():
-    l = list(COLORS)
-    l.remove(COLOR)
-    return l
 
-def _orientations():
-    l = list(ORIENTATIONS)
-    l.remove(ORIENTATION)
-    return l
+VALID_COLORS = list(COLORS)
+if COLOR in VALID_COLORS: VALID_COLORS.remove(COLOR)
+VALID_ORIENTATIONS = list(ORIENTATIONS)
+if ORIENTATION in VALID_ORIENTATIONS: VALID_ORIENTATIONS.remove(ORIENTATION)
+VALID_SIDES = list(SIDES)
+if SIDE in VALID_SIDES: VALID_SIDES.remove(SIDE)
 
-def _sides():
-    l = list(SIDES)
-    l.remove(SIDE)
-    return l
+# def _colors():
+#     l = list(COLORS)
+#     l.remove(COLOR)
+#     return l
+
+# def _orientations():
+#     l = list(ORIENTATIONS)
+#     l.remove(ORIENTATION)
+#     return l
+
+# def _sides():
+#     l = list(SIDES)
+#     l.remove(SIDE)
+#     return l
 
 def _color_type():
     return [COLOR]
@@ -491,31 +499,58 @@ def _total_time_defaults():
 def _total_score_defaults():
     return  ['(total-score)']
 
+def _directly_named_objects():
+    return room_and_object_types.DIRECTLY_REFERRED_OBJECTS
+
+
+SKIP_CATEGORIES = [room_and_object_types.COLORS, room_and_object_types.ORIENTATIONS, room_and_object_types.SIDES,
+                   room_and_object_types.AGENT, room_and_object_types.EMPTY_OBJECT]
+
+ALL_OBJECT_TYPES = set(reduce(lambda x, y: x + y, room_and_object_types.CATEGORIES_TO_TYPES.values()))
+ALL_OBJECT_TYPES.update(room_and_object_types.DIRECTLY_REFERRED_OBJECTS)
+for skip_category in SKIP_CATEGORIES:
+    ALL_OBJECT_TYPES.difference_update(room_and_object_types.CATEGORIES_TO_TYPES[skip_category])
+
+ALL_OBJECT_TYPES = list(ALL_OBJECT_TYPES)
+
+
+def _all_object_types():
+    return ALL_OBJECT_TYPES
+
 
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     binary_comp=defaultdict(_comparison_operators),
     binary_op=defaultdict(_binary_operators),
     multi_op=defaultdict(_multi_operators),
     func_name=defaultdict(_function_names),
-    object_type=defaultdict(list),  # TODO: decide if there's a prior here
-    object_name=defaultdict(list),  # TODO: decide if there's a prior here
-    # location=defaultdict(list),  # TODO: decide if there's a prior here
-    color=defaultdict(_colors),  # TODO: decide if there's a prior here
-    orientation=defaultdict(_orientations),  # (lambda: ORIENTATIONS), # TODO: decide if there's a prior here
-    side=defaultdict(_sides),  # TODO: decide if there's a prior here
-    color_type=defaultdict( _color_type),
-    orientation_type=defaultdict(_orientation_type),
-    side_type=defaultdict(_side_type),
-    predicate_name=defaultdict(_predicate_names),
-    preference_name={
-        ('preference', 'pref_name'): sample_new_preference_name_factory,
-        ('pref_name_and_types', 'pref_name'): sample_existing_preference_name,
+    name={
+        ('object_type', 'terminal'): ALL_OBJECT_TYPES,
+        ('object_name', 'terminal'): room_and_object_types.DIRECTLY_REFERRED_OBJECTS,
+        ('color_type', 'terminal'): [COLOR],
+        ('color', 'terminal'): VALID_COLORS,
+        ('orientation_type', 'terminal'): [ORIENTATION],
+        ('orientation', 'terminal'): VALID_ORIENTATIONS,
+        ('side_type', 'terminal'): [SIDE],
+        ('side', 'terminal'): VALID_SIDES,
     },
+    # object_type=defaultdict(_all_object_types),
+    # object_name=defaultdict(_directly_named_objects),
+    # color=defaultdict(_colors),
+    # orientation=defaultdict(_orientations),
+    # side=defaultdict(_sides),
+    # color_type=defaultdict( _color_type),
+    # orientation_type=defaultdict(_orientation_type),
+    # side_type=defaultdict(_side_type),
     id={
         ('game_def', 'game_name'): generate_game_id,
         ('domain_def', 'domain_name'): generate_domain_name,
     },
     number=defaultdict(_number_defaults),
+    predicate_name=defaultdict(_predicate_names),
+    preference_name={
+        ('preference', 'pref_name'): sample_new_preference_name_factory,
+        ('pref_name_and_types', 'pref_name'): sample_existing_preference_name,
+    },
     variable=VARIABLE_DEFAULTS,
     color_variable=COLOR_VARIABLE_DEFAULTS,
     orientation_variable=ORIENTATION_VARIABLE_DEFAULTS,
@@ -524,22 +559,34 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     total_score=defaultdict(_total_score_defaults),
 )
 
-# TODO: consider if we want to try to remove some of these extra steps
+
 SPECIAL_RULE_FIELD_VALUE_TYPES = {
-    ('type_definition', 'type'): 'object_type',
-    ('color_type_definition', 'type'): 'color_type',
-    ('orientation_type_definition', 'type'): 'orientation_type',
-    ('side_type_definition', 'type'): 'side_type',
+    # ('type_definition', 'type'): 'object_type',
+    # ('color_type_definition', 'type'): 'color_type',
+    # ('orientation_type_definition', 'type'): 'orientation_type',
+    # ('side_type_definition', 'type'): 'side_type',
     ('comparison_arg', 'arg'): 'number',
-    ('predicate_or_function_term', 'term'): ('object_name', 'variable',),
-    ('predicate_or_function_color_term', 'term'): ('color', 'color_variable',),
-    # ('predicate_or_function_location_term', 'term'): ('location', 'variable',),
-    ('predicate_or_function_orientation_term', 'term'): ('orientation', 'orientation_variable',),
-    ('predicate_or_function_side_term', 'term'): ('side', 'side_variable',),
-    ('predicate_or_function_type_term', 'term'): ('object_type', 'variable',),
+    ('object_type', 'terminal'): 'name',
+    ('object_name', 'terminal'): 'name',
+    ('color_type', 'terminal'): 'name',
+    ('color', 'terminal'): 'name',
+    ('orientation_type', 'terminal'): 'name',
+    ('orientation', 'terminal'): 'name',
+    ('side_type', 'terminal'): 'name',
+    ('side', 'terminal'): 'name',
+    # ('predicate_or_function_term', 'term'): ('object_name', 'variable',),
+    # ('predicate_or_function_color_term', 'term'): ('color', 'color_variable',),
+    # ('predicate_or_function_orientation_term', 'term'): ('orientation', 'orientation_variable',),
+    # ('predicate_or_function_side_term', 'term'): ('side', 'side_variable',),
+    # ('predicate_or_function_type_term', 'term'): ('object_type', 'variable',),
+    ('predicate_or_function_term', 'term'): 'variable',
+    ('predicate_or_function_color_term', 'term'): 'color_variable',
+    ('predicate_or_function_orientation_term', 'term'): 'orientation_variable',
+    ('predicate_or_function_side_term', 'term'): 'side_variable',
+    ('predicate_or_function_type_term', 'term'): 'variable',
     ('terminal_expr', 'expr'): ('total_time', 'total_score'),
     ('scoring_expr_or_number', 'expr'): 'number',
-    ('pref_object_type', 'type_name'): ('object_name', 'object_type'),
+    # ('pref_object_type', 'type_name'): ('object_name', 'object_type'),
 }
 
 
@@ -720,17 +767,24 @@ class ASTSampler:
             self._create_length_posterior(rule_name, field_name, field_prior, field_counter)
 
         if isinstance(options, str):
-            # If it's a string, check if it's a rule that expands a token
-            if options in self.pattern_rule_options:
-                self._create_value_posterior(rule_name, field_name, field_prior, options, field_counter)
+            options = [options]
 
-            # Otherwise, it's a singular rule, and we fall through to the next case
-            else:
-                options = [options]
-
-        # It's a list, which at this point means it's a list of optional expansion rules
         if isinstance(options, list):
-            self.   _create_rule_posterior(rule_name, field_name, field_prior, options, field_counter)
+            # If it's a list of length 1, it could be something that expands to a token, so check that
+            if len(options) == 1 and options[0] in self.pattern_rule_options:
+                self._create_value_posterior(rule_name, field_name, field_prior, options[0], field_counter)
+
+            # Edge case to handle the new way I write down some of the token expanding rules
+            # If there are rule counts, it's a hybrid, and we'll fall through from the rule posterior
+            elif (rule_name, field_name) in self.rule_field_value_types and ((field_counter is None) or (len(field_counter.rule_counts) == 0)):
+                value_type = self.rule_field_value_types[(rule_name, field_name)]
+                if not isinstance(value_type, str):
+                    raise ValueError(f'Unrecognized value type for {rule_name}.{field_name}: {value_type} (expected a string)')
+                self._create_value_posterior(rule_name, field_name, field_prior,
+                                             value_type, field_counter)
+            # It's a list, which at this point means it's a list of optional expansion rules
+            else:
+                self._create_rule_posterior(rule_name, field_name, field_prior, options, field_counter)
 
         elif not isinstance(options, str):
             if self.verbose: print(f'Unrecognized options type for {rule_name}.{field_name}: {options}')
@@ -836,21 +890,20 @@ class ASTSampler:
         field_prior[RULE_POSTERIOR] = {value: self.prior_token_count for value in options}
 
         if field_counter is not None:
-            if len(field_counter.value_counts) > 0:
-                if (rule_name, field_name) in self.rule_field_value_types:
-                    value_type = self.rule_field_value_types[(rule_name, field_name)]
-                    if isinstance(value_type, str):
-                        if value_type in field_prior[RULE_POSTERIOR]:
-                            del field_prior[RULE_POSTERIOR][value_type]  # type: ignore
-                        self._create_value_posterior(rule_name, field_name, field_prior, value_type, field_counter, rule_hybrird=True)
-                    else:
-                        for vt in value_type:
-                            if vt in field_prior[RULE_POSTERIOR]:
-                                del field_prior[RULE_POSTERIOR][vt]  # type: ignore
-                            self._create_value_posterior(rule_name, field_name, field_prior, vt, field_counter, rule_hybrird=True)
-
+            if (rule_name, field_name) in self.rule_field_value_types:
+                value_type = self.rule_field_value_types[(rule_name, field_name)]
+                if isinstance(value_type, str):
+                    if value_type in field_prior[RULE_POSTERIOR]:
+                        del field_prior[RULE_POSTERIOR][value_type]  # type: ignore
+                    self._create_value_posterior(rule_name, field_name, field_prior, value_type, field_counter, rule_hybrird=True)
                 else:
-                    raise ValueError(f'{rule_name}.{field_name} has counted values but should only have rules or have a special type')
+                    for vt in value_type:
+                        if vt in field_prior[RULE_POSTERIOR]:
+                            del field_prior[RULE_POSTERIOR][vt]  # type: ignore
+                        self._create_value_posterior(rule_name, field_name, field_prior, vt, field_counter, rule_hybrird=True)
+
+            elif len(field_counter.value_counts) > 0:
+                raise ValueError(f'{rule_name}.{field_name} has counted values but should only have rules or have a special type')
 
             for counted_rule, count in field_counter.rule_counts.items():
                 if counted_rule not in field_prior[RULE_POSTERIOR]:

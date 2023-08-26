@@ -772,7 +772,7 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('corner', 'Any of the corners of the room'),
     TypeDesc('door', 'The door out of the room'),
 	TypeDesc('desk'),
-    TypeDesc('desk_shelf', 'The shelves under the desk'),
+    TypeDesc('shelf_desk', 'The shelves under the desk'),
 	TypeDesc('drawer', 'Either drawer in the side table'),
 	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.'), # (* \\textbf Do we want to specify this differently? *)'),
 	TypeDesc('floor'),

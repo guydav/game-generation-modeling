@@ -248,8 +248,10 @@ def mutation_and_removal_context(func):
 
 def _parse_either_types(either_types, context):
     type_names = either_types.type_names
-    if isinstance(type_names, list):
-        type_names = ' '.join(type_names)
+    if not isinstance(type_names, list):
+        type_names = [type_names]
+
+    type_names = ' '.join(t.terminal for t in type_names)
 
     var_type_str = f'(either {type_names})'
     return _out_str_to_span(var_type_str, context, remove=either_types.get('remove', False))
@@ -271,11 +273,12 @@ def validate_variable_list_is_list(func):
 
 def _parse_type_definition(var_type_def, context):
     var_type = var_type_def.type
+    var_type_rule = var_type.parseinfo.rule  # type: ignore
 
-    if isinstance(var_type, str):
-        var_type_str = var_type
+    if var_type_rule.endswith('type'):
+        var_type_str = var_type.terminal
 
-    elif var_type.parseinfo.rule.startswith('either'):
+    elif var_type_rule.startswith('either'):
         var_type_str = _parse_either_types(var_type, context)
 
         inner_prev_mutation = None
@@ -452,28 +455,6 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None, ret
     return _handle_predicate(caller, rule, ast, depth, increment, context, return_str=return_str)
 
 
-# @mutation_and_removal_context
-# def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
-#     formatted_args = _format_func_args(ast, depth, increment, context)
-#     return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
-
-# def _format_func_args(ast, depth, increment, context):
-#     func_args = ast.func_args
-#     if func_args is None:
-#         formatted_args = []
-
-#     else:
-#         if not isinstance(func_args, list):
-#             func_args = [func_args]
-
-#         formatted_args = [
-#             arg if isinstance(arg, str)
-#             else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context))
-#             for arg in func_args]
-
-#     return formatted_args
-
-
 # @mutation_and_removal_context  -- handles it internally
 def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None) -> str:
     arg = ast.arg
@@ -548,9 +529,17 @@ def _handle_multiple_args_equal_comparison(caller, rule, ast, depth, increment, 
                   depth, increment, context)
 
 
+def _extract_predicate_term_value(ast):
+    terminal = ast.term
+    if isinstance(terminal, tatsu.ast.AST):
+        terminal = terminal.terminal
+
+    return terminal
+
+
 @mutation_and_removal_context
 def _handle_predicate_or_function_term(caller, rule, ast, depth, increment, context=None):
-    _indent_print(_out_str_to_span(ast.term, context, remove=ast.get('remove', False)), depth, increment, context)
+    _indent_print(_out_str_to_span(_extract_predicate_term_value(ast), context, remove=ast.get('remove', False)), depth, increment, context)
 
 
 
@@ -575,10 +564,12 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
     arg_index = 1
     arg_key = f'arg_{arg_index}'
     while arg_key in pred and pred[arg_key] is not None:
-        term = pred[arg_key].term
+        terminal = _extract_predicate_term_value(pred[arg_key])
+
         if isinstance(pred[arg_key], tatsu.ast.AST) and pred[arg_key].get('remove', False):
-            term = f'<remove>{term}</remove>'
-        args.append(term)
+            terminal = f'<remove>{terminal}</remove>'
+
+        args.append(terminal)
 
         arg_index += 1
         arg_key = f'arg_{arg_index}'
@@ -876,7 +867,10 @@ def _handle_with(caller, rule, ast, depth, increment, context=None):
 
 
 def _parse_pref_object_type(pref_object_type, context):
-    return _out_str_to_span(pref_object_type.type_name, context, remove=pref_object_type.get('remove', False))
+    type_name = pref_object_type.type_name
+    if isinstance(type_name, tatsu.ast.AST):
+        type_name = type_name.terminal
+    return _out_str_to_span(type_name, context, remove=pref_object_type.get('remove', False))
 
 
 @mutation_and_removal_context

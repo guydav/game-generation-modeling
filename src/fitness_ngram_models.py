@@ -595,7 +595,12 @@ class NGramASTParser(ast_parser.ASTParser):
         combine_types_func = None
 
         if rule.startswith('predicate_or_function_') and rule.endswith('term'):
-            term = typing.cast(str, ast.term)
+            term = ast.term
+            if isinstance(term, tatsu.ast.AST):
+                term = term.terminal
+
+            term = typing.cast(str, term)
+
             local_variables = kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {}
             types_or_categories = self._map_to_type_or_category(term, local_variables)
 
@@ -607,16 +612,22 @@ class NGramASTParser(ast_parser.ASTParser):
 
         if rule == 'variable_type_def':
             var_type = ast.var_type.type  # type: ignore
-            if isinstance(var_type, str):
-                types_or_categories = self._map_to_type_or_category(var_type, {})
+            var_type_rule = var_type.parseinfo.rule  # type: ignore
+
+            if var_type_rule.endswith('type'):
+                types_or_categories = self._map_to_type_or_category(var_type.terminal, {})
 
                 if types_or_categories is None or len(types_or_categories) == 0:
                     return UNKNOWN_CATEGORY
 
                 types_or_categories = list(types_or_categories)
 
-            elif isinstance(var_type, tatsu.ast.AST):
+            elif var_type_rule.startswith('either'):
                 type_names = var_type.type_names  # type: ignore
+                if not isinstance(type_names, list):
+                    type_names = [type_names]
+
+                type_names = typing.cast(typing.List[str], [t.terminal for t in type_names])
                 types_or_categories = self._map_to_type_or_category(type_names, {})  # type: ignore
                 combine_types_func = self._combine_either_types_list
 
@@ -641,7 +652,7 @@ class NGramASTParser(ast_parser.ASTParser):
                 if not isinstance(object_types, (list, tuple)):
                     object_types = [object_types]
 
-                object_types = [t.type_name if isinstance(t, tatsu.ast.AST) else str(t) for t in object_types]
+                object_types = [t.type_name.terminal if isinstance(t, tatsu.ast.AST) else str(t) for t in object_types]
                 for obj_type in object_types:
                     object_category = self._map_to_type_or_category(obj_type, {})  # type: ignore
                     if object_category is None or len(object_category) == 0:

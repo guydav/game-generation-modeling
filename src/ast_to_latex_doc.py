@@ -772,7 +772,7 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('corner', 'Any of the corners of the room'),
     TypeDesc('door', 'The door out of the room'),
 	TypeDesc('desk'),
-    TypeDesc('desk_shelf', 'The shelves under the desk'),
+    TypeDesc('shelf_desk', 'The shelves under the desk'),
 	TypeDesc('drawer', 'Either drawer in the side table'),
 	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.'), # (* \\textbf Do we want to specify this differently? *)'),
 	TypeDesc('floor'),
@@ -815,7 +815,10 @@ def extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
     arg_index = 1
     arg_key = f'arg_{arg_index}'
     while arg_key in inner and inner[arg_key] is not None:
-        args.append(str(inner[arg_key].term))
+        term = inner[arg_key].term
+        if isinstance(term, tatsu.ast.AST):
+            term = term.terminal
+        args.append(str(term))
         arg_index += 1
         arg_key = f'arg_{arg_index}'
 
@@ -860,8 +863,8 @@ FUNCTION_RULES = {
 
 
 def extract_single_variable_type(ast):
-    if 'var_type' in ast and 'type' in ast.var_type and isinstance(ast.var_type.type, str):
-        return ast.var_type.type
+    if 'var_type' in ast and 'type' in ast.var_type and isinstance(ast.var_type.type, tatsu.ast.AST):
+        return ast.var_type.type.terminal
 
     return None
 
@@ -871,7 +874,10 @@ def extract_either_variable_types(ast):
         if isinstance(ast.type_names, str):
             return (ast.type_names, )
 
-        return ast.type_names
+        if isinstance(ast.type_names, tatsu.ast.AST):
+            return (ast.type_names.terminal,)
+
+        return tuple(t.terminal for t in ast.type_names)
 
     return None
 
@@ -882,9 +888,9 @@ def extract_pref_name_and_types(ast):
             return None
 
         if isinstance(ast.object_types, tatsu.ast.AST):
-            return ast.object_types.type_name
+            return ast.object_types.type_name.terminal
         else:
-            return [t.type_name for t in ast.object_types if 'type_name' in t]
+            return [t.type_name.terminal for t in ast.object_types if 'type_name' in t]
 
     return None
 
@@ -896,8 +902,8 @@ def extract_types_from_predicates_and_functions(ast):
 
 def extract_co_ocurring_types(ast, key):
     if 'type_names' in ast:
-        if not isinstance(ast.type_names, str):
-            types = list(ast.type_names)
+        if not isinstance(ast.type_names, (str, tatsu.ast.AST)):
+            types = list(t.terminal for t in ast.type_names)
             if key in types:
                 types.remove(key)
 

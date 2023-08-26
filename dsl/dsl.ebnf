@@ -9,7 +9,7 @@ game_def = '(game' game_name:id ')';
 domain_def = '(:domain' domain_name:id ')';
 setup_def = '(:setup' setup ')' | ();
 constraints_def = '(:constraints' preferences ')';
-terminal_def = '(:terminal' terminal ')' | ();  # TODO: do we want this to be optional?
+terminal_def = '(:terminal' terminal ')' | ();
 scoring_def = '(:scoring' scoring ')';
 
 # Generic definitions useful across sections
@@ -23,7 +23,7 @@ color_variable = /\?x[0-9]*/;
 orientation_variable = /\?y[0-9]*/;
 side_variable = /\?z[0-9]*/;
 
-variable_list = '(' {variables+:(variable_type_def |  color_variable_type_def | orientation_variable_type_def | side_variable_type_def)}+ ')';
+variable_list = '(' {variables+:(variable_type_def | color_variable_type_def | orientation_variable_type_def | side_variable_type_def)}+ ')';
 
 variable_type_def = {var_names+:variable}+ '-' var_type:type_definition;
 color_variable_type_def = {var_names+:color_variable}+ '-' var_type:color_type_definition;
@@ -40,14 +40,14 @@ either_color_types = '(either' {type_names+:color}+ ')';
 either_orientation_types = '(either' {type_names+:orientation}+ ')';
 either_side_types = '(either' {type_names+:side}+ ')';
 
-object_name = name;
-object_type = name;
-color_type = 'color';
-color = 'blue' | 'brown' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'tan' | 'white' | 'yellow';
-orientation_type = 'orientation';
-orientation = 'diagonal' | 'sideways' | 'upright' | 'upside_down';
-side_type = 'side';
-side = 'back' | 'front' | 'left' | 'right';
+object_type = terminal:name;  # we don't hardcode all the types, but do set a prior over them in the sampler
+object_name = terminal:('agent' | 'bed' | 'desk' | 'door' | 'floor' | 'main_light_switch' | 'mirror' | 'room_center' | 'rug' | 'side_table' | 'bottom_drawer' | 'bottom_shelf' | 'east_sliding_door' | 'east_wall' | 'north_wall' | 'south_wall' | 'top_drawer' | 'top_shelf' | 'west_sliding_door' | 'west_wall');
+color_type = terminal:'color';
+color = terminal:('blue' | 'brown' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'tan' | 'white' | 'yellow');
+orientation_type = terminal:'orientation';
+orientation = terminal:('diagonal' | 'sideways' | 'upright' | 'upside_down');
+side_type = terminal:'side';
+side = terminal:('back' | 'front' | 'left' | 'right');
 # location = name;
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
@@ -346,7 +346,7 @@ count_measure = '(count-measure' name_and_types:pref_name_and_types ')';
 
 pref_name_and_types = pref_name:preference_name {object_types+:pref_object_type}*;
 
-pref_object_type = ':' type_name:(color | object_type | object_name);
+pref_object_type = ':' type_name:(color | object_name | object_type);
 
 # Scoring
 scoring = scoring_expr;

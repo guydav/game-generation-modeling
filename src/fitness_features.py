@@ -1048,10 +1048,14 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             var_type = ast.var_type.type  # type: ignore
-            if isinstance(var_type, str):
+            var_type_rule = var_type.parseinfo.rule  # type: ignore
+
+            if var_type_rule.endswith('type'):
                 n_types = 1
+
             else:
                 n_types = len(set(var_type.type_names)) if isinstance(var_type.type_names, list) else 1
+
             self.max_types_quantified = max(self.max_types_quantified, n_types)
 
             variables = ast.var_names
@@ -1127,19 +1131,18 @@ class RepeatedVariableTypeInEither(FitnessTerm):
     repeated_type_found: bool = False
 
     def __init__(self):
-        super().__init__(VARIABLE_TYPE_DEF_RULES_PATTERN, 'repeated_variable_type_in_either')
+        super().__init__(EITHER_TYPES_RULES_PATTERN, 'repeated_variable_type_in_either')
 
     def game_start(self) -> None:
         self.repeated_type_found = False
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            var_type = ast.var_type.type  # type: ignore
-            if isinstance(var_type, tatsu.ast.AST):
-                type_names = var_type.type_names
-                if isinstance(type_names, list):
-                    if len(set(type_names)) < len(type_names):
-                        self.repeated_type_found = True
+            type_names = ast.type_names
+            if isinstance(type_names, list):
+                type_names = [t.terminal for t in type_names]
+                if len(set(type_names)) < len(type_names):
+                    self.repeated_type_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.repeated_type_found
@@ -1561,6 +1564,11 @@ class PrefForallTerm(FitnessTerm):
             else:   # count*
                 pref_name = ast.name_and_types['pref_name']  # type: ignore
                 object_types = ast.name_and_types['object_types']  # type: ignore
+                if object_types is not None:
+                    if not isinstance(object_types, list):
+                        object_types = [object_types]
+
+                    object_types = [t.type_name.terminal for t in object_types]
                 self._update_count(pref_name, object_types, rule, context)
 
     @abstractmethod
@@ -1776,8 +1784,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
             return
 
         count_correct = 0
-        for obj_type, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
-            obj = obj_type.type_name
+        for obj, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
             var_types = var_def.var_types
             if obj in var_types or (obj in room_and_object_types.TYPE_TO_META_TYPE and room_and_object_types.TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
                 count_correct += 1

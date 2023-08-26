@@ -772,7 +772,7 @@
 (:setup (and
     (forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
     (game-optional (toggled_on main_light_switch))
-    (game-optional (toggled_on desktop))
+    (forall (?e - desktop) (game-optional (toggled_on ?e)))
 ))
 (:constraints (and
     (preference dodgeballsInPlace
@@ -1702,13 +1702,13 @@
 (define (game 61623853a4ccad551beeb11a-57) (:domain medium-objects-room-v1)  ; 57
 
 (:constraints (and
-    (preference bookOnDeskShelf (exists (?b - book ?d - desk_shelf)
+    (preference bookOnDeskShelf (exists (?b - book ?d - shelf_desk)
         (at-end (and
             (on ?d ?b)
             (not (exists (?o - (either pencil pen cd)) (on ?d ?o)))
         ))
     ))
-    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - desk_shelf)
+    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - shelf_desk)
         (at-end (and
             (on ?d ?o)
             (not (exists (?b - book) (on ?d ?b)))
@@ -3226,7 +3226,6 @@
     (exists (?h - hexagonal_bin) (game-conserved (and
         (adjacent south_wall ?h)
         (adjacent west_wall ?h)
-        ; (faces ?h south_west_corner)
     )))
     (forall (?o - (either dodgeball cube_block alarm_clock book)) (game-optional (adjacent ?o desk)))
 ))

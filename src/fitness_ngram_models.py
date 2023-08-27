@@ -570,13 +570,13 @@ class NGramASTParser(ast_parser.ASTParser):
                 else:
                     self.current_input_ngrams_by_section[section][n].append(ngram)
 
-    def _map_to_type_or_category(self, term: str,
+    def _map_to_type_or_category(self, term_or_terms: typing.Union[str, typing.List[str]],
         context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]) -> typing.Union[str, typing.List[str]]:
 
         if self.use_specific_objects:
-            types_or_categories = ast_parser.predicate_function_term_to_types(term, context_variables)
+            types_or_categories = ast_parser.predicate_function_term_to_types(term_or_terms, context_variables)
         else:
-            types_or_categories = ast_parser.predicate_function_term_to_type_categories(term, context_variables, {})
+            types_or_categories = ast_parser.predicate_function_term_to_type_categories(term_or_terms, context_variables, {})
 
         if types_or_categories is None or len(types_or_categories) == 0:
             return UNKNOWN_CATEGORY
@@ -614,36 +614,24 @@ class NGramASTParser(ast_parser.ASTParser):
             var_type = ast.var_type.type  # type: ignore
             var_type_rule = var_type.parseinfo.rule  # type: ignore
 
-            if var_type_rule.endswith('type'):
-                types_or_categories = self._map_to_type_or_category(var_type.terminal, {})
+            var_types = ast_parser._extract_variable_type_as_list(var_type)  # type: ignore
+            types_or_categories = self._map_to_type_or_category(var_types, {})
 
-                if types_or_categories is None or len(types_or_categories) == 0:
-                    return UNKNOWN_CATEGORY
-
-                types_or_categories = list(types_or_categories)
-
-            elif var_type_rule.startswith('either'):
-                type_names = var_type.type_names  # type: ignore
-                if not isinstance(type_names, list):
-                    type_names = [type_names]
-
-                type_names = typing.cast(typing.List[str], [t.terminal for t in type_names])
-                types_or_categories = self._map_to_type_or_category(type_names, {})  # type: ignore
+            if var_type_rule.startswith('either'):
                 combine_types_func = self._combine_either_types_list
 
-        if types_or_categories is not None:
-            if types_or_categories == UNKNOWN_CATEGORY:
-                return UNKNOWN_CATEGORY
+        if types_or_categories is None or len(types_or_categories) == 0 or types_or_categories == UNKNOWN_CATEGORY:
+            return UNKNOWN_CATEGORY
 
-            types_or_categories = list(types_or_categories)
+        types_or_categories = list(types_or_categories)
 
-            if len(types_or_categories) == 1:
-                return types_or_categories[0]
+        if len(types_or_categories) == 1:
+            return types_or_categories[0]
+        else:
+            if combine_types_func is not None:
+                return combine_types_func(types_or_categories)
             else:
-                if combine_types_func is not None:
-                    return combine_types_func(types_or_categories)
-                else:
-                    raise ValueError(f'Found multiple types/categories for {ast} with no combine_types_func: {types_or_categories}')
+                raise ValueError(f'Found multiple types/categories for {ast} with no combine_types_func: {types_or_categories}')
 
         if rule == 'pref_name_and_types':
             output = ['pref_name']

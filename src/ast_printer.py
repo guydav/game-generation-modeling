@@ -273,31 +273,32 @@ def validate_variable_list_is_list(func):
 
 def _parse_type_definition(var_type_def, context):
     var_type = var_type_def.type
-    var_type_rule = var_type.parseinfo.rule  # type: ignore
+    var_type_list = ast_parser._extract_variable_type_as_list(var_type)
+    var_type_str = var_type_list[0] if len(var_type_list) == 1 else f"(either {' '.join(var_type_list)})"
+    # var_type_rule = var_type.parseinfo.rule  # type: ignore
+    # if var_type_rule.endswith('type'):
+    #     var_type_str = var_type.terminal
 
-    if var_type_rule.endswith('type'):
-        var_type_str = var_type.terminal
+    # elif var_type_rule.startswith('either'):
+    #     var_type_str = _parse_either_types(var_type, context)
 
-    elif var_type_rule.startswith('either'):
-        var_type_str = _parse_either_types(var_type, context)
+    #     inner_prev_mutation = None
+    #     if 'html' in context and context['html'] and 'mutation' in var_type:
+    #         if 'mutation' in context:
+    #             inner_prev_mutation = context['mutation']
 
-        inner_prev_mutation = None
-        if 'html' in context and context['html'] and 'mutation' in var_type:
-            if 'mutation' in context:
-                inner_prev_mutation = context['mutation']
+    #         context['mutation'] = var_type['mutation']
+    #         context = preprocess_context(context)
+    #         var_type_str = _out_str_to_span(var_type_str, context)
 
-            context['mutation'] = var_type['mutation']
-            context = preprocess_context(context)
-            var_type_str = _out_str_to_span(var_type_str, context)
+    #         if inner_prev_mutation is not None:
+    #             context['mutation'] = inner_prev_mutation
+    #         else:
+    #             del context['mutation']
+    #         context = preprocess_context(context)
 
-            if inner_prev_mutation is not None:
-                context['mutation'] = inner_prev_mutation
-            else:
-                del context['mutation']
-            context = preprocess_context(context)
-
-    else:
-        raise ValueError(f'Unrecognized quantifier variables: {var_type}')
+    # else:
+    #     raise ValueError(f'Unrecognized quantifier variables: {var_type}')
 
     return _out_str_to_span(var_type_str, context, remove=var_type_def.get('remove', False))
 

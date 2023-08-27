@@ -861,9 +861,9 @@
 ))
 (:scoring (+
     (* 10 (count thrownBallReachesEnd))
-    (* (- 5) (count thrownBallHitsBlock:red))
-    (* (- 3) (count thrownBallHitsBlock:green))
-    (* (- 3) (count thrownBallHitsBlock:pink))
+    (* -5 (count thrownBallHitsBlock:red))
+    (* -3 (count thrownBallHitsBlock:green))
+    (* -3 (count thrownBallHitsBlock:pink))
     (- (count thrownBallHitsBlock:yellow))
     (- (count thrownBallHitsBlock:purple))
 )))
@@ -1494,7 +1494,7 @@
     (* 10 (count-once-per-objects itemsHidingScreens))
     (* 10 (count-once-per-objects objectsHidden))
     (* 10 (count-once-per-objects blindsOpened))
-    (* (- 5) (count objectMoved))
+    (* -5 (count objectMoved))
 )))
 
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
@@ -1802,7 +1802,7 @@
 (:scoring (+
     (* 5 (count-once-per-objects gameBlockFound))
     (* 100 (count-once matchingBuildingBuilt))
-    (* (-10) (count towerFallsWhileBuilding))
+    (* -10 (count towerFallsWhileBuilding))
 )))
 
 (define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
@@ -1899,7 +1899,7 @@
 (:scoring (+
     (count smallObjectThrownToBed)
     (* 5 (count bigObjectThrownToBed))
-    (* (- 5) (count failedThrowAttempt))
+    (* -5 (count failedThrowAttempt))
 )))
 
 
@@ -3183,7 +3183,7 @@
 )
 (:scoring (+
     (* 3 (count-once-per-external-objects throwKnocksBlock:pyramid_block))
-    (* (- 3) (count-once-per-external-objects throwKnocksBlock:tall_cylindrical_block))
+    (* -3 (count-once-per-external-objects throwKnocksBlock:tall_cylindrical_block))
     (count-once-per-external-objects throwKnocksBlock:cylindrical_block)
     (* 2 (count-once-per-external-objects ballInOrOnBin:dodgeball))
     (* 2 (count-once-per-external-objects ballInOrOnBin:basketball))

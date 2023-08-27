@@ -1934,6 +1934,9 @@ def _is_number(s: typing.Any) -> bool:
         return s.replace('.', '', 1).isdigit()
 
     elif isinstance(s, tatsu.ast.AST):
+        if s.parseinfo.rule == 'number_value':  # type: ignore
+            return True
+
         if s.parseinfo.rule in ('scoring_expr', 'scoring_neg_expr'):  # type: ignore
             return _is_number(s.expr)
 

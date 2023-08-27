@@ -975,10 +975,10 @@ if __name__ == '__main__':
     stats = CommonSensePredicateStatisticsDatabse(cache_dir=DEFAULT_CACHE_DIR,
                                                     # trace_names=CURRENT_TEST_TRACE_NAMES,
                                                     trace_names=FULL_PARTICIPANT_TRACE_SET,
-                                                    cache_rules=[],
+                                                    # cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    force_trace_names_hash='028b3733',
-                                                    # overwrite=True
+                                                    # force_trace_names_hash='028b3733',
+                                                    overwrite=True
                                                     )
 
     variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())

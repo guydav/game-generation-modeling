@@ -255,5 +255,18 @@
                 "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
             }
         },
+        {
+            "name": "Python: reward filter",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--run-from-real-games",
+                "--max-traces-per-game", "10",
+                "--n-workers", "1",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
     ]
 }

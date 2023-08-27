@@ -60,10 +60,6 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
     DESK: [
         "Desk|+03.14|00.00|-01.41"
     ],
-    SHELF_DESK: [
-        "Shelf|+03.13|+00.63|-00.56",
-        "Shelf|+03.13|+00.63|-02.27"
-    ],
     LAMP: [
         "DeskLamp|+03.13|+00.79|-00.64"
     ],
@@ -114,6 +110,10 @@ OBJECTS_SHARED_IN_ALL_ROOMS_BY_TYPE = {
         "Shelf|-02.97|+01.16|-02.47",
         "Shelf|-02.97|+01.53|-01.72",
         "Shelf|-02.97|+01.53|-02.47"
+    ],
+    SHELF_DESK: [
+        "Shelf|+03.13|+00.63|-00.56",
+        "Shelf|+03.13|+00.63|-02.27"
     ],
     SIDE_TABLE: [
         "SideTable|-01.52|00.00|+00.41"

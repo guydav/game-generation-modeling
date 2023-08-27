@@ -16,7 +16,7 @@ scoring_def = '(:scoring' scoring ')';
 
 id = /[a-z0-9][a-z0-9\-]+/;
 name = /[A-Za-z][A-Za-z0-9_]*/;
-number = /-?\d*\.?\d+/;
+number_pattern = /\d*\.?\d+/;
 
 variable = /\?[a-w][a-z0-9]*/;
 color_variable = /\?x[0-9]*/;
@@ -48,7 +48,10 @@ orientation_type = terminal:'orientation';
 orientation = terminal:('diagonal' | 'sideways' | 'upright' | 'upside_down');
 side_type = terminal:'side';
 side = terminal:('back' | 'front' | 'left' | 'right');
-# location = name;
+number_value = number:(positive_number | negative_number);
+positive_number = terminal:number_pattern;
+negative_number = '-' number:positive_number;
+
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
@@ -62,7 +65,7 @@ predicate_or_function_side_term = term:(side | side_variable);
 predicate_or_function_type_term = term:(object_type | variable);
 
 
-comparison_arg = arg:(function_eval | number);
+comparison_arg = arg:(function_eval | number_value);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = func:(function_building_size |
     function_distance |
@@ -280,7 +283,7 @@ scoring_expr = expr:(
     );
     # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
 
-scoring_expr_or_number = expr:(scoring_expr | number);
+scoring_expr_or_number = expr:(scoring_expr | number_value);
 
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';

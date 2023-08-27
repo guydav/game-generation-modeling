@@ -205,7 +205,8 @@ class ASTRuleValueCounter(ASTParser):
 BINARY_OPERATORS = ['-', '/']
 MULTI_OPERATORS = ['+', '*']
 COMPARISON_OPERATORS = ['<=', '<', '=', '>=', '>']
-NUMBER_DEFAULTS = list(range(11))
+NUMBER_DEFAULTS = list(range(26)) + list(range(0, 110, 10)) + list(range(0, 360, 60)) + list(np.round(np.arange(0, 1, 0.1), 1))
+NUMBER_DEFAULTS = [f'{x:.1f}' if isinstance(x, float) else str(x) for x in set(NUMBER_DEFAULTS)]
 TYPE_NAMES = []
 FUNCTION_NAMES = []
 PREDICATE_NAMES = []
@@ -545,7 +546,7 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
         ('game_def', 'game_name'): generate_game_id,
         ('domain_def', 'domain_name'): generate_domain_name,
     },
-    number=defaultdict(_number_defaults),
+    number_pattern=defaultdict(_number_defaults),
     predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
@@ -565,7 +566,7 @@ SPECIAL_RULE_FIELD_VALUE_TYPES = {
     # ('color_type_definition', 'type'): 'color_type',
     # ('orientation_type_definition', 'type'): 'orientation_type',
     # ('side_type_definition', 'type'): 'side_type',
-    ('comparison_arg', 'arg'): 'number',
+    # ('comparison_arg', 'arg'): 'number',
     ('object_type', 'terminal'): 'name',
     ('object_name', 'terminal'): 'name',
     ('color_type', 'terminal'): 'name',
@@ -585,7 +586,7 @@ SPECIAL_RULE_FIELD_VALUE_TYPES = {
     ('predicate_or_function_side_term', 'term'): 'side_variable',
     ('predicate_or_function_type_term', 'term'): 'variable',
     ('terminal_expr', 'expr'): ('total_time', 'total_score'),
-    ('scoring_expr_or_number', 'expr'): 'number',
+    # ('scoring_expr_or_number', 'expr'): 'number',
     # ('pref_object_type', 'type_name'): ('object_name', 'object_type'),
 }
 

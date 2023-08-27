@@ -52,6 +52,7 @@ def main(args):
 
     for ast in test_cases:
         ast_printer.BUFFER = None
+        first_print_out = ''
         try:
             if args.pretty_print:
                 ast_printer.pretty_print_ast(ast)
@@ -70,6 +71,10 @@ def main(args):
 
 
         except (tatsu.exceptions.FailedToken, tatsu.exceptions.FailedParse) as e:
+            print(f'Parse failed: at position {e.pos} expected "{e.item}" :')
+            if len(first_print_out) > e.pos:
+                print(first_print_out[e.pos:])
+
             raise e
             # print(test_case[:test_case.find('(:domain')])
             # print(f'Parse failed: at position {e.pos} expected {e.item}')

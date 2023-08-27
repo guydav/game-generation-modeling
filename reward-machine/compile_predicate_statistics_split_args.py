@@ -24,7 +24,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES
+from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, SLIDING_DOOR, SHELF_DESK
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -85,6 +85,15 @@ TYPE_REMAP = {
     "teddybear": "teddy_bear",
     "triangleblock": "triangle_block"
 }
+
+
+OBJECT_ID_TYPE_REMAP = {
+     "Window|+02.28|+00.93|-03.18": SLIDING_DOOR,
+     "Window|-01.02|+00.93|-03.19": SLIDING_DOOR,
+     "Shelf|+03.13|+00.63|-00.56": SHELF_DESK,
+     "Shelf|+03.13|+00.63|-02.27": SHELF_DESK,
+}
+
 
 DEBUG = False
 PROFILE = True
@@ -606,7 +615,9 @@ class CommonSensePredicateStatisticsSplitArgs():
 
                                     for i, (arg_id, arg_type) in enumerate(zip(arg_ids, arg_types)):
                                         info[f"arg_{i + 1}_id"] = arg_id
-                                        info[f"arg_{i + 1}_type"] = TYPE_REMAP.get(arg_type, arg_type)
+                                        arg_type = TYPE_REMAP.get(arg_type, arg_type)
+                                        arg_type = OBJECT_ID_TYPE_REMAP.get(arg_id, arg_type)
+                                        info[f"arg_{i + 1}_type"] = arg_type
                                     predicate_satisfaction_mapping[key] = info
 
                                 elif predicate_satisfaction_mapping[key]['intervals'][-1][1] is not None:

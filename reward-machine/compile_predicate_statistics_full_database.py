@@ -27,7 +27,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES
+from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -203,7 +203,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.all_trace_ids = [os.path.splitext(os.path.basename(t))[0] for t in glob.glob(os.path.join(trace_folder, '*.json'))]
         self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS])
         self.all_types = set(reduce(lambda x, y: x + y, [list(x.keys()) for x in chain(OBJECTS_BY_ROOM_AND_TYPE.values(), SPECIFIC_NAMED_OBJECTS_BY_ROOM.values())]))
+        self.all_types.difference_update(META_TYPES.keys())
         self.all_types.remove(GAME_OBJECT)
+        self.all_types.add(BUILDING)
         self.all_arg_ids = set(reduce(lambda x, y: x + y, [object_types for room_types in OBJECTS_BY_ROOM_AND_TYPE.values() for object_types in room_types.values()]))
         self.all_arg_ids.update(UNITY_PSEUDO_OBJECTS.keys())
 

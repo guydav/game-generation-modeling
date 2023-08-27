@@ -209,6 +209,10 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.all_arg_ids = set(reduce(lambda x, y: x + y, [object_types for room_types in OBJECTS_BY_ROOM_AND_TYPE.values() for object_types in room_types.values()]))
         self.all_arg_ids.update(UNITY_PSEUDO_OBJECTS.keys())
 
+        self.game_object_excluded_arg_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+        self.game_object_excluded_arg_types.difference_update(META_TYPES.keys())
+
+
         self.trace_names_hash = force_trace_names_hash
         self.stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=self.trace_names_hash))
         self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=self.trace_names_hash))
@@ -324,6 +328,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
+        result_query = None
         try:
             if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
@@ -361,6 +366,12 @@ class CommonSensePredicateStatisticsFullDatabase():
             # Pass the exception through and let the caller handle it
             raise e
 
+        except duckdb.InvalidInputException as e:
+            if result_query is not None:
+                logger.error(f"Invalid input exception for query:\n{result_query}")
+
+            raise e
+
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
@@ -390,7 +401,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
-                exclude_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+                exclude_types = self.game_object_excluded_arg_types.copy()
                 for type in arg_types:
                     exclude_types.discard(type)
 
@@ -623,12 +634,12 @@ class CommonSensePredicateStatisticsFullDatabase():
                 object_types = object_types[0]
 
             if object_types == GAME_OBJECT:
-                where_clause = f"type NOT IN {self._types_to_arg_casts(GAME_OBJECT_EXCLUDED_TYPES)}"
+                where_clause = f"type NOT IN {self._types_to_arg_casts(self.game_object_excluded_arg_types)}"
             else:
                 where_clause = f"type = '{object_types}'"
         else:
             if GAME_OBJECT in object_types:
-                exclude_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+                exclude_types = self.game_object_excluded_arg_types.copy()
                 for type in object_types:
                     exclude_types.discard(type)
 

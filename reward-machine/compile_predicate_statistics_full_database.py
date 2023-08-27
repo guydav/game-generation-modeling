@@ -612,6 +612,12 @@ class CommonSensePredicateStatisticsFullDatabase():
         return '(' + ', '.join(f"'{t}'::arg_type" for t in types) + ')'
 
     def _build_object_assignment_cte(self, var: str, object_types: typing.Union[str, typing.List[str]]):
+        if isinstance(object_types, str) and object_types in META_TYPES:
+            object_types = META_TYPES[object_types]
+
+        else:
+            object_types = sum([META_TYPES.get(obj_type, [obj_type]) for obj_type in object_types], [])
+
         if isinstance(object_types, str) or len(object_types) == 1:
             if isinstance(object_types, list):
                 object_types = object_types[0]

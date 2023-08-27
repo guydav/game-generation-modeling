@@ -291,7 +291,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
 
         duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO data SELECT * FROM data_df")
+        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_2_id, arg_2_type, trace_id, domain, intervals FROM data_df")
 
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")

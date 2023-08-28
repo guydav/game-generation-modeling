@@ -274,7 +274,7 @@ def validate_variable_list_is_list(func):
 def _parse_type_definition(var_type_def, context):
     var_type = var_type_def.type
     var_type_list = ast_parser._extract_variable_type_as_list(var_type)
-    var_type_str = var_type_list[0] if len(var_type_list) == 1 else f"(either {' '.join(var_type_list)})"
+    var_type_str = var_type_list[0] if var_type.rule.endswith('type') else f"(either {' '.join(var_type_list)})"
     # var_type_rule = var_type.parseinfo.rule  # type: ignore
     # if var_type_rule.endswith('type'):
     #     var_type_str = var_type.terminal

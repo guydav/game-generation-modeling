@@ -2983,6 +2983,12 @@ if __name__ == '__main__':
     logger.debug('Predicate found in data features:')
     logger.debug(df[[c for c in df.columns if 'predicate_found_in_data_' in c]].describe())
 
+    logger.debug('Features with largest differences:')
+    g = df.groupby('real')[[c for c in df.columns if c not in ('Index', 'real')]].mean()
+    mean_diffs = g.loc[1] - g.loc[0]
+    logger.debug('Features with largest positive diffs:\n' + str(mean_diffs.nlargest(20)))
+    logger.debug('Features with largest negative diffs:\n' + str(mean_diffs.nsmallest(20)))
+
     logger.info(f'Writing to {args.output_path}')
     df.to_csv(args.output_path, index_label='Index', compression='gzip')
 

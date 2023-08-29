@@ -449,11 +449,15 @@ class NGramTrieModel:
 
 IGNORE_RULES = [
     'setup', 'setup_statement',
-    'variable_list', 'type_definition', 'either_types',
+    'variable_list',
+    'type_definition', 'color_type_definition', 'orientation_type_definition', 'side_type_definition',
+    'either_types', 'either_color_types', 'either_orientation_types', 'either_side_types',
+    'object_type', 'object_name', 'color_type', 'color', 'orientation_type', 'orientation', 'side_type', 'side',
     'super_predicate', 'predicate', 'function_eval', 'comparison_arg',
     'pref_forall_prefs', 'pref_def', 'pref_body', 'seq_func',
-    'terminal', 'terminal_expr', 'scoring_expr',
+    'terminal', 'terminal_expr', 'scoring_expr', 'scoring_expr_or_number',
     'preference_eval', 'pref_object_type',
+    'number_value', 'positive_number', 'negative_number',
 ]
 
 
@@ -571,7 +575,7 @@ class NGramASTParser(ast_parser.ASTParser):
                     self.current_input_ngrams_by_section[section][n].append(ngram)
 
     def _map_to_type_or_category(self, term_or_terms: typing.Union[str, typing.List[str]],
-        context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]) -> typing.Union[str, typing.List[str]]:
+        context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]) -> typing.Union[typing.Literal['<unknown>'], typing.List[str]]:
 
         if self.use_specific_objects:
             types_or_categories = ast_parser.predicate_function_term_to_types(term_or_terms, context_variables)
@@ -592,6 +596,7 @@ class NGramASTParser(ast_parser.ASTParser):
     def _tokenize_ast_node(self, ast: tatsu.ast.AST, **kwargs) -> typing.Union[str, typing.List[str]]:
         rule = ast.parseinfo.rule  # type: ignore
         types_or_categories = None
+        found_types_or_categories = False
         combine_types_func = None
 
         if rule.startswith('predicate_or_function_') and rule.endswith('term'):
@@ -603,35 +608,38 @@ class NGramASTParser(ast_parser.ASTParser):
 
             local_variables = kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {}
             types_or_categories = self._map_to_type_or_category(term, local_variables)
+            found_types_or_categories = True
 
-            if types_or_categories is None or len(types_or_categories) == 0:
-                return UNKNOWN_CATEGORY
-
-            types_or_categories = list(types_or_categories)
             combine_types_func = self._combine_either_types_str
 
-        if rule == 'variable_type_def':
+        if rule.endswith('variable_type_def'):
             var_type = ast.var_type.type  # type: ignore
             var_type_rule = var_type.parseinfo.rule  # type: ignore
 
             var_types = ast_parser._extract_variable_type_as_list(var_type)  # type: ignore
-            types_or_categories = self._map_to_type_or_category(var_types, {})
+            if len(var_types) == 1:
+                types_or_categories = self._map_to_type_or_category(var_types, {})
+            else:
+                types_or_categories = list(itertools.chain.from_iterable(self._map_to_type_or_category(var_type, {}) for var_type in var_types))
 
             if var_type_rule.startswith('either'):
                 combine_types_func = self._combine_either_types_list
 
-        if types_or_categories is None or len(types_or_categories) == 0 or types_or_categories == UNKNOWN_CATEGORY:
-            return UNKNOWN_CATEGORY
+            found_types_or_categories = True
 
-        types_or_categories = list(types_or_categories)
+        if found_types_or_categories:
+            if types_or_categories is None or len(types_or_categories) == 0 or types_or_categories == UNKNOWN_CATEGORY:
+                return UNKNOWN_CATEGORY
 
-        if len(types_or_categories) == 1:
-            return types_or_categories[0]
-        else:
-            if combine_types_func is not None:
-                return combine_types_func(types_or_categories)
+            types_or_categories = typing.cast(typing.List[str], types_or_categories)
+
+            if len(types_or_categories) == 1:
+                return types_or_categories[0]
             else:
-                raise ValueError(f'Found multiple types/categories for {ast} with no combine_types_func: {types_or_categories}')
+                if combine_types_func is not None:
+                    return combine_types_func(types_or_categories)
+                else:
+                    raise ValueError(f'Found multiple types/categories for {ast} with no combine_types_func: {types_or_categories}')
 
         if rule == 'pref_name_and_types':
             output = ['pref_name']
@@ -662,6 +670,9 @@ class NGramASTParser(ast_parser.ASTParser):
 
         if rule == 'scoring_neg_expr':
             return '-'
+
+        if rule in ('number_value', 'positive_number', 'negative_number'):
+            return 'number'
 
         return rule
 

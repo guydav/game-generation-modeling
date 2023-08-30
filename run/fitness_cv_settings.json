@@ -3,7 +3,8 @@
         "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
-        "fitness__batch_size": [1, 2, 4]
+        "fitness__batch_size": [1, 2, 4],
+        "fitness__regularization_weight": [0.001, 0.003, 0.01, 0.03]
     },
     "train_kwargs": {
         "n_epochs": 20000,
@@ -14,7 +15,8 @@
         "evaluate_opposite_shuffle_mode": false,
         "full_dataset_on_device": true,
         "bias_init_margin_ratio": 0.01,
-        "negative_score_reduction": "none"
+        "negative_score_reduction": "none",
+        "regularizer": 1
     },
     "cv_kwargs": {
         "refit": "overall_ecdf",

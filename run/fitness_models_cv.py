@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pprint import pformat
+import re
 import sys
 import typing
 
@@ -118,7 +119,14 @@ def main(args: argparse.Namespace):
 
     if args.ignore_categories:
         logger.info(f'Ignoring categories: {args.ignore_categories}')
-        all_ignore_features = set(reduce(lambda x, y: x + y, [FEATURE_CATEGORIES[c] for c in args.ignore_categories], []))
+        all_ignore_features = set()
+        for category in args.ignore_categories:
+            for feature in FEATURE_CATEGORIES[category]:
+                if isinstance(feature, re.Pattern):
+                    all_ignore_features.update([f for f in feature_columns if feature.match(f)])
+                else:
+                    all_ignore_features.add(feature)
+
         feature_columns = [c for c in feature_columns if c not in all_ignore_features]
 
     logger.info(f'Fitting models with {len(feature_columns)} features')

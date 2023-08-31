@@ -6,6 +6,7 @@
         "fitness__batch_size": [1, 2, 4],
         "fitness__regularization_weight": [0.001, 0.003, 0.01, 0.03]
     },
+
     "train_kwargs": {
         "n_epochs": 20000,
         "patience_epochs": 500,
@@ -18,6 +19,7 @@
         "negative_score_reduction": "none",
         "regularizer": 1
     },
+
     "cv_kwargs": {
         "refit": "overall_ecdf",
         "error_score": "raise"
@@ -30,13 +32,6 @@
         "fitness__batch_size": [1, 2, 4]
     },
 
-    "param_grid_minimal": {
-        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
-        "fitness__lr": [4e-3],
-        "fitness__k": [1024],
-        "fitness__batch_size": [4]
-    },
-
     "param_grid_full": {
         "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
         "fitness__lr": [4e-3, 1e-3, 3e-4],
@@ -44,7 +39,14 @@
         "fitness__batch_size": [1, 2, 4, 8, 16]
     },
 
-    "l1_param_grid": {
+    "param_grid_minimal": {
+        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__lr": [4e-3],
+        "fitness__k": [1024],
+        "fitness__batch_size": [4]
+    },
+
+    "param_grid_l1": {
         "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],

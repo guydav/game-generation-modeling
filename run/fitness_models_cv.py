@@ -63,6 +63,12 @@ parser.add_argument('--output-scaling', type=float, default=1.0)
 parser.add_argument('--cv-settings-json', type=str, default=os.path.join(os.path.dirname(__file__), 'fitness_cv_settings.json'))
 parser.add_argument('--no-save-full-model', action='store_true')
 parser.add_argument('--full-model-without-test', action='store_true')
+DEFAULT_TRAIN_KWARGS_JSON_KEY = 'train_kwargs'
+parser.add_argument('--train-kwargs-json-key', type=str, default=DEFAULT_TRAIN_KWARGS_JSON_KEY)
+DEFAULT_PARAM_GRID_JSON_KEY = 'param_grid'
+parser.add_argument('--param-grid-json-key', type=str, default=DEFAULT_PARAM_GRID_JSON_KEY)
+CV_KWARGS_JSON_KEY = 'cv_kwargs'
+parser.add_argument('--cv-kwargs-json-key', type=str, default=CV_KWARGS_JSON_KEY)
 
 
 def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
@@ -135,10 +141,10 @@ def main(args: argparse.Namespace):
         cv_settings = json.load(f)
 
     logger.debug(f'CV settings:\n{pformat(cv_settings)}')
-
-    param_grid = cv_settings['param_grid']
-    cv_kwargs = cv_settings['cv_kwargs']
-    train_kwargs = cv_settings['train_kwargs']
+    logger.info(f'Using param grid key "{args.param_grid_json_key}", train kwargs key "{args.train_kwargs_json_key}", cv kwargs key "{args.cv_kwargs_json_key}"')
+    param_grid = cv_settings[args.param_grid_json_key]
+    cv_kwargs = cv_settings[args.cv_kwargs_json_key]
+    train_kwargs = cv_settings[args.train_kwargs_json_key]
 
     if 'beta' not in train_kwargs and 'fitness__beta' not in param_grid:
         train_kwargs['beta'] = args.beta

@@ -490,37 +490,6 @@
     (* 10 (count-once-per-objects castleBuilt))
 ))
 
-; (* 4 (or
-    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ; ))
-    ; (* 3 (or
-    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - green_bridge_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt))
-    ; ))
-    ; (* 3 (with (?b - green_bridge_block ?f - yellow_flat_block ?t - yellow_tall_cylindrical_block ?c - green_cube_block ?p - orange_pyramid_block) (count-once-per-objects castleBuilt)))
-    ; (* 4 (or
-    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ; ))
-    ; (* 3 (or
-    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?b - brown_bridge_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ;     (with (?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt))
-    ; ))
-    ; (* 3 (with (?b - brown_bridge_block ?f - gray_flat_block ?t - brown_tall_cylindrical_block ?c - blue_cube_block ?p - red_pyramid_block) (count-once-per-objects castleBuilt)))
-
 (define (game 60e93f64ec69ecdac3107555-19) (:domain medium-objects-room-v1)  ; 19
 (:setup (and
     (forall (?b - ball)
@@ -783,18 +752,18 @@
     (>= (total-score) 300)
 )
 (:scoring (+
-    (* 5 (count throwBallToBin:blue_dodgeball:red))
-    (* 10 (count throwBallToBin:pink_dodgeball:red))
-    (* 10 (count throwBallToBin:blue_dodgeball:pink))
-    (* 20 (count throwBallToBin:pink_dodgeball:pink))
-    (* 15 (count throwBallToBin:blue_dodgeball:orange))
-    (* 30 (count throwBallToBin:pink_dodgeball:orange))
-    (* 15 (count throwBallToBin:blue_dodgeball:green))
-    (* 30 (count throwBallToBin:pink_dodgeball:green))
-    (* 20 (count throwBallToBin:blue_dodgeball:purple))
-    (* 40 (count throwBallToBin:pink_dodgeball:purple))
-    (* 20 (count throwBallToBin:blue_dodgeball:yellow))
-    (* 40 (count throwBallToBin:pink_dodgeball:yellow))
+    (* 5 (count throwBallToBin:dodgeball_blue:red))
+    (* 10 (count throwBallToBin:dodgeball_pink:red))
+    (* 10 (count throwBallToBin:dodgeball_blue:pink))
+    (* 20 (count throwBallToBin:dodgeball_pink:pink))
+    (* 15 (count throwBallToBin:dodgeball_blue:orange))
+    (* 30 (count throwBallToBin:dodgeball_pink:orange))
+    (* 15 (count throwBallToBin:dodgeball_blue:green))
+    (* 30 (count throwBallToBin:dodgeball_pink:green))
+    (* 20 (count throwBallToBin:dodgeball_blue:purple))
+    (* 40 (count throwBallToBin:dodgeball_pink:purple))
+    (* 20 (count throwBallToBin:dodgeball_blue:yellow))
+    (* 40 (count throwBallToBin:dodgeball_pink:yellow))
 )))
 
 ; 25 and 26 are the same participant and are invalid -- hiding games
@@ -803,7 +772,7 @@
 (:setup (and
     (forall (?d - (either dodgeball cube_block)) (game-optional (not (exists (?s - shelf) (on ?s ?d)))))
     (game-optional (toggled_on main_light_switch))
-    (game-optional (toggled_on desktop))
+    (forall (?e - desktop) (game-optional (toggled_on ?e)))
 ))
 (:constraints (and
     (preference dodgeballsInPlace
@@ -892,9 +861,9 @@
 ))
 (:scoring (+
     (* 10 (count thrownBallReachesEnd))
-    (* (- 5) (count thrownBallHitsBlock:red))
-    (* (- 3) (count thrownBallHitsBlock:green))
-    (* (- 3) (count thrownBallHitsBlock:pink))
+    (* -5 (count thrownBallHitsBlock:red))
+    (* -3 (count thrownBallHitsBlock:green))
+    (* -3 (count thrownBallHitsBlock:pink))
     (- (count thrownBallHitsBlock:yellow))
     (- (count thrownBallHitsBlock:purple))
 )))
@@ -1415,7 +1384,7 @@
     ))
 ))
 (:constraints (and
-    (preference ballThrownToRampToBed (exists (?d - pink_dodgeball ?c - curved_wooden_ramp)
+    (preference ballThrownToRampToBed (exists (?d - dodgeball_pink ?c - curved_wooden_ramp)
         (then
             (once (and (agent_holds ?d) (faces agent ?c)))
             (hold-while
@@ -1425,7 +1394,7 @@
             (once (and (not (in_motion ?d)) (on bed ?d)))
         )
     ))
-    (preference ballThrownHitsAgent (exists (?d - pink_dodgeball ?c - curved_wooden_ramp)
+    (preference ballThrownHitsAgent (exists (?d - dodgeball_pink ?c - curved_wooden_ramp)
         (then
             (once (and (agent_holds ?d) (faces agent ?c)))
             (hold-while
@@ -1447,7 +1416,7 @@
 (:constraints (and
     (forall (?x - color)
         (preference beachballBouncedOffRamp
-            (exists (?b - beachball ?r - green_triangular_ramp)
+            (exists (?b - beachball ?r - triangular_ramp_green)
                 (then
                     (once (and (agent_holds ?b) (not (on rug agent)) (faces agent ?r)))
                     (hold-while
@@ -1525,20 +1494,20 @@
     (* 10 (count-once-per-objects itemsHidingScreens))
     (* 10 (count-once-per-objects objectsHidden))
     (* 10 (count-once-per-objects blindsOpened))
-    (* (- 5) (count objectMoved))
+    (* -5 (count objectMoved))
 )))
 
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
-(:setup (and
-    (game-conserved (< (distance door green_golfball) 0.5))
-    (forall (?d - dodgeball) (game-optional (< (distance ?d green_golfball) 1)))
-))
+(:setup (exists (?g - golfball_green) (and
+    (game-conserved (< (distance door ?g) 0.5))
+    (forall (?d - dodgeball) (game-optional (< (distance ?d ?g) 1)))
+)))
 (:constraints (and
     (forall (?d - dodgeball) (and
-        (preference dodgeballThrownToBin (exists (?h - hexagonal_bin)
+        (preference dodgeballThrownToBin (exists (?h - hexagonal_bin ?g - golfball_green)
             (then
                 (once (and
-                    (adjacent green_golfball agent)
+                    (adjacent ?g agent)
                     (adjacent door agent)
                     (agent_holds ?d)
                 ))
@@ -1546,17 +1515,17 @@
                 (once (and (not (in_motion ?d)) (in ?h ?d)))
             )
         ))
-        (preference throwAttemptFromDoor
+        (preference throwAttemptFromDoor (exists (?g - golfball_green)
             (then
                 (once (and
-                    (adjacent green_golfball agent)
+                    (adjacent ?g agent)
                     (adjacent door agent)
                     (agent_holds ?d)
                 ))
                 (hold (and (in_motion ?d) (not (agent_holds ?d))))
                 (once (not (in_motion ?d)))
             )
-        )
+        ))
     ))
 ))
 (:terminal (or
@@ -1733,13 +1702,13 @@
 (define (game 61623853a4ccad551beeb11a-57) (:domain medium-objects-room-v1)  ; 57
 
 (:constraints (and
-    (preference bookOnDeskShelf (exists (?b - book ?d - desk_shelf)
+    (preference bookOnDeskShelf (exists (?b - book ?d - shelf_desk)
         (at-end (and
             (on ?d ?b)
             (not (exists (?o - (either pencil pen cd)) (on ?d ?o)))
         ))
     ))
-    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - desk_shelf)
+    (preference otherObjectsOnDeskShelf (exists (?o - (either pencil pen cd) ?d - shelf_desk)
         (at-end (and
             (on ?d ?o)
             (not (exists (?b - book) (on ?d ?b)))
@@ -1769,20 +1738,18 @@
 
 (define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)  ; 58
 (:setup (and
-    (exists (?b - building) (and
-        (game-conserved (= (building_size ?b) 6))
+    (forall (?l - block ?s - shelf) (game-optional (not (on ?s ?l))))
+    (exists (?b - building) (game-conserved (and
+        (= (building_size ?b) 6)
         (forall (?l - block) (or
-            (game-conserved (and
-                    (in ?b ?l)
-                    (not (exists (?l2 - block) (and
-                        (in ?b ?l2)
-                        (not (same_object ?l ?l2))
-                        (same_type ?l ?l2)
-                    )))
+            (in ?b ?l)
+            (exists (?l2 - block) (and
+                (in ?b ?l2)
+                (not (same_object ?l ?l2))
+                (same_type ?l ?l2)
             ))
-            (game-optional (not (exists (?s - shelf) (on ?s ?l))))
         ))
-    ))
+    )))
 ))
 (:constraints (and
     (preference gameBlockFound (exists (?l - block)
@@ -1801,7 +1768,7 @@
                     (in ?b ?l1)
                     (or
                         (agent_holds ?l2)
-                        (in_motion ?l2)  ; (and (not (agent_holds ?l2))  was gratuious because of the disjunction
+                        (in_motion ?l2)
                     )
                 )
                 (touch ?l1 ?l2)
@@ -1835,7 +1802,7 @@
 (:scoring (+
     (* 5 (count-once-per-objects gameBlockFound))
     (* 100 (count-once matchingBuildingBuilt))
-    (* (-10) (count towerFallsWhileBuilding))
+    (* -10 (count towerFallsWhileBuilding))
 )))
 
 (define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
@@ -1866,7 +1833,7 @@
 (:setup (game-conserved (and
     (exists (?f - flat_block) (on rug ?f))
     (forall (?p - pyramid_block) (on floor ?p))
-    (exists (?p1 - yellow_pyramid_block ?p2 - red_pyramid_block ?p3 - blue_pyramid_block ?h - hexagonal_bin)
+    (exists (?p1 - pyramid_block_yellow ?p2 - pyramid_block_red ?p3 - pyramid_block_blue ?h - hexagonal_bin)
         (and
             (> (distance ?h ?p2) (distance ?h ?p1))
             (> (distance ?h ?p3) (distance ?h ?p2))
@@ -1892,10 +1859,10 @@
     ))
 ))
 (:scoring (+
-    (* 10 (count dodgeballFromBlockToBin:yellow_pyramid_block))
-    (* 25 (count dodgeballFromBlockToBin:red_pyramid_block))
-    (* 50 (count dodgeballFromBlockToBin:blue_pyramid_block))
-    (* 100 (= (count-once-per-objects dodgeballFromBlockToBin:blue_pyramid_block) 3))
+    (* 10 (count dodgeballFromBlockToBin:pyramid_block_yellow))
+    (* 25 (count dodgeballFromBlockToBin:pyramid_block_red))
+    (* 50 (count dodgeballFromBlockToBin:pyramid_block_blue))
+    (* 100 (= (count-once-per-objects dodgeballFromBlockToBin:pyramid_block_blue) 3))
     (* 10 (count-once-per-objects cubeBlockInBuilding))
     (* 100 (= (count-once-per-objects cubeBlockInBuilding) 3))
 )))
@@ -1932,7 +1899,7 @@
 (:scoring (+
     (count smallObjectThrownToBed)
     (* 5 (count bigObjectThrownToBed))
-    (* (- 5) (count failedThrowAttempt))
+    (* -5 (count failedThrowAttempt))
 )))
 
 
@@ -2423,11 +2390,13 @@
 (define (game 5eeb326764eb142830aa5cfb-78) (:domain medium-objects-room-v1)  ; 78
 (:setup (and
     (exists (?t - teddy_bear) (game-optional (and
-        (adjacent_side bed front_left_corner ?t)
+        (adjacent_side bed front ?t)
+        (adjacent_side bed left ?t)
         (object_orientation ?t upright)
     )))
     (exists (?b - beachball) (game-optional (and
-        (< (distance_side bed front_left_corner ?b) 1)
+        (< (distance_side bed front ?b) 1)
+        (< (distance_side bed left ?b) 1)
         (on floor ?b)
     )))
     (forall (?o - (either hexagonal_bin basketball))
@@ -2859,7 +2828,7 @@
 
 (define (game 5b6a87d2cda8590001db8e07097-97) (:domain medium-objects-room-v1)  ; 97
 (:constraints (and
-    (preference ballThrownToRug (exists (?d - red_dodgeball)
+    (preference ballThrownToRug (exists (?d - dodgeball_red)
         (then
             (once (and (agent_holds ?d) (not (on rug agent))))
             (hold (and (in_motion ?d) (not (agent_holds ?d))))
@@ -2954,7 +2923,7 @@
 (:setup (and
     (exists (?h - hexagonal_bin) (game-conserved (on bed ?h)))
     (exists (?r - curved_wooden_ramp) (game-conserved (and (adjacent bed ?r) (faces ?r desk))))
-    (exists (?c1 ?c2 - blue_cube_block ?c3 ?c4 - yellow_cube_block) (game-conserved (and
+    (exists (?c1 ?c2 - cube_block_blue ?c3 ?c4 - cube_block_yellow) (game-conserved (and
         (= (distance desk ?c1) 1)
         (= (distance desk ?c2) 1)
         (= (distance desk ?c3) 2)
@@ -2964,7 +2933,7 @@
     )))
 ))
 (:constraints (and
-    (forall (?c - (either blue_cube_block yellow_cube_block)) (and
+    (forall (?c - (either cube_block_blue cube_block_yellow)) (and
         (preference ballThrownFromBehindBlock (exists (?b - ball ?h - hexagonal_bin)
             (then
                 (once (and
@@ -2994,10 +2963,10 @@
     (>= (total-score) 50)
 ))
 (:scoring (+
-    (* 10 (count ballThrownFromBehindBlock:blue_cube_block))
-    (* 5 (count ballThrownFromBehindBlock:yellow_cube_block))
-    (* 30 (= (count ballThrownFromBehindBlock:blue_cube_block) 2))
-    (* 15 (= (count ballThrownFromBehindBlock:yellow_cube_block) 2))
+    (* 10 (count ballThrownFromBehindBlock:cube_block_blue))
+    (* 5 (count ballThrownFromBehindBlock:cube_block_yellow))
+    (* 30 (= (count ballThrownFromBehindBlock:cube_block_blue) 2))
+    (* 15 (= (count ballThrownFromBehindBlock:cube_block_yellow) 2))
 )))
 
 
@@ -3080,25 +3049,25 @@
     (forall (?d - dodgeball) (game-conserved (not (exists (?s - shelf) (on ?s ?d)))))
 ))
 (:constraints (and
-    (preference woodenBlockMovedFromRugToDesk (exists (?b - tan_cube_block)
+    (preference woodenBlockMovedFromRugToDesk (exists (?b - cube_block_tan)
         (then
             (once (and
-                (forall (?c - (either blue_cube_block yellow_cube_block)) (on rug ?c))
+                (forall (?c - (either cube_block_blue cube_block_yellow)) (on rug ?c))
                 (on rug ?b)
             ))
-            (hold (forall (?c - (either blue_cube_block yellow_cube_block)) (or
+            (hold (forall (?c - (either cube_block_blue cube_block_yellow)) (or
                 (on rug ?c)
                 (agent_holds ?c)
                 (in_motion ?c)
                 (< (distance desk ?c) 1)
-                (exists (?c2 - (either blue_cube_block yellow_cube_block)) (and
+                (exists (?c2 - (either cube_block_blue cube_block_yellow)) (and
                     (not (same_object ?c ?c2))
                     (< (distance ?c ?c2) 0.5)
                     (on floor ?c)
                     (on floor ?c2)
                 ))
             )))
-            (hold (forall (?c - (either blue_cube_block yellow_cube_block))
+            (hold (forall (?c - (either cube_block_blue cube_block_yellow))
                 (< (distance desk ?c) 1)
             ))
             (once (above ?b desk))
@@ -3214,7 +3183,7 @@
 )
 (:scoring (+
     (* 3 (count-once-per-external-objects throwKnocksBlock:pyramid_block))
-    (* (- 3) (count-once-per-external-objects throwKnocksBlock:tall_cylindrical_block))
+    (* -3 (count-once-per-external-objects throwKnocksBlock:tall_cylindrical_block))
     (count-once-per-external-objects throwKnocksBlock:cylindrical_block)
     (* 2 (count-once-per-external-objects ballInOrOnBin:dodgeball))
     (* 2 (count-once-per-external-objects ballInOrOnBin:basketball))
@@ -3257,7 +3226,6 @@
     (exists (?h - hexagonal_bin) (game-conserved (and
         (adjacent south_wall ?h)
         (adjacent west_wall ?h)
-        ; (faces ?h south_west_corner)
     )))
     (forall (?o - (either dodgeball cube_block alarm_clock book)) (game-optional (adjacent ?o desk)))
 ))
@@ -3424,21 +3392,21 @@
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved (< (distance ?h ?r) 2)))
 ))
 (:constraints (and
-    (preference redDodgeballThrownToBinWithoutTouchingFloor (exists (?h - hexagonal_bin ?r - red_dodgeball)
+    (preference redDodgeballThrownToBinWithoutTouchingFloor (exists (?h - hexagonal_bin ?r - dodgeball_red)
         (then
             (once (agent_holds ?r))
             (hold (and (not (agent_holds ?r)) (in_motion ?r) (not (touch floor ?r))))
             (once (and (not (in_motion ?r)) (in ?h ?r)))
         )
     ))
-    (preference redDodgeballThrownToBin (exists (?h - hexagonal_bin ?r - red_dodgeball)
+    (preference redDodgeballThrownToBin (exists (?h - hexagonal_bin ?r - dodgeball_red)
         (then
             (once (agent_holds ?r))
             (hold (and (not (agent_holds ?r)) (in_motion ?r)))
             (once (and (not (in_motion ?r)) (in ?h ?r)))
         )
     ))
-    (preference throwAttempt (exists (?r - red_dodgeball)
+    (preference throwAttempt (exists (?r - dodgeball_red)
         (then
             (once (agent_holds ?r))
             (hold (and (not (agent_holds ?r)) (in_motion ?r)))

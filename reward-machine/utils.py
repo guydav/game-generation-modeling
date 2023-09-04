@@ -401,12 +401,20 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
 
         for key in predicate:
             if key == "term":
+                term = predicate["term"]
 
                 # Different structure for predicate args vs. function args
-                if isinstance(predicate["term"], tatsu.ast.AST):
-                    pred_vars.append(predicate["term"]["arg"])  # type: ignore
+                if isinstance(term, tatsu.ast.AST):
+                    if "terminal" in term:
+                        pred_vars.append(term["terminal"])
+
+                    elif "arg" in term:  # comparison argument
+                        pred_vars.append(term["arg"])  # type: ignore
+
+                    else:
+                        raise ValueError(f'Unexpected predicate term structure in `extract_variables`: {term}')
                 else:
-                    pred_vars.append(predicate["term"])
+                    pred_vars.append(term)
 
             elif key == "var_names":
                 pred_vars.append(predicate["var_names"]) # type: ignore
@@ -481,11 +489,16 @@ def ast_cache_key(ast: typing.Optional[tatsu.ast.AST], mapping: typing.Dict[str,
 
     return ast_str, mapping_str
 
+
+TYPES_COLORS_ORIENTATIONS_SIDES = set(itertools.chain(ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS))
+NAMED_OBJECT_SET = set(NAMED_OBJECTS)
+
+
 def is_type_color_side_orientation(variable: str):
     '''
     Returns whether the variable is a type or color
     '''
-    return any(variable in collection for collection in (ALL_OBJECT_TYPES, COLORS, SIDES, ORIENTATIONS)) and (variable not in NAMED_OBJECTS)
+    return (variable in TYPES_COLORS_ORIENTATIONS_SIDES) and (variable not in NAMED_OBJECT_SET)
 
 def get_object_types(obj: ObjectState):
     '''

@@ -349,64 +349,103 @@ class PredicateHandler:
             comp = typing.cast(tatsu.ast.AST, predicate["comp"])
             comparison_operator = comp["comp_op"]
 
-            # TODO: comparison arguments can be predicate evaluations, and not just function evals and ints
+            if "equal_comp_args" in comp:
+                # For each comparison argument, evaluate it if it's a function or convert to an int if not
+                args = comp["equal_comp_args"]
+                if not isinstance(args, list):
+                    args = [args]
 
-            # TODO: handle cases where the two arguments of '=' are variables, in which case we're checking
-            #       variable equivalence instead of numerical equivalance
+                any_args_implemented = False
+                all_args_implemented = True
+                arg_values = []
 
-            # For each comparison argument, evaluate it if it's a function or convert to an int if not
-            comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
-            comp_arg_1_implemented = True
-            if isinstance(comp_arg_1, tatsu.ast.AST):
-                try:
-                    # If it's an AST, it's a function, so evaluate it
-                    comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
+                for arg in args:
+                    inner_arg = arg.arg  # type: ignore
+                    if isinstance(inner_arg, tatsu.ast.AST):
+                        try:
+                            # If it's an AST, it's a function, so evaluate it
+                            arg_value = self.evaluate_function(inner_arg, state, mapping, force_evaluation)
 
-                    # If the function is undecidable with the current information, return None
-                    if comp_arg_1 is None:
-                        return None
+                            # If the function is undecidable with the current information, return None
+                            if arg_value is None:
+                                return None
 
-                except PredicateHandlerPredicateNotImplemented:
-                    comp_arg_1_implemented = False
-                    comp_arg_1 = float('-Inf')
+                            arg_values.append(arg_value)
 
-            comp_arg_1 = float(comp_arg_1)
+                            any_args_implemented = True
 
-            comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
-            comp_arg_2_implemented = True
-            if isinstance(comp_arg_2, tatsu.ast.AST):
-                try:
-                    # If it's an AST, it's a function, so evaluate it
-                    comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
+                        except PredicateHandlerPredicateNotImplemented:
+                            all_args_implemented = False
 
-                    # If the function is undecidable with the current information, return None
-                    if comp_arg_2 is None:
-                        return None
-                except PredicateHandlerPredicateNotImplemented:
-                    comp_arg_2_implemented = False
-                    comp_arg_2 = float('-Inf')
+                    else:
+                        arg_values.append(inner_arg)
 
-            comp_arg_2 = float(comp_arg_2)
+                    if not any_args_implemented:
+                        raise PredicateHandlerPredicateNotImplemented('All arguments of function comparison were not implemented')
 
-            if not comp_arg_1_implemented and not comp_arg_1_implemented:
-                raise PredicateHandlerPredicateNotImplemented('Both arguments of function comparison were not implemented')
+                    if not all_args_implemented:
+                        # check how many args we ended up with values for
+                        if len(arg_values) == 1:
+                            # Presumably the comparison is possible if we had implemented the other values, so return True
+                            return True
 
-            # One was not implemented, so assume the function comparison could be True
-            if comp_arg_1_implemented != comp_arg_2_implemented:
-                return True
+                    # At this point, we have at least one value, so we can compare them
+                    return np.all(np.isclose(arg_values, arg_values[0]))  # type: ignore
 
-            if comparison_operator == "=":
-                return comp_arg_1 == comp_arg_2
-            elif comparison_operator == "<":
-                return comp_arg_1 < comp_arg_2
-            elif comparison_operator == "<=":
-                return comp_arg_1 <= comp_arg_2
-            elif comparison_operator == ">":
-                return comp_arg_1 > comp_arg_2
-            elif comparison_operator == ">=":
-                return comp_arg_1 >= comp_arg_2
             else:
-                raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
+                # For each comparison argument, evaluate it if it's a function or convert to an int if not
+                comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
+                comp_arg_1_implemented = True
+                if isinstance(comp_arg_1, tatsu.ast.AST):
+                    try:
+                        # If it's an AST, it's a function, so evaluate it
+                        comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
+
+                        # If the function is undecidable with the current information, return None
+                        if comp_arg_1 is None:
+                            return None
+
+                    except PredicateHandlerPredicateNotImplemented:
+                        comp_arg_1_implemented = False
+                        comp_arg_1 = float('-Inf')
+
+                comp_arg_1 = float(comp_arg_1)
+
+                comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
+                comp_arg_2_implemented = True
+                if isinstance(comp_arg_2, tatsu.ast.AST):
+                    try:
+                        # If it's an AST, it's a function, so evaluate it
+                        comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
+
+                        # If the function is undecidable with the current information, return None
+                        if comp_arg_2 is None:
+                            return None
+                    except PredicateHandlerPredicateNotImplemented:
+                        comp_arg_2_implemented = False
+                        comp_arg_2 = float('-Inf')
+
+                comp_arg_2 = float(comp_arg_2)
+
+                if not comp_arg_1_implemented and not comp_arg_1_implemented:
+                    raise PredicateHandlerPredicateNotImplemented('Both arguments of function comparison were not implemented')
+
+                # One was not implemented, so assume the function comparison could be True
+                if comp_arg_1_implemented != comp_arg_2_implemented:
+                    return True
+
+                if comparison_operator == "=":
+                    return comp_arg_1 == comp_arg_2
+                elif comparison_operator == "<":
+                    return comp_arg_1 < comp_arg_2
+                elif comparison_operator == "<=":
+                    return comp_arg_1 <= comp_arg_2
+                elif comparison_operator == ">":
+                    return comp_arg_1 > comp_arg_2
+                elif comparison_operator == ">=":
+                    return comp_arg_1 >= comp_arg_2
+                else:
+                    raise ValueError(f"Error: Unknown comparison operator '{comparison_operator}'")
 
         else:
             raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
@@ -424,7 +463,7 @@ class PredicateHandler:
         if state_index > self.state_cache_global_last_updated:
             self.update_cache(state)
 
-        current_state_value =  self._inner_evaluate_function(function, state, mapping, force_evaluation)
+        current_state_value = self._inner_evaluate_function(function, state, mapping, force_evaluation)
         if current_state_value is not None:
             self.evaluation_cache[function_key] = current_state_value
             self.evaluation_cache_last_updated[function_key] = state_index

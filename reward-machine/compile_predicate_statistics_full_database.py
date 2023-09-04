@@ -18,6 +18,8 @@ import pickle
 import polars as pl
 pl.enable_string_cache(True)
 import pstats
+import shutil
+import signal
 import tatsu, tatsu.ast, tatsu.grammars
 import time
 from tqdm import tqdm
@@ -25,7 +27,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES
+from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -89,8 +91,7 @@ TYPE_REMAP = {
     "triangleblock": "triangle_block"
 }
 
-DEBUG = False
-PROFILE = True
+
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_bitstring_intervals_{traces_hash}.pkl.gz'
 NO_INTERVALS_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_no_intervals_{traces_hash}.pkl.gz'
@@ -112,6 +113,53 @@ class MissingVariableException(Exception):
     pass
 
 
+class QueryTimeoutException(Exception):
+    pass
+
+
+class Timeout:
+    def __init__(self, seconds=1, message="Timed out"):
+        self._seconds = seconds
+        self._message = message
+
+    @property
+    def seconds(self):
+        return self._seconds
+
+    @property
+    def message(self):
+        return self._message
+
+    @property
+    def handler(self):
+        return self._handler
+
+    @handler.setter
+    def handler(self, handler):
+        self._handler = handler
+
+    def handle_timeout(self, *_):
+        raise QueryTimeoutException(self.message)
+
+    def __enter__(self):
+        signal.alarm(self.seconds)
+        return self
+
+    def __exit__(self, *_):
+        signal.alarm(0)
+        pass
+
+
+def raise_query_timeout(*args, **kwargs):
+    raise QueryTimeoutException("Query timed out")
+
+
+# alarm_handler = signal.getsignal(signal.SIGALRM)
+# if alarm_handler is not None and alarm_handler is not signal.SIG_DFL and alarm_handler is not signal.SIG_IGN:
+    # signal.signal(signal.SIGALRM, raise_query_timeout)
+
+
+
 def stable_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
@@ -121,9 +169,9 @@ def stable_hash_list(list_data: typing.Sequence[str]):
 
 
 DEBUG = False
-MAX_CACHE_SIZE = 2 ** 10
-MAX_CHILD_ARGS = 6
-
+MAX_CACHE_SIZE = 2 ** 12
+MAX_CHILD_ARGS = 4  # 6
+DEFAULT_QUERY_TIMEOUT = 5  # seconds
 
 class CommonSensePredicateStatisticsFullDatabase():
     def __init__(self,
@@ -134,12 +182,17 @@ class CommonSensePredicateStatisticsFullDatabase():
                  trace_folder: typing.Optional[str] = None,
                  max_cache_size: int = MAX_CACHE_SIZE,
                  max_child_args: int = MAX_CHILD_ARGS,
+                 query_timeout: int = DEFAULT_QUERY_TIMEOUT,
                  ):
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.temp_table_index = -1
         self.temp_table_prefix = 't'
+        self.temp_dir = None
         self.max_child_args = max_child_args
+        self.query_timeout = query_timeout
+
+        signal.signal(signal.SIGALRM, raise_query_timeout)
 
         if trace_folder is None:
             if os.path.exists(CLUSTER_BASE_TRACE_PATH):
@@ -150,9 +203,15 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.all_trace_ids = [os.path.splitext(os.path.basename(t))[0] for t in glob.glob(os.path.join(trace_folder, '*.json'))]
         self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS])
         self.all_types = set(reduce(lambda x, y: x + y, [list(x.keys()) for x in chain(OBJECTS_BY_ROOM_AND_TYPE.values(), SPECIFIC_NAMED_OBJECTS_BY_ROOM.values())]))
+        self.all_types.difference_update(META_TYPES.keys())
         self.all_types.remove(GAME_OBJECT)
+        self.all_types.add(BUILDING)
         self.all_arg_ids = set(reduce(lambda x, y: x + y, [object_types for room_types in OBJECTS_BY_ROOM_AND_TYPE.values() for object_types in room_types.values()]))
         self.all_arg_ids.update(UNITY_PSEUDO_OBJECTS.keys())
+
+        self.game_object_excluded_arg_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+        self.game_object_excluded_arg_types.difference_update(META_TYPES.keys())
+
 
         self.trace_names_hash = force_trace_names_hash
         self.stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=self.trace_names_hash))
@@ -168,6 +227,11 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.__dict__.update(state)
         self._create_databases()
 
+    def __del__(self):
+        if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
+            if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
+            if shutil is not None: shutil.rmtree(self.temp_dir)
+
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
         if table_query is not None:
@@ -175,6 +239,10 @@ class CommonSensePredicateStatisticsFullDatabase():
             if 'data' in all_tables:
                 # logger.info('Skipping creating tables because they already exist')
                 return
+
+        # duckdb.sql('INSTALL postgres_scanner; LOAD postgres_scanner;')
+        # duckdb.sql("CALL POSTGRES_ATTACH('postgresql://gd1279:Mati7878@localhost:33333/fitness')")
+        # return
 
         logger.info("Loading data from files")
         open_method = gzip.open if self.stats_filename.endswith('.gz') else open
@@ -193,9 +261,12 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        duckdb.sql(f"set temp_directory='/tmp/duckdb/{os.getpid()}';")
-        duckdb.sql(f"set enable_progress_bar=false;")
-        duckdb.sql(f"set enable_progress_bar_print=false;")
+        self.temp_dir = f"/tmp/duckdb/{os.getpid()}"
+        os.makedirs(self.temp_dir, exist_ok=True)
+        duckdb.sql(f"SET temp_directory='{self.temp_dir}';")
+        duckdb.sql("SET enable_progress_bar=false;")
+        duckdb.sql("SET enable_progress_bar_print=false;")
+        duckdb.sql("SET memory_limit='32GB';")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
@@ -226,10 +297,10 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
 
         duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO data SELECT * FROM data_df")
+        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_2_id, arg_2_type, trace_id, domain, intervals FROM data_df")
 
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
+        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
 
         duckdb.sql('CREATE INDEX idx_data_trace_id ON data (trace_id)')
         duckdb.sql('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id)')
@@ -255,23 +326,50 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
+        result_query = None
         try:
             if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
 
-            result_query, _ = self._inner_filter(predicate, mapping, **kwargs)
+            result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
 
-            if 'return_full_result' in kwargs and kwargs['return_full_result']:
-                output_query = f"SELECT * FROM ({result_query})"
-                return output_query
-            else:
-                output_query = f"SELECT count(*) FROM ({result_query})"
-                return duckdb.sql(output_query).fetchone()[0]  # type: ignore
+            if DEBUG: print(result_query)
+
+            with Timeout(seconds=self.query_timeout):
+                if 'return_full_result' in kwargs and kwargs['return_full_result']:
+                    output_query = f"SELECT DISTINCT(*) FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'return_interval_counts' in kwargs and kwargs['return_interval_counts']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, bit_count(intervals) AS 'bit_count', {select_variables} FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'last_interval_bit_set' in kwargs and kwargs['last_interval_bit_set']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, get_bit(intervals, bit_length(intervals)::INTEGER - 1) AS 'last_bit', {select_variables} FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+                if 'return_first_state_index' in kwargs and kwargs['return_first_state_index']:
+                    select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchdf()
+
+                elif 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
+                    output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query})"
+                    return tuple(chain.from_iterable(duckdb.sql(output_query).fetchall()))
+
+                else:
+                    output_query = f"SELECT COUNT(*) FROM ({result_query})"
+                    return duckdb.sql(output_query).fetchone()[0]  # type: ignore
 
         except PredicateNotImplementedException as e:
             # Pass the exception through and let the caller handle it
+            raise e
+
+        except duckdb.InvalidInputException as e:
+            if result_query is not None:
+                logger.error(f"Invalid input exception for query:\n{result_query}")
+
             raise e
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
@@ -303,7 +401,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
-                exclude_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+                exclude_types = self.game_object_excluded_arg_types.copy()
                 for type in arg_types:
                     exclude_types.discard(type)
 
@@ -525,17 +623,23 @@ class CommonSensePredicateStatisticsFullDatabase():
         return '(' + ', '.join(f"'{t}'::arg_type" for t in types) + ')'
 
     def _build_object_assignment_cte(self, var: str, object_types: typing.Union[str, typing.List[str]]):
+        if isinstance(object_types, str) and object_types in META_TYPES:
+            object_types = META_TYPES[object_types]
+
+        else:
+            object_types = sum([META_TYPES.get(obj_type, [obj_type]) for obj_type in object_types], [])
+
         if isinstance(object_types, str) or len(object_types) == 1:
             if isinstance(object_types, list):
                 object_types = object_types[0]
 
             if object_types == GAME_OBJECT:
-                where_clause = f"type NOT IN {self._types_to_arg_casts(GAME_OBJECT_EXCLUDED_TYPES)}"
+                where_clause = f"type NOT IN {self._types_to_arg_casts(self.game_object_excluded_arg_types)}"
             else:
                 where_clause = f"type = '{object_types}'"
         else:
             if GAME_OBJECT in object_types:
-                exclude_types = set(GAME_OBJECT_EXCLUDED_TYPES)
+                exclude_types = self.game_object_excluded_arg_types.copy()
                 for type in object_types:
                     exclude_types.discard(type)
 

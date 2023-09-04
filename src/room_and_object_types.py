@@ -35,29 +35,49 @@ GAME_OBJECT = 'game_object'
 BALL = 'ball'
 BASKETBALL = 'basketball'
 BEACHBALL = 'beachball'
-BLUE_DODGEBALL = 'blue_dodgeball'
 DODGEBALL = 'dodgeball'
+DODGEBALL_BLUE = 'dodgeball_blue'
+DODGEBALL_PINK = 'dodgeball_pink'
+DODGEBALL_RED = 'dodgeball_red'
 GOLFBALL = 'golfball'
-GREEN_GOLFBALL = 'green_golfball'
-PINK_DODGEBALL = 'pink_dodgeball'
-RED_DODGEBALL = 'red_dodgeball'
+GOLFBALL_GREEN = 'golfball_green'
+GOLFBALL_ORANGE = 'golfball_orange'
+GOLFBALL_WHITE = 'golfball_white'
 
 # BLOCKS
 BLOCK = 'block'
 BRIDGE_BLOCK = 'bridge_block'
+BRIDGE_BLOCK_GREEN = 'bridge_block_green'
+BRIDGE_BLOCK_PINK = 'bridge_block_pink'
+BRIDGE_BLOCK_TAN = 'bridge_block_tan'
 CUBE_BLOCK = 'cube_block'
+CUBE_BLOCK_BLUE = 'cube_block_blue'
+CUBE_BLOCK_TAN = 'cube_block_tan'
+CUBE_BLOCK_YELLOW = 'cube_block_yellow'
 CYLINDRICAL_BLOCK = 'cylindrical_block'
+CYLINDRICAL_BLOCK_BLUE = 'cylindrical_block_blue'
+CYLINDRICAL_BLOCK_TAN = 'cylindrical_block_tan'
+CYLINDRICAL_BLOCK_GREEN = 'cylindrical_block_green'
 FLAT_BLOCK = 'flat_block'
+FLAT_BLOCK_GRAY = 'flat_block_gray'
+FLAT_BLOCK_TAN = 'flat_block_tan'
+FLAT_BLOCK_YELLOW = 'flat_block_yellow'
 PYRAMID_BLOCK = 'pyramid_block'
+PYRAMID_BLOCK_BLUE = 'pyramid_block_blue'
+PYRAMID_BLOCK_RED = 'pyramid_block_red'
+PYRAMID_BLOCK_YELLOW = 'pyramid_block_yellow'
 TALL_CYLINDRICAL_BLOCK = 'tall_cylindrical_block'
+TALL_CYLINDRICAL_BLOCK_GREEN = 'tall_cylindrical_block_green'
+TALL_CYLINDRICAL_BLOCK_TAN = 'tall_cylindrical_block_tan'
+TALL_CYLINDRICAL_BLOCK_YELLOW = 'tall_cylindrical_block_yellow'
 TALL_RECTANGULAR_BLOCK = 'tall_rectangular_block'
+TALL_RECTANGULAR_BLOCK_BLUE = 'tall_rectangular_block_blue'
+TALL_RECTANGULAR_BLOCK_GREEN = 'tall_rectangular_block_green'
+TALL_RECTANGULAR_BLOCK_TAN = 'tall_rectangular_block_tan'
 TRIANGLE_BLOCK = 'triangle_block'
-TAN_CUBE_BLOCK = 'tan_cube_block'
-RED_PYRAMID_BLOCK = 'red_pyramid_block'
-BLUE_CUBE_BLOCK = 'blue_cube_block'
-BLUE_PYRAMID_BLOCK = 'blue_pyramid_block'
-YELLOW_PYRAMID_BLOCK = 'yellow_pyramid_block'
-YELLOW_CUBE_BLOCK = 'yellow_cube_block'
+TRIANGLE_BLOCK_BLUE = 'triangle_block_blue'
+TRIANGLE_BLOCK_GREEN = 'triangle_block_green'
+TRIANGLE_BLOCK_TAN = 'triangle_block_tan'
 
 # COLORS
 COLOR = 'color'
@@ -65,7 +85,6 @@ BLUE = 'blue'
 BROWN = 'brown'
 GRAY = 'gray'
 GREEN = 'green'
-LIGHT_BLUE = 'light_blue'
 ORANGE = 'orange'
 PINK = 'pink'
 PURPLE = 'purple'
@@ -80,12 +99,12 @@ EMPTY_OBJECT_OBJ = ''
 # FURNITURE
 BED = 'bed'
 BLINDS = 'blinds'
-CHAIR = 'chair'
 DESK = 'desk'
-DESK_SHELF = 'desk_shelf'
+SHELF_DESK = 'shelf_desk'
 DRAWER = 'drawer'
 MAIN_LIGHT_SWITCH = 'main_light_switch'
 DESKTOP = 'desktop'
+BOTTOM_DRAWER = 'bottom_drawer'
 TOP_DRAWER = 'top_drawer'
 SIDE_TABLE = 'side_table'
 
@@ -94,14 +113,17 @@ BUILDING = 'building'
 
 # LARGE_OBJECTS
 BOOK = 'book'
+CHAIR = 'chair'
 LAPTOP = 'laptop'
 PILLOW = 'pillow'
 TEDDY_BEAR = 'teddy_bear'
 
 # RAMPS
+RAMP = 'ramp'
 CURVED_WOODEN_RAMP = 'curved_wooden_ramp'
 TRIANGULAR_RAMP = 'triangular_ramp'
-GREEN_TRIANGULAR_RAMP = 'green_triangular_ramp'
+TRIANGULAR_RAMP_GREEN = 'triangular_ramp_green'
+TRIANGULAR_RAMP_TAN = 'triangular_ramp_tan'
 
 # RECEPTACLES
 DOGGIE_BED = 'doggie_bed'
@@ -110,6 +132,8 @@ HEXAGONAL_BIN = 'hexagonal_bin'
 # ROOM_FEATURES
 DOOR = 'door'
 FLOOR = 'floor'
+MIRROR = 'mirror'
+POSTER = 'poster'
 ROOM_CENTER = 'room_center'
 RUG = 'rug'
 SHELF = 'shelf'
@@ -117,8 +141,9 @@ BOTTOM_SHELF = 'bottom_shelf'
 TOP_SHELF = 'top_shelf'
 SLIDING_DOOR = 'sliding_door'
 EAST_SLIDING_DOOR = 'east_sliding_door'
-SOUTH_WEST_CORNER = 'south_west_corner'
+WEST_SLIDING_DOOR = 'west_sliding_door'
 WALL = 'wall'
+EAST_WALL = 'east_wall'
 NORTH_WALL = 'north_wall'
 SOUTH_WALL = 'south_wall'
 WEST_WALL = 'west_wall'
@@ -136,13 +161,14 @@ PENCIL = 'pencil'
 WATCH = 'watch'
 
 # SIDES
+SIDE = 'side'
 BACK = 'back'
 FRONT = 'front'
-FRONT_LEFT_CORNER = 'front_left_corner'
 LEFT = 'left'
 RIGHT = 'right'
 
 #  ORIENTATIONS
+ORIENTATION = 'orientation'
 DIAGONAL = 'diagonal'
 SIDEWAYS = 'sideways'
 UPRIGHT = 'upright'
@@ -150,13 +176,21 @@ UPSIDE_DOWN = 'upside_down'
 
 
 # -- MAPPINGS --
-DIRECTLY_REFERRED_OBJECTS = [
-    AGENT, BED, BOTTOM_SHELF, DESK, DESKTOP,
-    DOOR, EAST_SLIDING_DOOR, FLOOR, GREEN_GOLFBALL,
-    MAIN_LIGHT_SWITCH, NORTH_WALL, PINK_DODGEBALL,
-    ROOM_CENTER, RUG, SIDE_TABLE, SOUTH_WALL,
-    SOUTH_WEST_CORNER, TOP_DRAWER, TOP_SHELF, WEST_WALL
+
+SPECIFICALLY_REFERRED_OBJECTS = [
+    BOTTOM_DRAWER, BOTTOM_SHELF,
+    EAST_SLIDING_DOOR, EAST_WALL,
+    NORTH_WALL, SOUTH_WALL,
+    TOP_DRAWER, TOP_SHELF,
+    WEST_SLIDING_DOOR, WEST_WALL
 ]
+
+DIRECTLY_REFERRED_OBJECTS = [
+    AGENT, BED,
+    DESK, DOOR,
+    FLOOR, MAIN_LIGHT_SWITCH, MIRROR,
+    ROOM_CENTER, RUG, SIDE_TABLE,
+] + SPECIFICALLY_REFERRED_OBJECTS
 
 # -- MAPPINGS --
 
@@ -168,24 +202,30 @@ CATEGORIES_TO_TYPES = {
         GAME_OBJECT,
     ),
     BALLS: (
-        BALL, BASKETBALL, BEACHBALL, BLUE_DODGEBALL, DODGEBALL,
-        GOLFBALL, GREEN_GOLFBALL, PINK_DODGEBALL, RED_DODGEBALL,
+        BALL, BASKETBALL, BEACHBALL,
+        DODGEBALL, DODGEBALL_BLUE, DODGEBALL_PINK, DODGEBALL_RED,
+        GOLFBALL, GOLFBALL_GREEN, GOLFBALL_ORANGE, GOLFBALL_WHITE,
     ),
     BLOCKS: (
-        BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK,
-        PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TRIANGLE_BLOCK, TAN_CUBE_BLOCK, RED_PYRAMID_BLOCK,
-        BLUE_CUBE_BLOCK, BLUE_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, YELLOW_CUBE_BLOCK,
+        BLOCK, BRIDGE_BLOCK, BRIDGE_BLOCK_GREEN, BRIDGE_BLOCK_PINK, BRIDGE_BLOCK_TAN,
+        CUBE_BLOCK, CUBE_BLOCK_BLUE, CUBE_BLOCK_TAN, CUBE_BLOCK_YELLOW,
+        CYLINDRICAL_BLOCK, CYLINDRICAL_BLOCK_BLUE, CYLINDRICAL_BLOCK_TAN, CYLINDRICAL_BLOCK_GREEN,
+        FLAT_BLOCK, FLAT_BLOCK_GRAY, FLAT_BLOCK_TAN, FLAT_BLOCK_YELLOW,
+        PYRAMID_BLOCK, PYRAMID_BLOCK_BLUE, PYRAMID_BLOCK_RED, PYRAMID_BLOCK_YELLOW,
+        TALL_CYLINDRICAL_BLOCK, TALL_CYLINDRICAL_BLOCK_GREEN, TALL_CYLINDRICAL_BLOCK_TAN, TALL_CYLINDRICAL_BLOCK_YELLOW,
+        TALL_RECTANGULAR_BLOCK, TALL_RECTANGULAR_BLOCK_BLUE, TALL_RECTANGULAR_BLOCK_GREEN, TALL_RECTANGULAR_BLOCK_TAN,
+        TRIANGLE_BLOCK, TRIANGLE_BLOCK_BLUE, TRIANGLE_BLOCK_GREEN, TRIANGLE_BLOCK_TAN
     ),
     COLORS: (
         COLOR, BLUE, BROWN, GRAY, GREEN,
-        LIGHT_BLUE, ORANGE, PINK, PURPLE, RED,
+        ORANGE, PINK, PURPLE, RED,
         TAN, WHITE, YELLOW,
     ),
     EMPTY_OBJECT: (
         EMPTY_OBJECT_OBJ,
     ),
     FURNITURE: (
-        BED, BLINDS, DESK, DESK_SHELF,
+        BED, BLINDS, DESK, SHELF_DESK,
         DRAWER, MAIN_LIGHT_SWITCH, DESKTOP, SIDE_TABLE,
     ),
     BUILDING: (
@@ -195,21 +235,21 @@ CATEGORIES_TO_TYPES = {
         BOOK, CHAIR, LAPTOP, PILLOW, TEDDY_BEAR,
     ),
     ORIENTATIONS: (
-        DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
+        ORIENTATION, DIAGONAL, SIDEWAYS, UPRIGHT, UPSIDE_DOWN,
     ),
     RAMPS: (
-        CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, GREEN_TRIANGULAR_RAMP,
+        RAMP, CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, TRIANGULAR_RAMP_GREEN, TRIANGULAR_RAMP_TAN,
     ),
     RECEPTACLES: (
-        DOGGIE_BED, HEXAGONAL_BIN, TOP_DRAWER,
+        DOGGIE_BED, HEXAGONAL_BIN, TOP_DRAWER, BOTTOM_DRAWER,
     ),
     ROOM_FEATURES: (
-        DOOR, FLOOR, RUG, ROOM_CENTER, SHELF, BOTTOM_SHELF,
-        TOP_SHELF, SLIDING_DOOR, EAST_SLIDING_DOOR, SOUTH_WEST_CORNER, WALL,
-        NORTH_WALL, SOUTH_WALL, WEST_WALL,
+        DOOR, FLOOR, MIRROR, POSTER, RUG, ROOM_CENTER, SHELF, BOTTOM_SHELF,
+        TOP_SHELF, SLIDING_DOOR, EAST_SLIDING_DOOR, WEST_SLIDING_DOOR,
+        WALL, EAST_WALL, NORTH_WALL, SOUTH_WALL, WEST_WALL,
     ),
     SIDES: (
-        BACK, FRONT, FRONT_LEFT_CORNER, LEFT, RIGHT,
+        SIDE, BACK, FRONT, LEFT, RIGHT,
     ),
     SMALL_OBJECTS: (
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN,
@@ -232,6 +272,7 @@ ABSTRACT_OBJECTS_IN_ALL_ROOMS = {
     GAME_OBJECT: 1,
     BUILDING: 1,
     EMPTY_OBJECT_OBJ: 1,
+    **{type_name: 1 for type_name in CATEGORIES_TO_TYPES[COLORS]},
     **{type_name: 1 for type_name in CATEGORIES_TO_TYPES[ORIENTATIONS]},
     **{type_name: 1 for type_name in CATEGORIES_TO_TYPES[SIDES]},
 }
@@ -247,25 +288,12 @@ FULL_ROOMS_TO_OBJECTS = {
             BLOCK: 1,
             CUBE_BLOCK: {BLUE: 2, TAN: 2, YELLOW: 2, },
         },
-        COLORS: {
-            BLUE: 1,
-            BROWN: 1,
-            COLOR: 1,
-            GREEN: 1,
-            ORANGE: 1,
-            PINK: 1,
-            PURPLE: 1,
-            RED: 1,
-            TAN: 1,
-            WHITE: 1,
-            YELLOW: 1,
-        },
         FURNITURE: {
             BED: 1,
             BLINDS: 2,
             CHAIR: 2,
             DESK: 1,
-            DESK_SHELF: 1,
+            SHELF_DESK: 1,
             DESKTOP: 1,
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
@@ -277,9 +305,11 @@ FULL_ROOMS_TO_OBJECTS = {
             PILLOW: 1,
         },
         RAMPS: {
+            RAMP: 1,
             CURVED_WOODEN_RAMP: 1,
         },
         RECEPTACLES: {
+            BOTTOM_DRAWER: 1,
             HEXAGONAL_BIN: 1,
             TOP_DRAWER: 1,
         },
@@ -287,16 +317,19 @@ FULL_ROOMS_TO_OBJECTS = {
             BOTTOM_SHELF: 1,
             DOOR: 1,
             EAST_SLIDING_DOOR: 1,
+            EAST_WALL: 1,
             FLOOR: 1,
+            MIRROR: 1,
             NORTH_WALL: 1,
+            POSTER: 2,
             ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 4,
             SLIDING_DOOR: 2,
             SOUTH_WALL: 1,
-            SOUTH_WEST_CORNER: 1,
             TOP_SHELF: 1,
             WALL: 1,
+            WEST_SLIDING_DOOR: 1,
             WEST_WALL: 1,
         },
         SMALL_OBJECTS: {
@@ -323,38 +356,22 @@ FULL_ROOMS_TO_OBJECTS = {
         BLOCKS: {
             BLOCK: 1,
             BRIDGE_BLOCK: {GREEN: 1, TAN: 1},
-            CUBE_BLOCK: {BLUE: 1, YELLOW: 1, },
-            CYLINDRICAL_BLOCK: {GREEN: 1, LIGHT_BLUE: 1},
+            CUBE_BLOCK: {BLUE: 1, YELLOW: 1},
+            CYLINDRICAL_BLOCK: {BLUE: 1, GREEN: 1},
             FLAT_BLOCK: {GRAY: 1, YELLOW: 1},
-            PYRAMID_BLOCK: {RED: 1, YELLOW: 1, },
+            PYRAMID_BLOCK: {RED: 1, YELLOW: 1},
             TALL_CYLINDRICAL_BLOCK: {TAN: 1, YELLOW: 1},
-        },
-        COLORS: {
-            BLUE: 1,
-            BROWN: 1,
-            COLOR: 1,
-            GREEN: 1,
-            GRAY: 1,
-            LIGHT_BLUE: 1,
-            ORANGE: 1,
-            PINK: 1,
-            PURPLE: 1,
-            RED: 1,
-            TAN: 1,
-            WHITE: 1,
-            YELLOW: 1,
         },
         FURNITURE: {
             BED: 1,
             BLINDS: 2,
             CHAIR: 2,
             DESK: 1,
-            DESK_SHELF: 1,
+            SHELF_DESK: 1,
             DESKTOP: 1,
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
             SIDE_TABLE: 1,
-
         },
         LARGE_OBJECTS: {
             BOOK: 1,
@@ -363,9 +380,12 @@ FULL_ROOMS_TO_OBJECTS = {
             TEDDY_BEAR: 1,
         },
         RAMPS: {
+            RAMP: 1,
             TRIANGULAR_RAMP: 1,
+            TRIANGULAR_RAMP_TAN: 1,
         },
         RECEPTACLES: {
+            BOTTOM_DRAWER: 1,
             DOGGIE_BED: 1,
             HEXAGONAL_BIN: 1,
             TOP_DRAWER: 1,
@@ -374,17 +394,20 @@ FULL_ROOMS_TO_OBJECTS = {
             BOTTOM_SHELF: 1,
             DOOR: 1,
             EAST_SLIDING_DOOR: 1,
+            EAST_WALL: 1,
             FLOOR: 1,
+            MIRROR: 1,
             NORTH_WALL: 1,
             ROOM_CENTER: 1,
             RUG: 1,
+            POSTER: 2,
             SHELF: 2,
             SLIDING_DOOR: 2,
             SOUTH_WALL: 1,
-            SOUTH_WEST_CORNER: 1,
             TOP_SHELF: 1,
             WALL: 1,
             WEST_WALL: 1,
+            WEST_SLIDING_DOOR: 1,
         },
         SMALL_OBJECTS: {
             ALARM_CLOCK: 1,
@@ -409,36 +432,21 @@ FULL_ROOMS_TO_OBJECTS = {
         },
         BLOCKS: {
             BLOCK: 1,
-            BRIDGE_BLOCK: {PINK: 1, TAN: 1, WHITE: 1, },
+            BRIDGE_BLOCK: {GREEN: 1, PINK: 1, TAN: 1, },
             CUBE_BLOCK: {BLUE: 1, TAN: 1, YELLOW: 1, },
-            CYLINDRICAL_BLOCK: {GREEN: 1, LIGHT_BLUE: 1, TAN: 1},
+            CYLINDRICAL_BLOCK: {BLUE: 1, GREEN: 1, TAN: 1},
             FLAT_BLOCK: {GRAY: 1, TAN: 1, YELLOW: 1},
             PYRAMID_BLOCK: {BLUE: 1, RED: 1, YELLOW: 1, },
             TALL_CYLINDRICAL_BLOCK: {GREEN: 1, TAN: 1, YELLOW: 1},
             TALL_RECTANGULAR_BLOCK: {BLUE: 1, GREEN: 1, TAN: 1, },
             TRIANGLE_BLOCK: {BLUE: 1, GREEN: 1, TAN: 1, },
         },
-        COLORS: {
-            BLUE: 1,
-            BROWN: 1,
-            COLOR: 1,
-            GREEN: 1,
-            GRAY: 1,
-            LIGHT_BLUE: 1,
-            ORANGE: 1,
-            PINK: 1,
-            PURPLE: 1,
-            RED: 1,
-            TAN: 1,
-            WHITE: 1,
-            YELLOW: 1,
-        },
         FURNITURE: {
             BED: 1,
             BLINDS: 2,
             CHAIR: 2,
             DESK: 1,
-            DESK_SHELF: 1,
+            SHELF_DESK: 1,
             DESKTOP: 1,
             DRAWER: 1,
             MAIN_LIGHT_SWITCH: 1,
@@ -452,10 +460,12 @@ FULL_ROOMS_TO_OBJECTS = {
             TEDDY_BEAR: 2,
         },
         RAMPS: {
+            RAMP: 1,
             CURVED_WOODEN_RAMP: 1,
             TRIANGULAR_RAMP: {GREEN: 1, TAN: 1},
         },
         RECEPTACLES: {
+            BOTTOM_DRAWER: 1,
             HEXAGONAL_BIN: 1,
             TOP_DRAWER: 1,
         },
@@ -463,17 +473,20 @@ FULL_ROOMS_TO_OBJECTS = {
             BOTTOM_SHELF: 1,
             DOOR: 1,
             EAST_SLIDING_DOOR: 1,
+            EAST_WALL: 1,
             FLOOR: 1,
+            MIRROR: 1,
             NORTH_WALL: 1,
+            POSTER: 2,
             ROOM_CENTER: 1,
             RUG: 1,
             SHELF: 2,
             SLIDING_DOOR: 2,
             SOUTH_WALL: 1,
-            SOUTH_WEST_CORNER: 1,
             TOP_SHELF: 1,
             WALL: 1,
             WEST_WALL: 1,
+            WEST_SLIDING_DOOR: 1,
         },
         SMALL_OBJECTS: {
             ALARM_CLOCK: 1,
@@ -490,83 +503,41 @@ FULL_ROOMS_TO_OBJECTS = {
     },
 }
 
-
-# ROOMS_TO_AVAILABLE_OBJECTS = {
-#     FEW: set([
-#         'agent',
-#         'ball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball',
-#         'block', 'cube_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
-#         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
-#         'building',  'game_object', '',
-#         'curved_wooden_ramp', 'hexagonal_bin',
-#         'laptop', 'pillow',
-#         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
-#         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',
-#     ]),
-#     MEDIUM: set([
-#         'agent',
-#         'ball', 'basketball', 'beachball', 'dodgeball', 'red_dodgeball',
-#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block',
-#         'yellow_pyramid_block', 'red_pyramid_block', 'yellow_cube_block', 'blue_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan', 'white', 'yellow',
-#         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
-#         'building',  'game_object', '',
-#         'doggie_bed', 'hexagonal_bin',  'triangular_ramp',
-#         'laptop', 'pillow', 'teddy_bear',
-#         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
-#         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',
-#     ]),
-#     MANY: set([
-#         'agent',
-#         'ball', 'beachball', 'dodgeball', 'blue_dodgeball', 'pink_dodgeball', 'red_dodgeball', 'golfball', 'green_golfball',
-#         'block', 'bridge_block', 'cube_block', 'cylindrical_block', 'flat_block', 'pyramid_block', 'tall_cylindrical_block', 'triangle_block',
-#         'yellow_pyramid_block', 'red_pyramid_block', 'blue_pyramid_block', 'yellow_cube_block', 'blue_cube_block', 'tan_cube_block',
-#         'color', 'blue', 'brown', 'green', 'orange', 'pink', 'purple', 'red', 'tan',  'white', 'yellow',
-#         'bed', 'blinds', 'chair', 'desk', 'desk_shelf', 'drawer', 'main_light_switch', 'desktop', 'top_drawer', 'side_table',
-#         'building',  'game_object', '',
-#         'curved_wooden_ramp', 'doggie_bed', 'green_triangular_ramp', 'hexagonal_bin',  'triangular_ramp',
-#         'laptop', 'pillow', 'teddy_bear',
-#         'door', 'floor', 'rug', 'shelf', 'top_shelf', 'bottom_shelf', 'sliding_door', 'south_west_corner', 'east_sliding_door', 'wall', 'north_wall', 'south_wall', 'west_wall',
-#         'alarm_clock', 'book', 'cd', 'cellphone',  'credit_card', 'key_chain', 'lamp',  'mug', 'pen', 'pencil', 'watch',
-#     ]),
-# }
-
 ROOMS_TO_AVAILABLE_OBJECTS = {
     FEW: set([
         *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
-        BALL, DODGEBALL, BLUE_DODGEBALL, PINK_DODGEBALL,
-        BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK,
+        BALL, DODGEBALL, DODGEBALL_BLUE, DODGEBALL_PINK,
+        BLOCK, CUBE_BLOCK, CUBE_BLOCK_BLUE, CUBE_BLOCK_TAN, CUBE_BLOCK_YELLOW,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, TOP_DRAWER,
+        BED, BLINDS, CHAIR, DESK, SHELF_DESK, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, BOTTOM_DRAWER, TOP_DRAWER,
         BOOK, LAPTOP, PILLOW,
         CURVED_WOODEN_RAMP,
         HEXAGONAL_BIN,
-        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, FLOOR, NORTH_WALL, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, SOUTH_WEST_CORNER, TOP_SHELF, WALL, WEST_WALL,
+        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, EAST_WALL, FLOOR, MIRROR, NORTH_WALL, POSTER, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, TOP_SHELF, WALL, WEST_WALL, WEST_SLIDING_DOOR,
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
     MEDIUM: set([
         *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
-        BALL, BASKETBALL, BEACHBALL, DODGEBALL, RED_DODGEBALL,
-        BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, YELLOW_CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK,
+        BALL, BASKETBALL, BEACHBALL, DODGEBALL, DODGEBALL_RED,
+        BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, CUBE_BLOCK_BLUE, CUBE_BLOCK_YELLOW, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, PYRAMID_BLOCK_RED, PYRAMID_BLOCK_YELLOW, TALL_CYLINDRICAL_BLOCK,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, TOP_DRAWER,
+        BED, BLINDS, CHAIR, DESK, SHELF_DESK, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, BOTTOM_DRAWER, TOP_DRAWER,
         BOOK, LAPTOP, PILLOW, TEDDY_BEAR,
         TRIANGULAR_RAMP,
         DOGGIE_BED, HEXAGONAL_BIN,
-        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, FLOOR, NORTH_WALL, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, SOUTH_WEST_CORNER, TOP_SHELF, WALL, WEST_WALL,
+        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, EAST_WALL, FLOOR, MIRROR, NORTH_WALL, POSTER, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, TOP_SHELF, WALL, WEST_WALL, WEST_SLIDING_DOOR,
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
     MANY: set([
         *ABSTRACT_OBJECTS_IN_ALL_ROOMS.keys(),
-        BALL, BEACHBALL, DODGEBALL, BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL, GOLFBALL, GREEN_GOLFBALL,
-        BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TRIANGLE_BLOCK,
+        BALL, BEACHBALL, DODGEBALL, DODGEBALL_BLUE, DODGEBALL_PINK, DODGEBALL_RED, GOLFBALL, GOLFBALL_GREEN,
+        BLOCK, BRIDGE_BLOCK, CUBE_BLOCK, CUBE_BLOCK_BLUE, CUBE_BLOCK_TAN, CUBE_BLOCK_YELLOW, CYLINDRICAL_BLOCK, FLAT_BLOCK, PYRAMID_BLOCK, PYRAMID_BLOCK_BLUE, PYRAMID_BLOCK_RED, PYRAMID_BLOCK_YELLOW, TALL_CYLINDRICAL_BLOCK, TRIANGLE_BLOCK,
         COLOR, BLUE, BROWN, COLOR, GREEN, ORANGE, PINK, PURPLE, RED, TAN, WHITE, YELLOW,
-        BED, BLINDS, CHAIR, DESK, DESK_SHELF, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, TOP_DRAWER,
+        BED, BLINDS, CHAIR, DESK, SHELF_DESK, DESKTOP, DRAWER, MAIN_LIGHT_SWITCH, SIDE_TABLE, BOTTOM_DRAWER, TOP_DRAWER,
         BOOK, LAPTOP, PILLOW, TEDDY_BEAR,
-        CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, GREEN_TRIANGULAR_RAMP,
+        CURVED_WOODEN_RAMP, TRIANGULAR_RAMP, TRIANGULAR_RAMP_GREEN,
         DOGGIE_BED, HEXAGONAL_BIN,
-        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, FLOOR, NORTH_WALL, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, SOUTH_WEST_CORNER, TOP_SHELF, WALL, WEST_WALL,
+        BOTTOM_SHELF, DOOR, EAST_SLIDING_DOOR, EAST_WALL, FLOOR, MIRROR, NORTH_WALL, POSTER, RUG, SHELF, SLIDING_DOOR, SOUTH_WALL, TOP_SHELF, WALL, WEST_WALL, WEST_SLIDING_DOOR,
         ALARM_CLOCK, CD, CELLPHONE, CREDIT_CARD, KEY_CHAIN, LAMP, MUG, PEN, PENCIL, WATCH,
     ]),
 }
@@ -577,72 +548,12 @@ META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],
               BLOCK: [BRIDGE_BLOCK, CUBE_BLOCK, CYLINDRICAL_BLOCK, FLAT_BLOCK,
                       PYRAMID_BLOCK, TALL_CYLINDRICAL_BLOCK, TALL_RECTANGULAR_BLOCK, TRIANGLE_BLOCK],
               COLOR: CATEGORIES_TO_TYPES[COLORS],
-              CUBE_BLOCK: [BLUE_CUBE_BLOCK, TAN_CUBE_BLOCK, YELLOW_CUBE_BLOCK],
-              DODGEBALL: [BLUE_DODGEBALL, PINK_DODGEBALL, RED_DODGEBALL],
-              PYRAMID_BLOCK: [ BLUE_PYRAMID_BLOCK, RED_PYRAMID_BLOCK, YELLOW_PYRAMID_BLOCK]}
+              CUBE_BLOCK: [CUBE_BLOCK_BLUE, CUBE_BLOCK_TAN, CUBE_BLOCK_YELLOW],
+              DODGEBALL: [DODGEBALL_BLUE, DODGEBALL_PINK, DODGEBALL_RED],
+              PYRAMID_BLOCK: [ PYRAMID_BLOCK_BLUE, PYRAMID_BLOCK_RED, PYRAMID_BLOCK_YELLOW]}
 
 TYPE_TO_META_TYPE = {t: m for m, ts in META_TYPES.items() for t in ts}
 
-
-# print('FULL_ROOMS_TO_OBJECTS = {')
-# for room, available_objects in ROOMS_TO_AVAILABLE_OBJECTS.items():
-#     print(f'{" " * 4}{room.upper()}: {{')
-#     room_types_to_categories = defaultdict(dict)
-#     for obj_type in available_objects:
-#         split_index = obj_type.find('_')
-#         added = False
-
-#         if split_index != -1:
-#             potential_color = obj_type[:split_index]
-#             colorless_type = obj_type[split_index + 1:]
-
-#             if potential_color in CATEGORIES_TO_TYPES[COLORS] and potential_color != COLOR:
-#                 if colorless_type not in room_types_to_categories[TYPES_TO_CATEGORIES[colorless_type]] or \
-#                     isinstance(room_types_to_categories[TYPES_TO_CATEGORIES[colorless_type]][colorless_type], int):
-#                     room_types_to_categories[TYPES_TO_CATEGORIES[colorless_type]][colorless_type] = []
-
-#                 room_types_to_categories[TYPES_TO_CATEGORIES[colorless_type]][colorless_type].append(potential_color)
-#                 added = True
-
-#         if not added and obj_type not in room_types_to_categories[TYPES_TO_CATEGORIES[obj_type]]:
-#             room_types_to_categories[TYPES_TO_CATEGORIES[obj_type]][obj_type] = 1
-
-#     for key in sorted(room_types_to_categories.keys()):
-#         if key in (EMPTY_OBJECT, AGENT, ANY_OBJECT, BUILDING):
-#             continue
-
-#         print(f'{" " * 8}{key.upper()}: {{')
-#         for obj, count in sorted(room_types_to_categories[key].items(), key=lambda x: x[0]):
-
-#             if isinstance (count, list):
-#                 count = f'{{]{", ".join([c.upper() + ": 1" for c in sorted(count)])}, }}'
-
-#             print(f'{" " * 12}{obj.upper()}: {count},')
-
-#         print(f'{" " * 8}}},')
-
-#     print(f'{" " * 4}}},')
-# print('}')
-
-
-# print('ROOMS_TO_AVAILABLE_OBJECTS = {')
-# for room, full_available_objects in FULL_ROOMS_TO_OBJECTS.items():
-#     print(f'{" " * 4}{room.upper()}: set([')
-#     for category, object_dict in full_available_objects.items():
-#         category_objects = []
-#         if category == COLORS:
-#             category_objects.append(COLOR)
-
-#         for key, value in sorted(object_dict.items(), key=lambda x: x[0]):
-#             category_objects.append(key.upper()),
-#             if isinstance(value, (list, tuple)):
-#                 category_objects.extend([f'{color}_{key}'.upper() for color in value])
-
-#         print(f'{" " * 8}{", ".join(category_objects)},')
-
-#     print('    ]),')
-
-# print('}')
 
 parser = argparse.ArgumentParser()
 DEFAULT_START_TOKEN = '[CONTENTS]'

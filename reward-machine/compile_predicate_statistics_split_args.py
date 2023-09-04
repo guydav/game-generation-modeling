@@ -8,6 +8,7 @@ import io
 from itertools import groupby, permutations, product, repeat, starmap
 import json
 import logging
+import numpy as np
 import os
 import operator
 import pandas as pd
@@ -23,7 +24,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import COLORS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES
+from config import COLORS, META_TYPES, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, SLIDING_DOOR, SHELF_DESK
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -85,6 +86,15 @@ TYPE_REMAP = {
     "triangleblock": "triangle_block"
 }
 
+
+OBJECT_ID_TYPE_REMAP = {
+     "Window|+02.28|+00.93|-03.18": SLIDING_DOOR,
+     "Window|-01.02|+00.93|-03.19": SLIDING_DOOR,
+     "Shelf|+03.13|+00.63|-00.56": SHELF_DESK,
+     "Shelf|+03.13|+00.63|-02.27": SHELF_DESK,
+}
+
+
 DEBUG = False
 PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
@@ -138,6 +148,28 @@ class MaxRowsLRUCache(cachetools.LRUCache):
         key, value = super().popitem()
         del value
         return key, None
+
+
+b = bytes([0, 1])
+BYTE_MAPPING = {b: str(i) for i, b in enumerate(b)}
+
+
+def row_to_string_intervals(row):
+    value = np.zeros(row['trace_length'], dtype=np.uint8)
+    for interval in row['intervals']:
+        value[interval[0]:interval[1]] = 1
+
+    return ''.join(map(lambda b: BYTE_MAPPING[b], value.tobytes()))
+
+
+def create_bitstings_df(df, trace_lengths_and_domains_dict, output_path):
+    trace_lengths_and_domains_rows = [(key, *value) for key, value in trace_lengths_and_domains_dict.items()]
+    trace_lengths_and_domains_df = pd.DataFrame(trace_lengths_and_domains_rows, columns=['trace_id', 'trace_length', 'domain'])
+
+    split_args_with_trace_length_df = df.join(trace_lengths_and_domains_df.drop(columns=['domain']).set_index('trace_id'), on='trace_id')
+    split_args_with_string_intervals_df = split_args_with_trace_length_df.assign(intervals=split_args_with_trace_length_df.apply(row_to_string_intervals, axis=1))
+    split_args_with_string_intervals_df.to_pickle(output_path)
+
 
 
 class CommonSensePredicateStatisticsSplitArgs():
@@ -583,7 +615,9 @@ class CommonSensePredicateStatisticsSplitArgs():
 
                                     for i, (arg_id, arg_type) in enumerate(zip(arg_ids, arg_types)):
                                         info[f"arg_{i + 1}_id"] = arg_id
-                                        info[f"arg_{i + 1}_type"] = TYPE_REMAP.get(arg_type, arg_type)
+                                        arg_type = TYPE_REMAP.get(arg_type, arg_type)
+                                        arg_type = OBJECT_ID_TYPE_REMAP.get(arg_id, arg_type)
+                                        info[f"arg_{i + 1}_type"] = arg_type
                                     predicate_satisfaction_mapping[key] = info
 
                                 elif predicate_satisfaction_mapping[key]['intervals'][-1][1] is not None:
@@ -1196,11 +1230,22 @@ if __name__ == '__main__':
                                                     trace_names=FULL_PARTICIPANT_TRACE_SET,
                                                     cache_rules=[],
                                                     base_trace_path=DEFAULT_BASE_TRACE_PATH,
-                                                    overwrite=True
+                                                    overwrite=False
                                                     )
 
-    variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
-    for var_type in variable_type_usage:
+    all_object_types = set()
+    for room_type in OBJECTS_BY_ROOM_AND_TYPE.keys():
+        all_object_types.update(OBJECTS_BY_ROOM_AND_TYPE[room_type].keys())
+        all_object_types.update(SPECIFIC_NAMED_OBJECTS_BY_ROOM[room_type].keys())
+
+    all_object_types.update(COLORS)
+    all_object_types.update(ORIENTATIONS)
+    all_object_types.update(SIDES)
+
+    all_object_types.difference_update(META_TYPES.keys())
+
+    # variable_type_usage = json.loads(open(f"{get_project_dir()}/reward-machine/caches/variable_type_usage.json", "r").read())
+    for var_type in sorted(all_object_types):
         if var_type in META_TYPES:
             continue
         var_intervals = stats.data.filter((pl.col("arg_1_type") == var_type) | (pl.col("arg_2_type") == var_type))

@@ -128,6 +128,11 @@ class ASTParser:
         elif rule.endswith('variable_type_def'):
             self._update_variable_type_def_kwargs(ast, kwargs)
 
+        self._current_ast_to_contexts_hook(ast, kwargs)
+
+    def _current_ast_to_contexts_hook(self, ast: tatsu.ast.AST, kwargs: typing.Dict[str, typing.Any]):
+        pass
+
     def _variable_type_def_rule_to_context_key(self, rule: str) -> str:
         if rule.startswith('variable'):
             return VARIABLES_CONTEXT_KEY
@@ -375,8 +380,9 @@ def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: 
             var_names = [var_names]
 
         var_type = var_def.var_type.type  # type: ignore
+
         if isinstance(var_type, tatsu.ast.AST):
-            var_type = var_type.type_names
+            var_type = _extract_variable_type_as_list(var_type)
 
         if isinstance(var_type, str):
             var_type = [var_type]
@@ -758,3 +764,19 @@ class ASTSamplePostprocessor(ASTParser):
                 ast_utils.replace_child(ast, 'term', self.variable_mapping[term])
 
         super()._handle_ast(ast, **kwargs)
+
+
+def _extract_variable_type_as_list(var_type: tatsu.ast.AST) -> typing.List[str]:
+    var_type_rule = var_type.parseinfo.rule  # type: ignore
+    if var_type_rule.endswith('type'):
+        return [var_type.terminal]  # type: ignore
+
+    elif var_type_rule.startswith('either'):
+        type_names = var_type.type_names
+        if not isinstance(type_names, list):
+            type_names = [type_names]
+
+        return [t.terminal for t in type_names]  # type: ignore
+
+    else:
+        raise ValueError(f'Unexpected variable type rule: {var_type_rule}')

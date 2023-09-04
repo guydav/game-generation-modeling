@@ -310,15 +310,15 @@ PARENT_INDEX = 'parent_index'
 class PopulationBasedSampler():
     args: argparse.Namespace
     candidates: SingleStepResults
-    _context_fixers: typing.List[ASTContextFixer]
+    context_fixer: ASTContextFixer
     counter: ASTRuleValueCounter
     diversity_scorer: typing.Optional[DiversityScorer]
     diversity_scorer_type: typing.Optional[str]
     feature_names: typing.List[str]
     first_sampler_key: str
-    _fitness_featurizers: typing.List[ASTFitnessFeaturizer]
+    fitness_featurizer: ASTFitnessFeaturizer
     fitness_featurizer_path: str
-    _fitness_functions: typing.List[typing.Callable[[torch.Tensor], float]]
+    fitness_function: typing.Callable[[torch.Tensor], float]
     fitness_function_date_id: str
     fitness_function_model_name: str
     flip_fitness_sign: bool
@@ -335,11 +335,11 @@ class PopulationBasedSampler():
     n_workers: int
     output_folder: str
     output_name: str
-    _postprocessors: typing.List[ast_parser.ASTSamplePostprocessor]
+    postprocessor: ast_parser.ASTSamplePostprocessor
     population: typing.List[ASTType]
     population_size: int
     random_seed: int
-    _regrowth_samplers: typing.List[RegrowthSampler]
+    regrowth_sampler: RegrowthSampler
     relative_path: str
     rng: np.random.Generator
     sample_filter_func: typing.Optional[typing.Callable[[ASTType, typing.Dict[str, typing.Any], float], bool]]
@@ -347,7 +347,7 @@ class PopulationBasedSampler():
     sampler_keys: typing.List[str]
     sampler_kwargs: typing.Dict[str, typing.Any]
     sampler_prior_count: typing.List[int]
-    _samplers: typing.List[typing.Dict[str, ASTSampler]]
+    samplers: typing.Dict[str, ASTSampler]
     saving: bool
     signal_received: bool
     verbose: int
@@ -413,7 +413,7 @@ class PopulationBasedSampler():
         self.fitness_featurizer = _load_pickle_gzip(fitness_featurizer_path)
         self.fitness_function_date_id = fitness_function_date_id
         self.fitness_function_model_name = fitness_function_model_name
-        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)
+        self.fitness_function, self.feature_names = load_model_and_feature_columns(fitness_function_date_id, name=fitness_function_model_name, relative_path=relative_path)  # type: ignore
         self.flip_fitness_sign = flip_fitness_sign
 
         self.diversity_scorer_type = diversity_scorer_type
@@ -1075,17 +1075,18 @@ class PopulationBasedSampler():
 
                 current_variable_types = set()
                 if isinstance(variables, tatsu.ast.AST):
-                    if isinstance(variables.var_type.type, str):  # type: ignore
-                        current_variable_types.add(variables.var_type.type)  # type: ignore
+                    current_variable_types.update(ast_parser._extract_variable_type_as_list(variables.var_type.type))
 
                 else:
                     for var_def in variables:
-                        if isinstance(var_def.var_type.type, str):
-                            current_variable_types.add(var_def.var_type.type)
+                        current_variable_types.update(ast_parser._extract_variable_type_as_list(var_def.var_type.type))
 
                 new_variable_node = None
-                while new_variable_node is None or (isinstance(new_variable_node.var_type.type, str) and new_variable_node.var_type.type in current_variable_types):  # type: ignore
+                new_variable_node_has_new_type = False
+                while new_variable_node_has_new_type:
                     new_variable_node = sampler.sample(new_variable_def_rule, global_context, local_context)[0]
+                    new_variable_node_types = ast_parser._extract_variable_type_as_list(new_variable_node.var_type.type)
+                    new_variable_node_has_new_type = len(current_variable_types.intersection(new_variable_node_types)) > 0
 
                 if isinstance(variables, tatsu.ast.AST):
                     new_variable_list = [variables, new_variable_node]
@@ -1127,7 +1128,6 @@ class PopulationBasedSampler():
             game = mutated_game
 
         if mutated_preference_as_new:
-            # TODO: check that the mutated preference is different from all current preferences
             game_preferences_node = [section_tuple for section_tuple in game if section_tuple[0] == ast_parser.PREFERENCES][0][1]
             game_preferences_node['preferences'].insert(rng.integers(len(game_preferences_node['preferences']) + 1), original_pref_def)  # type: ignore
 
@@ -1340,7 +1340,7 @@ class PopulationBasedSampler():
                 raise e
 
 
-        # # TODO: should this raise an exception or just return the parent unmodified? -- parent is already in the population, so returning nothing
+        # Parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
         return SingleStepResults([], [], [], [], [])
 
@@ -1854,7 +1854,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         self._update_population_statistics()
 
     def _custom_tqdm_postfix(self):
-        # TODO: make these thresholds a parameter
         metrics = {
             '# Cells': self.population_size,
             '# Good': len([True for fitness in self.fitness_values.values() if fitness > self.good_threshold]),

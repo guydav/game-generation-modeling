@@ -710,15 +710,15 @@ TYPE_DESCRIPTIONS = (
 	TypeDesc('block', 'Parent type of all block types:'),
 	TypeDesc('bridge_block'),
 	TypeDesc('cube_block'),
-    TypeDesc('blue_cube_block'),
-    TypeDesc('tan_cube_block'),
-    TypeDesc('yellow_cube_block'),
+    TypeDesc('cube_block_blue'),
+    TypeDesc('cube_block_tan'),
+    TypeDesc('cube_block_yellow'),
 	TypeDesc('flat_block'),
 	TypeDesc('pyramid_block'),
-    TypeDesc('blue_pyramid_block'),
-    TypeDesc('red_pyramid_block'),
+    TypeDesc('pyramid_block_blue'),
+    TypeDesc('pyramid_block_red'),
     TypeDesc('triangle_block'),
-    TypeDesc('yellow_pyramid_block'),
+    TypeDesc('pyramid_block_yellow'),
 	TypeDesc('cylindrical_block'),
 	TypeDesc('tall_cylindrical_block'),
     section_separator_typedesc('Balls'),
@@ -726,11 +726,11 @@ TYPE_DESCRIPTIONS = (
 	TypeDesc('beachball'),
 	TypeDesc('basketball'),
 	TypeDesc('dodgeball'),
-    TypeDesc('blue_dodgeball'),
-    TypeDesc('red_dodgeball'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
-	TypeDesc('pink_dodgeball'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
+    TypeDesc('dodgeball_blue'),
+    TypeDesc('dodgeball_red'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('dodgeball_pink'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
 	TypeDesc('golfball'),
-    TypeDesc('green_golfball'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
+    TypeDesc('golfball_green'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
 	section_separator_typedesc('Colors'),
     TypeDesc('color', 'Likewise, not a real game object, mostly used to refer to the color of the rug under an object'),
 	TypeDesc('blue'),
@@ -761,7 +761,7 @@ TYPE_DESCRIPTIONS = (
     TypeDesc('main_light_switch', 'The main light switch on the wall'),
 	TypeDesc('mug'),
 	TypeDesc('triangular_ramp'),
-	TypeDesc('green_triangular_ramp'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
+	TypeDesc('triangular_ramp_green'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
 	TypeDesc('pen'),
     TypeDesc('pencil'),
     TypeDesc('pillow'),
@@ -770,10 +770,9 @@ TYPE_DESCRIPTIONS = (
     section_separator_typedesc('Immoveable objects'),
 	TypeDesc('bed'),
     TypeDesc('corner', 'Any of the corners of the room'),
-    TypeDesc('south_west_corner', 'The corner of the room where the south and west walls meet'),
     TypeDesc('door', 'The door out of the room'),
 	TypeDesc('desk'),
-    TypeDesc('desk_shelf', 'The shelves under the desk'),
+    TypeDesc('shelf_desk', 'The shelves under the desk'),
 	TypeDesc('drawer', 'Either drawer in the side table'),
 	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.'), # (* \\textbf Do we want to specify this differently? *)'),
 	TypeDesc('floor'),
@@ -816,7 +815,10 @@ def extract_predicate_function_args(ast: tatsu.ast.AST) -> typing.List[str]:
     arg_index = 1
     arg_key = f'arg_{arg_index}'
     while arg_key in inner and inner[arg_key] is not None:
-        args.append(str(inner[arg_key].term))
+        term = inner[arg_key].term
+        if isinstance(term, tatsu.ast.AST):
+            term = term.terminal
+        args.append(str(term))
         arg_index += 1
         arg_key = f'arg_{arg_index}'
 
@@ -861,8 +863,8 @@ FUNCTION_RULES = {
 
 
 def extract_single_variable_type(ast):
-    if 'var_type' in ast and 'type' in ast.var_type and isinstance(ast.var_type.type, str):
-        return ast.var_type.type
+    if 'var_type' in ast and 'type' in ast.var_type and isinstance(ast.var_type.type, tatsu.ast.AST):
+        return ast.var_type.type.terminal
 
     return None
 
@@ -872,7 +874,10 @@ def extract_either_variable_types(ast):
         if isinstance(ast.type_names, str):
             return (ast.type_names, )
 
-        return ast.type_names
+        if isinstance(ast.type_names, tatsu.ast.AST):
+            return (ast.type_names.terminal,)
+
+        return tuple(t.terminal for t in ast.type_names)
 
     return None
 
@@ -883,9 +888,9 @@ def extract_pref_name_and_types(ast):
             return None
 
         if isinstance(ast.object_types, tatsu.ast.AST):
-            return ast.object_types.type_name
+            return ast.object_types.type_name.terminal
         else:
-            return [t.type_name for t in ast.object_types if 'type_name' in t]
+            return [t.type_name.terminal for t in ast.object_types if 'type_name' in t]
 
     return None
 
@@ -897,8 +902,8 @@ def extract_types_from_predicates_and_functions(ast):
 
 def extract_co_ocurring_types(ast, key):
     if 'type_names' in ast:
-        if not isinstance(ast.type_names, str):
-            types = list(ast.type_names)
+        if not isinstance(ast.type_names, (str, tatsu.ast.AST)):
+            types = list(t.terminal for t in ast.type_names)
             if key in types:
                 types.remove(key)
 

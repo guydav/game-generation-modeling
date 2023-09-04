@@ -8,7 +8,8 @@ import itertools
 import glob
 import gzip
 import logging
-import multiprocessing
+import multiprocess as multiprocessing
+from multiprocess import pool as mpp
 import os
 import pickle
 import re
@@ -80,13 +81,22 @@ parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1024)
 DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
-parser.add_argument('--maxtasksperchild', default=None)
+parser.add_argument('--maxtasksperchild', default=None, type=int)
 parser.add_argument('--expected-total-row-count', type=int, default=98 * 1025)
 parser.add_argument('--single-process-n-rows-to-temp-file', type=int, default=None)
+parser.add_argument('--start-index', type=int, default=None)
+parser.add_argument('--end-index', type=int, default=None)
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+mp_logger = multiprocessing.log_to_stderr()
+mp_handler = logging.StreamHandler(sys.stdout)
+mp_handler.setFormatter(logging.Formatter('[%(levelname)s/%(processName)s] %(message)s'))
+for handler in mp_logger.handlers:
+    mp_logger.removeHandler(handler)
+mp_logger.addHandler(mp_handler)
 
 ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
@@ -194,6 +204,7 @@ class ASTFitnessFeaturizer:
         self.temp_file_writer_dict = {}
 
     def __del__(self):
+        if logger is not None: logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
         for temp_file in self.temp_files.values():
             temp_file.close()
 
@@ -309,31 +320,45 @@ class ASTFitnessFeaturizer:
         return self.all_column_keys
 
     def parse_iterator_parallel(self, game_and_src_file_iter: typing.Iterator[typing.Tuple[tuple, str]]):
-        with multiprocessing.Pool(self.args.n_workers) as p:
+        with mpp.Pool(self.args.n_workers) as p:  # , maxtasksperchild=args.maxtasksperchild
             logger.info('Pool started')
 
-            for row in tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize), total=self.args.expected_total_row_count):
-                pass
+            start_index = args.start_index if args.start_index is not None else 0
+            end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
+
+            result_tqdm = tqdm(p.imap_unordered(self._parse_iterator_single_game, game_and_src_file_iter, chunksize=self.args.chunksize),
+                               total=end_index - start_index, desc='Parsing games', disable=args.dont_tqdm)
+
+            result_tqdm.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+            i = 0
+            for row in result_tqdm:
+                i += 1
+                if i >= 100:
+                    result_tqdm.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+                    i = 0
+
+                if any(map(lambda proc: not proc.is_alive(), p._pool)):
+                    logger.warn('Found a dead process!')
+
+            p.close()
+            p.join()
 
     def _parse_iterator_single_game(self, game_and_src_file: typing.Tuple[tuple, str]):
         game, src_file = game_and_src_file
         row = self.parse(game, src_file, return_row=True, preprocess_row=False)
-        process_index = multiprocessing.current_process()._identity[0] - 1 % self.args.n_workers
+        pid = os.getpid()
 
-        if process_index not in self.temp_file_writer_dict:
-            temp_output_path = None
-            path_index = process_index
-            while temp_output_path is None or os.path.exists(temp_output_path):
-                temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{path_index}.temp.csv')
-                path_index += self.args.n_workers
+        if pid not in self.temp_file_writer_dict:
+            temp_output_path = os.path.join(TEMP_DIR, os.path.basename(self.args.output_path) + f'_{pid}.temp.csv')
+            logger.info(f'Creating temp file for pid {pid} with path {temp_output_path}')
 
-            self.temp_file_output_paths[process_index] = temp_output_path
-            temp_file = open(temp_output_path, 'w', newline='')
-            self.temp_files[process_index] = temp_file
+            self.temp_file_output_paths[pid] = temp_output_path
+            temp_file = open(temp_output_path, 'a', newline='')
+            self.temp_files[pid] = temp_file
             temp_csv_writer = csv.DictWriter(temp_file, self.get_all_column_keys())
-            self.temp_file_writer_dict[process_index] = temp_csv_writer
+            self.temp_file_writer_dict[pid] = temp_csv_writer
 
-        self.temp_file_writer_dict[process_index].writerow(row)  # type: ignore
+        self.temp_file_writer_dict[pid].writerow(row)  # type: ignore
 
     def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
         row = {}
@@ -716,16 +741,16 @@ class PredicateFoundInData(FitnessTerm):
         self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
-        if self.use_full_databse:
-            self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-                force_trace_names_hash=self.trace_names_hash
-            )
+        # if self.use_full_databse:
+        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+            force_trace_names_hash=self.trace_names_hash
+        )
 
-        else:
-            self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabse(
-                use_no_intervals=True,
-                force_trace_names_hash=self.trace_names_hash
-            )
+        # else:
+        #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
+        #         use_no_intervals=True,
+        #         force_trace_names_hash=self.trace_names_hash
+        #     )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
@@ -769,6 +794,11 @@ class PredicateFoundInData(FitnessTerm):
 
             except (compile_predicate_statistics_database.MissingVariableException, compile_predicate_statistics_full_database.MissingVariableException) as e:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?
+                pass
+
+            except (compile_predicate_statistics_full_database.QueryTimeoutException, RuntimeError) as e:
+                # If the query timed out, ignore this predicate for now
+                logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")  # type: ignore
                 pass
 
     def _get_all_inner_keys(self):
@@ -1018,10 +1048,14 @@ class MaxNumberVariablesTypesQuantified(FitnessTerm):
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             var_type = ast.var_type.type  # type: ignore
-            if isinstance(var_type, str):
+            var_type_rule = var_type.parseinfo.rule  # type: ignore
+
+            if var_type_rule.endswith('type'):
                 n_types = 1
+
             else:
                 n_types = len(set(var_type.type_names)) if isinstance(var_type.type_names, list) else 1
+
             self.max_types_quantified = max(self.max_types_quantified, n_types)
 
             variables = ast.var_names
@@ -1097,19 +1131,18 @@ class RepeatedVariableTypeInEither(FitnessTerm):
     repeated_type_found: bool = False
 
     def __init__(self):
-        super().__init__(VARIABLE_TYPE_DEF_RULES_PATTERN, 'repeated_variable_type_in_either')
+        super().__init__(EITHER_TYPES_RULES_PATTERN, 'repeated_variable_type_in_either')
 
     def game_start(self) -> None:
         self.repeated_type_found = False
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
-            var_type = ast.var_type.type  # type: ignore
-            if isinstance(var_type, tatsu.ast.AST):
-                type_names = var_type.type_names
-                if isinstance(type_names, list):
-                    if len(set(type_names)) < len(type_names):
-                        self.repeated_type_found = True
+            type_names = ast.type_names
+            if isinstance(type_names, list):
+                type_names = [t.terminal for t in type_names]
+                if len(set(type_names)) < len(type_names):
+                    self.repeated_type_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.repeated_type_found
@@ -1531,6 +1564,11 @@ class PrefForallTerm(FitnessTerm):
             else:   # count*
                 pref_name = ast.name_and_types['pref_name']  # type: ignore
                 object_types = ast.name_and_types['object_types']  # type: ignore
+                if object_types is not None:
+                    if not isinstance(object_types, list):
+                        object_types = [object_types]
+
+                    object_types = [t.type_name.terminal for t in object_types]
                 self._update_count(pref_name, object_types, rule, context)
 
     @abstractmethod
@@ -1746,8 +1784,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
             return
 
         count_correct = 0
-        for obj_type, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
-            obj = obj_type.type_name
+        for obj, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
             var_types = var_def.var_types
             if obj in var_types or (obj in room_and_object_types.TYPE_TO_META_TYPE and room_and_object_types.TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
                 count_correct += 1
@@ -1818,20 +1855,24 @@ class PredicateArgumentSymmetryType(Enum):
     FIRST_AND_THIRD_ARGUMENTS = 1
 
 
+ALL_ARGUMENTS = 0
+FIRST_AND_THIRD_ARGUMENTS = 1
+
+
 SYMMETRIC_PREDICATE_ARG_INDICES = {
-    'adjacent': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'adjacent_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'between': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'distance': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'distance_side_4': PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS,
-    'equal_x_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'equal_z_position': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'faces': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'opposite': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_color': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_object': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'same_type': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
-    'touch': PredicateArgumentSymmetryType.ALL_ARGUMENTS,
+    'adjacent': ALL_ARGUMENTS,
+    'adjacent_side_4': FIRST_AND_THIRD_ARGUMENTS,
+    'between': FIRST_AND_THIRD_ARGUMENTS,
+    'distance': ALL_ARGUMENTS,
+    'distance_side_4': FIRST_AND_THIRD_ARGUMENTS,
+    'equal_x_position': ALL_ARGUMENTS,
+    'equal_z_position': ALL_ARGUMENTS,
+    'faces': ALL_ARGUMENTS,
+    'opposite': ALL_ARGUMENTS,
+    'same_color': ALL_ARGUMENTS,
+    'same_object': ALL_ARGUMENTS,
+    'same_type': ALL_ARGUMENTS,
+    'touch': ALL_ARGUMENTS,
 }
 
 
@@ -1893,6 +1934,9 @@ def _is_number(s: typing.Any) -> bool:
         return s.replace('.', '', 1).isdigit()
 
     elif isinstance(s, tatsu.ast.AST):
+        if s.parseinfo.rule == 'number_value':  # type: ignore
+            return True
+
         if s.parseinfo.rule in ('scoring_expr', 'scoring_neg_expr'):  # type: ignore
             return _is_number(s.expr)
 
@@ -2042,14 +2086,14 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
     argument_types_to_count_by_section: typing.Dict[str, typing.Dict[typing.Tuple[str, ...], int]]
     name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]]
     predicate_or_function: str
-    symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType]
+    symmetric_predicate_symmetry_types: typing.Dict[str, int]
     type_categories: typing.Sequence[str]
 
     def __init__(self, predicate_or_function: str, # argument_type_categories: typing.Sequence[str],
         name_to_arity_map: typing.Dict[str, typing.Union[int, typing.Tuple[int, ...]]] = PREDICATE_FUNCTION_ARITY_MAP,  # type: ignore
         known_missing_types: typing.Sequence[str] = KNOWN_MISSING_TYPES,
         type_categories: typing.Sequence[str] = COMMON_SENSE_TYPE_CATEGORIES,
-        symmetric_predicate_symmetry_types: typing.Dict[str, PredicateArgumentSymmetryType] = SYMMETRIC_PREDICATE_ARG_INDICES,
+        symmetric_predicate_symmetry_types: typing.Dict[str, int] = SYMMETRIC_PREDICATE_ARG_INDICES,
         ):
 
         super().__init__((f'predicate_{predicate_or_function}', f'function_{predicate_or_function}'),
@@ -2100,10 +2144,10 @@ class PredicateFunctionArgumentTypes(FitnessTerm):
             for category_product in itertools.product(*term_categories):  # type: ignore
                 if name in self.symmetric_predicate_symmetry_types:
                     symmetry_type = self.symmetric_predicate_symmetry_types[name]
-                    if symmetry_type == PredicateArgumentSymmetryType.ALL_ARGUMENTS:
+                    if symmetry_type == ALL_ARGUMENTS or symmetry_type == PredicateArgumentSymmetryType.ALL_ARGUMENTS:
                         category_product = tuple(sorted(category_product))
 
-                    elif symmetry_type == PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS:
+                    elif symmetry_type == FIRST_AND_THIRD_ARGUMENTS or symmetry_type == PredicateArgumentSymmetryType.FIRST_AND_THIRD_ARGUMENTS:
                         if category_product[0] > category_product[2]:
                             category_product = (category_product[2], category_product[1], category_product[0], *category_product[3:])
 
@@ -2595,14 +2639,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
 
-    predicate_found_in_data = PredicateFoundInData()
+    predicate_found_in_data = PredicateFoundInData(use_full_databse=False)
     fitness.register(predicate_found_in_data)
-
-    # setup_predicate_found_in_data = SetupSuperPredicateFoundInData()
-    # fitness.register(setup_predicate_found_in_data)
-
-    # preferences_predicate_found_in_data = PreferencesPredicateFoundInData()
-    # fitness.register(preferences_predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)
@@ -2736,12 +2774,22 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 #     temp_csv_writers[process_index].writerow(row)  # type: ignore
 
 
-def game_iterator():
+def game_iterator(args: argparse.Namespace):
+    i = 0
     for src_file in args.test_files:
         for game in cached_load_and_parse_games_from_file(src_file,
                                                           grammar_parser,  # type: ignore
                                                           use_tqdm=False, log_every_change=False, force_from_cache=True):
-            yield game, src_file
+            before_start = args.start_index is not None and i < args.start_index
+            after_end = args.end_index is not None and i >= args.end_index
+            if after_end:
+                logger.info(f'Reached end index {args.end_index}, stopping')
+                return
+            elif not before_start:
+                yield game, src_file
+            i += 1
+
+    logger.info(f'Reached end of game_iterator, stopping')
 
 
 def get_headers(args: argparse.Namespace, featurizer: ASTFitnessFeaturizer) -> typing.List[str]:
@@ -2772,6 +2820,7 @@ def extract_negative_index(game_name: str):
 def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths: typing.List[str], headers: typing.List[str]):
     logger.info('About to parse rows from temp files into dataframe')
     rows_dfs = [pd.read_csv(temp_output_path, header=None, names=headers) for temp_output_path in temp_output_paths]
+    logger.info(f'Temp dataframes have shapes: {[df.shape for df in rows_dfs]}')
     rows_df = pd.concat(rows_dfs, sort=False)
 
     rows_df = rows_df.assign(real=(rows_df.src_file == 'interactive-beta.pddl').astype(int))
@@ -2781,7 +2830,6 @@ def temp_files_to_featurizer(featurizer: ASTFitnessFeaturizer, temp_output_paths
     rows_df.drop(columns=['fake', 'game_index', 'negative_index'], inplace=True)
 
     featurizer.rows_df = rows_df.reset_index(drop=True)
-
 
 
 def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
@@ -2794,7 +2842,6 @@ def build_or_load_featurizer(args: argparse.Namespace) -> ASTFitnessFeaturizer:
         featurizer = build_fitness_featurizer(args)
 
     return featurizer
-
 
 
 def test_multiprocessing_globals(index: int):
@@ -2840,7 +2887,7 @@ if __name__ == '__main__':
             os.remove(file)
 
         logger.info(f'About to start pool by calling parse_iterator_parallel with {args.n_workers} workers')
-        featurizer.parse_iterator_parallel(game_iterator())  # type: ignore
+        featurizer.parse_iterator_parallel(game_iterator(args))  # type: ignore
 
         for temp_file in featurizer.temp_files.values():
             temp_file.close()
@@ -2862,7 +2909,10 @@ if __name__ == '__main__':
             temp_file = open(temp_output_path, 'w', newline='')
             temp_csv_writer = csv.DictWriter(temp_file, headers)
 
-            for game, src_file in tqdm(game_iterator(), total=args.expected_total_row_count):
+            start_index = args.start_index if args.start_index is not None else 0
+            end_index = args.end_index if args.end_index is not None else args.expected_total_row_count
+
+            for game, src_file in tqdm(game_iterator(args), total=end_index - start_index):
                 row = featurizer.parse(game, src_file, return_row=True, preprocess_row=False)
                 temp_csv_writer.writerow(row)
                 file_row_count += 1

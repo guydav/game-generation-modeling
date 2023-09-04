@@ -9,21 +9,21 @@ game_def = '(game' game_name:id ')';
 domain_def = '(:domain' domain_name:id ')';
 setup_def = '(:setup' setup ')' | ();
 constraints_def = '(:constraints' preferences ')';
-terminal_def = '(:terminal' terminal ')' | ();  # TODO: do we want this to be optional?
+terminal_def = '(:terminal' terminal ')' | ();
 scoring_def = '(:scoring' scoring ')';
 
 # Generic definitions useful across sections
 
 id = /[a-z0-9][a-z0-9\-]+/;
 name = /[A-Za-z][A-Za-z0-9_]*/;
-number = /-?\d*\.?\d+/;
+number_pattern = /\d*\.?\d+/;
 
 variable = /\?[a-w][a-z0-9]*/;
 color_variable = /\?x[0-9]*/;
 orientation_variable = /\?y[0-9]*/;
 side_variable = /\?z[0-9]*/;
 
-variable_list = '(' {variables+:(variable_type_def |  color_variable_type_def | orientation_variable_type_def | side_variable_type_def)}+ ')';
+variable_list = '(' {variables+:(variable_type_def | color_variable_type_def | orientation_variable_type_def | side_variable_type_def)}+ ')';
 
 variable_type_def = {var_names+:variable}+ '-' var_type:type_definition;
 color_variable_type_def = {var_names+:color_variable}+ '-' var_type:color_type_definition;
@@ -31,21 +31,27 @@ orientation_variable_type_def = {var_names+:orientation_variable}+ '-' var_type:
 side_variable_type_def = {var_names+:side_variable}+ '-' var_type:side_type_definition;
 
 type_definition = type:(object_type | either_types);
-color_type_definition = type:(color | either_color_types);
-orientation_type_definition = type:(orientation | either_orientation_types);
-side_type_definition = type:(side | either_side_types);
+color_type_definition = type:(color_type | either_color_types);
+orientation_type_definition = type:(orientation_type | either_orientation_types);
+side_type_definition = type:(side_type | either_side_types);
 
 either_types = '(either' {type_names+:object_type}+ ')';
 either_color_types = '(either' {type_names+:color}+ ')';
 either_orientation_types = '(either' {type_names+:orientation}+ ')';
 either_side_types = '(either' {type_names+:side}+ ')';
 
-object_name = name;
-object_type = name;
-color = name;
-location = name;
-orientation = name;
-side = name;
+object_type = terminal:name;  # we don't hardcode all the types, but do set a prior over them in the sampler
+object_name = terminal:('agent' | 'bed' | 'desk' | 'door' | 'floor' | 'main_light_switch' | 'mirror' | 'room_center' | 'rug' | 'side_table' | 'bottom_drawer' | 'bottom_shelf' | 'east_sliding_door' | 'east_wall' | 'north_wall' | 'south_wall' | 'top_drawer' | 'top_shelf' | 'west_sliding_door' | 'west_wall');
+color_type = terminal:'color';
+color = terminal:('blue' | 'brown' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'tan' | 'white' | 'yellow');
+orientation_type = terminal:'orientation';
+orientation = terminal:('diagonal' | 'sideways' | 'upright' | 'upside_down');
+side_type = terminal:'side';
+side = terminal:('back' | 'front' | 'left' | 'right');
+number_value = number:(positive_number | negative_number);
+positive_number = terminal:number_pattern;
+negative_number = '-' number:positive_number;
+
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
@@ -53,13 +59,13 @@ multiple_args_equal_comparison = '(=' {equal_comp_args+:comparison_arg}+ ')';
 
 predicate_or_function_term = term:(object_name | variable);
 predicate_or_function_color_term = term:(color | color_variable);
-predicate_or_function_location_term = term:(location | variable);
+# predicate_or_function_location_term = term:(location | variable);
 predicate_or_function_orientation_term = term:(orientation | orientation_variable);
 predicate_or_function_side_term = term:(side | side_variable);
 predicate_or_function_type_term = term:(object_type | variable);
 
 
-comparison_arg = arg:(function_eval | number);
+comparison_arg = arg:(function_eval | number_value);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = func:(function_building_size |
     function_distance |
@@ -69,11 +75,14 @@ function_eval = func:(function_building_size |
     )
     ;
 function_building_size = '(building_size' arg_1:predicate_or_function_term ')';
-function_distance = '(distance' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
-function_distance_side_3 = '(distance_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
-function_distance_side_4 = '(distance_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
+function_distance = '(distance' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+function_distance_side_3 = '(distance_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
+function_distance_side_4 = '(distance_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
 function_x_position = '(x_position' arg_1:predicate_or_function_term ')';
 
+# function_distance = '(distance' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
+# function_distance_side_3 = '(distance_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
+# function_distance_side_4 = '(distance_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
 # function_term = term:(type_name | variable);   #  used to allow numbers as well -- unsure why at this point: function_term = term:(number | type_name | variable);
 
 predicate = pred:(predicate_above |
@@ -106,15 +115,15 @@ predicate = pred:(predicate_above |
     ;
 
 predicate_above = '(above' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
-predicate_adjacent = '(adjacent' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
-predicate_adjacent_side_3 = '(adjacent_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
-predicate_adjacent_side_4 = '(adjacent_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
+predicate_adjacent = '(adjacent' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_adjacent_side_3 = '(adjacent_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
+predicate_adjacent_side_4 = '(adjacent_side' arg_1:predicate_or_function_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
 predicate_agent_crouches = '(agent_crouches' no_args:{} ')';  # hack to make sure it parses an expression
 predicate_agent_holds = '(agent_holds' arg_1:predicate_or_function_term ')';
 predicate_between = '(between' arg_1:predicate_or_function_term arg_2:predicate_or_function_term arg_3:predicate_or_function_term ')';
 predicate_broken = '(broken' arg_1:predicate_or_function_term ')';
-predicate_equal_x_position = '(equal_x_position' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
-predicate_equal_z_position = '(equal_z_position' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
+predicate_equal_x_position = '(equal_x_position' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
+predicate_equal_z_position = '(equal_z_position' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_faces = '(faces' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_game_over = '(game_over' no_args:{} ')';  # hack to make sure it parses an expression
 predicate_game_start = '(game_start' no_args:{} ')';  # hack to make sure it parses an expression
@@ -126,12 +135,17 @@ predicate_on = '(on' arg_1:predicate_or_function_term arg_2:predicate_or_functio
 predicate_open = '(open' arg_1:predicate_or_function_term ')';
 predicate_opposite = '(opposite' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_rug_color_under = '(rug_color_under' arg_1:predicate_or_function_term arg_2:predicate_or_function_color_term ')';
-predicate_same_color = '(same_color' arg_1:predicate_or_function_term arg_2:(predicate_or_function_term | predicate_or_function_color_term) ')';
+predicate_same_color = '(same_color' arg_1:predicate_or_function_term arg_2:(predicate_or_function_color_term | predicate_or_function_term) ')';
 predicate_same_object = '(same_object' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_same_type = '(same_type' arg_1:predicate_or_function_term arg_2:predicate_or_function_type_term ')';
 predicate_toggled_on = '(toggled_on' arg_1:predicate_or_function_term ')';
 predicate_touch = '(touch' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 
+# predicate_adjacent = '(adjacent' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
+# predicate_adjacent_side_3 = '(adjacent_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term ')';
+# predicate_adjacent_side_4 = '(adjacent_side' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_side_term arg_3:predicate_or_function_term arg_4:predicate_or_function_side_term ')';
+# predicate_equal_x_position = '(equal_x_position' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
+# predicate_equal_z_position = '(equal_z_position' arg_1:predicate_or_function_location_term arg_2:predicate_or_function_term ')';
 
 # Game Setup
 
@@ -269,7 +283,7 @@ scoring_expr = expr:(
     );
     # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
 
-scoring_expr_or_number = expr:(scoring_expr | number);
+scoring_expr_or_number = expr:(scoring_expr | number_value);
 
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
@@ -335,7 +349,7 @@ count_measure = '(count-measure' name_and_types:pref_name_and_types ')';
 
 pref_name_and_types = pref_name:preference_name {object_types+:pref_object_type}*;
 
-pref_object_type = ':' type_name:(object_type | object_name);
+pref_object_type = ':' type_name:(color | object_name | object_type);
 
 # Scoring
 scoring = scoring_expr;

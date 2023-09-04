@@ -248,8 +248,10 @@ def mutation_and_removal_context(func):
 
 def _parse_either_types(either_types, context):
     type_names = either_types.type_names
-    if isinstance(type_names, list):
-        type_names = ' '.join(type_names)
+    if not isinstance(type_names, list):
+        type_names = [type_names]
+
+    type_names = ' '.join(t.terminal for t in type_names)
 
     var_type_str = f'(either {type_names})'
     return _out_str_to_span(var_type_str, context, remove=either_types.get('remove', False))
@@ -271,30 +273,32 @@ def validate_variable_list_is_list(func):
 
 def _parse_type_definition(var_type_def, context):
     var_type = var_type_def.type
+    var_type_list = ast_parser._extract_variable_type_as_list(var_type)
+    var_type_str = var_type_list[0] if var_type.parseinfo.rule.endswith('type') else f"(either {' '.join(var_type_list)})"
+    # var_type_rule = var_type.parseinfo.rule  # type: ignore
+    # if var_type_rule.endswith('type'):
+    #     var_type_str = var_type.terminal
 
-    if isinstance(var_type, str):
-        var_type_str = var_type
+    # elif var_type_rule.startswith('either'):
+    #     var_type_str = _parse_either_types(var_type, context)
 
-    elif var_type.parseinfo.rule.startswith('either'):
-        var_type_str = _parse_either_types(var_type, context)
+    #     inner_prev_mutation = None
+    #     if 'html' in context and context['html'] and 'mutation' in var_type:
+    #         if 'mutation' in context:
+    #             inner_prev_mutation = context['mutation']
 
-        inner_prev_mutation = None
-        if 'html' in context and context['html'] and 'mutation' in var_type:
-            if 'mutation' in context:
-                inner_prev_mutation = context['mutation']
+    #         context['mutation'] = var_type['mutation']
+    #         context = preprocess_context(context)
+    #         var_type_str = _out_str_to_span(var_type_str, context)
 
-            context['mutation'] = var_type['mutation']
-            context = preprocess_context(context)
-            var_type_str = _out_str_to_span(var_type_str, context)
+    #         if inner_prev_mutation is not None:
+    #             context['mutation'] = inner_prev_mutation
+    #         else:
+    #             del context['mutation']
+    #         context = preprocess_context(context)
 
-            if inner_prev_mutation is not None:
-                context['mutation'] = inner_prev_mutation
-            else:
-                del context['mutation']
-            context = preprocess_context(context)
-
-    else:
-        raise ValueError(f'Unrecognized quantifier variables: {var_type}')
+    # else:
+    #     raise ValueError(f'Unrecognized quantifier variables: {var_type}')
 
     return _out_str_to_span(var_type_str, context, remove=var_type_def.get('remove', False))
 
@@ -452,26 +456,19 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None, ret
     return _handle_predicate(caller, rule, ast, depth, increment, context, return_str=return_str)
 
 
-# @mutation_and_removal_context
-# def _inline_format_function_eval(caller, rule, ast, depth, increment, context=None):
-#     formatted_args = _format_func_args(ast, depth, increment, context)
-#     return _out_str_to_span(f'({ast.func_name} {" ".join(formatted_args)})', context)
+def _format_number_value(ast):
+    number = ast.number
+    prefix = ''
+    if number.parseinfo.rule == 'negative_number':
+        number = number.number
+        prefix = '-'
 
-# def _format_func_args(ast, depth, increment, context):
-#     func_args = ast.func_args
-#     if func_args is None:
-#         formatted_args = []
+    return f'{prefix}{number.terminal}'
 
-#     else:
-#         if not isinstance(func_args, list):
-#             func_args = [func_args]
 
-#         formatted_args = [
-#             arg if isinstance(arg, str)
-#             else (arg.term if isinstance (arg.term, str) else _inline_format_comparison_arg(None, arg.term.parseinfo.rule, arg.term, depth, increment, context))
-#             for arg in func_args]
-
-#     return formatted_args
+@mutation_and_removal_context
+def _handle_number_value(caller, rule, ast, depth, increment, context=None):
+    _indent_print(_format_number_value(ast), depth, increment, context)
 
 
 # @mutation_and_removal_context  -- handles it internally
@@ -483,6 +480,8 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
         if arg.parseinfo.rule == 'function_eval':  # type: ignore
             # return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
             out_str = _handle_function_eval(caller, arg.rule, arg, depth, increment, context, return_str=True)
+        elif arg.parseinfo.rule == 'number_value':  # type: ignore
+            out_str = _format_number_value(arg)
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
     else:
@@ -548,9 +547,17 @@ def _handle_multiple_args_equal_comparison(caller, rule, ast, depth, increment, 
                   depth, increment, context)
 
 
+def _extract_predicate_term_value(ast):
+    terminal = ast.term
+    if isinstance(terminal, tatsu.ast.AST):
+        terminal = terminal.terminal
+
+    return terminal
+
+
 @mutation_and_removal_context
 def _handle_predicate_or_function_term(caller, rule, ast, depth, increment, context=None):
-    _indent_print(_out_str_to_span(ast.term, context, remove=ast.get('remove', False)), depth, increment, context)
+    _indent_print(_out_str_to_span(_extract_predicate_term_value(ast), context, remove=ast.get('remove', False)), depth, increment, context)
 
 
 
@@ -575,10 +582,12 @@ def _handle_predicate(caller, rule, ast, depth, increment, context, return_str=F
     arg_index = 1
     arg_key = f'arg_{arg_index}'
     while arg_key in pred and pred[arg_key] is not None:
-        term = pred[arg_key].term
+        terminal = _extract_predicate_term_value(pred[arg_key])
+
         if isinstance(pred[arg_key], tatsu.ast.AST) and pred[arg_key].get('remove', False):
-            term = f'<remove>{term}</remove>'
-        args.append(term)
+            terminal = f'<remove>{terminal}</remove>'
+
+        args.append(terminal)
 
         arg_index += 1
         arg_key = f'arg_{arg_index}'
@@ -611,7 +620,7 @@ def build_setup_printer():
     printer.register_exact_matches(
         _handle_setup, _handle_statement, _handle_super_predicate,
         _handle_function_comparison, _handle_function_eval, _handle_predicate,
-        _handle_two_arg_comparison, _handle_comparison_arg,
+        _handle_two_arg_comparison, _handle_comparison_arg, _handle_number_value,
         _handle_multiple_args_equal_comparison, _handle_variable_list, )
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
     printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
@@ -778,7 +787,7 @@ def build_constraints_printer():
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end,
         _handle_forall_seq, _handle_function_eval, _handle_two_arg_comparison,
         _handle_multiple_args_equal_comparison, _handle_comparison_arg,
-        _handle_variable_list,
+        _handle_number_value, _handle_variable_list,
     )
     printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
@@ -876,7 +885,10 @@ def _handle_with(caller, rule, ast, depth, increment, context=None):
 
 
 def _parse_pref_object_type(pref_object_type, context):
-    return _out_str_to_span(pref_object_type.type_name, context, remove=pref_object_type.get('remove', False))
+    type_name = pref_object_type.type_name
+    if isinstance(type_name, tatsu.ast.AST):
+        type_name = type_name.terminal
+    return _out_str_to_span(type_name, context, remove=pref_object_type.get('remove', False))
 
 
 @mutation_and_removal_context
@@ -953,7 +965,7 @@ def build_terminal_printer():
         _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr,
-        _handle_neg_expr, _handle_equals_comp,
+        _handle_neg_expr, _handle_equals_comp, _handle_number_value,
         _handle_function_eval, _handle_with, _handle_pref_object_type,
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
@@ -992,7 +1004,8 @@ def build_scoring_printer():
         _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr, _handle_neg_expr, _handle_scoring_expr_or_number,
-        _handle_equals_comp, _handle_function_eval, _handle_with, _handle_pref_object_type,
+        _handle_number_value, _handle_equals_comp, _handle_function_eval,
+        _handle_with, _handle_pref_object_type,
     )
     printer.register_exact_match(_handle_binary_comp, 'comp')
     printer.register_keyword_match(('count',), _handle_count_method)

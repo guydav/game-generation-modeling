@@ -188,6 +188,44 @@ Now, convert the following description:
 ### NATURAL LANGUAGE DESCRIPTION:
 """
 
+STAGE_2_TO_STAGE_3_PROMPT = """Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
+Use the following examples as a guide:
+
+### INITIAL RULES:
+Setup:
+To set up the game, place a hexagonal bin and a triangular ramp close to each other, with a distance of less than 1. Make sure they remain close throughout the entire game.
+
+Preferences:
+The preferences of the game are:
+
+-----Preference 1-----
+This preference is satisfied when:
+- first, the agent picks up a ball
+- next, the agent throws the ball at a triangular ramp, causing the ball to touch the ramp
+- finally, the ball stops moving and ends up inside of a hexagonal bin
+
+-----Preference 2-----
+This preference is satisfied when:
+- first, the hexagonal bin is in an upright position
+- next, the agent does not touch or hold the hexagonal bin
+- finally, the hexagonal bin is not in an upright position
+
+Terminal Conditions:
+The game ends when 'Preference 2' has been satisfied at least once.
+
+Scoring:
+At the end of the game, the player's score is equal to the number of times 'Preference 1' has been fulfilled.
+
+### SIMPLIFIED RULES:
+Place the bin and ramp next to each other. Then, throw balls at the bin so that they hit the ramp before going in. The game ends if the bin falls over, and the player's score is the number of times they succeed in bouncing the ball off the ramp into the bin.
+
+Now, convert the following rules:
+### INITIAL RULES:
+{0}
+
+### SIMPLIFIED RULES:
+"""
+
 
 ### Additional prompt considerations
 '''

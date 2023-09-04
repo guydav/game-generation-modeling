@@ -756,10 +756,23 @@ class GameDescriber():
             delimiter = ''
             formatting = "{0}"
 
-        setup_description = formatting.format(ast_section_to_string(game_ast[3], SETUP, delimiter))
-        preferences_description = formatting.format(ast_section_to_string(game_ast[4], PREFERENCES, delimiter))
-        terminal_description = formatting.format(ast_section_to_string(game_ast[5], TERMINAL, delimiter))
-        scoring_description = formatting.format(ast_section_to_string(game_ast[6], SCORING, delimiter))
+        setup_description = ""
+        preferences_description = ""
+        terminal_description = ""
+        scoring_description = ""
+
+        for section in game_ast:
+            if not isinstance(section, tuple):
+                continue
+
+            if section[0] == SETUP:
+                setup_description = formatting.format(ast_section_to_string(section, SETUP, delimiter))
+            elif section[0] == PREFERENCES:
+                preferences_description = formatting.format(ast_section_to_string(section, PREFERENCES, delimiter))
+            elif section[0] == TERMINAL:
+                terminal_description = formatting.format(ast_section_to_string(section, TERMINAL, delimiter))
+            elif section[0] == SCORING:
+                scoring_description = formatting.format(ast_section_to_string(section, SCORING, delimiter))
 
         return setup_description, preferences_description, terminal_description, scoring_description
 
@@ -817,7 +830,7 @@ class GameDescriber():
 
         return setup_description, preferences_description, terminal_description, scoring_description
     
-    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
+    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None):
         '''
         Generate a "stage 2" description of the provided game text or AST. A stage 2 description uses
         an LLM to convert a stage 1 description into more naturalistic language
@@ -825,7 +838,10 @@ class GameDescriber():
 
         assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 2 description"
 
-        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = self.describe_stage_1(game_text_or_ast)
+        if stage_1_descriptions is None:
+            setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = self.describe_stage_1(game_text_or_ast)
+        else:
+            setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = stage_1_descriptions
 
         if setup_stage_1 != "":
             setup_description = self._query_openai(SETUP_STAGE_1_TO_STAGE_2_PROMPT.format(setup_stage_1))
@@ -848,6 +864,34 @@ class GameDescriber():
             scoring_description = ""
 
         return setup_description, preferences_description, terminal_description, scoring_description
+    
+    def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None):
+        '''
+        Generate a "stage 3" description of the provided game text or AST. A stage 3 description uses an LLM
+        to convert a stage 2 description (consisting of independent section descriptions) into a single, short
+        natural language description of the game
+        '''
+
+        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 2 description"
+
+        if stage_2_descriptions is None:
+            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = self.describe_stage_1(game_text_or_ast)
+        else:
+            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = stage_2_descriptions
+
+        prompt_format = f"""Setup:
+        {setup_stage_2}
+        Preferences:
+        {preferences_stage_2}
+        Terminal Conditions:
+        {terminal_stage_2}
+        Scoring:
+        {scoring_stage_2}
+        """
+
+        stage_3_description = self._query_openai(STAGE_2_TO_STAGE_3_PROMPT.format(prompt_format))
+
+        return stage_3_description
 
 
 if __name__ == '__main__':
@@ -860,19 +904,26 @@ if __name__ == '__main__':
 
     # game_describer.describe(TEST_GAME_2)
 
+    game_table_htmls = []
     for game in game_asts:
 
         
         setup_stage_0, preferences_stage_0, terminal_stage_0, scoring_stage_0 = game_describer.describe_stage_0(game, format_for_html=True)
-        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = game_describer.describe_stage_1(game)
-        setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = game_describer.describe_stage_2(game)
-
-        data = [[setup_stage_0, setup_stage_1, setup_stage_2],
-                [preferences_stage_0, preferences_stage_1, preferences_stage_2],
-                [terminal_stage_0, terminal_stage_1, terminal_stage_2],
-                [scoring_stage_0, scoring_stage_1, scoring_stage_2]]
         
-        columns = ["Stage 0", "Stage 1", "Stage 2"]
+        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = game_describer.describe_stage_1(game)
+        stage_1_descriptions = (setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1)
+        
+        setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = game_describer.describe_stage_2(game, stage_1_descriptions)
+        stage_2_descriptions = (setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2)
+
+        stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions)
+
+        data = [[setup_stage_0, setup_stage_1, setup_stage_2, stage_3_description],
+                [preferences_stage_0, preferences_stage_1, preferences_stage_2, ""],
+                [terminal_stage_0, terminal_stage_1, terminal_stage_2, ""],
+                [scoring_stage_0, scoring_stage_1, scoring_stage_2, ""]]
+        
+        columns = ["Stage 0", "Stage 1", "Stage 2", "Stage 3"]
 
         table_html = tabulate.tabulate(data, headers=columns, tablefmt="unsafehtml")
 
@@ -884,6 +935,9 @@ if __name__ == '__main__':
         table_html = table_html.replace('<table>', '<table class="table table-striped table-bordered">')
         table_html = table_html.replace('<thead>', '<thead class="thead-dark">')
         table_html = table_html.replace('<th>', '<th scope="col">')
+
+        game_table_htmls.append(table_html)
+        joined_html = "\n".join(game_table_htmls)
         
         style = """
         <style>
@@ -911,7 +965,7 @@ if __name__ == '__main__':
         </head>
         <body>
             <div>
-                {table_html}
+                {joined_html}
             </div>
             <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
             <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>

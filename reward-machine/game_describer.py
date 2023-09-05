@@ -470,7 +470,7 @@ class GameDescriber():
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
 
-        predicate_rule = predicate["parseinfo"].rule # type: ignore
+        rule = predicate["parseinfo"].rule # type: ignore
 
         if rule == "predicate":
 
@@ -552,13 +552,13 @@ class GameDescriber():
             elif comparison_operator == ">=":
                 return f"{comp_arg_1} is greater than or equal to {comp_arg_2}"
 
-        elif predicate_rule == "function_eval":
+        elif rule == "function_eval":
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
             return FUNCTION_DESCRIPTIONS[name].format(*variables)
 
-        elif predicate_rule == "number_value":
+        elif rule == "number_value":
             inner_number = predicate["number"]
             inner_number_rule = inner_number["parseinfo"].rule # type: ignore
             sign = ""
@@ -611,9 +611,15 @@ class GameDescriber():
             elif comparison_operator == ">=":
                 return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
 
-        # TODO: make sure this works
         elif rule == "number_value":
-            return terminal_ast["number"]["terminal"] # type: ignore
+            inner_number = terminal_ast["number"]
+            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
+            sign = ""
+            if inner_number_rule == 'negative_number':
+                sign = "-"
+                inner_number = inner_number["number"]  # type: ignore
+
+            return f"{sign}{inner_number['terminal']}"  # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown terminal rule '{rule}'")

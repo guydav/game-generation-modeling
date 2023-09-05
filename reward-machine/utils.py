@@ -338,24 +338,32 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
 
     variables = OrderedDict({})
     for var_info in variable_list:
-        var_type = typing.cast(tatsu.ast.AST, var_info["var_type"])
+        var_type = typing.cast(tatsu.ast.AST, var_info["var_type"]["type"])  # type: ignore
 
-        if isinstance(var_type["type"], tatsu.ast.AST):
-            var_type_type = typing.cast(tatsu.ast.AST, var_type["type"])
-            var_type_name = var_type_type["type_names"]
+        ###
+        var_type_rule = var_type.parseinfo.rule  # type: ignore
+        if var_type_rule.endswith('type'):
+            var_type_name = [var_type.terminal]  # type: ignore
+
+        elif var_type_rule.startswith('either'):
+            type_names = var_type.type_names
+            if not isinstance(type_names, list):
+                type_names = [type_names]
+
+            var_type_name = [t.terminal for t in type_names]  # type: ignore
+
         else:
-            var_type_name = var_type["type"]
+            raise ValueError(f'Unexpected variable type rule: {var_type_rule}')
 
         var_names = var_info["var_names"]
         if isinstance(var_names, str):
-            variables[var_info["var_names"]] = var_type_name
+            variables[var_names] = var_type_name
         else:
             var_names = typing.cast(typing.Sequence[str], var_names)
             for var_name in var_names:
                 variables[var_name] = var_type_name
 
-
-    return OrderedDict({var: types if isinstance(types, list) else [types] for var, types in variables.items()})
+    return variables
 
 
 def extract_predicate_function_name(ast: tatsu.ast.AST):

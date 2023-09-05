@@ -1,6 +1,12 @@
+import argparse
 from itertools import groupby
 import os
 import typing
+
+import logging
+logging.getLogger('openai').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 import backoff
 import inflect
@@ -63,6 +69,40 @@ SETUP_HEADER = "In order to set up the game, "
 PREFERENCES_HEADER = "\nThe preferences of the game are:"
 TERMINAL_HEADER = "\nThe game ends when "
 SCORING_HEADER = "\nAt the end of the game, the player's score is "
+
+STYLE_HTML = """
+<style>
+    .table td, .table th {
+        min-width: 40em;
+        max-width: 60em;
+    }
+    pre {
+        white-space: pre-wrap;
+        max-height: 60em;
+        overflow: auto;
+        display: inline-block;
+    }
+</style>
+"""
+
+TABLE_HTML_TEMPLATE = """
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Representative games comparison</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    {0}
+</head>
+<body>
+    <div>
+        {1}
+    </div>
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+</body>
+"""
 
 class GameDescriber():
     def __init__(self,
@@ -931,48 +971,16 @@ class GameDescriber():
 
         return stage_3_description
 
+    def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]]):
+        '''
+        Helper function for formatting the descriptions for display in an HTML page
+        '''
+        grouped_descriptions = list(zip(*descriptions_by_stage))
 
-if __name__ == '__main__':
-    # game = open("./reward-machine/games/game-6.txt", "r").read()
+        columns = [f"Stage {i}" for i in range(len(descriptions_by_stage))]
 
-    grammar = open('./dsl/dsl.ebnf').read()
-    grammar_parser = tatsu.compile(grammar)
-    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
-    game_describer = GameDescriber(openai_model_str="gpt-3.5-turbo")
-
-    # game_describer.describe(TEST_GAME_2)
-
-    MAX_STAGE = 1
-
-    game_table_htmls = []
-    for game in tqdm(game_asts):
-        descriptions_by_stage = []
-
-        stage_0_descriptions = game_describer.describe_stage_0(game, format_for_html=True)
-        descriptions_by_stage.append(stage_0_descriptions)
-
-        if MAX_STAGE >= 1:
-            stage_1_descriptions = game_describer.describe_stage_1(game)
-            descriptions_by_stage.append(stage_1_descriptions)
-
-        if MAX_STAGE >= 2:
-            stage_2_descriptions = game_describer.describe_stage_2(game, stage_1_descriptions)
-            descriptions_by_stage.append(stage_2_descriptions)
-
-        if MAX_STAGE >= 3:
-            stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions)
-            descriptions_by_stage.append((stage_3_description, "", "", ""))
-
-        data = list(zip(*descriptions_by_stage))
-
-        # data = [[setup_stage_0, setup_stage_1, setup_stage_2, stage_3_description],
-        #         [preferences_stage_0, preferences_stage_1, preferences_stage_2, ""],
-        #         [terminal_stage_0, terminal_stage_1, terminal_stage_2, ""],
-        #         [scoring_stage_0, scoring_stage_1, scoring_stage_2, ""]]
-
-        columns = [f"Stage {i}" for i in range(MAX_STAGE + 1)]
-
-        table_html = tabulate.tabulate(data, headers=columns, tablefmt="unsafehtml")
+        # The content of the table in HTML (for just the current game)
+        table_html = tabulate.tabulate(grouped_descriptions, headers=columns, tablefmt="unsafehtml")
 
         # Replace all newlines inside the <tbody> tags with <br>
         tbody_start = table_html.find("<tbody>")
@@ -983,43 +991,50 @@ if __name__ == '__main__':
         table_html = table_html.replace('<thead>', '<thead class="thead-dark">')
         table_html = table_html.replace('<th>', '<th scope="col">')
 
+        return table_html
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--description_stage", type=int, default=1, help="The maximum 'stage' of description to generate for each game")
+    parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4-8k"])
+    parser.add_argument("--output_path", type=str, default="./reward-machine")
+
+    args = parser.parse_args()
+
+    grammar = open('./dsl/dsl.ebnf').read()
+    grammar_parser = tatsu.compile(grammar)
+    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
+    game_describer = GameDescriber(openai_model_str=args.gpt_model)
+
+    game_table_htmls = []
+    for game in tqdm(game_asts, desc="Generating game descriptions"):
+        descriptions_by_stage = []
+
+        stage_0_descriptions = game_describer.describe_stage_0(game, format_for_html=True)
+        descriptions_by_stage.append(stage_0_descriptions)
+
+        if args.description_stage >= 1:
+            stage_1_descriptions = game_describer.describe_stage_1(game)
+            descriptions_by_stage.append(stage_1_descriptions)
+
+        if args.description_stage >= 2:
+            stage_2_descriptions = game_describer.describe_stage_2(game, stage_1_descriptions)
+            descriptions_by_stage.append(stage_2_descriptions)
+
+        if args.description_stage >= 3:
+            stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions)
+            descriptions_by_stage.append((stage_3_description, "", "", ""))
+
+        # The content of the table in HTML (for just the current game)
+        table_html = game_describer._prepare_data_for_html_display(descriptions_by_stage)
+
         game_table_htmls.append(table_html)
         joined_html = "\n".join(game_table_htmls)
 
-        style = """
-        <style>
-            .table td, .table th {
-                min-width: 40em;
-                max-width: 60em;
-            }
-            pre {
-                white-space: pre-wrap;
-                max-height: 60em;
-                overflow: auto;
-                display: inline-block;
-            }
-        </style>
-        """
+        # The ultimate html to be saved / displayed
+        full_html = TABLE_HTML_TEMPLATE.format(STYLE_HTML, joined_html)
 
-        html_template = f"""
-        <html lang="en">
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-            <title>Representative games comparison</title>
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-            {style}
-        </head>
-        <body>
-            <div>
-                {joined_html}
-            </div>
-            <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-            <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-            <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
-        </body>
-        """
-
-        with open("./output.html", "w") as file:
-            file.write(html_template)
-        input()
+        output_filename = os.path.join(args.output_path, f"game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
+        with open(output_filename, "w") as file:
+            file.write(full_html)

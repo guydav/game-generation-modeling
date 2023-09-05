@@ -348,7 +348,7 @@ class GameDescriber():
             for sub_idx, sub_preference in enumerate(sub_preferences):
                 name = typing.cast(str, sub_preference["pref_name"])
 
-                self.external_forall_preference_mappings[name] = list(variable_type_mapping.keys()) # type: ignore
+                self.external_forall_preference_mappings[name] = variable_type_mapping # type: ignore
 
                 newline = '\n' if sub_idx > 0 else ''
                 description += f"{newline}-----Preference {self.preference_index + 1}-----"
@@ -464,9 +464,9 @@ class GameDescriber():
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
         
-        predicate_rule = predicate["parseinfo"].rule # type: ignore
+        rule = predicate["parseinfo"].rule # type: ignore
 
-        if predicate_rule == "predicate":
+        if rule == "predicate":
 
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
@@ -477,19 +477,19 @@ class GameDescriber():
 
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
-        elif predicate_rule == "super_predicate":
+        elif rule == "super_predicate":
             return self._describe_predicate(predicate["pred"]) # type: ignore
 
-        elif predicate_rule == "super_predicate_not":
+        elif rule == "super_predicate_not":
             return f"it's not the case that {self._describe_predicate(predicate['not_args'])}" # type: ignore
 
-        elif predicate_rule == "super_predicate_and":
+        elif rule == "super_predicate_and":
             return self.engine.join(["(" + self._describe_predicate(sub) + ")" for sub in predicate["and_args"]]) # type: ignore
 
-        elif predicate_rule == "super_predicate_or":
+        elif rule == "super_predicate_or":
             return self.engine.join(["(" + self._describe_predicate(sub) + ")" for sub in predicate["or_args"]], conj="or") # type: ignore
 
-        elif predicate_rule == "super_predicate_exists":
+        elif rule == "super_predicate_exists":
             variable_type_mapping = extract_variable_type_mapping(predicate["exists_vars"]["variables"]) # type: ignore
 
             def group_func(key):
@@ -505,7 +505,7 @@ class GameDescriber():
 
             return f"there exists {self.engine.join(new_variables)}, such that {self._describe_predicate(predicate['exists_args'])}" # type: ignore
 
-        elif predicate_rule == "super_predicate_forall":
+        elif rule == "super_predicate_forall":
             variable_type_mapping = extract_variable_type_mapping(predicate["forall_vars"]["variables"]) # type: ignore
 
             new_variables = []
@@ -514,7 +514,7 @@ class GameDescriber():
 
             return f"for any {self.engine.join(new_variables)}, {self._describe_predicate(predicate['forall_args'])}" # type: ignore
 
-        elif predicate_rule == "function_comparison":
+        elif rule == "function_comparison":
 
             # Special case for multi-arg equality
             if predicate["comp"].parseinfo.rule == "multiple_args_equal_comparison":
@@ -546,14 +546,18 @@ class GameDescriber():
             elif comparison_operator == ">=":
                 return f"{comp_arg_1} is greater than or equal to {comp_arg_2}"
             
-        elif predicate_rule == "function_eval":
+        elif rule == "function_eval":
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
             return FUNCTION_DESCRIPTIONS[name].format(*variables)
+        
+        # TODO: make sure this works
+        elif rule == "number_value":
+            return predicate["number"]["terminal"] # type: ignore
 
         else:
-            raise ValueError(f"Error: Unknown rule '{predicate_rule}'")
+            raise ValueError(f"Error: Unknown rule '{rule}'")
 
         return ''
     
@@ -595,6 +599,10 @@ class GameDescriber():
             elif comparison_operator == ">=":
                 return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
 
+        # TODO: make sure this works
+        elif rule == "number_value":
+            return terminal_ast["number"]["terminal"] # type: ignore
+
         else:
             raise ValueError(f"Error: Unknown terminal rule '{rule}'")
 
@@ -606,7 +614,7 @@ class GameDescriber():
         if external_object_types is None:
             return ""
         
-        specified_variables = self.external_forall_preference_mappings[preference_name][:len(external_object_types)] # type: ignore
+        specified_variables = list(self.external_forall_preference_mappings[preference_name].keys())[:len(external_object_types)] # type: ignore
         mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
 
         return f", where {mapping_description}"
@@ -672,17 +680,19 @@ class GameDescriber():
         elif rule == "scoring_external_maximize":
             # Extracts the name of the first predicate encountered -- fine since they all share an external forall
             preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
-            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+            external_variable_mapping = self.external_forall_preference_mappings[preference_name] # type: ignore
+            quanitification_string = self.engine.join([f"{var} (of type {self.engine.join(types, conj='or')})" for var, types in external_variable_mapping.items()]) # type: ignore
 
             internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
-            return f"the maximum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
+            return f"the maximum value of ({internal_description}) over all quantifications of {quanitification_string}"
         
         elif rule == "scoring_external_minimize":
             preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
             external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+            quanitification_string = self.engine.join([f"{var} (of type {self.engine.join(types, conj='or')})" for var, types in external_variable_mapping.items()]) # type: ignore
 
             internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
-            return f"the minimum value of ({internal_description}) over all quantifications of {self.engine.join(external_variables, conj='and')}"
+            return f"the minimum value of ({internal_description}) over all quantifications of {quanitification_string}"
         
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
@@ -731,11 +741,15 @@ class GameDescriber():
         elif rule == "count_once_per_external_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
 
-            external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
+            external_variables = list(self.external_forall_preference_mappings[preference_name].keys()) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
         
+        # TODO: make sure this works
+        elif rule == "number_value":
+            return scoring_ast["number"]["terminal"] # type: ignore
+
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
 

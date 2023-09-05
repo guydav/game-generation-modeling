@@ -7,6 +7,7 @@ import inflect
 import openai, openai.error
 import tabulate
 import tatsu, tatsu.ast, tatsu.grammars
+from tqdm import tqdm
 
 # For some reason utils needs to be imported first?
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
@@ -64,12 +65,12 @@ TERMINAL_HEADER = "\nThe game ends when "
 SCORING_HEADER = "\nAt the end of the game, the player's score is "
 
 class GameDescriber():
-    def __init__(self, 
+    def __init__(self,
                  grammar_path: str = DEFAULT_GRAMMAR_PATH,
                  openai_model_str: typing.Optional[str] = None,
                  max_openai_tokens: int = 512,
                  openai_temperature: float = 0.0):
-        
+
         grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
         self.engine = inflect.engine()
@@ -81,8 +82,10 @@ class GameDescriber():
             self.openai_model_str = openai_model_str
             openai_key = os.environ.get("OPENAI_TOKEN")
             if openai_key is None:
-                raise ValueError("Error: OPENAI_TOKEN environment variable is not set")
-            
+                openai_key = os.environ.get("OPENAI_API_KEY")
+                if openai_key is None:
+                    raise ValueError("Error: OPENAI_TOKEN/OPENAI_API_KEY environment variable is not set")
+
             openai.api_key = openai_key
 
         self.max_openai_tokens = max_openai_tokens
@@ -92,7 +95,7 @@ class GameDescriber():
     def _query_openai(self, prompt: str):
         '''
         Query the specified openai model with the given prompt, and return the response. Assumes
-        that the API key has already been set. Retries with exponentially-increasing delays in 
+        that the API key has already been set. Retries with exponentially-increasing delays in
         case of rate limit errors
         '''
         response = openai.ChatCompletion.create(
@@ -165,7 +168,7 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: predicate does not have a temporal logic type: {predicate.keys()}")
-        
+
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
         '''
         Helper function to extract the name of the preference being scored, as well as any of the object types that have been
@@ -188,8 +191,11 @@ class GameDescriber():
                 else:
                     object_types = None
 
+                if object_types is not None:
+                    object_types = [type_name["terminal"] for type_name in object_types]
+
                 return str(preference_name), object_types
-            
+
             else:
                 for key in scoring_expression.keys():
                     if key != "parseinfo":
@@ -197,17 +203,17 @@ class GameDescriber():
 
                         if preference_name is not None:
                             return preference_name, object_types
-            
+
         elif isinstance(scoring_expression, tuple) or isinstance(scoring_expression, list):
             for item in scoring_expression:
                 preference_name, object_types = self._extract_name_and_types(item)
 
                 if preference_name is not None:
                     return preference_name, object_types
-                
+
         else:
             return None, None
-        
+
         raise ValueError(f"No name found in scoring expression!")
 
     def _describe_setup(self, setup_ast: tatsu.ast.AST, condition_type: typing.Optional[str] = None):
@@ -226,7 +232,7 @@ class GameDescriber():
 
         elif rule == "super_predicate":
             return self._describe_predicate(typing.cast(tatsu.ast.AST, setup_ast)), condition_type
-        
+
         elif rule == "setup_not":
             text, condition_type = self._describe_setup(setup_ast["not_args"], condition_type) # type: ignore
             return f"it's not the case that {text}", condition_type # type: ignore
@@ -272,10 +278,10 @@ class GameDescriber():
                 description += "\n- " + "\n- ".join(conserved_conditions)
 
             return description, None
-        
+
         elif rule == "setup_exists":
             variable_type_mapping = extract_variable_type_mapping(setup_ast["exists_vars"]["variables"]) # type: ignore
-       
+
             def group_func(key):
                 return ";".join(variable_type_mapping[key])
 
@@ -301,15 +307,15 @@ class GameDescriber():
             text, condition_type = self._describe_setup(setup_ast["forall_args"], condition_type) # type: ignore
 
             return f"for any {self.engine.join(new_variables)}, {text}", condition_type # type: ignore
-        
+
         elif rule == "setup_game_optional":
             text, _ = self._describe_setup(setup_ast["optional_pred"], condition_type) # type: ignore
             return text, "optional"
-        
+
         elif rule == "setup_game_conserved":
             text, _ = self._describe_setup(setup_ast["conserved_pred"], condition_type) # type: ignore
             return text, "conserved"
-        
+
         else:
             raise ValueError(f"Unknown setup expression rule: {rule}")
 
@@ -358,9 +364,9 @@ class GameDescriber():
 
                 description += self._indent(self._describe_preference_body(body, variable_type_mapping))
                 self.preference_index += 1
-        
+
         return description
-        
+
     def _describe_preference_body(self, body_ast: tatsu.ast.AST, additional_variable_mapping: typing.Dict[str, typing.List[str]] = {}):
         '''
         Describe the main body of a preference (i.e. the part after any external-foralls / names). Optionally, additional variable
@@ -373,7 +379,7 @@ class GameDescriber():
 
             variable_type_mapping = extract_variable_type_mapping(body_ast["exists_vars"]["variables"])
             description += "\nThe variables required by this preference are:"
-            
+
             def group_func_external(key):
                 return ";".join(additional_variable_mapping[key])
 
@@ -396,7 +402,7 @@ class GameDescriber():
 
             def group_func_external(key):
                 return ";".join(additional_variable_mapping[key])
-            
+
             for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
                 group = list(group)
                 description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
@@ -408,7 +414,7 @@ class GameDescriber():
 
             def group_func_external(key):
                 return ";".join(additional_variable_mapping[key])
-            
+
             for key, group in groupby(sorted(additional_variable_mapping.keys(), key=group_func_external), key=group_func_external):
                 group = list(group)
                 description += f"\n-{self.engine.join(group)} of type {self.engine.join(key.split(';'), conj='or')}"
@@ -455,16 +461,16 @@ class GameDescriber():
                         description += f" Additionally, during this sequence there is {while_desc} (in that order)."
                     else:
                         description += f" Additionally, during this sequence there is  a state where ({self._describe_predicate(temporal_predicate['while_preds'])})."
-                
+
         else:
             raise ValueError(f"Unknown body exist-args rule: {temporal_predicate_ast.parseinfo.rule}")
-        
+
         return description
 
 
     def _describe_predicate(self, predicate: tatsu.ast.AST):
-        
-        rule = predicate["parseinfo"].rule # type: ignore
+
+        predicate_rule = predicate["parseinfo"].rule # type: ignore
 
         if rule == "predicate":
 
@@ -531,7 +537,7 @@ class GameDescriber():
 
             if isinstance(comp_arg_1, tatsu.ast.AST):
                 comp_arg_1 = self._describe_predicate(comp_arg_1)
-     
+
             if isinstance(comp_arg_2, tatsu.ast.AST):
                 comp_arg_2 = self._describe_predicate(comp_arg_2)
 
@@ -545,22 +551,28 @@ class GameDescriber():
                 return f"{comp_arg_1} is greater than {comp_arg_2}"
             elif comparison_operator == ">=":
                 return f"{comp_arg_1} is greater than or equal to {comp_arg_2}"
-            
-        elif rule == "function_eval":
+
+        elif predicate_rule == "function_eval":
             name = extract_predicate_function_name(predicate)
             variables = extract_variables(predicate)
 
             return FUNCTION_DESCRIPTIONS[name].format(*variables)
-        
-        # TODO: make sure this works
-        elif rule == "number_value":
-            return predicate["number"]["terminal"] # type: ignore
+
+        elif predicate_rule == "number_value":
+            inner_number = predicate["number"]
+            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
+            sign = ""
+            if inner_number_rule == 'negative_number':
+                sign = "-"
+                inner_number = inner_number["number"]  # type: ignore
+
+            return f"{sign}{inner_number['terminal']}"  # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}'")
 
         return ''
-    
+
     def _describe_terminal(self, terminal_ast: typing.Optional[tatsu.ast.AST]):
         '''
         Determine whether the terminal conditions of the game have been met
@@ -575,7 +587,7 @@ class GameDescriber():
 
         elif rule == "terminal_not":
             return f"it's not the case that {self._describe_terminal(terminal_ast['not_args'])}" # type: ignore
-        
+
         elif rule == "terminal_and":
             return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["and_args"]]) # type: ignore
 
@@ -626,7 +638,7 @@ class GameDescriber():
 
         rule = scoring_ast["parseinfo"].rule  # type: ignore
 
-        if rule in ("scoring_expr", "scoring_expr_or_number"): 
+        if rule in ("scoring_expr", "scoring_expr_or_number"):
             return self._describe_scoring(scoring_ast["expr"]) # type: ignore
 
         elif rule == "scoring_multi_expr":
@@ -656,7 +668,7 @@ class GameDescriber():
 
         elif rule == "scoring_neg_expr":
             return f"negative {self._describe_scoring(scoring_ast['expr'])}" # type: ignore
-        
+
         elif rule == "scoring_comparison":
             comparison_operator = scoring_ast["comp"]["op"] # type: ignore
 
@@ -673,10 +685,10 @@ class GameDescriber():
                 return f"{expr_1} is greater than {expr_2}" # type: ignore
             elif comparison_operator == ">=":
                 return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
-        
+
         elif rule == "preference_eval":
             return self._describe_scoring(scoring_ast["count_method"]) # type: ignore
-        
+
         elif rule == "scoring_external_maximize":
             # Extracts the name of the first predicate encountered -- fine since they all share an external forall
             preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
@@ -699,11 +711,11 @@ class GameDescriber():
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the number of times '{preference_name}' has been satisfied" + external_scoring_desc
-          
+
         elif rule == "count_overlapping":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
-            
+
             return f"the number of times '{preference_name}' has been satisfied in overlapping intervals" + external_scoring_desc
 
         elif rule == "count_once":
@@ -711,33 +723,33 @@ class GameDescriber():
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
             # return f"whether '{preference_name}' has been satisfied at least once" + external_scoring_desc
             return f"min(1, the number of times '{preference_name}' has been satisfied{external_scoring_desc})"
-   
+
         elif rule == "count_once_per_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
-            
-            return f"the number of times '{preference_name}' has been satisfied with different objects" + external_scoring_desc 
-            
+
+            return f"the number of times '{preference_name}' has been satisfied with different objects" + external_scoring_desc
+
         elif rule == "count_measure":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
-            
+
             if object_types is None:
                 return f"the sum of all values measured during satisfactions of '{preference_name}'"
             else:
                 raise ValueError("Error: count_measure does not support specific object types (I think?)")
-            
+
         elif rule == "count_unique_positions":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the number of times '{preference_name}' has been satisfied with stationary objects in different positions" + external_scoring_desc
-            
+
         elif rule == "count_same_positions":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the maximum number of satisfactions of '{preference_name}' where stationary objects remain in the same place between satisfactions" + external_scoring_desc
-        
+
         elif rule == "count_once_per_external_objects":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
 
@@ -745,10 +757,16 @@ class GameDescriber():
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
-        
-        # TODO: make sure this works
+
         elif rule == "number_value":
-            return scoring_ast["number"]["terminal"] # type: ignore
+            inner_number = scoring_ast["number"]  # type: ignore
+            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
+            sign = ""
+            if inner_number_rule == 'negative_number':
+                sign = "-"
+                inner_number = inner_number["number"]  # type: ignore
+
+            return f"{sign}{inner_number['terminal']}"  # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")
@@ -793,7 +811,7 @@ class GameDescriber():
     def describe_stage_1(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST]):
         '''
         Generate a "stage 1" description of the provided game text or AST. A stage 1 description is
-        templated based on a series of hard-coded rules. Description will be split by game section 
+        templated based on a series of hard-coded rules. Description will be split by game section
         (setup, preferences, terminal, and scoring)
         '''
 
@@ -801,7 +819,7 @@ class GameDescriber():
             game_ast = typing.cast(tatsu.ast.AST, self.grammar_parser.parse(game_text_or_ast))
         else:
             game_ast = game_text_or_ast
-        
+
         game_info = {}
         self._extract_game_info(game_ast, game_info)
 
@@ -843,7 +861,7 @@ class GameDescriber():
             scoring_description = ""
 
         return setup_description, preferences_description, terminal_description, scoring_description
-    
+
     def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None):
         '''
         Generate a "stage 2" description of the provided game text or AST. A stage 2 description uses
@@ -878,7 +896,7 @@ class GameDescriber():
             scoring_description = ""
 
         return setup_description, preferences_description, terminal_description, scoring_description
-    
+
     def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None):
         '''
         Generate a "stage 3" description of the provided game text or AST. A stage 3 description uses an LLM
@@ -918,26 +936,35 @@ if __name__ == '__main__':
 
     # game_describer.describe(TEST_GAME_2)
 
+    MAX_STAGE = 1
+
     game_table_htmls = []
-    for game in game_asts:
+    for game in tqdm(game_asts):
+        descriptions_by_stage = []
 
-        
-        setup_stage_0, preferences_stage_0, terminal_stage_0, scoring_stage_0 = game_describer.describe_stage_0(game, format_for_html=True)
-        
-        setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = game_describer.describe_stage_1(game)
-        stage_1_descriptions = (setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1)
-        
-        setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = game_describer.describe_stage_2(game, stage_1_descriptions)
-        stage_2_descriptions = (setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2)
+        stage_0_descriptions = game_describer.describe_stage_0(game, format_for_html=True)
+        descriptions_by_stage.append(stage_0_descriptions)
 
-        stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions)
+        if MAX_STAGE >= 1:
+            stage_1_descriptions = game_describer.describe_stage_1(game)
+            descriptions_by_stage.append(stage_1_descriptions)
 
-        data = [[setup_stage_0, setup_stage_1, setup_stage_2, stage_3_description],
-                [preferences_stage_0, preferences_stage_1, preferences_stage_2, ""],
-                [terminal_stage_0, terminal_stage_1, terminal_stage_2, ""],
-                [scoring_stage_0, scoring_stage_1, scoring_stage_2, ""]]
-        
-        columns = ["Stage 0", "Stage 1", "Stage 2", "Stage 3"]
+        if MAX_STAGE >= 2:
+            stage_2_descriptions = game_describer.describe_stage_2(game, stage_1_descriptions)
+            descriptions_by_stage.append(stage_2_descriptions)
+
+        if MAX_STAGE >= 3:
+            stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions)
+            descriptions_by_stage.append((stage_3_description, "", "", ""))
+
+        data = list(zip(*descriptions_by_stage))
+
+        # data = [[setup_stage_0, setup_stage_1, setup_stage_2, stage_3_description],
+        #         [preferences_stage_0, preferences_stage_1, preferences_stage_2, ""],
+        #         [terminal_stage_0, terminal_stage_1, terminal_stage_2, ""],
+        #         [scoring_stage_0, scoring_stage_1, scoring_stage_2, ""]]
+
+        columns = [f"Stage {i}" for i in range(MAX_STAGE + 1)]
 
         table_html = tabulate.tabulate(data, headers=columns, tablefmt="unsafehtml")
 
@@ -952,7 +979,7 @@ if __name__ == '__main__':
 
         game_table_htmls.append(table_html)
         joined_html = "\n".join(game_table_htmls)
-        
+
         style = """
         <style>
             .table td, .table th {

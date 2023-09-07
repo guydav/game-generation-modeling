@@ -24,14 +24,9 @@ class Visualizer():
         self.colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
 
     def _plot_object_bounding_box(self, ax, object_state, color, alpha=0.5):
-        # x, y, z = object_state.bbox_center
-        # x_size, y_size, z_size = object_state.bbox_extents
 
         x, z, y = object_state.bbox_center
         x_size, z_size, y_size = object_state.bbox_extents
-
-        # print(f"Object {object_state.object_id} has bbox center {object_state.bbox_center} and bbox extents {object_state.bbox_extents}")
-        # print(f"\tVelocity: {object_state.velocity}")
 
         vertices = [
             (x - x_size, y - y_size, z - z_size),
@@ -43,10 +38,6 @@ class Visualizer():
             (x + x_size, y + y_size, z + z_size),
             (x - x_size, y + y_size, z + z_size)
         ]
-
-        # Update the plot limits
-        # self.min_x, self.min_y, self.min_z = min(self.min_x, vertices[0][0]), min(self.min_y, vertices[0][1]), min(self.min_z, vertices[0][2])
-        # self.max_x, self.max_y, self.max_z = max(self.max_x, vertices[6][0]), max(self.max_y, vertices[6][1]), max(self.max_z, vertices[6][2])
 
         faces = [
             [vertices[0], vertices[1], vertices[2], vertices[3]],
@@ -161,22 +152,6 @@ class Visualizer():
             self.agent_states_by_idx.append(most_recent_agent_state)
             self.object_states_by_idx.append(most_recent_object_states.copy())
 
-            if self.predicate is not None:
-                if self.predicate_args is not None:
-                    args = self.predicate_args
-                else:
-                    args = self.objects_to_track
-
-                agent_state = most_recent_agent_state
-                object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else 
-                                 most_recent_object_states[object_id] for object_id in args]
-                
-                predicate_value = PREDICATE_LIBRARY_RAW[self.predicate](agent_state, object_states)
-                if predicate_value:
-                    print(f"Predicate {self.predicate} is true at state {idx}")
-                    self.visualization_index = idx
-                    break
-
         # Plot figure
         self.fig = plt.figure()
         cid = self.fig.canvas.mpl_connect('key_press_event', self._update_visualization)
@@ -186,8 +161,6 @@ class Visualizer():
         self._visualize_objects()
         plt.show()
         
-
-
 
 if __name__ == "__main__":
 

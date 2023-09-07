@@ -12,7 +12,9 @@ from matplotlib.lines import Line2D
 import numpy as np
 from tqdm import tqdm
 
+from config import UNITY_PSEUDO_OBJECTS
 from utils import FullState, get_project_dir
+from predicate_handler import PREDICATE_LIBRARY_RAW
 
 class Visualizer():
     def __init__(self):
@@ -22,8 +24,11 @@ class Visualizer():
         self.colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
 
     def _plot_object_bounding_box(self, ax, object_state, color, alpha=0.5):
-        x, y, z = object_state.bbox_center
-        x_size, y_size, z_size = object_state.bbox_extents
+        # x, y, z = object_state.bbox_center
+        # x_size, y_size, z_size = object_state.bbox_extents
+
+        x, z, y = object_state.bbox_center
+        x_size, z_size, y_size = object_state.bbox_extents
 
         # print(f"Object {object_state.object_id} has bbox center {object_state.bbox_center} and bbox extents {object_state.bbox_extents}")
         # print(f"\tVelocity: {object_state.velocity}")
@@ -60,14 +65,18 @@ class Visualizer():
     def _visualize_objects(self):
 
         # Reset plot limits
-        self.min_x, self.min_y, self.min_z = -4, -1, -4
-        self.max_x, self.max_y, self.max_z = 4, 4, 4
-
-        print(self.visualization_index)
+        self.min_x, self.min_y, self.min_z = -4, -4, -0.15
+        self.max_x, self.max_y, self.max_z = 4, 4, 3
 
         prisms = []
         for obj_idx, object_id in enumerate(self.objects_to_track):
-            prism = self._plot_object_bounding_box(self.ax, self.object_states_by_idx[self.visualization_index][object_id], self.colors[obj_idx % len(self.colors)], alpha=0.5)
+
+            if object_id in UNITY_PSEUDO_OBJECTS:
+                object_state = UNITY_PSEUDO_OBJECTS[object_id]
+            else:
+                object_state = self.object_states_by_idx[self.visualization_index][object_id]
+
+            prism = self._plot_object_bounding_box(self.ax, object_state, self.colors[obj_idx % len(self.colors)], alpha=0.5)
             prisms.append(prism)
 
         margin = 0
@@ -78,23 +87,49 @@ class Visualizer():
         legend_elements = [Line2D([0], [0], color=self.colors[i % len(self.colors)], lw=4, label=self.objects_to_track[i]) for i in range(len(self.objects_to_track))]
         self.ax.legend(handles=legend_elements, loc='upper right', fontsize=12)
 
-        plt.title(f"State {self.visualization_index}", fontsize=16)
+        if self.predicate is not None:
+
+            if self.predicate_args is not None:
+                args = self.predicate_args
+            else:
+                args = self.objects_to_track
+
+            agent_state = [self.agent_states_by_idx[self.visualization_index]]
+            object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else 
+                             self.object_states_by_idx[self.visualization_index][object_id] for object_id in args]
+            
+            predicate_value = PREDICATE_LIBRARY_RAW[self.predicate](agent_state, object_states)
+
+            title = f"State {self.visualization_index} - Predicate {self.predicate}: {predicate_value}"
+
+        else:
+            title = f"State {self.visualization_index}"
+
+        plt.title(title, fontsize=16)
 
     def _update_visualization(self, event):
+
         if event.key == "right":
             self.visualization_index = min(self.visualization_index + 1, len(self.agent_states_by_idx) - 1)
-            self.ax.clear()
-            self._visualize_objects()
-
         elif event.key == "left":
             self.visualization_index = max(self.visualization_index - 1, 0)
-            self.ax.clear()
-            self._visualize_objects()
 
-    def visualize(self, trace, objects_to_track, start_idx=0):
+        # Clear the axis and update the visualization
+        self.ax.clear()
+        self._visualize_objects()
+
+        # Reset camera view
+        self.ax.view_init(elev=self.elev, azim=self.azim)
+
+    def _update_azim_elev(self, event):
+        self.azim, self.elev = self.ax.azim, self.ax.elev
+
+    def visualize(self, trace, objects_to_track, start_idx=0, predicate=None, predicate_args=None):
         
         self.objects_to_track = objects_to_track
         self.visualization_index = start_idx
+        self.predicate = predicate
+        self.predicate_args = predicate_args
 
         replay = trace['replay']
         replay_len = int(len(replay))
@@ -124,13 +159,30 @@ class Visualizer():
                 most_recent_object_states[obj.object_id] = obj
 
             self.agent_states_by_idx.append(most_recent_agent_state)
-            self.object_states_by_idx.append(most_recent_object_states)
+            self.object_states_by_idx.append(most_recent_object_states.copy())
+
+            if self.predicate is not None:
+                if self.predicate_args is not None:
+                    args = self.predicate_args
+                else:
+                    args = self.objects_to_track
+
+                agent_state = most_recent_agent_state
+                object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else 
+                                 most_recent_object_states[object_id] for object_id in args]
+                
+                predicate_value = PREDICATE_LIBRARY_RAW[self.predicate](agent_state, object_states)
+                if predicate_value:
+                    print(f"Predicate {self.predicate} is true at state {idx}")
+                    self.visualization_index = idx
+                    break
 
         # Plot figure
         self.fig = plt.figure()
         cid = self.fig.canvas.mpl_connect('key_press_event', self._update_visualization)
+        cid2 = self.fig.canvas.mpl_connect('motion_notify_event', self._update_azim_elev)
 
-        self.ax = self.fig.add_subplot(111, projection='3d')
+        self.ax = self.fig.add_subplot(projection='3d')
         self._visualize_objects()
         plt.show()
         
@@ -138,8 +190,12 @@ class Visualizer():
 
 
 if __name__ == "__main__":
-    trace_path = "./reward-machine/traces/throw_ball_to_bin_unique_positions-rerecorded.json"
+
+    TRACE_NAME = "ImigmCOsFcfkSwe0ctO2-preCreateGame-rerecorded"
+    
+
+    trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
     trace = json.load(open(trace_path, 'r'))
 
-    objects = ["Dodgeball|+00.19|+01.13|-02.80", "Floor|+00.00|+00.00|+00.00"]
-    Visualizer().visualize(trace, objects_to_track=objects, start_idx=1500)
+    objects = ["south_wall", "LongCylinderBlock|+00.12|+01.19|-02.89"]
+    Visualizer().visualize(trace, objects_to_track=objects, start_idx=1991, predicate="on")

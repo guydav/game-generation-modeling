@@ -56,8 +56,8 @@ class Visualizer():
     def _visualize_objects(self):
 
         # Reset plot limits
-        self.min_x, self.min_y, self.min_z = -4, -4, -0.15
-        self.max_x, self.max_y, self.max_z = 4, 4, 3
+        self.min_x, self.min_y, self.min_z = 0.5, -2.75, -0.15
+        self.max_x, self.max_y, self.max_z = 1, -2.25, 2.15
 
         prisms = []
         for obj_idx, object_id in enumerate(self.objects_to_track):
@@ -164,11 +164,18 @@ class Visualizer():
 
 if __name__ == "__main__":
 
-    TRACE_NAME = "ImigmCOsFcfkSwe0ctO2-preCreateGame-rerecorded"
-    
+    # TRACE_NAME = "ZSRiFalssazyXG8Qui4j-preCreateGame-rerecorded"
+    # START_IDX = 476
+    # PREDICATE = "on"
+    # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
+
+    TRACE_NAME = "izuuOskcJXqeevaNXXPQ-gameplay-attempt-1-rerecorded"
+    START_IDX = 431
+    PREDICATE = "touch"
+    OBJECTS_TO_TRACK = ["Golfball|+00.96|+01.04|-02.70", "Golfball|+01.05|+01.04|-02.70"]
+
+
 
     trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
-    trace = json.load(open(trace_path, 'r'))
-
-    objects = ["south_wall", "LongCylinderBlock|+00.12|+01.19|-02.89"]
-    Visualizer().visualize(trace, objects_to_track=objects, start_idx=1991, predicate="on")
+    trace = json.load(open(trace_path, 'r'))    
+    Visualizer().visualize(trace, objects_to_track=OBJECTS_TO_TRACK, start_idx=START_IDX, predicate=PREDICATE)

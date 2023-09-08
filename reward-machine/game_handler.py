@@ -177,7 +177,17 @@ class GameHandler():
         self.building_handler.process(state, debug=debug or debug_building_handler)
 
         # Every named object will exist only once in the room, so we can just directly use index 0
-        default_mapping = {obj: OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0] for obj in NAMED_OBJECTS}
+        default_mapping = {}
+        for obj in NAMED_OBJECTS:
+            if obj in OBJECTS_BY_ROOM_AND_TYPE[self.domain_name]:
+                default_mapping[obj] = OBJECTS_BY_ROOM_AND_TYPE[self.domain_name][obj][0]
+
+            elif obj in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name]:
+                default_mapping[obj] = SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name][obj][0]
+
+            else:
+                raise ValueError(f"Error: Could not find object id for named object '{obj}'")
+
         # Update with specifically named objects that exist once in this domain
         default_mapping.update({obj: SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name][obj][0] for obj in SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name]
                                 if obj not in default_mapping and len(SPECIFIC_NAMED_OBJECTS_BY_ROOM[self.domain_name][obj]) == 1})
@@ -389,14 +399,12 @@ class GameHandler():
         name_and_types = typing.cast(tatsu.ast.AST, scoring_expression["name_and_types"])
         preference_name = name_and_types["pref_name"]
 
-        if isinstance(name_and_types["object_types"], tatsu.ast.AST):
-            object_types = [name_and_types["object_types"]["type_name"]]  # type: ignore
+        object_types = name_and_types["object_types"]
+        if object_types is not None:
+            if not isinstance(object_types, list):
+                object_types = [object_types]
 
-        elif isinstance(name_and_types["object_types"], list):
-            object_types = [object_type["type_name"] for object_type in name_and_types["object_types"]]  # type: ignore
-
-        else:
-            object_types = None
+            object_types = [t.type_name.terminal for t in object_types]
 
         return str(preference_name), object_types
 
@@ -461,6 +469,16 @@ class GameHandler():
 
         if rule in ("scoring_expr", "scoring_expr_or_number"):
             return self.score(scoring_expression["expr"], external_mapping)
+
+        elif rule == 'number_value':
+            number = scoring_expression["number"]
+            sign = 1
+            if number.parseinfo.rule == "negative_number":  # type: ignore
+                number = number["number"]  # type: ignore
+                sign = -1
+
+            # At this point, the rule is positive_number
+            return float(number["terminal"]) * sign  # type: ignore
 
         elif rule == "scoring_multi_expr":
             # Multi-expression operators are either addition (+) or multiplication (*)

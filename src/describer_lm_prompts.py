@@ -181,6 +181,12 @@ At the end of the game, the player's score is the sum of (the product of (5) and
 ### NATURAL LANGUAGE DESCRIPTION:
 At the end of the game, the player gets 5 points for every object used to satisfy 'Preference 1', 5 points for every object used to satisfy 'Preference 2', 5 points for every object used to satisfy 'Preference 3', and 5 points for every object used to satisfy 'Preference 4'. They also get 3 points for every object used to satisfy 'Preference 5'.
 
+### TEMPLATED DESCRIPTION:
+At the end of the game, the player's score is the maximum value of (the number of times 'Preference 1' has been satisfied with different objects) over all quantifications of ?b (of type building)
+
+### NATURAL LANGUAGE DESCRIPTION:
+At the end of the game, determine the building for which 'Preference 1' has been satisfied the most times. The player's score is the number of times 'Preference 1' has been satisfied with different objects using that building.
+
 Now, convert the following description:
 ### TEMPLATED DESCRIPTION:
 {0}
@@ -218,6 +224,49 @@ At the end of the game, the player's score is equal to the number of times 'Pref
 
 ### SIMPLIFIED RULES:
 Place the bin and ramp next to each other. Then, throw balls at the bin so that they hit the ramp before going in. The game ends if the bin falls over, and the player's score is the number of times they succeed in bouncing the ball off the ramp into the bin.
+
+### INITIAL RULES:
+Setup:
+To set up the game, make sure that the top drawer is open throughout the entire game.
+
+Preferences:
+The preferences of the game are:
+
+-----Preference 1-----
+This preference is satisfied when:
+- first, the agent picks up a dodgeball or a golfball while standing next to a door
+- next, the agent throws the ball, causing it to move
+- finally, the ball stops moving and ends up inside of a top drawer or a hexagonal bin
+
+-----Preference 2-----
+This preference is satisfied when:
+- first, the agent picks up a dodgeball or a golfball
+- next, the agent throws the ball, causing it to move
+- finally, the ball stops moving
+
+Terminal Conditions:
+The game ends when 'Preference 2' has been satisfied six times with different objects.
+
+Scoring:
+At the end of the game, the player's score is calculated as follows: they get 1 point for each time 'Preference 1' is satisfied with a golf ball in a hexagonal bin, 2 points for each time 'Preference 1' is satisfied with a dodgeball in a hexagonal bin, 3 points for each time 'Preference 1' is satisfied with a golf ball in a top drawer, and they get the total number of times 'Preference 1' is satisfied minus the total number of times 'Preference 2' is satisfied.
+
+### SIMPLIFIED RULES:
+To set up game, open the top drawer. Then, throw dodgeballs or golfballs so that they end up in the top drawer or the hexagonal bin. The game ends after six different balls have been thrown. The player gets 1 point for each different golfball they land in the bin, 2 points for each dodgeball they land in the bin, and 3 points for each golfball they land in the top drawer. They lose 1 point for each throw that doesn't land in the bin or drawer.
+
+### INITIAL RULES:
+Setup:
+
+Preferences:
+The preference of the game is:
+- In the final game state, a block is inside of a building.
+
+Terminal Conditions:
+
+Scoring:
+At the end of the game, determine the building for which 'Preference 1' has been satisfied the most times. The player's score is the number of times 'Preference 1' has been satisfied with different objects using that building.
+
+### SIMPLIFIED RULES:
+There are no specific setup conditions for this game. At the end of the game, the player gets one point for every block they use in the building which has the most blocks in it.
 
 Now, convert the following rules:
 ### INITIAL RULES:

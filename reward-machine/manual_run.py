@@ -101,10 +101,11 @@ if __name__ == "__main__":
 
 
     # game = TEST_GAME_LIBRARY['throw-block-cache-test']
-    game = TEST_GAME_LIBRARY['test-ball-from-bed']
+    game = TEST_GAME_LIBRARY['game-27']
     game_handler = GameHandler(game)
     # trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
-    trace_path = '/Users/guydavidson/Downloads/hRlEvjz5alx99uwENncs-preCreateGame.json'
+    trace_path = CLEANUP_TRACE.resolve().as_posix()
+    # trace_path = '/Users/guydavidson/Downloads/hRlEvjz5alx99uwENncs-preCreateGame.json'
 
     score = None
 

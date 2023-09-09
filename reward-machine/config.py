@@ -427,6 +427,21 @@ GAME_OBJECT_EXCLUDED_TYPES.extend(SIDES)
 GAME_OBJECT_EXCLUDED_TYPES.extend(META_TYPES.keys())
 
 
+ELIGILBLE_IN_OBJECT_TYPES = set(CATEGORIES_TO_TYPES[RECEPTACLES])
+ELIGILBLE_IN_OBJECT_TYPES.add(MUG)
+
+ELIGILBLE_IN_OBJECT_IDS = set()
+for room_type_to_object_ids in OBJECTS_BY_ROOM_AND_TYPE.values():
+    for object_type in ELIGILBLE_IN_OBJECT_TYPES:
+        if object_type in room_type_to_object_ids:
+            ELIGILBLE_IN_OBJECT_IDS.update(room_type_to_object_ids[object_type])
+
+for room_type_to_object_ids in SPECIFIC_NAMED_OBJECTS_BY_ROOM.values():
+    for object_type in ELIGILBLE_IN_OBJECT_TYPES:
+        if object_type in room_type_to_object_ids:
+            ELIGILBLE_IN_OBJECT_IDS.update(room_type_to_object_ids[object_type])
+
+
 # Update the dictionary by mapping the agent and colors to themselves and grouping objects into meta types. Also group all
 # of the objects that count as a "game_object"
 for domain in ROOMS:

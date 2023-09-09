@@ -1,4 +1,7 @@
+import itertools
 import json
+import os
+import typing
 
 import logging
 logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
@@ -15,6 +18,7 @@ from tqdm import tqdm
 from config import UNITY_PSEUDO_OBJECTS
 from utils import FullState, get_project_dir
 from predicate_handler import PREDICATE_LIBRARY_RAW
+from building_handler import BuildingPseudoObject, BuildingHandler
 
 class Visualizer():
     def __init__(self):
@@ -41,10 +45,10 @@ class Visualizer():
 
         faces = [
             [vertices[0], vertices[1], vertices[2], vertices[3]],
-            [vertices[4], vertices[5], vertices[6], vertices[7]], 
-            [vertices[0], vertices[1], vertices[5], vertices[4]], 
-            [vertices[2], vertices[3], vertices[7], vertices[6]], 
-            [vertices[0], vertices[3], vertices[7], vertices[4]], 
+            [vertices[4], vertices[5], vertices[6], vertices[7]],
+            [vertices[0], vertices[1], vertices[5], vertices[4]],
+            [vertices[2], vertices[3], vertices[7], vertices[6]],
+            [vertices[0], vertices[3], vertices[7], vertices[4]],
             [vertices[1], vertices[2], vertices[6], vertices[5]]
         ]
 
@@ -52,7 +56,7 @@ class Visualizer():
         ax.add_collection3d(prism)
 
         return prism
-    
+
     def _visualize_objects(self):
 
         # Reset plot limits
@@ -67,8 +71,17 @@ class Visualizer():
             else:
                 object_state = self.object_states_by_idx[self.visualization_index][object_id]
 
-            prism = self._plot_object_bounding_box(self.ax, object_state, self.colors[obj_idx % len(self.colors)], alpha=0.5)
-            prisms.append(prism)
+            if isinstance(object_state, BuildingPseudoObject):
+                building_object_ids = list(object_state.building_objects.keys())
+                print(f'Building {object_id} is composed of: {building_object_ids}')
+                for building_object_id in building_object_ids:
+                    building_object_state = self.object_states_by_idx[self.visualization_index][building_object_id]
+                    prism = self._plot_object_bounding_box(self.ax, building_object_state, self.colors[obj_idx % len(self.colors)], alpha=0.5)
+                    prisms.append(prism)
+
+            else:
+                prism = self._plot_object_bounding_box(self.ax, object_state, self.colors[obj_idx % len(self.colors)], alpha=0.5)
+                prisms.append(prism)
 
         margin = 0
         self.ax.set_xlim(self.min_x - margin, self.max_x + margin)
@@ -86,9 +99,29 @@ class Visualizer():
                 args = self.objects_to_track
 
             agent_state = [self.agent_states_by_idx[self.visualization_index]]
-            object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else 
+            object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else
                              self.object_states_by_idx[self.visualization_index][object_id] for object_id in args]
-            
+
+            for i, object_id in enumerate(args):
+                if object_id.startswith('building'):
+                    building_state = typing.cast(BuildingPseudoObject, object_states[i])
+                    building_object_ids = list(building_state.building_objects.keys())
+
+                    for object_combination in itertools.permutations(building_object_ids, 2):
+                        combination_object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else
+                                                     self.object_states_by_idx[self.visualization_index][object_id] for object_id in object_combination]
+                        print(f'({self.predicate} {object_combination[0]} {object_combination[1]}) = {PREDICATE_LIBRARY_RAW[self.predicate](agent_state, combination_object_states)}')
+
+                    print()
+
+
+                    for j, other_object_id in enumerate(args):
+                        if i != j:
+                            print(f'Other object id {other_object_id} is in the building? {other_object_id in building_state.building_objects}')
+                            print(f'({self.predicate} {object_id} {other_object_id}) = {PREDICATE_LIBRARY_RAW[self.predicate](agent_state, [object_states[i], object_states[j]])}')
+                            print(f'({self.predicate} {other_object_id} {object_id} ) = {PREDICATE_LIBRARY_RAW[self.predicate](agent_state, [object_states[j], object_states[i]])}')
+
+
             predicate_value = PREDICATE_LIBRARY_RAW[self.predicate](agent_state, object_states)
 
             title = f"State {self.visualization_index} - Predicate {self.predicate}: {predicate_value}"
@@ -115,8 +148,8 @@ class Visualizer():
     def _update_azim_elev(self, event):
         self.azim, self.elev = self.ax.azim, self.ax.elev
 
-    def visualize(self, trace, objects_to_track, start_idx=0, predicate=None, predicate_args=None):
-        
+    def visualize(self, trace, objects_to_track, start_idx=0, predicate=None, domain=None, predicate_args=None):
+
         self.objects_to_track = objects_to_track
         self.visualization_index = start_idx
         self.predicate = predicate
@@ -130,10 +163,17 @@ class Visualizer():
         most_recent_object_states = {}
 
         initial_object_states = {}
-        
+
+        if domain is None:
+            print("No domain specified, using 'few' as the default domain")
+            domain = "few"
+
+        building_handler = BuildingHandler(domain)
+
         # Start by recording the states of objects we want to track
         for idx, state in tqdm(enumerate(replay), total=replay_len, desc=f"Processing replay", leave=False):
             state = FullState.from_state_dict(state)
+            building_handler.process(state)
 
             # Track changes to the agent
             if state.agent_state_changed:
@@ -160,7 +200,7 @@ class Visualizer():
         self.ax = self.fig.add_subplot(projection='3d')
         self._visualize_objects()
         plt.show()
-        
+
 
 if __name__ == "__main__":
 
@@ -169,13 +209,17 @@ if __name__ == "__main__":
     # PREDICATE = "on"
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
-    TRACE_NAME = "izuuOskcJXqeevaNXXPQ-gameplay-attempt-1-rerecorded"
-    START_IDX = 431
-    PREDICATE = "touch"
-    OBJECTS_TO_TRACK = ["Golfball|+00.96|+01.04|-02.70", "Golfball|+01.05|+01.04|-02.70"]
+    TRACE_NAME = "Q6a8AbiIdcLA9tJzAu14-createGame-rerecorded"
+    START_IDX = 405
+    PREDICATE = "on"
+    OBJECTS_TO_TRACK = ["building_1", "SmallSlide|-00.81|+00.14|-03.10"]
+    DOMAIN = 'many'
 
 
 
     trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
-    trace = json.load(open(trace_path, 'r'))    
-    Visualizer().visualize(trace, objects_to_track=OBJECTS_TO_TRACK, start_idx=START_IDX, predicate=PREDICATE)
+    if not os.path.exists(trace_path):
+        trace_path = trace_path.replace('/traces/', '/traces/participant-traces/')
+
+    trace = json.load(open(trace_path, 'r'))
+    Visualizer().visualize(trace, objects_to_track=OBJECTS_TO_TRACK, start_idx=START_IDX, predicate=PREDICATE, domain=DOMAIN)

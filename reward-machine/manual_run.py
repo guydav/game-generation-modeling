@@ -105,6 +105,7 @@ if __name__ == "__main__":
     game_handler = GameHandler(game)
     # trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
     trace_path = CLEANUP_TRACE.resolve().as_posix()
+    # trace_path = BUILDING_IN_TOUCH_TEST_TRACE.resolve().as_posix()
     # trace_path = '/Users/guydavidson/Downloads/hRlEvjz5alx99uwENncs-preCreateGame.json'
 
     score = None

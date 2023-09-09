@@ -8,7 +8,7 @@ import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG, ROOM_CENTER
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG, ROOM_CENTER, ELIGILBLE_IN_OBJECT_IDS
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -574,10 +574,8 @@ def _pred_above(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectS
 
         # A building is not above any object that's part of the building
         if lower_object.object_id in upper_object.building_objects:
-            # Unless it's the bottom object in the building
-            return not any([_pred_on(agent, [building_object, lower_object])
-                for building_object in upper_object.building_objects.values()
-                if building_object.object_id != lower_object.object_id])
+            # Unless it's the bottom object in the building -- in which case the building is `on` it
+            return _pred_on(agent, objects)
 
         # Otherwise, a building is above an object if an object in the building is above that object
         return any([_pred_above(agent, [lower_object, building_object])
@@ -700,6 +698,10 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
             return _object_in_building(*objects)  # type: ignore
 
         # if the second object is a building, we continue to the standard implementation
+
+    # Check that the first object is something that could contain other objects
+    if objects[0].object_id not in ELIGILBLE_IN_OBJECT_IDS:
+        return False
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
     inner_min_corner, inner_max_corner = _extract_object_limits(objects[1])
@@ -836,7 +838,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-
     if isinstance(upper_object, AgentState):
         if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
             return False
@@ -853,8 +854,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         return False
 
     if _pred_touch(agent, objects):
-        # TODO: the 'agent' does not have a bounding box, which breaks this implementation of _on
-
         upper_object_bbox_center = upper_object.bbox_center
         upper_object_bbox_extents = upper_object.bbox_extents
 
@@ -868,7 +867,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # Due to bounding box weirdness, we also check to see if the center of the upper object is contained in the bottom's
         # bounding box. Enforcing that the objects are touching should make sure that we don't have any errors where floating
         # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
-        test_points += upper_object_corners
+        # test_points += upper_object_corners
+
 
         objects_on = any([_point_in_top_half(test_point, lower_object) for test_point in test_points])
 
@@ -881,8 +881,14 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         if lower_object.object_id not in upper_object.building_objects:
             return False
 
-        # and (b) that object is not on any other object in the building
-        return not any([_pred_on(agent, [building_object, lower_object])
+        # (b) that object is not on any other object in the building
+        if any([_pred_on(agent, [building_object, lower_object])
+            for building_object in upper_object.building_objects.values()
+            if building_object.object_id != lower_object.object_id]):
+            return False
+
+        # and (c) at least one object in the building is on that object
+        return any([_pred_on(agent, [lower_object, building_object])
             for building_object in upper_object.building_objects.values()
             if building_object.object_id != lower_object.object_id])
 
@@ -891,8 +897,14 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         if upper_object.object_id not in lower_object.building_objects:
             return False
 
-        # and (b) no other object in the building is on that object
-        return not any([_pred_on(agent, [upper_object, building_object])
+        # (b) no other object in the building is on that object
+        if any([_pred_on(agent, [upper_object, building_object])
+            for building_object in lower_object.building_objects.values()
+            if building_object.object_id != upper_object.object_id]):
+            return False
+
+        # and (c) it is on at least one object in the building
+        return any([_pred_on(agent, [building_object, upper_object])
             for building_object in lower_object.building_objects.values()
             if building_object.object_id != upper_object.object_id])
 

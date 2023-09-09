@@ -225,10 +225,10 @@ TEST_CASES = [
         ],
         'blocksInPlace' : [
             PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.29|-02.83'}, start=3015, end=3015, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.10|-02.83'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.10|-02.83'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.28|-02.83'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.23|+00.28|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.10|-02.83'}, start=3015, end=3015, measures={}),
             PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.24|+00.10|-02.83'}, start=3015, end=3015, measures={})
         ],
         'laptopAndBookInPlace' : [

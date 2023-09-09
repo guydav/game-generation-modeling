@@ -838,6 +838,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
+
+    # Special case: the agent can only be 'on' the floor or the rug
     if isinstance(upper_object, AgentState):
         if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
             return False
@@ -850,6 +852,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
         return agent_on_rug if 'Rug' in lower_object.object_id else not agent_on_rug
 
+    # Special case: nothing can ever be 'on' the agent
     if isinstance(lower_object, AgentState):
         return False
 

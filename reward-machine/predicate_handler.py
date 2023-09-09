@@ -838,6 +838,8 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
+
+    # Special case: the agent can only be 'on' the floor or the rug
     if isinstance(upper_object, AgentState):
         if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
             return False
@@ -850,6 +852,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
         return agent_on_rug if 'Rug' in lower_object.object_id else not agent_on_rug
 
+    # Special case: nothing can ever be 'on' the agent
     if isinstance(lower_object, AgentState):
         return False
 
@@ -868,7 +871,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # bounding box. Enforcing that the objects are touching should make sure that we don't have any errors where floating
         # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
         # test_points += upper_object_corners
-
 
         objects_on = any([_point_in_top_half(test_point, lower_object) for test_point in test_points])
 

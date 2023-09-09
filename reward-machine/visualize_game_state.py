@@ -16,8 +16,8 @@ import numpy as np
 from tqdm import tqdm
 
 from config import UNITY_PSEUDO_OBJECTS
-from utils import FullState, get_project_dir
-from predicate_handler import PREDICATE_LIBRARY_RAW
+from utils import FullState, _object_corners, _point_in_top_half
+from predicate_handler import PREDICATE_LIBRARY_RAW, ON_DISTANCE_THRESHOLD
 from building_handler import BuildingPseudoObject, BuildingHandler
 
 class Visualizer():
@@ -60,8 +60,8 @@ class Visualizer():
     def _visualize_objects(self):
 
         # Reset plot limits
-        self.min_x, self.min_y, self.min_z = 0.5, -2.75, -0.15
-        self.max_x, self.max_y, self.max_z = 1, -2.25, 2.15
+        self.min_x, self.min_y, self.min_z = -4, -3, -0.25
+        self.max_x, self.max_y, self.max_z = -1, 1, 4
 
         prisms = []
         for obj_idx, object_id in enumerate(self.objects_to_track):
@@ -124,12 +124,46 @@ class Visualizer():
 
             predicate_value = PREDICATE_LIBRARY_RAW[self.predicate](agent_state, object_states)
 
-            title = f"State {self.visualization_index} - Predicate {self.predicate}: {predicate_value}"
+            arg_names = " ".join([arg.name for arg in object_states])
+
+            title = f"State {self.visualization_index}: ({self.predicate} {arg_names}) = {predicate_value}"
+
+            # Special  case for debugging 'on':
+            if self.predicate == "on":
+                lower_object = object_states[0]
+                upper_object = object_states[1]
+                upper_object_bbox_center = upper_object.bbox_center
+                upper_object_bbox_extents = upper_object.bbox_extents
+
+                # Project a point slightly below the bottom center / corners of the upper object
+                upper_object_corners = _object_corners(upper_object)
+
+                test_points = [corner - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0])  # type: ignore
+                            for corner in upper_object_corners]
+                test_points.append(upper_object_bbox_center - np.array([0, upper_object_bbox_extents[1] + ON_DISTANCE_THRESHOLD, 0]))
+                test_points += upper_object_corners
+
+                EXPANSION_FACTOR = 1
+                for point in test_points:
+                    u = np.linspace(0, 2 * np.pi, 5)
+                    v = np.linspace(0, np.pi, 5)
+
+                    if _point_in_top_half(point, lower_object):
+                        EXPANSION_FACTOR *= 5
+
+                    x = point[0] + (EXPANSION_FACTOR * ON_DISTANCE_THRESHOLD) * np.outer(np.cos(u), np.sin(v))
+                    y = point[2] + (EXPANSION_FACTOR * ON_DISTANCE_THRESHOLD) * np.outer(np.sin(u), np.sin(v))
+                    z = point[1] + (EXPANSION_FACTOR * ON_DISTANCE_THRESHOLD) * np.outer(np.ones(np.size(u)), np.cos(v))
+
+                    if _point_in_top_half(point, lower_object):
+                        EXPANSION_FACTOR /= 5
+
+                    self.ax.plot_surface(x, y, z, color='r', alpha=1)
 
         else:
             title = f"State {self.visualization_index}"
 
-        plt.title(title, fontsize=16)
+        plt.title(title, fontsize=12)
 
     def _update_visualization(self, event):
 
@@ -199,6 +233,12 @@ class Visualizer():
 
         self.ax = self.fig.add_subplot(projection='3d')
         self._visualize_objects()
+
+        # Matplotlib uses Z as the default "vertical" dimension, whereas the traces use Y
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Z')
+        self.ax.set_zlabel('Y')
+        
         plt.show()
 
 
@@ -209,13 +249,11 @@ if __name__ == "__main__":
     # PREDICATE = "on"
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
-    TRACE_NAME = "Q6a8AbiIdcLA9tJzAu14-createGame-rerecorded"
-    START_IDX = 405
+    TRACE_NAME = "1El1CmicSoKZKTLe8NpP-gameplay-attempt-1-rerecorded"
+    START_IDX = 306
     PREDICATE = "on"
-    OBJECTS_TO_TRACK = ["building_1", "SmallSlide|-00.81|+00.14|-03.10"]
     DOMAIN = 'many'
-
-
+    OBJECTS_TO_TRACK = ["Beachball|-02.93|+00.17|-01.99", "Bed|-02.46|00.00|-00.57"]
 
     trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
     if not os.path.exists(trace_path):

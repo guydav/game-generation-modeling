@@ -677,7 +677,7 @@ def _object_in_building(building: BuildingPseudoObject, other_object: ObjectStat
 IN_MARGIN = 0.05
 
 
-def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]], allow_in_any_object: bool = False):
     assert len(objects) == 2
 
     # The agent cannot be a container or contained in another object
@@ -700,7 +700,7 @@ def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # if the second object is a building, we continue to the standard implementation
 
     # Check that the first object is something that could contain other objects
-    if objects[0].object_id not in ELIGILBLE_IN_OBJECT_IDS:
+    if not allow_in_any_object and objects[0].object_id not in ELIGILBLE_IN_OBJECT_IDS:
         return False
 
     outer_min_corner, outer_max_corner = _extract_object_limits(objects[0])
@@ -868,7 +868,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
         # bounding box. Enforcing that the objects are touching should make sure that we don't have any errors where floating
         # objects are considered on top of other objects, but we should keep an eye on this for any weird behavior that crops up
         # test_points += upper_object_corners
-
 
         objects_on = any([_point_in_top_half(test_point, lower_object) for test_point in test_points])
 

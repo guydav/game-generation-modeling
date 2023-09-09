@@ -59,10 +59,6 @@ class Visualizer():
 
     def _visualize_objects(self):
 
-        # Reset plot limits
-        self.min_x, self.min_y, self.min_z = -4, -3, -0.25
-        self.max_x, self.max_y, self.max_z = -1, 1, 4
-
         prisms = []
         for obj_idx, object_id in enumerate(self.objects_to_track):
 
@@ -83,7 +79,28 @@ class Visualizer():
                 prism = self._plot_object_bounding_box(self.ax, object_state, self.colors[obj_idx % len(self.colors)], alpha=0.5)
                 prisms.append(prism)
 
-        margin = 0
+
+        
+        if self.zoom_to_objects:
+            object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else
+                             self.object_states_by_idx[self.visualization_index][object_id] for object_id in self.objects_to_track]
+            
+            self.min_x = min([obj.bbox_center[0] - obj.bbox_extents[0] for obj in object_states])
+            self.max_x = max([obj.bbox_center[0] + obj.bbox_extents[0] for obj in object_states])
+
+            self.min_z = min([obj.bbox_center[1] - obj.bbox_extents[1] for obj in object_states])
+            self.max_z = max([obj.bbox_center[1] + obj.bbox_extents[1] for obj in object_states])
+
+            self.min_y = min([obj.bbox_center[2] - obj.bbox_extents[2] for obj in object_states])
+            self.max_y = max([obj.bbox_center[2] + obj.bbox_extents[2] for obj in object_states])
+
+            margin = 0.2
+
+        else:
+            self.min_x, self.min_y, self.min_z = -4, -4, -0.25
+            self.max_x, self.max_y, self.max_z = 4, 4, 4
+            margin = 0
+
         self.ax.set_xlim(self.min_x - margin, self.max_x + margin)
         self.ax.set_ylim(self.min_y - margin, self.max_y + margin)
         self.ax.set_zlim(self.min_z - margin, self.max_z + margin)
@@ -182,12 +199,14 @@ class Visualizer():
     def _update_azim_elev(self, event):
         self.azim, self.elev = self.ax.azim, self.ax.elev
 
-    def visualize(self, trace, objects_to_track, start_idx=0, predicate=None, domain=None, predicate_args=None):
+    def visualize(self, trace, objects_to_track, start_idx=0, predicate=None, domain=None, predicate_args=None,
+                  zoom_to_objects=False):
 
         self.objects_to_track = objects_to_track
         self.visualization_index = start_idx
         self.predicate = predicate
         self.predicate_args = predicate_args
+        self.zoom_to_objects = zoom_to_objects
 
         replay = trace['replay']
         replay_len = int(len(replay))
@@ -238,7 +257,7 @@ class Visualizer():
         self.ax.set_xlabel('X')
         self.ax.set_ylabel('Z')
         self.ax.set_zlabel('Y')
-        
+
         plt.show()
 
 
@@ -249,15 +268,17 @@ if __name__ == "__main__":
     # PREDICATE = "on"
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
-    TRACE_NAME = "1El1CmicSoKZKTLe8NpP-gameplay-attempt-1-rerecorded"
-    START_IDX = 306
+    
+    TRACE_NAME = "qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded"
+    START_IDX = 2800
     PREDICATE = "on"
-    DOMAIN = 'many'
-    OBJECTS_TO_TRACK = ["Beachball|-02.93|+00.17|-01.99", "Bed|-02.46|00.00|-00.57"]
+    DOMAIN = "many"
+    OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-02.47", "CubeBlock|-00.23|+00.28|-02.83"]
 
     trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
     if not os.path.exists(trace_path):
         trace_path = trace_path.replace('/traces/', '/traces/participant-traces/')
 
     trace = json.load(open(trace_path, 'r'))
-    Visualizer().visualize(trace, objects_to_track=OBJECTS_TO_TRACK, start_idx=START_IDX, predicate=PREDICATE, domain=DOMAIN)
+    Visualizer().visualize(trace, objects_to_track=OBJECTS_TO_TRACK, start_idx=START_IDX, predicate=PREDICATE, domain=DOMAIN,
+                           zoom_to_objects=True)

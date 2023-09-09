@@ -14,16 +14,16 @@ import torch.nn as nn
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
+import ast_printer  # for logging
+import ast_parser  # for logging
 from src import fitness_energy_utils as utils
+from src import latest_model_paths
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
-
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--fitness-features-file', type=str, default='./data/fitness_features_1024_regrowths.csv.gz')
+parser.add_argument('--fitness-features-file', type=str, default=latest_model_paths.LATEST_FITNESS_FEATURES)
 parser.add_argument('--output-name', type=str, required=True)
 parser.add_argument('--output-folder', type=str, default='./data/fitness_cv')
 parser.add_argument('--output-relative-path', type=str, default='.')
@@ -31,21 +31,28 @@ parser.add_argument('--feature-score-threshold', type=float, required=True)
 parser.add_argument('--device', type=str, required=False)
 parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED)
+parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
+parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
+parser.add_argument('--output-activation', type=str, default=None)
+parser.add_argument('--output-scaling', type=float, default=1.0)
 parser.add_argument('--cv-settings-json', type=str, default=os.path.join(os.path.dirname(__file__), 'fitness_cv_settings.json'))
 parser.add_argument('--no-save-full-model', action='store_true')
 parser.add_argument('--full-model-without-test', action='store_true')
 
 
-def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float) -> typing.List[str]:
+def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
+                                       ngram_scores_to_remove: typing.Optional[typing.List[str]] = None) -> typing.List[str]:
+    if ngram_scores_to_remove is None:
+        ngram_scores_to_remove = []
+
     feature_columns = list(diffs[diffs >= score_threshold].index)
 
-    remove_all_ngram_scores = []
     for score_type in ('full', 'setup', 'constraints', 'terminal', 'scoring'):
         col_names = sorted([c for c in feature_columns if c.startswith(f'ast_ngram_{score_type}') and c.endswith('_score')])
 
-        if score_type not in remove_all_ngram_scores:
+        if score_type not in ngram_scores_to_remove:
             col_names = col_names[:-1]
 
         for col in col_names:
@@ -54,30 +61,37 @@ def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float)
     return feature_columns
 
 
-def get_feature_columns(df: pd.DataFrame, score_threshold: float) -> typing.List[str]:
+def get_feature_columns(df: pd.DataFrame, score_threshold: float,
+                        ngram_scores_to_remove: typing.Optional[typing.List[str]] = None) -> typing.List[str]:
     mean_features_by_real = df[['real'] + [c for c in df.columns if c not in utils.NON_FEATURE_COLUMNS]].groupby('real').mean()
     feature_diffs = mean_features_by_real.loc[1] - mean_features_by_real.loc[0]
     abs_diffs = feature_diffs.abs()
-    return get_features_by_abs_diff_threshold(abs_diffs, score_threshold)
+    return get_features_by_abs_diff_threshold(abs_diffs, score_threshold, ngram_scores_to_remove)  # type: ignore
 
 
 def main(args: argparse.Namespace):
-    fitness_df = utils.load_fitness_data('./data/fitness_features_1024_regrowths.csv.gz')
-    logging.info(f'Unique source files: {fitness_df.src_file.unique()}')
-    logging.info(f'Dataframe shape: {fitness_df.shape}')
+    logger.info(f'Loading fitness data from {args.fitness_features_file}')
+    fitness_df = utils.load_fitness_data(args.fitness_features_file)
+    logger.info(f'Unique source files: {fitness_df.src_file.unique()}')
+    logger.info(f'Dataframe shape: {fitness_df.shape}')
     original_game_counts = fitness_df.groupby('original_game_name').src_file.count().value_counts()
     if len(original_game_counts) == 1:
-        logging.debug(f'All original games have {original_game_counts.index[0] - 1} regrowths')  # type: ignore
+        logger.debug(f'All original games have {original_game_counts.index[0] - 1} regrowths')  # type: ignore
     else:
         raise ValueError('Some original games have different numbers of regrowths: {original_game_counts}')
 
-    feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold)
-    logging.debug(f'Fitting models with {len(feature_columns)} features')
+    feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove)
+
+    if args.ignore_features:
+        logger.debug(f'Ignoring features: {args.ignore_features}')
+        feature_columns = [c for c in feature_columns if c not in args.ignore_features]
+
+    logger.debug(f'Fitting models with {len(feature_columns)} features')
 
     with open(args.cv_settings_json, 'r') as f:
         cv_settings = json.load(f)
 
-    logging.debug(f'CV settings:\n{pformat(cv_settings)}')
+    logger.debug(f'CV settings:\n{pformat(cv_settings)}')
 
     param_grid = cv_settings['param_grid']
     cv_kwargs = cv_settings['cv_kwargs']
@@ -97,7 +111,19 @@ def main(args: argparse.Namespace):
         train_kwargs['loss_function'] = getattr(utils, args.default_loss_function)
 
     scaler_kwargs = dict(passthrough=True)
-    model_kwargs = dict(output_activation=nn.Identity())
+
+    output_activation = nn.Identity()
+    if args.output_activation is not None:
+        if args.output_activation == 'sigmoid':
+            output_activation = nn.Sigmoid()
+
+        elif args.output_activation == 'tanh':
+            output_activation = nn.Tanh()
+
+        else:
+            raise ValueError(f'Unknown output activation: {args.output_activation}')
+
+    model_kwargs = dict(output_activation=output_activation, output_scaling=args.output_scaling)
 
     # scoring = utils.build_multiple_scoring_function(
     #     [utils.wrap_loss_function_to_metric(utils.fitness_sofmin_loss_positive_negative_split, dict(beta=args.beta), True),  # type: ignore
@@ -117,23 +143,31 @@ def main(args: argparse.Namespace):
         random_seed=args.random_seed,
         )
 
-    logging.info(f'Best params: {cv.best_params_}')
+    logger.info(f'Best params: {cv.best_params_}')
 
     utils.visualize_cv_outputs(cv, train_tensor, test_tensor, results, notebook=False)
-    cv.scorer_ = None
-    cv.scoring = None
+    cv.scorer_ = None  # type: ignore
+    cv.scoring = None  # type: ignore
 
     output_data = dict(cv=cv, train_tensor=train_tensor, test_tensor=test_tensor, results=results, feature_columns=feature_columns)
     utils.save_data(output_data, folder=args.output_folder, name=args.output_name, relative_path=args.output_relative_path)
 
     if not args.no_save_full_model:
-        logging.debug('Saving full model')
+        logger.debug('Saving full model')
         if not args.full_model_without_test:
-            logging.debug('Fitting full model with entire dataset (including test data)')
+            logger.debug('Fitting full model with entire dataset (including test data)')
             full_tensor = utils.df_to_tensor(fitness_df, feature_columns)
             cv.best_estimator_['fitness'].train_kwargs['split_validation_from_train'] = False  # type: ignore
             cv.best_estimator_.fit(full_tensor)  # type: ignore
             print(utils.evaluate_trained_model(cv.best_estimator_, full_tensor, utils.default_multiple_scoring))  # type: ignore
+
+            full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
+            real_game_scores = full_tensor_scores[:, 0]
+            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, max = {real_game_scores.max():.4f}')
+
+            negatives_scores = full_tensor_scores[:, 1:].ravel()
+            print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))
+            print(torch.quantile(negatives_scores, 0.2))
 
         model_name = args.output_name
         if 'fitness_sweep_' in model_name:
@@ -152,6 +186,6 @@ if __name__ == '__main__':
         args.device = torch.device(args.device)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

@@ -33,6 +33,7 @@ DEFAULT_N = 5
 parser.add_argument('-n', '--n', type=int, default=DEFAULT_N)
 DEFAULT_OUTPUT_PATH_PATTERN = './models/{model_type}_{n}_ngram_model_{today}.pkl'
 parser.add_argument('-o', '--output-path', default=None)
+parser.add_argument('--use-specific-objects', action='store_true')
 DEFAULT_STUPID_BACKOFF_DISCOUNT = 0.4
 parser.add_argument('--stupid-backoff-discount', type=float, default=DEFAULT_STUPID_BACKOFF_DISCOUNT)
 DEFAULT_ZERO_LOG_PROB = -7
@@ -182,8 +183,11 @@ class NGramTrieModel:
 
         # return node.count
 
-    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False):
+    def _score_ngram(self, ngram: typing.Tuple[str, ...], stupid_backoff: bool = True, log: bool = False, stupid_backoff_discount: typing.Optional[float] = None):
         if stupid_backoff:
+            if stupid_backoff_discount is None:
+                stupid_backoff_discount = self.stupid_backoff_discount
+
             discount_factor = 1.0
             start_index = 0
             n = min(self.n, len(ngram))
@@ -195,7 +199,7 @@ class NGramTrieModel:
                 if ngram_count > 0:
                     break
                 start_index += 1
-                discount_factor *= self.stupid_backoff_discount
+                discount_factor *= stupid_backoff_discount
 
             if start_index == n:
                 ret_val = 0
@@ -216,19 +220,21 @@ class NGramTrieModel:
 
     def _transform_ngrams(self, ngrams: typing.Sequence[typing.Tuple[str, ...]],
                   stupid_backoff: bool = True, log: bool = False,
+                  stupid_backoff_discount: typing.Optional[float] = None,
                   reduction: str = 'mean'):
 
         if len(ngrams) == 0:
             return None
 
-        scores = [self._score_ngram(ngram, stupid_backoff, log) for ngram in ngrams]
+        scores = [self._score_ngram(ngram, stupid_backoff, log, stupid_backoff_discount) for ngram in ngrams]
         if reduction == 'mean':
             return np.mean(scores)
 
         return scores
 
-    def transform(self, game_texts: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False,):
-        return np.array([self._transform_ngrams(self._text_to_ngrams(text), stupid_backoff, log)
+    def transform(self, game_texts: typing.Sequence[str], stupid_backoff: bool = True, log: bool = False,
+                  stupid_backoff_discount: typing.Optional[float] = None):
+        return np.array([self._transform_ngrams(self._text_to_ngrams(text), stupid_backoff, log, stupid_backoff_discount)
                          for text in game_texts])
 
     def fit_transform(self, game_texts: typing.Sequence[str]):
@@ -275,7 +281,8 @@ class NGramTrieModel:
               input_ngrams: typing.Optional[typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]]] = None,
               k: typing.Optional[int] = None, stupid_backoff: bool = True, log: bool = False,
               filter_padding_top_k: bool = True, top_k_min_n: typing.Optional[int] = None,
-              top_k_max_n: typing.Optional[int] = None, score_all: bool = False):
+              top_k_max_n: typing.Optional[int] = None, score_all: bool = False,
+              stupid_backoff_discount: typing.Optional[float] = None):
 
         if input_text is None and input_ngrams is None:
             raise ValueError('Must provide either text or ngrams')
@@ -301,10 +308,10 @@ class NGramTrieModel:
         input_ngrams = typing.cast(typing.Dict[int, typing.Sequence[typing.Tuple[str, ...]]], input_ngrams)
 
         if use_top_k and score_all:
-            output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, reduction='mean')
+            output = {f'n_{n}_score': self._transform_ngrams(input_ngrams[n], stupid_backoff, log, stupid_backoff_discount, reduction='mean')
                       for n in range(top_k_min_n, top_k_max_n + 1)}  # type: ignore
         else:
-            output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, reduction='mean'))
+            output = dict(score=self._transform_ngrams(input_ngrams[self.n], stupid_backoff, log, stupid_backoff_discount, reduction='mean'))
 
         if k is not None:
             if k != self.k:
@@ -452,9 +459,11 @@ IGNORE_RULES = [
 
 class NGramASTParser(ast_parser.ASTParser):
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
-                preorder_traversal: bool = True, pad: int = 0, skip_game_and_domain: bool = True):
+                 use_specific_objects: bool = False,
+                 preorder_traversal: bool = True, pad: int = 0, skip_game_and_domain: bool = True):
         self.n = n
         self.ignore_rules = set(ignore_rules)
+        self.use_specific_objects = use_specific_objects
         self.preorder_traversal = preorder_traversal
         self.pad = pad
         self.skip_game_and_domain = skip_game_and_domain
@@ -466,6 +475,12 @@ class NGramASTParser(ast_parser.ASTParser):
         self.preorder_ast_tokens = []
         self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
         self.ast_counts_by_section = defaultdict(int)
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        # To allow unpickling of old models
+        self.__dict__.update(state)
+        if not hasattr(self, 'use_specific_objects'):
+            self.use_specific_objects = False
 
     def _add_token(self, token: str, at_start: bool = False, **kwargs):
         if at_start:
@@ -555,51 +570,69 @@ class NGramASTParser(ast_parser.ASTParser):
                 else:
                     self.current_input_ngrams_by_section[section][n].append(ngram)
 
+    def _map_to_type_or_category(self, term: str,
+        context_variables: typing.Dict[str, typing.Union[ast_parser.VariableDefinition, typing.List[ast_parser.VariableDefinition]]]) -> typing.Union[str, typing.List[str]]:
+
+        if self.use_specific_objects:
+            types_or_categories = ast_parser.predicate_function_term_to_types(term, context_variables)
+        else:
+            types_or_categories = ast_parser.predicate_function_term_to_type_categories(term, context_variables, {})
+
+        if types_or_categories is None or len(types_or_categories) == 0:
+            return UNKNOWN_CATEGORY
+
+        return types_or_categories
+
+    def _combine_either_types_str(self, types: typing.List[str]) -> str:
+        return f'either_types_{"_".join(sorted(types))}'
+
+    def _combine_either_types_list(self, types: typing.List[str]) -> typing.List[str]:
+        return ['either_types'] + types
+
     def _tokenize_ast_node(self, ast: tatsu.ast.AST, **kwargs) -> typing.Union[str, typing.List[str]]:
         rule = ast.parseinfo.rule  # type: ignore
-        if rule == 'predicate_or_function_term':
-            term = typing.cast(str, ast.term)
-            categories = ast_parser.predicate_function_term_to_type_category(
-                term, kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {},  # type: ignore
-                {}
-                )
+        types_or_categories = None
+        combine_types_func = None
 
-            if categories is None or len(categories) == 0:
+        if rule.startswith('predicate_or_function_') and rule.endswith('term'):
+            term = typing.cast(str, ast.term)
+            local_variables = kwargs[ast_parser.VARIABLES_CONTEXT_KEY] if ast_parser.VARIABLES_CONTEXT_KEY in kwargs else {}
+            types_or_categories = self._map_to_type_or_category(term, local_variables)
+
+            if types_or_categories is None or len(types_or_categories) == 0:
                 return UNKNOWN_CATEGORY
 
-            categories = list(categories)
-            if len(categories) == 1:
-                return categories[0]
-            else:
-                # TODO: is this the right way to handle this here?
-                return f'either_types_{"_".join(sorted(categories))}'
+            types_or_categories = list(types_or_categories)
+            combine_types_func = self._combine_either_types_str
 
         if rule == 'variable_type_def':
             var_type = ast.var_type.type  # type: ignore
             if isinstance(var_type, str):
-                category_set = ast_parser.predicate_function_term_to_type_category(var_type, {}, {})
-                if category_set is None or len(category_set) == 0:
+                types_or_categories = self._map_to_type_or_category(var_type, {})
+
+                if types_or_categories is None or len(types_or_categories) == 0:
                     return UNKNOWN_CATEGORY
-                categories = list(category_set)
-                if len(categories) == 1:
-                    return categories[0]
-                else:
-                    raise ValueError(f'Variable type {var_type} has multiple categories: {categories}')
+
+                types_or_categories = list(types_or_categories)
 
             elif isinstance(var_type, tatsu.ast.AST):
                 type_names = var_type.type_names  # type: ignore
-                if isinstance(type_names, str):
-                    type_names = [type_names]
+                types_or_categories = self._map_to_type_or_category(type_names, {})  # type: ignore
+                combine_types_func = self._combine_either_types_list
 
-                categories = []
-                for type_name in type_names:  # type: ignore
-                    type_categories = ast_parser.predicate_function_term_to_type_category(type_name, {}, {})
-                    if type_categories is None or len(type_categories) == 0:
-                        categories.append(UNKNOWN_CATEGORY)
-                    else:
-                        categories.extend(type_categories)
+        if types_or_categories is not None:
+            if types_or_categories == UNKNOWN_CATEGORY:
+                return UNKNOWN_CATEGORY
 
-                return ['either_types'] + categories
+            types_or_categories = list(types_or_categories)
+
+            if len(types_or_categories) == 1:
+                return types_or_categories[0]
+            else:
+                if combine_types_func is not None:
+                    return combine_types_func(types_or_categories)
+                else:
+                    raise ValueError(f'Found multiple types/categories for {ast} with no combine_types_func: {types_or_categories}')
 
         if rule == 'pref_name_and_types':
             output = ['pref_name']
@@ -610,12 +643,12 @@ class NGramASTParser(ast_parser.ASTParser):
 
                 object_types = [t.type_name if isinstance(t, tatsu.ast.AST) else str(t) for t in object_types]
                 for obj_type in object_types:
-                    object_category = ast_parser.predicate_function_term_to_type_category(obj_type, {}, {})  # type: ignore
+                    object_category = self._map_to_type_or_category(obj_type, {})  # type: ignore
                     if object_category is None or len(object_category) == 0:
-                        # print(ast)
-                        # print(ast.object_types)
                         raise ValueError(f'Could not find category for object type {obj_type}: {object_category}')
-                    output.append(f'object_type_{object_category.pop()}')
+
+                    obj = object_category if isinstance(object_category, str) else f'object_type_{object_category[0]}'
+                    output.append(obj)  # type: ignore
 
             return output
 
@@ -680,6 +713,7 @@ DEFAULT_N_BY_SECTION = {
 
 class ASTNGramTrieModel:
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
+                 use_specific_objects: bool = False,
                  stupid_backoff_discount: float = DEFAULT_STUPID_BACKOFF_DISCOUNT,
                  zero_log_prob: float = DEFAULT_ZERO_LOG_PROB,
                  preorder_traversal: bool = True, pad: int = 0, n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
@@ -687,15 +721,23 @@ class ASTNGramTrieModel:
 
         self.n = n
         self.ignore_rules = ignore_rules
+        self.use_specific_objects = use_specific_objects
         self.sections = sections
         for section in sections:
             if section not in n_by_section:
                 n_by_section[section] = n
         self.n_by_sections = n_by_section
 
-        self.ngram_ast_parser = NGramASTParser(n, ignore_rules, preorder_traversal, pad)
+        self.ngram_ast_parser = NGramASTParser(n, ignore_rules=ignore_rules, use_specific_objects=use_specific_objects,
+                                               preorder_traversal=preorder_traversal, pad=pad)
         self.model = NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False)
         self.model_by_section = {section: NGramTrieModel(self.n_by_sections[section], stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        # To allow unpickling of old models
+        self.__dict__.update(state)
+        if not hasattr(self, 'use_specific_objects'):
+            self.use_specific_objects = False
 
     def fit(self, asts: typing.Sequence[typing.Union[tuple,tatsu.ast.AST]]):
         for ast in asts:
@@ -753,7 +795,8 @@ class ASTNGramTrieModel:
 
 def main(args: argparse.Namespace):
     if args.from_asts:
-        model = ASTNGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount,
+        model = ASTNGramTrieModel(n=args.n, use_specific_objects=args.use_specific_objects,
+                                  stupid_backoff_discount=args.stupid_backoff_discount,
                                   zero_log_prob=args.zero_log_prob, pad=0 if args.no_pad else args.padding)
     else:
         model = NGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
@@ -764,13 +807,13 @@ def main(args: argparse.Namespace):
     game_inputs = []
     for test_file in args.test_files:
         if args.from_asts:
-            game_inputs.extend(cached_load_and_parse_games_from_file(test_file, grammar_parser, True))
+            game_inputs.extend(cached_load_and_parse_games_from_file(test_file, grammar_parser, True))  # type: ignore
         else:
-            game_inputs.extend(ast_printer.ast_to_string(ast, '\n') for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, False))
+            game_inputs.extend(ast_printer.ast_to_string(ast, '\n') for ast in cached_load_and_parse_games_from_file(test_file, grammar_parser, False))  # type: ignore
 
     model.fit(game_inputs)
 
-    [print(model.score(game)) for game in game_inputs]
+    # [print(model.score(game)) for game in game_inputs]
 
     with open(args.output_path, 'wb') as f:
         pickle.dump(model, f)
@@ -786,7 +829,10 @@ if __name__ == '__main__':
         args.test_files.extend(DEFAULT_TEST_FILES)
 
     if args.output_path is None:
-        args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(model_type='ast' if args.from_asts else 'text',
+        model_type = 'ast' if args.from_asts else 'text'
+        if args.use_specific_objects:
+            model_type += '_specific_objects'
+        args.output_path = DEFAULT_OUTPUT_PATH_PATTERN.format(model_type=model_type,
             n=args.n, today=datetime.now().strftime('%Y_%m_%d'))
 
     if args.padding is None:

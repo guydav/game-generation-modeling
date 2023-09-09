@@ -21,6 +21,7 @@
     (preference binKnockedOver
         (exists (?h - hexagonal_bin)
             (then
+                (once (object_orientation ?h upright))
                 (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
                 (once (not (object_orientation ?h upright)))
             )
@@ -586,8 +587,10 @@
         (preference blockInTowerKnockedByDodgeball (exists (?l - block ?d - dodgeball)
             (then
                 (once (and (in ?b ?l) (agent_holds ?d)))
-                (hold (and (in ?b ?l) (not (agent_holds ?d)) (in_motion ?d)))
-                (once (and (in ?b ?l) (touch ?d ?b)))
+                (hold-while
+                    (and (in ?b ?l) (not (agent_holds ?d)) (in_motion ?d))
+                    (touch ?d ?b)
+                )
                 (hold (in_motion ?l))
                 (once (not (in_motion ?l)))
             )
@@ -1693,7 +1696,6 @@
             (hold (agent_holds ?o))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
             (once (and (not (in_motion ?o)) (in ?h ?o)))
-            (hold (not (agent_holds ?o)))
         )
     ))
 ))
@@ -2112,13 +2114,14 @@
                     (touch ?b ?l)
                     (in_motion ?l)
                 )
+                (once (not (in_motion ?b)))
             )
         ))
         (preference throwAttempt
             (then
                 (once (and (agent_holds ?b) (on rug agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
-                (once (and (not (in_motion ?b))))
+                (once (not (in_motion ?b)))
             )
         )
     ))
@@ -2793,7 +2796,7 @@
         (then
             (once (agent_holds ?d))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
-            (once (touch floor ?d))
+            (hold (and (in_motion ?d) (not (agent_holds ?d)) (touch floor ?d)))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (touch floor ?d))))
             (once (and (not (in_motion ?d)) (on ?b ?d)))
         )
@@ -2851,7 +2854,7 @@
 
 ; 95 requires counting something that happens during a preference
 
-; 96 requires is underconstrainted -- I'm omitting it for now
+; 96 is underconstrainted -- I'm omitting it for now
 
 
 (define (game 5b6a87d2cda8590001db8e07097-97) (:domain medium-objects-room-v1)  ; 97
@@ -3162,7 +3165,11 @@
 (:constraints (and
     (preference agentLeavesDogbedOrNoMoreBalls (exists (?d - doggie_bed)
         (then
-            (hold (<= (distance ?d agent) 1))
+            (once (> (distance ?d agent) 1))
+            (hold-while
+                (<= (distance ?d agent) 1)
+                (exists (?b - ball) (agent_holds ?b))
+            )
             (once (or
                 (> (distance ?d agent) 1)
                 (forall (?b - ball) (and
@@ -3185,6 +3192,7 @@
                     (touch ?b ?c)
                     (in_motion ?c)
                 )
+                (once (not (in_motion ?b)))
             )
         ))
     )

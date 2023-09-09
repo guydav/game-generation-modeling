@@ -11,6 +11,7 @@ import tatsu.ast
 import ast_printer
 import ast_parser
 from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
+from ast_counter_sampler import *
 from ast_parser import ASTNodeInfo, ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
 from ast_utils import replace_child
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
@@ -25,6 +26,7 @@ PREFERENCE_NAMES_TO_REMOVE_CONTEXT_KEY = 'preference_names_to_remove'
 REPLACEMENT_MAPPINGS_CONTEXT_KEY = 'replacement_mappings'
 FORCED_REMAPPINGS_CONTEXT_KEY = 'forced_remappings'
 LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY = 'local_variable_ref_counts'
+
 
 class ASTDefinedPreferenceNamesFinder(ASTParser):
     def __init__(self):
@@ -84,6 +86,7 @@ class ASTContextFixer(ASTParentMapper):
             PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_remove,
             REPLACEMENT_MAPPINGS_CONTEXT_KEY: dict(),
             LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY: defaultdict(dict),
+            'rng': self.rng,
         })
 
         # If any preference names still remain unadded, we need to add them to the game
@@ -108,8 +111,10 @@ class ASTContextFixer(ASTParentMapper):
             single_variable = True
 
         for i, var_name in enumerate(var_names):  # type: ignore
+            var_name = var_name[1:]
             variables_key = self._variable_type_def_rule_to_context_key(rule)
-            global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][var_name[1:]] = 0
+            if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key]:
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][var_name] = 0
 
             if var_name in local_context[variables_key]:
                 if local_context[variables_key][var_name] == ast.parseinfo.pos:  # type: ignore
@@ -123,6 +128,7 @@ class ASTContextFixer(ASTParentMapper):
 
                     new_var = new_variable_sampler(global_context, local_context)
                     new_var_name = new_var[1:]
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][variables_key][new_var_name] = 0
 
                     # TODO: this assumes we want to consistenly map each missing variable to a new variable, which may or may not be the case -- we should discsuss
                     global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][var_name] = new_var_name
@@ -130,7 +136,7 @@ class ASTContextFixer(ASTParentMapper):
                     replace_child(ast, ['var_names'] if single_variable else ['var_names', i], new_var)
 
             else:
-                local_context[variables_key][var_name[1:]] = ast.parseinfo.pos  # type: ignore
+                local_context[variables_key][var_name] = ast.parseinfo.pos  # type: ignore
 
     def _should_rehandle_current_node(self, ast: tatsu.ast.AST, **kwargs):
         should_rehandle = False
@@ -195,6 +201,17 @@ class ASTContextFixer(ASTParentMapper):
                 for var_def in ast.variables:  # type: ignore
                     self._single_variable_def_context_update(var_def, local_context, global_context)
 
+        elif rule == 'preference':
+            if 'preference_names' not in global_context:
+                raise SamplingException('No preference names found in global context when updating a preference node')
+
+            preference_names = global_context['preference_names']
+            if preference_names[ast.pref_name] > 1:
+                new_pref_name = self.sampler.rules[rule]['pref_name']['samplers']['preference_name'](global_context, local_context)
+                replace_child(ast, ['pref_name'], new_pref_name)
+                global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].add(new_pref_name)
+                preference_names[ast.pref_name] -= 1
+
         elif rule.startswith('predicate_or_function_'):
             term = ast.term
             term_type = rule.split('_')[3]
@@ -251,7 +268,11 @@ class ASTContextFixer(ASTParentMapper):
                         term = '?' + new_var_name
                         replace_child(ast, ['term'], term)
 
-                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][term[1:]] += 1
+                var_name = term[1:]
+                if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
+
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] += 1
 
         elif rule == 'pref_name_and_types':
             if 'preference_names' not in global_context:
@@ -291,10 +312,21 @@ if __name__ == '__main__':
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
 (:setup (and
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
-        (game-conserved (< (distance ?h ?r) 1))
+        (exists (?h - block)
+            (game-conserved (< (distance ?h ?r) 1))
+        )
     )
 ))
 (:constraints (and
+    (preference binKnockedOver
+        (exists (?h - hexagonal_bin ?b - ball)
+            (then
+                (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
+                (once (not (object_orientation ?h upright)))
+            )
+        )
+    )
+
     (preference binKnockedOver
         (exists (?h - hexagonal_bin ?b - ball)
             (then

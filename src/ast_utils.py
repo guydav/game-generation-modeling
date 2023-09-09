@@ -1,5 +1,7 @@
 import argparse
-from collections import namedtuple
+from collections import namedtuple, deque
+from itertools import chain
+import enum
 import gzip
 import hashlib
 import logging
@@ -10,11 +12,17 @@ import tatsu
 import tatsu.ast
 import tatsu.infos
 import tatsu.grammars
+import tempfile
 import tqdm
 import typing
+import sys
 
+import msgpack
 
 import ast_printer
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 DEFAULT_TEST_FILES = (
@@ -54,7 +62,9 @@ def load_games_from_file(path: str, start_token: str='(define',
     if stop_tokens is None or not stop_tokens:
         stop_tokens = DEFAULT_STOP_TOKENS
 
-    with open(path) as f:
+    open_method = gzip.open if path.endswith('.gz') else open
+
+    with open_method(path, 'rt') as f:
         lines = f.readlines()
         # new_lines = []
         # for l in lines:
@@ -79,7 +89,7 @@ def load_games_from_file(path: str, start_token: str='(define',
         start = text.find(start_token)
 
         while start != -1:
-            end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]
+            end_matches = [text.find(stop_token, start + 1) for stop_token in stop_tokens]  # type: ignore
             end_matches = [match != -1 and match or len(text) for match in end_matches]
             end = min(end_matches)
             next_start = text.find(start_token, start + 1)
@@ -95,7 +105,8 @@ def load_games_from_file(path: str, start_token: str='(define',
 
 
 
-CACHE_FOLDER = './dsl/cache'
+CACHE_FOLDER = os.path.abspath(os.environ.get('GAME_GENERATION_CACHE', os.path.join(tempfile.gettempdir(), 'game_generation_cache')))
+logger.debug(f'Using cache folder: {CACHE_FOLDER}')
 CACHE_FILE_PATTERN = '{name}-cache.pkl.gz'
 CACHE_HASHES_KEY = 'hashes'
 CACHE_ASTS_KEY = 'asts'
@@ -103,11 +114,15 @@ CACHE_DSL_HASH_KEY = 'dsl'
 
 
 def _generate_cache_file_name(file_path: str, relative_path: typing.Optional[str] = None):
+    if not os.path.exists(CACHE_FOLDER):
+        logger.debug(f'Creating cache folder: {CACHE_FOLDER}')
+        os.makedirs(CACHE_FOLDER, exist_ok=True)
+
     name, _ = os.path.splitext(os.path.basename(file_path))
-    if relative_path is not None:
-        return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
-    else:
-        return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    # if relative_path is not None:
+    #     return os.path.join(relative_path, CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
+    # else:
+    return os.path.join(CACHE_FOLDER, CACHE_FILE_PATTERN.format(name=name))
 
 
 def _extract_game_id(game_str: str):
@@ -120,9 +135,22 @@ def fixed_hash(str_data: str):
     return hashlib.md5(bytearray(str_data, 'utf-8')).hexdigest()
 
 
+class NoParseinfoTokenizerModelContext(tatsu.grammars.ModelContext):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _get_parseinfo(self, name, pos):
+        parseinfo = super()._get_parseinfo(name, pos)
+        if parseinfo is not None:
+            parseinfo = parseinfo._replace(tokenizer=None)
+
+        return parseinfo
+
+
 def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: tatsu.grammars.Grammar,
     use_tqdm: bool, relative_path: typing.Optional[str] = None,
-    save_updates_every: int = -1, log_every_change: bool = True):
+    save_updates_every: int = -1, log_every_change: bool = True,
+    remove_parseinfo_tokenizers: bool = True, force_rebuild: bool = False):
 
     cache_path = _generate_cache_file_name(games_file_path, relative_path)
     grammar_hash = fixed_hash(grammar_parser._to_str())
@@ -145,7 +173,11 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
     cache_updated = False
     grammar_changed = CACHE_DSL_HASH_KEY not in cache or cache[CACHE_DSL_HASH_KEY] != grammar_hash
     if grammar_changed:
-        logging.debug('Grammar changed, clearing cache')
+        if CACHE_DSL_HASH_KEY not in cache:
+            logger.info('No cached DSL hash found')
+        else:
+            logger.info('Grammar changed, clearing cache')
+
         cache[CACHE_DSL_HASH_KEY] = grammar_hash
         cache_updated = True
 
@@ -153,10 +185,21 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         game_id = _extract_game_id(game)
         game_hash = fixed_hash(game)
 
-        if grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
-            if not grammar_changed and log_every_change: logging.debug(f'Game {game_id} changed or not in cache, parsing')
+        if force_rebuild or grammar_changed or game_id not in cache[CACHE_HASHES_KEY] or cache[CACHE_HASHES_KEY][game_id] != game_hash:
+            if not force_rebuild and not grammar_changed and log_every_change:
+                if game_id not in cache[CACHE_HASHES_KEY]:
+                    logger.debug(f'Game not found in cache: {game_id}')
+                else:
+                    logger.debug(f'Game changed: {game_id}')
             cache_updated = True
-            ast = grammar_parser.parse(game)
+
+            config = None
+            ctx = None
+            if remove_parseinfo_tokenizers:
+                config = grammar_parser.config.replace_config(None)
+                ctx = NoParseinfoTokenizerModelContext(grammar_parser.rules, config=config)
+
+            ast = grammar_parser.parse(game, config=config, ctx=ctx)
             cache_updates[CACHE_HASHES_KEY][game_id] = game_hash
             cache_updates[CACHE_ASTS_KEY][game_id] = ast
             n_cache_updates += 1
@@ -167,7 +210,7 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
         yield ast
 
         if save_updates_every > 0 and n_cache_updates >= save_updates_every:
-            logging.debug(f'Updating cache with {n_cache_updates} new games')
+            logger.debug(f'Updating cache with {n_cache_updates} new games')
             cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
             cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
             with gzip.open(cache_path, 'wb') as f:
@@ -175,10 +218,15 @@ def cached_load_and_parse_games_from_file(games_file_path: str, grammar_parser: 
             cache_updates = {CACHE_HASHES_KEY: {}, CACHE_ASTS_KEY: {},
                 CACHE_DSL_HASH_KEY: grammar_hash}
             n_cache_updates = 0
-            logging.debug(f'Done updating cache, returning to parsing')
+
+    if n_cache_updates > 0:
+        logger.debug(f'Updating cache with {n_cache_updates} new games')
+        cache[CACHE_HASHES_KEY].update(cache_updates[CACHE_HASHES_KEY])
+        cache[CACHE_ASTS_KEY].update(cache_updates[CACHE_ASTS_KEY])
+        cache_updated = True
 
     if cache_updated:
-        logging.debug(f'About to finally update the cache')
+        logger.debug(f'About to finally update the cache')
         with gzip.open(cache_path, 'wb') as f:
             pickle.dump(cache, f, pickle.HIGHEST_PROTOCOL)
 
@@ -269,3 +317,82 @@ def simplified_context_deepcopy(context: dict) -> typing.Dict[str, typing.Union[
             raise ValueError(f'Unexpected value type: {v}, {type(v)}')
 
     return context_new
+
+
+class ASTCopyType(enum.Enum):
+    FULL = 0
+    SECTION = 1
+    NODE = 2
+
+
+def msgpack_ast_restore(obj, copy_type: ASTCopyType = ASTCopyType.FULL, depth: int = 0):
+    if depth == 0 and copy_type in (ASTCopyType.FULL, ASTCopyType.SECTION):
+        return tuple([msgpack_ast_restore(item, copy_type, depth + 1) for item in obj])
+
+    if isinstance(obj, list):
+        out = [msgpack_ast_restore(item, copy_type, depth + 1) for item in obj]
+        if depth == 1 and copy_type == ASTCopyType.FULL:
+            return tuple(out)
+
+        return out
+
+    if isinstance(obj, dict):
+        out = {}
+        for key, val in obj.items():
+            if key == 'parseinfo':
+                val = tatsu.infos.ParseInfo(*val)
+
+            out[key] = msgpack_ast_restore(val, copy_type, depth + 1)
+
+        return tatsu.ast.AST(out)
+
+    return obj
+
+
+T = typing.TypeVar('T')
+
+
+def deepcopy_ast(ast: T, copy_type: ASTCopyType = ASTCopyType.FULL) -> T:
+    # return pickle.loads(pickle.dumps(ast, pickle.HIGHEST_PROTOCOL))
+    return msgpack_ast_restore(msgpack.unpackb(msgpack.packb(ast)), copy_type=copy_type)  # type: ignore
+
+
+def object_total_size(o, handlers={}, verbose=False):
+    """ Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {tuple: iter,
+                    list: iter,
+                    deque: iter,
+                    dict: dict_handler,
+                    set: iter,
+                    frozenset: iter,
+                   }
+    all_handlers.update(handlers)     # user handlers take precedence
+    seen = set()                      # track which object id's have already been seen
+    default_size = sys.getsizeof(0)       # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:       # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = sys.getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=sys.stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)

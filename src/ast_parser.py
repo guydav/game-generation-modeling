@@ -1,6 +1,7 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict, OrderedDict
 import copy
 import itertools
+import logging
 import re
 import typing
 
@@ -10,6 +11,14 @@ import tatsu
 import tatsu.ast
 import tatsu.buffering
 import tatsu.infos
+
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)-8s - %(message)s',
+    level=logging.DEBUG,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+logger = logging.getLogger(__name__)
 
 
 SETUP = '(:setup'
@@ -103,9 +112,9 @@ class ASTParser:
 
         if rule == 'preference':
             if 'preference_names' not in kwargs['global_context']:
-                kwargs['global_context']['preference_names'] = set()
+                kwargs['global_context']['preference_names'] = defaultdict(int)
 
-            kwargs['global_context']['preference_names'].add(ast.pref_name)
+            kwargs['global_context']['preference_names'][ast.pref_name] += 1
 
         elif rule == 'variable_list':
             if isinstance(ast.variables, tatsu.ast.AST):
@@ -130,7 +139,9 @@ class ASTParser:
         if key not in kwargs['local_context']:
             kwargs['local_context'][key] = dict()
 
-        kwargs['local_context'][key].update(self._extract_variable_def_variables(ast))
+        update = self._extract_variable_def_variables(ast)
+        update.update(kwargs['local_context'][key])
+        kwargs['local_context'][key] = update
 
     def _extract_variable_def_variables(self, ast):
         var_names = ast.var_names
@@ -156,9 +167,11 @@ class ASTNodeInfo(typing.NamedTuple):
 ASTParentMapping = typing.Dict[tatsu.infos.ParseInfo, ASTNodeInfo]
 
 VARIABLE_OWNER_CONTEXT_KEY_PREFIX = 'owner'
+LOCAL_CONTEXT_PROPAGATING_RULES = set(['variable_type_def', 'color_variable_type_def', 'orientation_variable_type_def', 'side_variable_type_def', 'variable_list'])
+
 
 class ASTParentMapper(ASTParser):
-    def __init__(self, root_node='root', local_context_propagating_rules: typing.Optional[typing.Set[str]] = None):
+    def __init__(self, root_node='root', local_context_propagating_rules: typing.Set[str] = LOCAL_CONTEXT_PROPAGATING_RULES):
         self.root_node = root_node
         self.local_context_propagating_rules = local_context_propagating_rules
         self.parent_mapping = {}
@@ -324,11 +337,34 @@ class ASTDepthParser(ASTParser):
         return kwargs['depth']
 
 
+class ASTPredicateFunctionCounter(ASTParser):
+    def __init__(self):
+        self.counts = defaultdict(int)
+
+    def _handle_ast(self, ast, **kwargs):
+        rule = ast.parseinfo.rule  # type: ignore
+        if rule == 'function_eval':
+            inner_rule = ast.func.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('function_', '')] += 1
+
+        elif rule == 'predicate':
+            inner_rule = ast.pred.parseinfo.rule  # type: ignore
+            self.counts[inner_rule.replace('predicate_', '')] += 1
+
+        return super()._handle_ast(ast, **kwargs)
+
+
+
 VariableDefinition = namedtuple('VariableDefinition', ('var_names', 'var_types', 'parseinfo'))
 
 
 def extract_variables_from_ast(ast: tatsu.ast.AST, vars_key: str, context_vars: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]]) -> None:
     variables = ast[vars_key].variables  # type: ignore
+
+    if variables is None:
+        logger.warning(f'No variables found in {ast}')
+        return
+
     if isinstance(variables, tatsu.ast.AST):
         variables = [variables]
 
@@ -375,31 +411,63 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
     return context
 
 
-def predicate_function_term_to_type_category(term: str,
+def predicate_function_term_to_types(term_or_terms: typing.Union[str, typing.List[str]],
     context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
-    known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.Set[str]]:
-    if term.startswith('?'):
-        if term in context_variables:
-            var_def = context_variables[term]
-            if isinstance(var_def, list):
-                term_type_list = var_def[0].var_types
-            else:
-                term_type_list = var_def.var_types
-        else:
-            return None
-    else:
-        term_type_list = [term]
+    ) -> typing.Optional[typing.List[str]]:
 
-    term_categories = set()
-    for term_type in term_type_list:
+    if isinstance(term_or_terms, str):
+        term_or_terms = [term_or_terms]
+
+    term_type_list = []
+
+    for term in term_or_terms:
+        if term.startswith('?'):
+            if term in context_variables:
+                var_def = context_variables[term]
+                if isinstance(var_def, list):
+                    var_types = var_def[0].var_types
+                else:
+                    var_types = var_def.var_types
+
+                if isinstance(var_types, list):
+                    term_type_list.extend(var_types)
+                else:
+                    term_type_list.append(var_types)
+        else:
+            term_type_list.append(term)
+
+    if any(not isinstance(term_type, str) for term_type in term_type_list):
+        print(f'Non-string type found in {term_type_list}')
+
+    term_types = OrderedDict()
+    for type in term_type_list:
+        if type not in term_types:
+            term_types[type] = 0
+
+    return list(term_types.keys())
+
+
+def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, typing.List[str]],
+    context_variables: typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]],
+    known_missing_types: typing.Iterable[str]) -> typing.Optional[typing.List[str]]:
+
+    term_types = predicate_function_term_to_types(term_or_terms, context_variables)
+
+    if not term_types:
+        return None
+
+    term_categories = OrderedDict()
+    for term_type in term_types:
         if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
             if term_type not in known_missing_types and not term_type.isnumeric():
                 continue
                 # print(f'Unknown type {term_type_list} not in the types to categories map')
         else:
-            term_categories.add(room_and_object_types.TYPES_TO_CATEGORIES[term_type])
+            term_category = room_and_object_types.TYPES_TO_CATEGORIES[term_type]
+            if term_category not in term_categories:
+                term_categories[term_category] = 0
 
-    return term_categories
+    return list(term_categories.keys())
 
 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16
@@ -593,7 +661,9 @@ class ASTBooleanParser(ASTParser):
                 expr = self(ast[keys.pop()], **kwargs)  # type: ignore
 
         if expr is None:
-            raise ValueError(f'No expression found for rule {rule}')
+            # TODO: debug how/why I get here
+            logger.warn(f'No expression found for rule {rule}, using "{key}"')
+            expr = boolean.Symbol(key)
 
         expr = typing.cast(boolean.Expression, expr)
         self.str_to_expression_mapping[key] = expr
@@ -618,14 +688,15 @@ class ASTSamplePostprocessor(ASTParser):
         self.variable_index = 0
         self.preference_mapping = {}
         self.variable_mapping = {}
+        self.parseinfo_index = 0
 
-    def __call__(self, ast, **kwargs):
+    def __call__(self, ast, should_deepcopy_initial: bool = True, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
             self._new_parse()
-
-            ast = copy.deepcopy(ast)
+            if should_deepcopy_initial:
+                ast = ast_utils.deepcopy_ast(ast)
 
         super().__call__(ast, **kwargs)
 
@@ -634,6 +705,10 @@ class ASTSamplePostprocessor(ASTParser):
 
     def _handle_ast(self, ast, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
+
+        new_parseinfo = tatsu.infos.ParseInfo(None, rule, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index, self.parseinfo_index)
+        ast_utils.replace_child(ast, 'parseinfo', new_parseinfo)
+        self.parseinfo_index += 1
 
         if rule == 'preference':
             pref_name = ast.pref_name
@@ -672,7 +747,7 @@ class ASTSamplePostprocessor(ASTParser):
 
                 ast_utils.replace_child(ast, 'var_names', new_var_names)
 
-        if rule == 'predicate_or_function_term':
+        if rule.startswith('predicate_or_function_') and rule.endswith('term'):
             term = ast.term
             if isinstance(term, str) and term.startswith('?'):
                 if term not in self.variable_mapping:

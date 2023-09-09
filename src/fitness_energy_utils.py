@@ -48,6 +48,10 @@ def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_fitness_data(path: str = LATEST_FITNESS_FEATURES) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
+    return process_fitness_df(fitness_df)
+
+
+def process_fitness_df(fitness_df: pd.DataFrame) -> pd.DataFrame:
     fitness_df = _add_original_game_name_column(fitness_df)
     fitness_df.columns = [c.replace(' ', '_').replace('(:', '') for c in fitness_df.columns]
     fitness_df = fitness_df.assign(**{c: fitness_df[c].astype('int') for c in fitness_df.columns if fitness_df.dtypes[c] == bool})
@@ -67,7 +71,7 @@ def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.Lis
     save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder=folder, name=name, relative_path=relative_path)
 
 
-def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..'):
+def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):
     output_path = f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
 
     i = 0
@@ -81,7 +85,8 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
         filename = filename + f'_{i}'
         output_path = os.path.join(folder, filename + period + extensions)
 
-    logging.debug(f'Saving data to {output_path} ...')
+    if log_message:
+        logging.debug(f'Saving data to {output_path} ...')
     with gzip.open(output_path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -97,11 +102,15 @@ def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MO
 
 
 def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
-    output_path = f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz'
-    if not os.path.exists(output_path):
-        raise FileNotFoundError(f'No model found at {output_path}')
+    return load_data_from_path(f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz')
 
-    with gzip.open(output_path, 'rb') as f:
+
+
+def load_data_from_path(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'No data file found at {path}')
+
+    with gzip.open(path, 'rb') as f:
         data = pickle.load(f)
 
     return data
@@ -123,20 +132,34 @@ def train_test_split_by_game_name(df: pd.DataFrame, training_prop: float = DEFAU
 
 
 def df_to_tensor(df: pd.DataFrame, feature_columns: typing.List[str],
-    positive_column: str = 'real', positive_value: typing.Any = True):
+    positive_column: str = 'real', positive_value: typing.Any = 1, ignore_original_game: bool = False):
 
     if df[positive_column].any():
-        return torch.tensor(
-            np.stack([
-                np.concatenate((
-                    df.loc[df[positive_column] & (df.original_game_name == game_name), feature_columns].to_numpy(),
-                    df.loc[(~df[positive_column]) & (df.original_game_name == game_name), feature_columns].to_numpy()
-                ))
-                for game_name
-                in df[df[positive_column] == positive_value].original_game_name.unique()
-            ]),
-            dtype=torch.float
-        )
+        if ignore_original_game:
+            positives = df.loc[df[positive_column] == positive_value, feature_columns].to_numpy()
+            positives = np.expand_dims(positives, axis=1)
+            negatives = df.loc[df[positive_column] != positive_value, feature_columns].to_numpy()
+            n_positives = positives.shape[0]
+            n_negatives_per_positive = negatives.shape[0] // n_positives
+            negatives = negatives[:n_positives * n_negatives_per_positive]
+
+            return torch.tensor(
+                np.concatenate([positives, negatives.reshape(n_positives, n_negatives_per_positive, -1)], axis=1),
+                dtype=torch.float
+            )
+
+        else:
+            return torch.tensor(
+                np.stack([
+                    np.concatenate((
+                        df.loc[df[positive_column] & (df.original_game_name == game_name), feature_columns].to_numpy(),
+                        df.loc[(~df[positive_column]) & (df.original_game_name == game_name), feature_columns].to_numpy()
+                    ))
+                    for game_name
+                    in df[df[positive_column] == positive_value].original_game_name.unique()
+                ]),
+                dtype=torch.float
+            )
 
     else:
         return torch.tensor(df.loc[:, feature_columns].to_numpy(), dtype=torch.float)
@@ -250,6 +273,7 @@ class FitnessEnergyModel(nn.Module):
     def __init__(self, n_features: int, hidden_size: typing.Optional[int] = None,
         hidden_activation: typing.Callable = torch.relu,
         output_activation: typing.Optional[typing.Callable] = None,
+        output_scaling: float = 1.0,
         n_outputs: int = 1):
         super().__init__()
         self.n_features = n_features
@@ -257,6 +281,7 @@ class FitnessEnergyModel(nn.Module):
         if output_activation is None:
             output_activation = nn.Identity()
         self.output_activation = output_activation
+        self.output_scaling = output_scaling
 
         if hidden_size is None:
             self.fc1 = nn.Linear(self.n_features, self.n_outputs)
@@ -267,12 +292,19 @@ class FitnessEnergyModel(nn.Module):
             self.fc2 = nn.Linear(hidden_size, self.n_outputs)
             self.hidden_activation = hidden_activation
 
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if not hasattr(self, 'output_scaling'):
+            self.output_scaling = 1.0
+
     def forward(self, x, activate: bool = True):
         x = self.fc1(x)
 
         if self.hidden_activation is not None:
             x = self.hidden_activation(x)
             x = self.fc2(x)
+
+        x = self.output_scaling * x
 
         if self.n_outputs == 1 and activate and self.output_activation is not None:
             x = self.output_activation(x)
@@ -428,7 +460,7 @@ DEFAULT_MODEL_KWARGS = {
     'hidden_activation': torch.relu,
     'n_outputs': 1,
     'output_activation': None,
-
+    'output_scaling': 1.0,
 }
 
 DEFAULT_TRAIN_KWARGS = {
@@ -436,6 +468,7 @@ DEFAULT_TRAIN_KWARGS = {
     'lr': 1e-2,
     'loss_function': fitness_nce_loss,
     'should_print': False,
+    'should_tqdm': False,
     'print_interval': 10,
     'n_epochs': 1000,
     'patience_epochs': 20,
@@ -848,7 +881,8 @@ def train_and_validate_model_weighted_sampling(
     val_loss_function: typing.Callable = fitness_sofmin_loss_positive_negative_split,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
-    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+    should_print: bool = True, should_tqdm: bool = False,
+    should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
     batch_size: int = 8, k: int = 4,
     dataset_energy_beta: float = DEFAULT_ENERGY_BETA,
@@ -951,7 +985,7 @@ def train_and_validate_model_weighted_sampling(
             if should_print:
                 print(f'Epoch {epoch}: new best model with loss {epoch_loss:.4f}')
             min_loss = epoch_loss
-            best_model = copy.deepcopy(model).cpu()
+            x = copy.deepcopy(model).cpu()
 
         if epoch_loss < patience_loss - patience_threshold:
             if should_print:
@@ -1010,7 +1044,8 @@ def train_and_validate_model(model: nn.Module,
     loss_function_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
     optimizer_class: typing.Callable = torch.optim.SGD,
     n_epochs: int = 1000, lr: float = 0.01, weight_decay: float = 0.0,
-    should_print: bool = True, should_print_weights: bool = False, print_interval: int = 10,
+    should_print: bool = False, should_tqdm: bool = False,
+    should_print_weights: bool = False, print_interval: int = 10,
     patience_epochs: int = 5, patience_threshold: float = 0.01,
     shuffle_negatives: bool = False, shuffle_validation_negatives: typing.Optional[bool] = None,
     evaluate_opposite_shuffle_mode: bool = False, split_validation_from_train: bool = False,
@@ -1099,6 +1134,23 @@ def train_and_validate_model(model: nn.Module,
     best_model = model
     losses = defaultdict(list)
 
+    if validate:
+        pre_val_losses = []
+        model.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:    # type: ignore
+                loss = _get_batch_loss(model, loss_function, loss_function_kwargs, k, device, batch)
+                if regularizer is not None:
+                    loss += regularization_weight * regularizer(model)
+                pre_val_losses.append(loss.item())
+
+        patience_loss = np.mean(pre_val_losses)
+        min_loss = patience_loss
+
+    pbar = None
+    if should_tqdm:
+        pbar = tqdm(total=n_epochs)
+
     epoch = 0
     for epoch in range(n_epochs):
         model.train()
@@ -1160,6 +1212,19 @@ def train_and_validate_model(model: nn.Module,
                 print(f'Epoch {epoch}: updating patience loss from {patience_loss:.4f} to {epoch_loss:.4f}')
             patience_loss = epoch_loss
             patience_update_epoch = epoch
+
+        if pbar is not None:
+            pbar.update(1)
+            postfix = dict()
+            if validate:
+                postfix['train_loss'] = epoch_train_loss
+                postfix['val_loss'] = epoch_loss
+            else:
+                postfix['loss'] = epoch_loss
+
+            postfix['min_loss'] = min_loss
+            postfix['patience_update_epoch'] = patience_update_epoch
+            pbar.set_postfix(postfix)
 
         if epoch - patience_update_epoch >= patience_epochs:
             if should_print:
@@ -1384,7 +1449,8 @@ def _input_data_to_train_test_tensors(
     feature_columns: typing.Optional[typing.List[str]],
     split_test_set: bool = True,
     random_seed: int = DEFAULT_RANDOM_SEED,
-    train_prop: float = DEFAULT_TRAINING_PROP) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
+    train_prop: float = DEFAULT_TRAINING_PROP,
+    ignore_original_game: bool = False) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
 
     test_tensor = None
 
@@ -1394,10 +1460,10 @@ def _input_data_to_train_test_tensors(
 
         if split_test_set:
             input_data, test_data = train_test_split_by_game_name(input_data, random_seed=random_seed)
-            test_tensor = df_to_tensor(test_data, feature_columns)
+            test_tensor = df_to_tensor(test_data, feature_columns, ignore_original_game=ignore_original_game)
 
         input_data = typing.cast(pd.DataFrame, input_data)
-        train_tensor = df_to_tensor(input_data, feature_columns)
+        train_tensor = df_to_tensor(input_data, feature_columns, ignore_original_game=ignore_original_game)
 
     else:
         if isinstance(input_data, (list, tuple)):
@@ -1562,7 +1628,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
     test_tensor: typing.Optional[torch.Tensor] = None,
     results: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = None,
     display_metric_correlation_table: bool = True,
-    display_by_ecdf: bool = True, display_by_game_rank: bool = True,
+    display_results_by_metric: bool = True,
     display_energy_histogram: bool = True, histogram_title_base: str = 'Energy scores of all games',
     title_note: typing.Optional[str] = None, histogram_log_y: bool = True,
     dispaly_weights_histogram: bool = True, weights_histogram_title_base: str = 'Energy model weights',
@@ -1629,12 +1695,13 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         else:
             logging.info(f'Metric correlation table:\n{table}')
 
-    for name in scoring_names:
-        if notebook:
-            display(Markdown(f'### CV results by {name}:'))
-            display(cv_df.sort_values(by=f'{name}_rank').head(10))
-        else:
-            logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
+    if display_results_by_metric:
+        for name in scoring_names:
+            if notebook:
+                display(Markdown(f'### CV results by {name}:'))
+                display(cv_df.sort_values(by=f'{name}_rank').head(10))
+            else:
+                logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
 
     # else:
     #     if display_by_ecdf:

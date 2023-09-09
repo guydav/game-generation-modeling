@@ -25,28 +25,36 @@ class FitnessFeaturesPreprocessor(ABC):
 NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'real', 'original_game_name'])
 
 BINARIZE_IGNORE_FEATURES = set([
-    'all_variables_defined', 'all_variables_used',
+    'variables_defined_all', 'variables_used_all', 'preferences_used_all',
     'setup_objects_used', 'setup_quantified_objects_used',
-    'starts_and_ends_once', 'all_preferences_used',
+    'starts_and_ends_once', 'scoring_count_expression_repetitions_exist',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal', 'adjacent_once_found',
-    'repeated_variables_found', 'nested_logicals_found', 'identical_logical_children_found',
+    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
+    'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
+    'repeated_variables_found', 'repeated_variable_type_in_either',
+    'nested_logicals_found', 'identical_logical_children_found',
+    'identical_scoring_children_found', 'identical_scoring_expressions_found',
     'two_number_operation_found', 'single_argument_multi_operation_found',
     'tautological_expression_found', 'redundant_expression_found',
-    'redundant_scoring_terminal_expression_found',
-    'identical_consecutive_seq_func_predicates_found', 'disjoint_seq_funcs_found',
+    'redundant_scoring_terminal_expression_found', 'at_end_found',
+    'identical_consecutive_seq_func_predicates_found',
+    'disjoint_seq_funcs_found', 'disjoint_at_end_found',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [
     re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
     re.compile(r'node_count_[\w\d_]+'),
-    re.compile(r'pref_forall_[\w\d_]+'),
+    re.compile(r'max_width_[\w\d_]+'),
+    re.compile(r'pref_forall_[\w\d_]+_correct$'),
+    re.compile(r'pref_forall_[\w\d_]+_incorrect$'),
+    # re.compile(r'pref_forall_[\w\d_]+'),
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     re.compile(r'predicate_under_modal_[\w\d_]+'),
     re.compile(r'section_doesnt_exist_[\w\d_]+'),
+    re.compile(r'num_preferences_defined_[\d_]+'),
 ]
 
 BINARIZE_NON_ONE = [
@@ -58,6 +66,8 @@ ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
 
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,
+    re.compile(r'[\w\d_]+_incorrect_count$'),  # since I now allow these to return a number, it might as well be scaled
+    re.compile(r'scoring_count_expression_repetitions_max'),
 ]
 
 BINRARIZE_NONZERO_PATTERNS = [
@@ -143,6 +153,9 @@ class BinarizeFitnessFeatures(FitnessFeaturesPreprocessor):
             else:
                 min_val, max_val = series.min(), series.max()
                 self.scale_series_min_max_values[c] = (min_val, max_val)
+
+            if min_val == max_val:
+                return np.clip(series, 0, 1)
 
             return np.clip((series - min_val) / (max_val - min_val), 0, 1)
 
@@ -315,6 +328,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
     df_key_to_index: typing.Dict[str, int]
     dropped_keys: typing.Set[str]
     feature_suffixes: typing.Sequence[str]
+    forced_output_keys: typing.Optional[typing.Set[str]]
     keys_to_drop: typing.List[str]
     merge_function: typing.Callable
     merged_column_suffix: str
@@ -325,7 +339,8 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
 
     def __init__(self, predicates: typing.Sequence[str], threshold_proportion: float = DEFAULT_MERGE_THRESHOLD_PROPORTION,
                  merge_function: typing.Callable = np.logical_or, merged_column_suffix: str = DEFAULT_MERGE_COLUMN_SUFFIX,
-                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0):
+                 feature_suffixes: typing.Sequence[str] = DEFAULT_FEATURE_SUFFIXES, default_value: int = 0,
+                 forced_output_keys: typing.Optional[typing.Set[str]] = None):
 
         self.predicates = predicates
         self.threshold_proportion = threshold_proportion
@@ -333,6 +348,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         self.merged_column_suffix = merged_column_suffix
         self.feature_suffixes = feature_suffixes
         self.default_value = default_value
+        self.forced_output_keys = None
 
         self.dropped_keys = set()
         self.keys_to_drop = []
@@ -345,8 +361,15 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         prefix_feature_names = [str(c) for c in df.columns if str(c).startswith(feature_prefix) and str(c).endswith(feature_suffix)]
         if len(prefix_feature_names) == 0:
             logging.info(f'No features found for prefix {feature_prefix} and suffix {feature_suffix}')
-            last_prefix_feature = [c for c in df.columns if str(c).startswith(feature_prefix)][-1]
-            insert_index = df.columns.get_loc(last_prefix_feature) + 1
+            prefix_feature_names = [c for c in df.columns if str(c).startswith(feature_prefix)]
+            if len(prefix_feature_names) > 0:
+                last_prefix_feature = prefix_feature_names[-1]
+                insert_index = df.columns.get_loc(last_prefix_feature) + 1
+
+            else:
+                all_arg_type_columns = [c for c in df.columns if 'arg_types' in str(c)]
+                insert_index = df.columns.get_loc(all_arg_type_columns[-1]) + 1
+
             new_series_values = pd.Series(np.ones(df.shape[0]) * self.default_value, name=merged_column_key)
             keys_to_merge = []
 
@@ -361,11 +384,25 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
                 insert_index = df.columns.get_loc(merge_insert_feature_name)
 
             counts = df[prefix_feature_names].sum()
-            keys_to_merge = counts.index[counts < self.threshold_proportion * df.shape[0]]  # type: ignore
+            keys_to_merge = list(counts.index[counts < self.threshold_proportion * df.shape[0]])  # type: ignore
+
+            if self.forced_output_keys is not None:
+                fixed_keys_to_merge = []
+                for k in keys_to_merge:
+                    if k not in self.forced_output_keys:
+                        fixed_keys_to_merge.append(k)
+
+                for k in prefix_feature_names:
+                    if k not in self.forced_output_keys and k not in fixed_keys_to_merge:
+                        fixed_keys_to_merge.append(k)
+
+                keys_to_merge = fixed_keys_to_merge
+
             if len(keys_to_merge) == 0:
                 logging.info(f'No features to merge for prefix {feature_prefix} and suffix {feature_suffix}')
                 return
 
+            # print(f'Merging {len(keys_to_merge)} features for prefix {feature_prefix} and suffix {feature_suffix}')
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
 
 
@@ -380,6 +417,7 @@ class MergeFitnessFeatures(FitnessFeaturesPreprocessor):
         if merged_column_key in self.merged_key_indices:
             insert_index = self.merged_key_indices[merged_column_key]
             keys_to_merge = self.merged_key_to_original_keys[merged_column_key]
+            keys_to_merge = [k for k in keys_to_merge if k in df.columns]
             new_series_values = reduce(self.merge_function, [df[k] for k in keys_to_merge[1:]], df[keys_to_merge[0]]).astype(int)
             df.insert(insert_index, merged_column_key, new_series_values)
 

@@ -83,7 +83,7 @@ class SectionBySectionNGramScoreSampler:
                  p_setup: float = DEFAULT_P_SETUP, p_terminal: float = DEFAULT_P_TERMINAL,
                  max_depth_by_sample_section: typing.Dict[str, int] = DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION,
                  score_threshold_by_sample_section: typing.Dict[str, float] = DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION,
-                 ngram_model_kwargs: typing.Dict[str, typing.Any] = DEFAULT_NGRAM_MODEL_KWARGS,
+                 ngram_model_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  ngram_model_key_by_section: typing.Dict[str, str] = NGRAM_MODEL_KEY_BY_SECTION,
                  rng: typing.Optional[np.random.Generator] = None,
                  random_seed: int = DEFAULT_RANDOM_SEED, verbose: int = 0
@@ -98,6 +98,14 @@ class SectionBySectionNGramScoreSampler:
 
         self.max_depth_by_sample_section = max_depth_by_sample_section
         self.score_threshold_by_sample_section = score_threshold_by_sample_section
+
+        if ngram_model_kwargs is None:
+            ngram_model_kwargs = DEFAULT_NGRAM_MODEL_KWARGS
+        else:
+            temp_kwargs = DEFAULT_NGRAM_MODEL_KWARGS.copy()
+            temp_kwargs.update(ngram_model_kwargs)
+            ngram_model_kwargs = temp_kwargs
+
         self.ngram_model_kwargs = ngram_model_kwargs
         self.ngram_model_key_by_section = ngram_model_key_by_section
 
@@ -164,7 +172,7 @@ class SectionBySectionNGramScoreSampler:
             setup = ('(:setup', setup, ')')
 
         n_preferences = self.rng.choice(np.arange(1, len(self.n_preferences_weights) + 1), p=self.n_preferences_weights)
-        preference_list = [self._sample_rule('preference', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
+        preference_list = [self._sample_rule('pref_def', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
 
         preferences_dict = dict(preferences=preference_list)
         preferences_dict['parseinfo'] = tatsu.infos.ParseInfo(  # type: ignore

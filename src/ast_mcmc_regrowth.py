@@ -16,7 +16,7 @@ import tatsu.grammars
 import torch
 
 from ast_counter_sampler import *
-from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler
+from ast_initial_proposal_sampler import SectionBySectionNGramScoreSampler, NGRAM_MODEL_KEY_BY_SECTION
 from ast_initial_proposal_sampler import *
 from fitness_ngram_models import *
 from ast_parser import ASTSamplePostprocessor
@@ -30,10 +30,8 @@ sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
 
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.DEBUG,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def istarmap(self, func, iterable, chunksize=1):
@@ -110,7 +108,8 @@ class InitialProposalSamplerType(enum.Enum):
     SECTION_SAMPLER = 1
 
 
-def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType, sampler: ASTSampler,
+def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType,
+                                    sampler: ASTSampler,
                                     ngram_model_path: typing.Optional[str] = None,
                                     section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None):
     if initial_proposal_type == InitialProposalSamplerType.MAP:
@@ -121,6 +120,27 @@ def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSample
 
         if ngram_model_path is None:
             raise ValueError('ngram_model_path must be specified for section sampler')
+
+        ngram_model_index = ngram_model_path.find('ngram_model')
+        model_n = int(ngram_model_path[ngram_model_index - 2: ngram_model_index - 1])
+        if model_n != 7:
+            if 'ngram_model_key_by_section' not in section_sampler_kwargs:
+                section_sampler_kwargs['ngram_model_key_by_section'] = {k: f'{k[2:]}_n_{model_n}_score' for k in ast_parser.SECTION_KEYS}
+
+            if 'ngram_model_kwargs' not in section_sampler_kwargs:
+                section_sampler_kwargs['ngram_model_kwargs'] = {}
+
+            if 'k' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['k'] = model_n
+
+            if 'top_k_min_n' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['top_k_min_n'] = model_n
+
+            if 'top_k_max_n' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['top_k_max_n'] = model_n
+
+            if 'k_for_sections' not in section_sampler_kwargs['ngram_model_kwargs']:
+                section_sampler_kwargs['ngram_model_kwargs']['k_for_sections'] = model_n
 
         with open(ngram_model_path, 'rb') as f:
             ngram_model = pickle.load(f)
@@ -244,7 +264,7 @@ class MCMCRegrowthSampler:
                                   postprocess: typing.Optional[bool] = None, n_workers: int = 8,
                                   chunksize: int = 1, notebook_tqdm: bool = False):
 
-        logging.debug(f'Launching multiprocessing pool with {n_workers} workers...')
+        logger.debug(f'Launching multiprocessing pool with {n_workers} workers...')
         with mpp.Pool(n_workers) as pool:
             if initial_proposals is None:
                 initial_proposals = [None] * n_samples_per_initial_proposal  # type: ignore
@@ -514,6 +534,6 @@ if __name__ == '__main__':
     args.ngram_model_path = os.path.join(args.relative_path, args.ngram_model_path)
 
     args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
-    logging.debug(f'Shell arguments:\n{args_str}')
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     main(args)

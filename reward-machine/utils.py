@@ -44,9 +44,6 @@ def _vec_dict_to_array(vec: typing.Dict[str, float]):
     return np.array([vec['x'], vec['y']])
 
 
-# TODO (GD 2022-10-16): is there a way to specify an ndarray with some number of entires/dimensions? a shape?
-
-
 class AgentState(typing.NamedTuple):
     angle: float
     angle_int: int
@@ -96,6 +93,16 @@ class AgentState(typing.NamedTuple):
         )
 
 
+SHELF_Y_AXIS_SCALING = 0.25
+BED_SHELVES_WITH_MISBEHAVED_BOUNDING_BOX = set([
+    "Shelf|-02.97|+01.16|-01.72",
+    "Shelf|-02.97|+01.16|-02.47",
+    "Shelf|-02.97|+01.53|-01.72",
+    "Shelf|-02.97|+01.53|-02.47",
+])
+BED_SHELVES_Y_CENTER_OFFSET = -0.075
+
+
 class ObjectState(typing.NamedTuple):
     angular_velocity: np.ndarray  # x, y, z
     bbox_center: np.ndarray  #  x, y, z
@@ -120,6 +127,18 @@ class ObjectState(typing.NamedTuple):
             state_dict['position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
             state_dict['bboxCenter'] = {'x': 0.16, 'y': -0.1, 'z': -0.185}
             state_dict['bboxExtents'] = {'x': 3.65, 'y': 0.1, 'z': 2.75}
+
+        # Manully adjust shelves, whose bounding boxes include the entire height of the shelf vertically, which is unintended
+        if state_dict['objectType'].lower() == 'shelf':
+            bbox_center_y = state_dict['bboxCenter']['y']
+            bbox_extents_y = state_dict['bboxExtents']['y']
+
+            if state_dict['objectId'] in BED_SHELVES_WITH_MISBEHAVED_BOUNDING_BOX:
+                bbox_center_y += BED_SHELVES_Y_CENTER_OFFSET
+
+            updated_bbox_extens_y = bbox_extents_y * SHELF_Y_AXIS_SCALING
+            state_dict['bboxExtents']['y'] = updated_bbox_extens_y
+            state_dict['bboxCenter']['y'] = bbox_center_y - (bbox_extents_y - updated_bbox_extens_y)
 
         return ObjectState(
             angular_velocity=_vec_dict_to_array(state_dict['angularVelocity']),

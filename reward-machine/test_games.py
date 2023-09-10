@@ -22,7 +22,7 @@ THROW_BALL_UNIQUE_POSITIONS_TRACE = pathlib.Path(get_project_dir() + '/reward-ma
 COMPLEX_STACKING_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/complex_stacking_trace.json')
 
 # CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/updated-game-27.json')
-CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame.json')
+CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
 # CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
 
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
@@ -220,29 +220,29 @@ TEST_CASES = [
     },),
     ('test-clean-room', CLEANUP_TRACE, 69.0, {
         'dodgeballsInPlace' : [
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.95|+01.29|-02.61'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=3015, end=3015, measures={})
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.95|+01.29|-02.61'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?h': 'GarbageCan|+00.95|-00.03|-02.68', '?d': 'Dodgeball|-02.97|+01.29|-02.28'}, start=2988, end=2988, measures={})
         ],
         'blocksInPlace' : [
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.29|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.10|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.10|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.28|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.23|+00.28|-02.83'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.24|+00.10|-02.83'}, start=3015, end=3015, measures={})
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.29|-02.83'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.10|-02.83'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.02|+00.28|-02.83'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.16|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.23|+00.28|-02.83'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-02.47', 'west_wall': 'west_wall', '?c': 'CubeBlock|-00.24|+00.10|-02.83'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|-02.97|+01.53|-01.72', 'west_wall': 'west_wall', '?c': 'CubeBlock|+00.20|+00.10|-02.83'}, start=2988, end=2988, measures={}),
         ],
         'laptopAndBookInPlace' : [
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.01|-02.82', '?o': 'Book|+02.83|+00.41|-00.01'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.51|-02.82', '?o': 'Laptop|+03.04|+00.79|-02.28'}, start=3015, end=3015, measures={})
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.01|-02.82', '?o': 'Book|+02.83|+00.41|-00.01'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?s': 'Shelf|+00.62|+01.51|-02.82', '?o': 'Laptop|+03.04|+00.79|-02.28'}, start=2988, end=2988, measures={})
         ],
         'smallItemsInPlace' : [
-            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'CellPhone|+02.96|+00.79|-00.93'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'KeyChain|-01.62|+00.60|+00.41'}, start=3015, end=3015, measures={})
+            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'CellPhone|+02.96|+00.79|-00.93'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?d': 'Drawer|-01.52|+00.41|+00.35', '?o': 'KeyChain|-01.62|+00.60|+00.41'}, start=2988, end=2988, measures={})
         ],
         'itemsTurnedOff' : [
-            PreferenceSatisfaction(mapping={'?o': 'LightSwitch|-00.14|+01.33|+00.60'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?o': 'Desktop|+03.10|+00.79|-01.24'}, start=3015, end=3015, measures={}),
-            PreferenceSatisfaction(mapping={'?o': 'Laptop|+03.04|+00.79|-02.28'}, start=3015, end=3015, measures={})
+            PreferenceSatisfaction(mapping={'?o': 'LightSwitch|-00.14|+01.33|+00.60'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?o': 'Desktop|+03.10|+00.79|-01.24'}, start=2988, end=2988, measures={}),
+            PreferenceSatisfaction(mapping={'?o': 'Laptop|+03.04|+00.79|-02.28'}, start=2988, end=2988, measures={})
         ],
     },),
     ('test-agent-adjacent', TEST_AGENT_DOOR_ADJACENT_TRACE, 1.0, {
@@ -285,14 +285,14 @@ def test_single_game(game_key: str, trace_path: typing.Union[str, pathlib.Path],
 
     for state, is_final in _load_trace(trace_path):
         state = FullState.from_state_dict(state)
-        score = game_handler.process(state, is_final, debug=debug,
+        score = game_handler.process(state, is_final, # debug=debug,
             debug_building_handler=debug_building_handler,
             debug_preference_handlers=debug_preference_handlers)
         if score is not None:
             break
 
     score = game_handler.score(game_handler.scoring)
-
+    print(score, expected_score)
     assert np.allclose(score, expected_score)
 
     if expected_satisfactions is not None:

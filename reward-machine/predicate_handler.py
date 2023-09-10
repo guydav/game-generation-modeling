@@ -674,7 +674,7 @@ def _object_in_building(building: BuildingPseudoObject, other_object: ObjectStat
     return other_object.object_id in building.building_objects
 
 
-IN_MARGIN = 0.05
+IN_MARGIN = 0.075
 
 
 def _pred_in(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]], allow_in_any_object: bool = False):
@@ -876,7 +876,7 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
         # object 1 is on object 0 if they're touching and object 1 is above object 0
         # or if they're touching and object 1 is contained withint object 0?
-        return objects_on or _pred_in(agent, objects)
+        return objects_on or _pred_in(agent, objects, allow_in_any_object=True)
 
     elif isinstance(upper_object, BuildingPseudoObject):
         # A building can also be on an object if that object is (a) in the building

@@ -80,11 +80,11 @@ class Visualizer():
                 prisms.append(prism)
 
 
-        
+
         if self.zoom_to_objects:
             object_states = [UNITY_PSEUDO_OBJECTS[object_id] if object_id in UNITY_PSEUDO_OBJECTS else
                              self.object_states_by_idx[self.visualization_index][object_id] for object_id in self.objects_to_track]
-            
+
             self.min_x = min([obj.bbox_center[0] - obj.bbox_extents[0] for obj in object_states])
             self.max_x = max([obj.bbox_center[0] + obj.bbox_extents[0] for obj in object_states])
 
@@ -268,12 +268,15 @@ if __name__ == "__main__":
     # PREDICATE = "on"
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
-    
-    TRACE_NAME = "qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded"
+
+    TRACE_NAME = "qK8hfQE9E97kZMDdL4Hv-preCreateGame"  # -rerecorded"
     START_IDX = 2800
     PREDICATE = "on"
     DOMAIN = "many"
-    OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-02.47", "CubeBlock|-00.23|+00.28|-02.83"]
+    OBJECTS_TO_TRACK = ["Shelf|+00.62|+01.51|-02.82", "Laptop|+03.04|+00.79|-02.28"]
+    # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-01.72", "CubeBlock|+00.20|+00.29|-02.83"]
+    # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-02.47", "Dodgeball|-02.95|+01.29|-02.61"]
+
 
     trace_path = f"./reward-machine/traces/{TRACE_NAME}.json"
     if not os.path.exists(trace_path):

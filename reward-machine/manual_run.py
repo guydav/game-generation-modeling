@@ -25,6 +25,7 @@ TEST_DOOR_AND_RUG_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/trac
 TEST_AGENT_DOOR_ADJACENT_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/agent_door_adjacent.json')
 THROW_WITH_STACKED_BLOCKS_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/throw_with_stacked_blocks.json')
 
+# CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame.json')
 CLEANUP_TRACE = pathlib.Path(get_project_dir() + '/reward-machine/traces/qK8hfQE9E97kZMDdL4Hv-preCreateGame-rerecorded.json')
 # TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame.json')
 TEST_BLOCK_CACHE_TEST = pathlib.Path(get_project_dir() + '/reward-machine/traces/otcaCEGfUhzEfGy72Qm8-preCreateGame-rerecorded.json')
@@ -91,7 +92,7 @@ TEST_GAME_LIBRARY = {
     'game-6': load_game("game-6"),
     'game-7': load_game("game-7"),
     'game-15': load_game("game-15"),
-    'game-27': load_game("game-27"),
+    'test-clean-room': load_game("game-27"),
     'test-door': load_game("test_door"),
     'test-agent-door-adjacent': load_game("test_agent_door_adjacent"),
     'throw-block-cache-test': load_game("throw_with_stacked_blocks"),
@@ -101,7 +102,7 @@ if __name__ == "__main__":
 
 
     # game = TEST_GAME_LIBRARY['throw-block-cache-test']
-    game = TEST_GAME_LIBRARY['game-27']
+    game = TEST_GAME_LIBRARY['test-clean-room']
     game_handler = GameHandler(game)
     # trace_path = TEST_BLOCK_CACHE_TEST.resolve().as_posix()
     trace_path = CLEANUP_TRACE.resolve().as_posix()
@@ -111,9 +112,8 @@ if __name__ == "__main__":
     score = None
 
     for idx, (state, is_final) in enumerate(_load_trace(trace_path)):
-        print(f"\n\n================================PROCESSING STATE {idx} ================================")
+        # print(f"\n\n================================PROCESSING STATE {idx} ================================")
         state = FullState.from_state_dict(state)
-
         score = game_handler.process(state, is_final, debug_preference_handlers=False, debug_building_handler=False)
         if score is not None:
             break

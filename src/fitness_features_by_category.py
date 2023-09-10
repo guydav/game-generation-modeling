@@ -1,5 +1,6 @@
 import re
 
+from fitness_features import COMMON_SENSE_PREDICATES_FUNCTIONS
 from fitness_features_preprocessing import NGRAM_SCORE_PATTERN, ARG_TYPES_PATTERN
 
 GRAMMAR_CONTEXT_FEATURES = [
@@ -39,6 +40,21 @@ COUNTING_FEATURES = [
     re.compile(r'max_width_[\w\d_]+'),
 ]
 
+COUNTING_FEATURES_PATTERN_DICT = {
+    # How many preferences are defined
+    'num_preferences_defined': re.compile(r'num_preferences_defined_[\d_]+'),
+    # How many modals are under a then
+    'modals under `then`': re.compile(r'length_of_then_modals_[\w\d_]+'),
+    # Various features related to variable quantifications
+    'variables quantified': re.compile(r'max_quantification_count_[\w\d_]+'),
+    'variable types quantified': re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
+    # Man and max depth and node count
+    'max depth by section': re.compile(r'max_depth_[\w\d_]+'),
+    'mean depth by section': re.compile(r'mean_depth_[\w\d_]+'),
+    'node count by section': re.compile(r'node_count_[\w\d_]+'),
+    'max width by section': re.compile(r'max_width_[\w\d_]+'),
+}
+
 FORALL_FEATURES = [
     re.compile(r'pref_forall_[\w\d_]+_correct$'),
     re.compile(r'pref_forall_[\w\d_]+_incorrect$'),
@@ -52,6 +68,11 @@ PREDICATE_UNDER_MODAL_FEATURES = [
 PREDICATE_ROLE_FILLER_FEATURES = [
     ARG_TYPES_PATTERN
 ]
+
+PREDICATE_ROLE_FILLER_PATTERN_DICT = {
+    pred: re.compile(f'{pred}_arg_types_[\\w_]+')
+    for pred in COMMON_SENSE_PREDICATES_FUNCTIONS
+}
 
 COMPOSITIONALITY_FEATURES = [
     re.compile(r'compositionality_structure_\d+'),

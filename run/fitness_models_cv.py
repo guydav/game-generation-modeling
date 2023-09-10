@@ -99,11 +99,15 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float,
 
 
 def main(args: argparse.Namespace):
+    if args.random_seed != utils.DEFAULT_RANDOM_SEED:
+        args.output_name = f'{args.output_name}_seed_{args.random_seed}'
+
     model_name = args.output_name
     if 'fitness_sweep_' in model_name:
         model_name = model_name.replace('fitness_sweep_', '')
 
     model_name = f'{utils.DEFAULT_SAVE_MODEL_NAME}_{model_name}'
+
 
     logger.info(f'Starting fitness CV for {model_name}')
 

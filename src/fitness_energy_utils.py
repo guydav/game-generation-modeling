@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
+from sklearn.metrics import average_precision_score
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold, ParameterGrid
 from sklearn.pipeline import Pipeline
 from statsmodels.distributions.empirical_distribution import ECDF
@@ -662,6 +663,14 @@ def _score_samples(model: ModelClasses, X: torch.Tensor, y: typing.Optional[torc
 #     X: torch.Tensor, y=None):
 #     return _score_samples(model, X, y, score_sign=-1)
 
+def _average_precision_score(positive_scores: np.ndarray, negative_scores: np.ndarray) -> float:
+    n_positives = positive_scores.shape[0]
+    negative_scores = negative_scores.reshape(-1)
+    n_negatives = negative_scores.shape[0]
+    labels = np.concatenate([np.ones(n_positives), np.zeros(n_negatives)])
+    scores = np.concatenate([positive_scores, negative_scores]) * -1  # flipping the signs of the energies  # type: ignore
+    return average_precision_score(labels, scores, average=None)  # type: ignore
+
 
 def _ecdf(positive_scores: np.ndarray, negative_scores: np.ndarray) -> float:
     ecdf = ECDF(np.concatenate([positive_scores, negative_scores.reshape(-1)]))
@@ -689,6 +698,15 @@ class ContrastiveDataWrapper:
 
 def contrastive_data_wrapper_to_tensor(score_function: typing.Callable):
     return ContrastiveDataWrapper(score_function)
+
+
+@contrastive_data_wrapper_to_tensor
+def evaluate_fitness_average_precision_score(model: ModelClasses,
+    X: torch.Tensor, y=None) -> float:
+    positive_scores, negative_scores = _score_samples(model, X, y)
+    positive_scores = positive_scores.squeeze().cpu().numpy()
+    negative_scores = negative_scores.squeeze().cpu().numpy()
+    return _average_precision_score(positive_scores, negative_scores)
 
 
 @contrastive_data_wrapper_to_tensor
@@ -808,8 +826,17 @@ default_multiple_scoring = build_multiple_scoring_function(
         evaluate_fitness_single_game_min_rank,
         wrap_loss_function_to_metric(energy_of_negative_at_quantile, dict(quantile=0.01), True),  # type: ignore
         wrap_loss_function_to_metric(energy_of_negative_at_quantile, dict(quantile=0.05), True),  # type: ignore
+        evaluate_fitness_average_precision_score,
     ],
-    ['loss', 'overall_ecdf', 'single_game_rank', 'single_game_min_rank', 'energy_of_negative@1%', 'energy_of_negative@5%'],
+    [
+        'loss',
+        'overall_ecdf',
+        'single_game_rank',
+        'single_game_min_rank',
+        'energy_of_negative@1%',
+        'energy_of_negative@5%',
+        'average_precision_score',
+    ],
 )
 
 
@@ -1543,7 +1570,8 @@ def evaluate_trained_model(model: SklearnFitnessWrapper, data_tensor: torch.Tens
         combined_ecdf = evaluate_fitness_overall_ecdf(model, data_tensor)
         combined_game_rank = evaluate_fitness_single_game_rank(model, data_tensor)
         combined_game_min_rank = evaluate_fitness_single_game_min_rank(model, data_tensor)
-        combined_results = dict(ecdf=combined_ecdf, game_rank=combined_game_rank, game_min_rank=combined_game_min_rank)
+        combined_mean_average_precision = evaluate_fitness_average_precision_score(model, data_tensor)
+        combined_results = dict(ecdf=combined_ecdf, game_rank=combined_game_rank, game_min_rank=combined_game_min_rank, mean_average_precision=combined_mean_average_precision)
 
     return combined_results
 

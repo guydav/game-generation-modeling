@@ -713,13 +713,13 @@ class PredicateFoundInData(FitnessTerm):
     min_trace_count: int
     predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
                                               typing.Tuple[int, int, int]]
-    predicate_sections: typing.Tuple[str]
+    predicate_sections: typing.Tuple[str, ...]
     predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
 
     _predicate_data_estimator = None
 
-    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False,
+    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False, split_by_section: bool = False,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
@@ -731,6 +731,7 @@ class PredicateFoundInData(FitnessTerm):
             rules = list(PREDICATE_IN_DATA_RULE_TO_CHILD.keys())
         else:
             rules = [rule]
+        self.split_by_section = split_by_section
 
         super().__init__(rules, f'predicate_found_in_data')
         self.min_trace_count = min_trace_count
@@ -767,7 +768,10 @@ class PredicateFoundInData(FitnessTerm):
         self._init_predicate_data_estimator()
 
     def game_start(self) -> None:
-        self.predicates_found_by_section = {section: [] for section in self.predicate_sections}
+        if self.split_by_section:
+            self.predicates_found_by_section = {section: [] for section in self.predicate_sections}
+        else:
+            self.predicates_found = []
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
@@ -784,8 +788,11 @@ class PredicateFoundInData(FitnessTerm):
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=True)
-                predicate_found = n_traces >= self.min_trace_count
-                self.predicates_found_by_section[section].append(1 if predicate_found else 0)
+                predicate_found = int(n_traces >= self.min_trace_count)
+                if self.split_by_section:
+                    self.predicates_found_by_section[section].append(predicate_found)
+                else:
+                    self.predicates_found.append(predicate_found)
                 # if not predicate_found:  # n_traces == 0:
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
@@ -802,24 +809,38 @@ class PredicateFoundInData(FitnessTerm):
                 pass
 
     def _get_all_inner_keys(self):
-        return [f'{section.replace("(:", "")}_{key}'
-                for section in self.predicate_sections
-                for key in ('all', 'prop')]
+        if self.split_by_section:
+            return [f'{section.replace("(:", "")}_{key}'
+                    for section in self.predicate_sections
+                    for key in ('all', 'prop')]
+        else:
+            return ['all', 'prop']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # TODO: should this be 0 or 1 if none are found? assuming 0 for now
         result = {}
-        for section, section_predicates_found in self.predicates_found_by_section.items():
-            section_key = section.replace("(:", "")
-            if len(section_predicates_found) == 0:
+
+        if self.split_by_section:
+            for section, section_predicates_found in self.predicates_found_by_section.items():
+                section_key = section.replace("(:", "")
+                if len(section_predicates_found) == 0:
+                    # logger.warning(f'No predicates found for {self.header}')
+                    result.update({f'{section_key}_{key}': 0 for key in ('all', 'prop')})
+
+                else:
+                    result[f'{section_key}_all'] = int(all(section_predicates_found))
+                    result[f'{section_key}_prop'] = sum(section_predicates_found) / len(section_predicates_found)
+
+            return result
+
+        else:
+            if len(self.predicates_found) == 0:
                 # logger.warning(f'No predicates found for {self.header}')
-                result.update({f'{section_key}_{key}': 0 for key in ('all', 'prop')})
+                result.update({key: 0 for key in ('all', 'prop')})
 
             else:
-                result[f'{section_key}_all'] = int(all(section_predicates_found))
-                result[f'{section_key}_prop'] = sum(section_predicates_found) / len(section_predicates_found)
-
-        return result
+                result['all'] = int(all(self.predicates_found))
+                result['prop'] = sum(self.predicates_found) / len(self.predicates_found)
 
 
 class NoAdjacentOnce(FitnessTerm):

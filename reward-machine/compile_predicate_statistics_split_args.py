@@ -99,6 +99,7 @@ DEBUG = False
 PROFILE = True
 DEFAULT_CACHE_DIR = pathlib.Path(get_project_dir() + '/reward-machine/caches')
 DEFAULT_CACHE_FILE_NAME_FORMAT = 'predicate_statistics_{traces_hash}.pkl.gz'
+BITSTRING_INTERVALS_FILE_NAME_FORMAT = 'predicate_statistics_bitstring_intervals_{traces_hash}.pkl.gz'
 DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
@@ -168,8 +169,8 @@ def create_bitstings_df(df, trace_lengths_and_domains_dict, output_path):
 
     split_args_with_trace_length_df = df.join(trace_lengths_and_domains_df.drop(columns=['domain']).set_index('trace_id'), on='trace_id')
     split_args_with_string_intervals_df = split_args_with_trace_length_df.assign(intervals=split_args_with_trace_length_df.apply(row_to_string_intervals, axis=1))
+    print(f'Saving bitstrings df to {output_path}')
     split_args_with_string_intervals_df.to_pickle(output_path)
-
 
 
 class CommonSensePredicateStatisticsSplitArgs():
@@ -205,19 +206,19 @@ class CommonSensePredicateStatisticsSplitArgs():
         # Compute hash of trace names
         if force_trace_names_hash is not None:
             logger.info(f"Forcing trace names hash to {force_trace_names_hash}")
-            trace_names_hash = force_trace_names_hash
+            self.trace_names_hash = force_trace_names_hash
         else:
-            trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
+            self.trace_names_hash = stable_hash_list([os.path.basename(trace_name).lower().replace(".json", "") for trace_name in trace_names])[:trace_hash_n_characters]
 
-        stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=trace_names_hash))
-        trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=trace_names_hash))
-        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=trace_names_hash))
-        open_method = gzip.open if stats_filename.endswith('.gz') else open
+        self.stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=self.trace_names_hash))
+        self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=self.trace_names_hash))
+        in_progress_traces_filename = os.path.join(cache_dir, in_progress_traces_filename_format.format(traces_hash=self.trace_names_hash))
+        open_method = gzip.open if self.stats_filename.endswith('.gz') else open
 
-        if os.path.exists(stats_filename) and not overwrite:
-            self.data = pd.read_pickle(stats_filename)  # type: ignore
-            logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
-            with open_method(trace_lengths_and_domains_filename, 'rb') as f:
+        if os.path.exists(self.stats_filename) and not overwrite:
+            self.data = pd.read_pickle(self.stats_filename)  # type: ignore
+            logger.info(f'Loaded data with shape {self.data.shape} from {self.stats_filename}')
+            with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
                 self.trace_lengths_and_domains = pickle.load(f)
 
         else:
@@ -227,7 +228,7 @@ class CommonSensePredicateStatisticsSplitArgs():
             if base_trace_path is None:
                 raise ValueError("Must specify base_trace_path if cache file does not exist")
 
-            logger.info(f"No cache file found at {stats_filename}, building from scratch...")
+            logger.info(f"No cache file found at {self.stats_filename}, building from scratch...")
 
             trace_paths = list(sorted([os.path.join(base_trace_path, f"{trace_name}.json" if not trace_name.lower().endswith(".json") else trace_name) for trace_name in trace_names]))
 
@@ -246,8 +247,8 @@ class CommonSensePredicateStatisticsSplitArgs():
                 trace_paths = [trace_path for trace_path in trace_paths if trace_path not in in_progress_trace_paths]
                 logger.info(f"Found {len(in_progress_trace_paths)} in progress traces, resuming processing with {len(trace_paths)} traces remaining")
                 self.data = pd.read_pickle(stats_filename)  # type: ignore
-                logger.info(f'Loaded data with shape {self.data.shape} from {stats_filename}')
-                with open_method(trace_lengths_and_domains_filename, 'rb') as f:
+                logger.info(f'Loaded data with shape {self.data.shape} from {self.stats_filename}')
+                with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
                     self.trace_lengths_and_domains = pickle.load(f)
 
             else:
@@ -260,9 +261,9 @@ class CommonSensePredicateStatisticsSplitArgs():
             for trace_path in tqdm(trace_paths, desc="Processing traces"):
                 trace = json.load(open(trace_path, 'r'))
                 self.process_trace(trace)
-                self.data.to_pickle(stats_filename)
+                self.data.to_pickle(self.stats_filename)
 
-                with open_method(trace_lengths_and_domains_filename, 'wb') as f:
+                with open_method(self.trace_lengths_and_domains_filename, 'wb') as f:
                     pickle.dump(self.trace_lengths_and_domains, f)
 
                 in_progress_trace_paths.append(trace_path)
@@ -1252,6 +1253,11 @@ if __name__ == '__main__':
 
         prefix = "[+]" if len(var_intervals) > 0 else "[-]"
         print(f"{prefix} {var_type} has {len(var_intervals)} appearances")
+
+    data_df = pd.read_pickle(stats.stats_filename)
+    create_bitstings_df(
+        data_df, stats.trace_lengths_and_domains,
+        os.path.join(DEFAULT_CACHE_DIR, BITSTRING_INTERVALS_FILE_NAME_FORMAT.format(traces_hash=stats.trace_names_hash)))
 
     exit()
 

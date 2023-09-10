@@ -269,11 +269,12 @@ if __name__ == "__main__":
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
 
-    TRACE_NAME = "qK8hfQE9E97kZMDdL4Hv-preCreateGame"  # -rerecorded"
-    START_IDX = 2800
+    TRACE_NAME = "ZSRiFalssazyXG8Qui4j-preCreateGame-rerecorded"  # "qK8hfQE9E97kZMDdL4Hv-preCreateGame"  # -rerecorded"
+    START_IDX = 121
     PREDICATE = "on"
-    DOMAIN = "many"
-    OBJECTS_TO_TRACK = ["Shelf|+00.62|+01.51|-02.82", "Laptop|+03.04|+00.79|-02.28"]
+    DOMAIN = "few"
+    OBJECTS_TO_TRACK = ["Dodgeball|+00.70|+01.11|-02.80", "Dodgeball|+00.44|+01.13|-02.80"]
+    # OBJECTS_TO_TRACK = ["Shelf|+00.62|+01.51|-02.82", "Laptop|+03.04|+00.79|-02.28"]
     # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-01.72", "CubeBlock|+00.20|+00.29|-02.83"]
     # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-02.47", "Dodgeball|-02.95|+01.29|-02.61"]
 

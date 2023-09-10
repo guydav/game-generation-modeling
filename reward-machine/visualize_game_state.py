@@ -246,7 +246,7 @@ class Visualizer():
             self.object_states_by_idx.append(most_recent_object_states.copy())
 
         # Plot figure
-        self.fig = plt.figure()
+        self.fig = plt.figure(figsize=(10, 10))
         cid = self.fig.canvas.mpl_connect('key_press_event', self._update_visualization)
         cid2 = self.fig.canvas.mpl_connect('motion_notify_event', self._update_azim_elev)
 
@@ -269,11 +269,11 @@ if __name__ == "__main__":
     # OBJECTS_TO_TRACK = ["north_wall", "CubeBlock|-02.99|+01.26|-01.49"]
 
 
-    TRACE_NAME = "ZSRiFalssazyXG8Qui4j-preCreateGame-rerecorded"  # "qK8hfQE9E97kZMDdL4Hv-preCreateGame"  # -rerecorded"
-    START_IDX = 121
+    TRACE_NAME = "50OkWutbBlKsEJPMGbKu-gameplay-attempt-1-rerecorded"  # "qK8hfQE9E97kZMDdL4Hv-preCreateGame"  # -rerecorded"
+    START_IDX = 77
     PREDICATE = "on"
     DOMAIN = "few"
-    OBJECTS_TO_TRACK = ["Dodgeball|+00.70|+01.11|-02.80", "Dodgeball|+00.44|+01.13|-02.80"]
+    OBJECTS_TO_TRACK = ["Chair|+02.73|00.00|-01.21", "Desk|+03.14|00.00|-01.41"]
     # OBJECTS_TO_TRACK = ["Shelf|+00.62|+01.51|-02.82", "Laptop|+03.04|+00.79|-02.28"]
     # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-01.72", "CubeBlock|+00.20|+00.29|-02.83"]
     # OBJECTS_TO_TRACK = ["Shelf|-02.97|+01.16|-02.47", "Dodgeball|-02.95|+01.29|-02.61"]

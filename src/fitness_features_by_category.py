@@ -40,6 +40,18 @@ COUNTING_FEATURES = [
     re.compile(r'max_width_[\w\d_]+'),
 ]
 
+
+# A Smaller set of counting features to exclude
+COUNTING_MORE_FEATURES = [
+    # How many modals are under a then
+    re.compile(r'length_of_then_modals_[\w\d_]+'),
+    # Various features related to variable quantifications
+    re.compile(r'max_quantification_count_[\w\d_]+'),
+    re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
+    re.compile(r'mean_depth_[\w\d_]+'),
+    re.compile(r'max_width_[\w\d_]+'),
+]
+
 COUNTING_FEATURES_PATTERN_DICT = {
     # How many preferences are defined
     'num_preferences_defined': re.compile(r'num_preferences_defined_[\d_]+'),
@@ -107,6 +119,7 @@ FEATURE_CATEGORIES = {
     'grammar_context': GRAMMAR_CONTEXT_FEATURES,
     'ngram_and_data_based': NGRAM_AND_DATA_BASED_FEATURES,
     'counting': COUNTING_FEATURES,
+    'counting_less_important': COUNTING_MORE_FEATURES,
     'forall': FORALL_FEATURES,
     'predicate_under_modal': PREDICATE_UNDER_MODAL_FEATURES,
     'predicate_role_filler': PREDICATE_ROLE_FILLER_FEATURES,

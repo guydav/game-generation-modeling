@@ -70,6 +70,7 @@ parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN = './models/{name}_{today}.pkl.gz'
 DEFAULT_FEATURIZER_OUTPUT_NAME = 'fitness_featurizer'
 parser.add_argument('-f', '--featurizer-output-name', default=DEFAULT_FEATURIZER_OUTPUT_NAME)
+parser.add_argument('--output-suffix', type=str, default=None)
 DEFAULT_RECURSION_LIMIT = 2000
 parser.add_argument('--recursion-limit', type=int, default=DEFAULT_RECURSION_LIMIT)
 parser.add_argument('--no-binarize', action='store_true')
@@ -719,7 +720,7 @@ class PredicateFoundInData(FitnessTerm):
 
     _predicate_data_estimator = None
 
-    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False, split_by_section: bool = False,
+    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False, split_by_section: bool = True,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
@@ -817,7 +818,6 @@ class PredicateFoundInData(FitnessTerm):
             return ['all', 'prop']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        # TODO: should this be 0 or 1 if none are found? assuming 0 for now
         result = {}
 
         if self.split_by_section:
@@ -831,8 +831,6 @@ class PredicateFoundInData(FitnessTerm):
                     result[f'{section_key}_all'] = int(all(section_predicates_found))
                     result[f'{section_key}_prop'] = sum(section_predicates_found) / len(section_predicates_found)
 
-            return result
-
         else:
             if len(self.predicates_found) == 0:
                 # logger.warning(f'No predicates found for {self.header}')
@@ -841,6 +839,9 @@ class PredicateFoundInData(FitnessTerm):
             else:
                 result['all'] = int(all(self.predicates_found))
                 result['prop'] = sum(self.predicates_found) / len(self.predicates_found)
+
+
+        return result
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2882,6 +2883,15 @@ if __name__ == '__main__':
 
     if not args.output_path.endswith('.gz'):
         args.output_path += '.gz'
+
+    if args.output_suffix is not None:
+        args.output_suffix = args.output_suffix.replace('-', '_')
+
+        output_ext = '.csv.gz'
+        output_path_no_ext = args.output_path[:-len(output_ext)]
+        args.output_path = f'{output_path_no_ext}_{args.output_suffix}{output_ext}'
+
+        args.featurizer_output_name = f'{args.featurizer_output_name}_{args.output_suffix}'
 
     featurizer_output_path = DEFAULT_FEATURIZER_OUTPUT_PATH_PATTERN.format(
             name=args.featurizer_output_name, today=datetime.now().strftime('%Y_%m_%d'))

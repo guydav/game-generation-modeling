@@ -10,11 +10,12 @@ import tatsu.ast
 
 import ast_printer
 import ast_parser
-from ast_counter_sampler import ASTSampler, SamplingException, parse_or_load_counter
-from ast_counter_sampler import *
+import ast_counter_sampler
+
 from ast_parser import ASTNodeInfo, ASTParser, ASTParentMapper, ContextDict, VARIABLES_CONTEXT_KEY, VARIABLE_OWNER_CONTEXT_KEY_PREFIX
 from ast_utils import replace_child
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH, LATEST_FITNESS_FUNCTION_DATE_ID
+from ast_to_latex_doc import extract_predicate_function_args
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
@@ -50,9 +51,9 @@ class ASTContextFixer(ASTParentMapper):
     preference_count_nodes: typing.Dict[str, typing.List[tatsu.ast.AST]]
     preference_name_finder: ASTDefinedPreferenceNamesFinder
     rng: np.random.Generator
-    sampler: ASTSampler
+    strict: bool
 
-    def __init__(self, sampler: ASTSampler, rng: np.random.Generator):
+    def __init__(self, sampler, rng: np.random.Generator, strict: bool = False):
         super().__init__(local_context_propagating_rules=sampler.local_context_propagating_rules)
         self.sampler = sampler
         self.rng = rng
@@ -94,7 +95,7 @@ class ASTContextFixer(ASTParentMapper):
             for pref_name_to_add in preference_names_to_add:
                 count_nodes_with_multiple_occurences = sum([pref_nodes for pref_nodes in self.preference_count_nodes.values() if len(pref_nodes) > 1], [])
                 if len(count_nodes_with_multiple_occurences) == 0:
-                    raise SamplingException(f'Could not find a node to add preference {pref_name_to_add} to')
+                    raise ast_counter_sampler.SamplingException(f'Could not find a node to add preference {pref_name_to_add} to')
 
                 node_to_add_pref_to = self._sample_from_sequence(count_nodes_with_multiple_occurences)
                 current_pref_name = node_to_add_pref_to.pref_name
@@ -159,7 +160,8 @@ class ASTContextFixer(ASTParentMapper):
                                                       if var in variable_ref_counts and variable_ref_counts[var] > 1}
 
                             if not potential_replacements:
-                                # raise SamplingException(f'Could not find a replacement for variable {missing_var}')
+                                if self.strict:
+                                    raise SamplingException(f'Could not find a replacement for variable {missing_var}')
                                 break
 
                             var_to_replace = self._sample_from_sequence(list(potential_replacements.keys()))
@@ -187,6 +189,69 @@ class ASTContextFixer(ASTParentMapper):
 
         return should_rehandle, (None, {FORCED_REMAPPINGS_CONTEXT_KEY: forced_remappings})
 
+    def _handle_single_predicate_or_function_term(self, ast: tatsu.ast.AST, local_context: ContextDict, global_context: ContextDict):
+        term = ast.term
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+        term_type = rule.split('_')[3]
+        type_def_rule = 'variable_type_def'
+        if term_type not in ('term', 'location', 'type') :
+            type_def_rule = f'{term_type}_{type_def_rule}'
+
+        term_variables_key = self._variable_type_def_rule_to_context_key(type_def_rule)
+
+        if isinstance(term, str) and term.startswith('?'):
+            var_name = term[1:]
+            if term_variables_key not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY]:
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key] = {}
+            #     raise SamplingException(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
+
+            if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
+            #     raise SamplingException(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
+
+            # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
+            reference_index = global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name]
+
+            if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and
+                term_variables_key in local_context[FORCED_REMAPPINGS_CONTEXT_KEY] and
+                var_name in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key] and
+                reference_index in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
+
+                current_term_replacements = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]
+                new_var_name = current_term_replacements[reference_index]
+                replace_child(ast, ['term'], '?' + new_var_name)
+                term = '?' + new_var_name
+                del current_term_replacements[reference_index]
+
+                # We need to decrement the target replacement index for all future replacements to account for the fact that we've removed one
+                future_replacement_indices = list(current_term_replacements.keys())
+                for idx in sorted(future_replacement_indices):
+                    current_term_replacements[idx - 1] = current_term_replacements[idx]
+                    del current_term_replacements[idx]
+
+            # If we already have a mapping for it, replace it with the mapping
+            if term[1:] in global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY]:
+                term = '?' + global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]]
+                replace_child(ast, ['term'], term)
+
+            else:
+                # Check if there's anything that we could map it to
+                if term_variables_key not in local_context or len(local_context[term_variables_key]) == 0:
+                    raise ast_counter_sampler.SamplingException(f'No variable context (with key {term_variables_key}) found for {term} when updating a predicate/function_eval node with variable children')
+
+                # If we don't have a mapping for it, and it's not in the local context, add a mapping
+                elif term[1:] not in local_context[term_variables_key]:
+                    new_var_name = self._sample_from_sequence(list(local_context[term_variables_key].keys()))
+                    global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]] = new_var_name
+                    term = '?' + new_var_name
+                    replace_child(ast, ['term'], term)
+
+            var_name = term[1:]
+            if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
+                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
+
+            global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] += 1
+
     def _parse_current_node(self, ast: tatsu.ast.AST, **kwargs):
         local_context = kwargs['local_context']
         global_context = kwargs['global_context']
@@ -203,7 +268,7 @@ class ASTContextFixer(ASTParentMapper):
 
         elif rule == 'preference':
             if 'preference_names' not in global_context:
-                raise SamplingException('No preference names found in global context when updating a preference node')
+                raise ast_counter_sampler.SamplingException('No preference names found in global context when updating a preference node')
 
             preference_names = global_context['preference_names']
             if preference_names[ast.pref_name] > 1:
@@ -212,71 +277,39 @@ class ASTContextFixer(ASTParentMapper):
                 global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].add(new_pref_name)
                 preference_names[ast.pref_name] -= 1
 
-        elif rule.startswith('predicate_or_function_'):
-            term = ast.term
-            term_type = rule.split('_')[3]
-            type_def_rule = 'variable_type_def'
-            if term_type not in ('term', 'location', 'type') :
-                type_def_rule = f'{term_type}_{type_def_rule}'
+        elif rule in ('predicate', 'function_eval'):
+            child = typing.cast(tatsu.ast.AST, ast.pred if rule == 'predicate' else ast.func)
+            child_args = extract_predicate_function_args(child)
+            for i, arg in enumerate(child_args):
+                if arg.startswith('?'):
+                    self._handle_single_predicate_or_function_term(child[f'arg_{i + 1}'],  # type: ignore
+                                                                   local_context, global_context)
 
-            term_variables_key = self._variable_type_def_rule_to_context_key(type_def_rule)
+            # check if these now all map to the same variable
+            # if so, and assuming there's more than one variable in the local context, replace one at random
+            updated_child_args = extract_predicate_function_args(child)
+            if len(updated_child_args) > 1 and all([arg == updated_child_args[0] for arg in updated_child_args]) and updated_child_args[0].startswith('?'):
+                current_all_vars_name = updated_child_args[0][1:]
+                if len(local_context[VARIABLES_CONTEXT_KEY]) > 1:
+                    var_names = list(local_context[VARIABLES_CONTEXT_KEY].keys())
+                    var_names.remove(current_all_vars_name)
+                    replacement_var_name = self._sample_from_sequence(var_names)
+                    replacement_index = self.rng.integers(len(child_args))
+                    replace_child(child[f'arg_{replacement_index + 1}'],  # type: ignore
+                                  ['term'], '?' + replacement_var_name)
 
-            if isinstance(term, str) and term.startswith('?'):
-                var_name = term[1:]
-                if term_variables_key not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY]:
-                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key] = {}
-                #     raise SamplingException(f'No ref count found for {term_variables_key} when updating a predicate/function_eval node with variable children')
+                    if replacement_var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][VARIABLES_CONTEXT_KEY]:
+                        global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][VARIABLES_CONTEXT_KEY][replacement_var_name] = 0
 
-                if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
-                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
-                #     raise SamplingException(f'No ref count found for {term} when updating a predicate/function_eval node with variable children')
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][VARIABLES_CONTEXT_KEY][replacement_var_name] += 1
+                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][VARIABLES_CONTEXT_KEY][current_all_vars_name] -= 1
 
-                # If we have a forced remapping for this variable, at this position, use it (before incrementing the ref count)
-                reference_index = global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name]
-
-                if (FORCED_REMAPPINGS_CONTEXT_KEY in local_context and
-                    term_variables_key in local_context[FORCED_REMAPPINGS_CONTEXT_KEY] and
-                    var_name in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key] and
-                    reference_index in local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]):
-
-                    current_term_replacements = local_context[FORCED_REMAPPINGS_CONTEXT_KEY][term_variables_key][var_name]
-                    new_var_name = current_term_replacements[reference_index]
-                    replace_child(ast, ['term'], '?' + new_var_name)
-                    term = '?' + new_var_name
-                    del current_term_replacements[reference_index]
-
-                    # We need to decrement the target replacement index for all future replacements to account for the fact that we've removed one
-                    future_replacement_indices = list(current_term_replacements.keys())
-                    for idx in sorted(future_replacement_indices):
-                        current_term_replacements[idx - 1] = current_term_replacements[idx]
-                        del current_term_replacements[idx]
-
-                # If we already have a mapping for it, replace it with the mapping
-                if term[1:] in global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY]:
-                    term = '?' + global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]]
-                    replace_child(ast, ['term'], term)
-
-                else:
-                    # Check if there's anything that we could map it to
-                    if term_variables_key not in local_context or len(local_context[term_variables_key]) == 0:
-                        raise SamplingException(f'No variable context (with key {term_variables_key}) found for {term} when updating a predicate/function_eval node with variable children')
-
-                    # If we don't have a mapping for it, and it's not in the local context, add a mapping
-                    elif term[1:] not in local_context[term_variables_key]:
-                        new_var_name = self._sample_from_sequence(list(local_context[term_variables_key].keys()))
-                        global_context[REPLACEMENT_MAPPINGS_CONTEXT_KEY][term[1:]] = new_var_name
-                        term = '?' + new_var_name
-                        replace_child(ast, ['term'], term)
-
-                var_name = term[1:]
-                if var_name not in global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key]:
-                    global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] = 0
-
-                global_context[LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY][term_variables_key][var_name] += 1
+                elif self.strict:
+                    raise ast_counter_sampler.SamplingException(f'All variables in the local context are the same when updating a {rule} node, and could not find a replacement')
 
         elif rule == 'pref_name_and_types':
             if 'preference_names' not in global_context:
-                raise SamplingException('No preference names found in global context when updating a count.pref_name_and_types node')
+                raise ast_counter_sampler.SamplingException('No preference names found in global context when updating a count.pref_name_and_types node')
 
             preference_names = global_context['preference_names']
             if ast.pref_name not in preference_names:
@@ -295,6 +328,8 @@ class ASTContextFixer(ASTParentMapper):
 
 
 if __name__ == '__main__':
+    from ast_counter_sampler import *
+
     DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
     DEFAULT_COUNTER_OUTPUT_PATH ='./data/ast_counter.pickle'
     DEFUALT_RANDOM_SEED = 0
@@ -321,7 +356,7 @@ if __name__ == '__main__':
     (preference binKnockedOver
         (exists (?h - hexagonal_bin ?b - ball)
             (then
-                (hold (and (not (touch agent ?h)) (not (agent_holds ?h))))
+                (hold (and (not (touch ?h ?h)) (not (agent_holds ?h))))
                 (once (not (object_orientation ?h upright)))
             )
         )
@@ -342,7 +377,7 @@ if __name__ == '__main__':
     args = DEFAULT_ARGS
     grammar = open(args.grammar_file).read()
     grammar_parser = tatsu.compile(grammar)
-    counter = parse_or_load_counter(args, grammar_parser)
+    counter = ast_counter_sampler.parse_or_load_counter(args, grammar_parser)
 
     # Used to generate the initial population of complete games
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)  # type: ignore

@@ -25,6 +25,7 @@ import tqdm
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, replace_child, fixed_hash, load_games_from_file, simplified_context_deepcopy, deepcopy_ast
 from ast_parser import ASTParser, ASTParentMapper, ASTDepthParser, SECTION_KEYS, PREFERENCES, ContextDict, ASTParentMapping, LOCAL_CONTEXT_PROPAGATING_RULES
+import ast_context_fixer
 import room_and_object_types
 from room_and_object_types import COLOR, ORIENTATION, SIDE
 
@@ -65,11 +66,15 @@ parser.add_argument('--regrowth-end-index', type=int, default=-1)
 parser.add_argument('--section-sample-weights-key', type=str, default=None)
 parser.add_argument('--depth-weight-function-key', type=str, default=None)
 parser.add_argument('--prior-count', action='append', type=int, default=[])
+parser.add_argument('--fix-contexts', action='store_true')
+parser.add_argument('--min-n-regrowths', type=int, default=1)
+parser.add_argument('--max-n-regrowths', type=int, default=1)
 
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
 parser.add_argument('--parallel-chunksize', type=int, default=1)
 parser.add_argument('--parallel-maxtasksperchild', type=int, default=None)
+
 
 DEFAULT_MAX_SAMPLE_DEPTH = 16  # 24  # deeper than the deepest game, which has depth 23, and this is for a single node regrowth
 parser.add_argument('--max-sample-depth', type=int, default=DEFAULT_MAX_SAMPLE_DEPTH)
@@ -1286,6 +1291,7 @@ def _update_game_id(ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, 
 class RegrowthSampler(ASTParentMapper):
     depth_parser: ASTDepthParser
     depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]]
+    fix_contexts: bool
     node_keys: typing.List[tatsu.infos.ParseInfo]
     node_keys_by_section: typing.Dict[str, typing.List[tatsu.infos.ParseInfo]]
     original_game_id: str
@@ -1299,7 +1305,7 @@ class RegrowthSampler(ASTParentMapper):
     def __init__(self, sampler: typing.Union[ASTSampler, typing.Dict[str, ASTSampler]],
                  section_sample_weights: typing.Optional[typing.Dict[str, float]] = None,
                  depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]] = None,
-                 seed: int = 0, rng: typing.Optional[np.random.Generator] = None):
+                 fix_contexts: bool = False, seed: int = 0, rng: typing.Optional[np.random.Generator] = None):
 
         if isinstance(sampler, ASTSampler):
             sampler = dict(default=sampler)
@@ -1314,11 +1320,16 @@ class RegrowthSampler(ASTParentMapper):
             section_sample_weights_sum = sum(self.section_sample_weights.values())
             self.section_sample_weights = {key: value / section_sample_weights_sum for key, value in self.section_sample_weights.items()}
         self.depth_weight_function = depth_weight_function
+        self.fix_contexts = fix_contexts
         self.seed = seed
 
         if rng is None:
             rng = np.random.default_rng(seed)
         self.rng = rng
+
+        if self.fix_contexts:
+            self.context_fixer = ast_context_fixer.ASTContextFixer(self.example_sampler, self.rng)
+
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()
         self.source_ast = None  # type: ignore
@@ -1378,64 +1389,71 @@ class RegrowthSampler(ASTParentMapper):
         return depth
 
     @_regrowth_sampler_state_wrapper
-    def sample(self, sample_index: int, external_global_context: typing.Optional[ContextDict] = None,
-        external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True,
-        rng: typing.Optional[np.random.Generator] = None, node_key_to_regrow: typing.Optional[typing.Hashable] = None) -> typing.Union[tatsu.ast.AST, tuple]:
+    def sample(self, sample_index: int, n_regrowths: int = 1,
+               external_global_context: typing.Optional[ContextDict] = None,
+               external_local_context: typing.Optional[ContextDict] = None, update_game_id: bool = True,
+               rng: typing.Optional[np.random.Generator] = None, node_key_to_regrow: typing.Optional[typing.Hashable] = None) -> typing.Union[tatsu.ast.AST, tuple]:
 
         if rng is None:
             rng = self.rng
 
         new_source = typing.cast(tuple, deepcopy_ast(self.source_ast))
-        self.set_source_ast(new_source)
 
-        if node_key_to_regrow is not None:
-            if node_key_to_regrow not in self.parent_mapping:
-                raise ValueError(f'Node key to regrow not found: {node_key_to_regrow}')
+        for _ in range(n_regrowths):
+            self.set_source_ast(new_source)
 
-            node, parent, selector, node_depth, section, global_context, local_context = self.parent_mapping[node_key_to_regrow]
+            if node_key_to_regrow is not None:
+                if node_key_to_regrow not in self.parent_mapping:
+                    raise ValueError(f'Node key to regrow not found: {node_key_to_regrow}')
 
-        else:
-            node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
+                node, parent, selector, node_depth, section, global_context, local_context = self.parent_mapping[node_key_to_regrow]
 
-        if section is None: section = ''
+            else:
+                node, parent, selector, node_depth, section, global_context, local_context = self._sample_node_to_update(rng)  # type: ignore
 
-        if external_global_context is not None:
-            global_context = global_context.copy()
-            global_context.update(external_global_context)
+            if section is None: section = ''
 
-        if external_local_context is not None:
-            local_context = local_context.copy()
-            local_context.update(external_local_context)
+            if external_global_context is not None:
+                global_context = global_context.copy()
+                global_context.update(external_global_context)
 
-        global_context['original_game_id'] = self.original_game_id
-        global_context['rng'] = rng
+            if external_local_context is not None:
+                local_context = local_context.copy()
+                local_context.update(external_local_context)
 
-        sampler_key = rng.choice(self.sampler_keys)
-        sampler = self.samplers[sampler_key]
+            global_context['original_game_id'] = self.original_game_id
+            global_context['rng'] = rng
 
-        try:
-            new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
+            sampler_key = rng.choice(self.sampler_keys)
+            sampler = self.samplers[sampler_key]
 
-            if update_game_id:
-                regrwoth_depth = self.depth_parser(node)
-                new_source = _update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
+            try:
+                new_node = sampler.sample(node.parseinfo.rule, global_context, local_context)[0]  # type: ignore
 
-            replace_child(parent, selector, new_node)
+                if update_game_id:
+                    regrwoth_depth = self.depth_parser(node)
+                    new_source = _update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
 
-            return new_source
+                replace_child(parent, selector, new_node)
 
-        except IndexError as e:
-            logger.error(f'Caught IndexError in RegrowthSampler.sample:')
-            logger.error(f'  node: {node}')
-            logger.error(f'  parent: {parent}')
-            logger.error(f'  selector: {selector}')
-            logger.error(f'  len(parent[selector[0]]): {len(parent[selector[0]])}')  # type: ignore
-            logger.error(f'  node_depth: {node_depth}')
-            logger.error(f'  section: {section}')
-            logger.error(f'  global_context: {global_context}')
-            logger.error(f'  local_context: {local_context}')
-            logger.error(f'  sampler_key: {sampler_key}')
-            raise e
+                if self.fix_contexts:
+                    self.context_fixer.fix_contexts(new_source, original_child=node, crossover_child=new_node)  # type: ignore
+
+            except IndexError as e:
+                logger.error(f'Caught IndexError in RegrowthSampler.sample:')
+                logger.error(f'  node: {node}')
+                logger.error(f'  parent: {parent}')
+                logger.error(f'  selector: {selector}')
+                logger.error(f'  len(parent[selector[0]]): {len(parent[selector[0]])}')  # type: ignore
+                logger.error(f'  node_depth: {node_depth}')
+                logger.error(f'  section: {section}')
+                logger.error(f'  global_context: {global_context}')
+                logger.error(f'  local_context: {local_context}')
+                logger.error(f'  sampler_key: {sampler_key}')
+                raise e
+
+
+        return new_source
 
 
 def parse_or_load_counter(args: argparse.Namespace, grammar_parser: typing.Optional[tatsu.grammars.Grammar] = None):
@@ -1514,9 +1532,10 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Union[typin
 
 
 def regrow_single_sample(regrowth_sampler: RegrowthSampler, sample_index: int, grammar_parser: tatsu.grammars.Grammar, args: argparse.Namespace):
+    n_regrowths = regrowth_sampler.rng.integers(args.min_n_regrowths, args.max_n_regrowths + 1)
     while True:
         try:
-            sample_ast = regrowth_sampler.sample(sample_index)
+            sample_ast = regrowth_sampler.sample(sample_index, n_regrowths=n_regrowths)
             sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
             sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
             return sample_str + '\n\n', sample_hash
@@ -1526,6 +1545,9 @@ def regrow_single_sample(regrowth_sampler: RegrowthSampler, sample_index: int, g
 
         except SamplingException:
             if args.verbose: print('Sampling exception, skipping sample')
+
+        except Exception as e:
+            if args.verbose: print(f'Exception of type {type(e)} while sampling, skipping sample: {e}')
 
 
 def _process_index(n_workers: int):
@@ -1571,7 +1593,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
         game_iter = tqdm.tqdm(game_iter, desc=f'Game #', total=args.regrowth_end_index - args.regrowth_start_index)
 
     if args.sample_parallel:
-        regrowth_samplers = [RegrowthSampler(samplers[worker_id], section_sample_weights, depth_weight_function, args.random_seed + worker_id)  # type: ignore
+        regrowth_samplers = [RegrowthSampler(samplers[worker_id], # type: ignore
+                                             section_sample_weights, depth_weight_function,
+                                             args.fix_contexts, args.random_seed + worker_id)
                              for worker_id in range(args.parallel_n_workers)]
         if not isinstance(grammar_parser, list):
             grammar_parser = [copy.deepcopy(grammar_parser) for _ in range(args.parallel_n_workers)]
@@ -1628,7 +1652,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
                         game_iter.set_postfix({'Samples': sample_index, 'Sample Hashes': len(sample_hashes), 'Maps': n_maps})  # type: ignore
 
     else:
-        regrowth_sampler = RegrowthSampler(samplers, section_sample_weights, depth_weight_function, args.random_seed)  # type: ignore
+        regrowth_sampler = RegrowthSampler(samplers, # type: ignore
+                                           section_sample_weights, depth_weight_function,
+                                           args.fix_contexts, args.random_seed)
 
         for real_game in game_iter:
             regrowth_sampler.set_source_ast(real_game)  # type: ignore
@@ -1662,6 +1688,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
 def main(args):
     # original_recursion_limit = sys.getrecursionlimit()
     # sys.setrecursionlimit(args.recursion_limit)
+
+    args_str = '\n'.join([f'{" " * 26}{k}: {v}' for k, v in vars(args).items()])
+    logger.debug(f'Shell arguments:\n{args_str}')
 
     grammar = open(args.grammar_file).read()
     grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))

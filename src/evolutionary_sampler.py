@@ -1084,10 +1084,10 @@ class PopulationBasedSampler():
 
                 new_variable_node = None
                 new_variable_node_has_new_type = False
-                while new_variable_node_has_new_type:
+                while not new_variable_node_has_new_type:
                     new_variable_node = sampler.sample(new_variable_def_rule, global_context, local_context)[0]
-                    new_variable_node_types = ast_parser._extract_variable_type_as_list(new_variable_node.var_type.type)
-                    new_variable_node_has_new_type = len(current_variable_types.intersection(new_variable_node_types)) > 0
+                    new_variable_node_types = set(ast_parser._extract_variable_type_as_list(new_variable_node.var_type.type))
+                    new_variable_node_has_new_type = len(new_variable_node_types.difference(current_variable_types)) > 0
 
                 if isinstance(variables, tatsu.ast.AST):
                     new_variable_list = [variables, new_variable_node]

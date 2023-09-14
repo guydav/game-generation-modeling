@@ -229,7 +229,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
     def __del__(self):
         if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
-            if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
+            # if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
             if shutil is not None: shutil.rmtree(self.temp_dir)
 
     def _create_databases(self):

@@ -205,7 +205,7 @@ class ASTFitnessFeaturizer:
         self.temp_file_writer_dict = {}
 
     def __del__(self):
-        if logger is not None: logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
+        # if logger is not None: logger.info(f'ASTFitnessFeaturizer.__del__ called for pid {os.getpid()}, closing temp files {list(self.temp_files.values())} ')
         for temp_file in self.temp_files.values():
             temp_file.close()
 

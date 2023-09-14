@@ -135,7 +135,6 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'identical_consecutive_seq_func_predicates_found',
     # 'disjoint_seq_funcs_found',
     # 'disjoint_at_end_found',
-
     # 'two_number_operation_found',
     'single_argument_multi_operation_found',
 ]

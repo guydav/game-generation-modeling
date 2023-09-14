@@ -40,9 +40,8 @@ COUNTING_FEATURES = [
     re.compile(r'max_width_[\w\d_]+'),
 ]
 
-
 # A Smaller set of counting features to exclude
-COUNTING_MORE_FEATURES = [
+COUNTING_LESS_IMPORTANT_FEATURES = [
     # How many modals are under a then
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     # Various features related to variable quantifications
@@ -115,14 +114,41 @@ GRAMMAR_USE_FEATURES = [
     'single_argument_multi_operation_found',
 ]
 
+# The ones that are kept are the ones commented out
+GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
+    'setup_objects_used',
+    # 'setup_quantified_objects_used',
+    'adjacent_once_found',
+    'no_adjacent_same_modal',
+    'starts_and_ends_once',
+    'once_in_middle_of_pref_found',
+    'pref_without_hold_found',
+    # 'at_end_found',
+
+    'nested_logicals_found',
+    'identical_logical_children_found',
+    'identical_scoring_children_found',
+    'scoring_count_expression_repetitions_exist',
+    'tautological_expression_found',
+    # 'redundant_expression_found',
+    # 'redundant_scoring_terminal_expression_found',
+    # 'identical_consecutive_seq_func_predicates_found',
+    # 'disjoint_seq_funcs_found',
+    # 'disjoint_at_end_found',
+
+    # 'two_number_operation_found',
+    'single_argument_multi_operation_found',
+]
+
 FEATURE_CATEGORIES = {
     'grammar_context': GRAMMAR_CONTEXT_FEATURES,
     'ngram_and_data_based': NGRAM_AND_DATA_BASED_FEATURES,
     'counting': COUNTING_FEATURES,
-    'counting_less_important': COUNTING_MORE_FEATURES,
+    'counting_less_important': COUNTING_LESS_IMPORTANT_FEATURES,
     'forall': FORALL_FEATURES,
     'predicate_under_modal': PREDICATE_UNDER_MODAL_FEATURES,
     'predicate_role_filler': PREDICATE_ROLE_FILLER_FEATURES,
     'compositionality': COMPOSITIONALITY_FEATURES,
     'grammar_use': GRAMMAR_USE_FEATURES,
+    'grammar_use_less_important': GRAMMAR_USE_LESS_IMPORTANT_FEATURES,
 }

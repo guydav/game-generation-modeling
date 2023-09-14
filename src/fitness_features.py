@@ -765,6 +765,8 @@ class PredicateFoundInData(FitnessTerm):
             self.trace_names_hash = FULL_DATASET_TRACES_HASH
         if not hasattr(self, 'use_full_databse'):
             self.use_full_databse = False
+        if not hasattr(self, 'split_by_section'):
+            self.split_by_section = True
 
         self._init_predicate_data_estimator()
 

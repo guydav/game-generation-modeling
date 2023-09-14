@@ -2,8 +2,6 @@ import argparse
 from collections import OrderedDict, Counter
 from datetime import datetime
 from functools import wraps
-import multiprocess as multiprocessing
-from multiprocess import pool as mpp
 import os
 import re
 import signal
@@ -28,6 +26,9 @@ from tqdm import tqdm, trange
 from viztracer import VizTracer
 import wandb
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+import src  # type: ignore
 
 # from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING=
 import ast_printer
@@ -47,10 +48,6 @@ from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEAT
     LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH,\
     LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
-
-import src  # type: ignore
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -59,6 +56,10 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
+import multiprocessing
+from multiprocessing import pool as mpp
+# import multiprocess as multiprocessing
+# from multiprocess import pool as mpp
 
 def istarmap(self, func, iterable, chunksize=1):
     """starmap-version of imap

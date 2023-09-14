@@ -1,6 +1,6 @@
 {
     "param_grid": {
-        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__loss_function": ["fitness_softmin_loss"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
         "fitness__batch_size": [1, 2, 4]
@@ -36,6 +36,13 @@
         "error_score": "raise"
     },
 
+    "ignore_categories_mapping": {
+        "minimal_counting_grammar_use": ["counting_less_important", "grammar_use_less_important", "predicate_under_modal", "predicate_role_filler", "compositionality"],
+        "minimal_counting": ["counting_less_important", "predicate_under_modal", "predicate_role_filler", "compositionality"],
+        "minimal": ["counting", "predicate_under_modal", "predicate_role_filler", "compositionality"],
+        "full": []
+    },
+
     "param_grid_baseline": {
         "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
         "fitness__lr": [4e-3, 1e-3],
@@ -51,14 +58,22 @@
     },
 
     "param_grid_minimal": {
-        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__loss_function": ["fitness_softmin_loss"],
         "fitness__lr": [4e-3],
         "fitness__k": [1024],
         "fitness__batch_size": [4]
     },
 
     "param_grid_l1": {
-        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__loss_function": ["fitness_softmin_loss"],
+        "fitness__lr": [4e-3, 1e-3],
+        "fitness__k": [256, 512, 1024],
+        "fitness__batch_size": [1, 2, 4],
+        "fitness__regularization_weight": [0.03]
+    },
+
+    "param_grid_l1_sweep": {
+        "fitness__loss_function": ["fitness_softmin_loss"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
         "fitness__batch_size": [1, 2, 4],
@@ -66,7 +81,7 @@
     },
 
     "param_grid_l2": {
-        "fitness__loss_function": ["fitness_softmin_loss", "fitness_softmin_loss_positive_to_all_negatives"],
+        "fitness__loss_function": ["fitness_softmin_loss"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
         "fitness__batch_size": [1, 2, 4],

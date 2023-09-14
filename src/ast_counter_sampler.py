@@ -69,6 +69,7 @@ parser.add_argument('--prior-count', action='append', type=int, default=[])
 parser.add_argument('--fix-contexts', action='store_true')
 parser.add_argument('--min-n-regrowths', type=int, default=1)
 parser.add_argument('--max-n-regrowths', type=int, default=1)
+# parser.add_argument('--max-n-attempts', type=int, default=1024)
 
 parser.add_argument('--sample-parallel', action='store_true')
 parser.add_argument('--parallel-n-workers', type=int, default=8)
@@ -1287,7 +1288,6 @@ def _update_game_id(ast: typing.Union[tuple, tatsu.ast.AST], sample_index: int, 
     return ast  # type: ignore
 
 
-# TODO: move this class to a separate module?
 class RegrowthSampler(ASTParentMapper):
     depth_parser: ASTDepthParser
     depth_weight_function: typing.Optional[typing.Callable[[np.ndarray], np.ndarray]]
@@ -1328,7 +1328,7 @@ class RegrowthSampler(ASTParentMapper):
         self.rng = rng
 
         if self.fix_contexts:
-            self.context_fixer = ast_context_fixer.ASTContextFixer(self.example_sampler, self.rng)
+            self.context_fixer = ast_context_fixer.ASTContextFixer(self.example_sampler, self.rng, strict=True)
 
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()
@@ -1432,7 +1432,7 @@ class RegrowthSampler(ASTParentMapper):
 
                 if update_game_id:
                     regrwoth_depth = self.depth_parser(node)
-                    new_source = _update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}')
+                    new_source = _update_game_id(new_source, sample_index, f'nd-{node_depth}-rd-{regrwoth_depth}-rs-{section.replace("(:", "")}-sk-{sampler_key}-nr-{n_regrowths}')
 
                 replace_child(parent, selector, new_node)
 
@@ -1531,23 +1531,33 @@ def _generate_mle_samples(args: argparse.Namespace, samplers: typing.Union[typin
                 print(f'SamplingException while sampling, repeating: {e}')
 
 
-def regrow_single_sample(regrowth_sampler: RegrowthSampler, sample_index: int, grammar_parser: tatsu.grammars.Grammar, args: argparse.Namespace):
+def regrow_single_sample(regrowth_sampler: RegrowthSampler, sample_index: int, grammar_parser: tatsu.grammars.Grammar, args: argparse.Namespace) -> typing.Tuple[str, str, int]:
     n_regrowths = regrowth_sampler.rng.integers(args.min_n_regrowths, args.max_n_regrowths + 1)
+    sampling_exception_count = 0
     while True:
         try:
             sample_ast = regrowth_sampler.sample(sample_index, n_regrowths=n_regrowths)
             sample_str = test_and_stringify_ast_sample(sample_ast, args, grammar_parser)
             sample_hash = fixed_hash(sample_str[sample_str.find('(:domain'):])
-            return sample_str + '\n\n', sample_hash
+            return sample_str + '\n\n', sample_hash, sampling_exception_count
 
         except RecursionError:
             if args.verbose: print('Recursion error, skipping sample')
 
         except SamplingException:
+            sampling_exception_count += 1
             if args.verbose: print('Sampling exception, skipping sample')
 
         except Exception as e:
-            if args.verbose: print(f'Exception of type {type(e)} while sampling, skipping sample: {e}')
+            # I think something with multiprocessing causes this to sometime happen
+            exception_name = type(e).__name__
+            if exception_name == 'SamplingException':
+                sampling_exception_count += 1
+                if args.verbose: print(f'Sampling exception, skipping sample: {e}')
+
+            else:
+                # if args.verbose: print(f'Exception of type {type(e)} while sampling, skipping sample: {e}')
+                raise e
 
 
 def _process_index(n_workers: int):
@@ -1595,7 +1605,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
     if args.sample_parallel:
         regrowth_samplers = [RegrowthSampler(samplers[worker_id], # type: ignore
                                              section_sample_weights, depth_weight_function,
-                                             args.fix_contexts, args.random_seed + worker_id)
+                                             fix_contexts=args.fix_contexts, seed=args.random_seed + worker_id)
                              for worker_id in range(args.parallel_n_workers)]
         if not isinstance(grammar_parser, list):
             grammar_parser = [copy.deepcopy(grammar_parser) for _ in range(args.parallel_n_workers)]
@@ -1614,6 +1624,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
                 sample_hashes = set([fixed_hash(real_game_str[real_game_str.find('(:domain'):])])
                 sample_index = 0
                 n_maps = 0
+                total_sampling_exception_count = 0
 
                 while len(sample_hashes) < args.num_samples + 1:
                     # This is required because the changes to the rng state happen in the pickled copies in the worker processes
@@ -1629,7 +1640,9 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
                     )
                     samples_iter = pool.imap_unordered(regrow_sample_parallel_map_wrapper, param_iterator, chunksize=args.parallel_chunksize)
 
-                    for sample_str, sample_hash in samples_iter:
+                    for sample_str, sample_hash, sampling_execption_count in samples_iter:
+                        total_sampling_exception_count += sampling_execption_count
+
                         if sample_hash not in sample_hashes:
                             game_name_start_index = sample_str.find(game_start) + len(game_start)
                             game_name_end_index = sample_str.find(')', game_name_start_index)
@@ -1649,12 +1662,12 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
 
                     n_maps += 1
                     if args.sample_tqdm:
-                        game_iter.set_postfix({'Samples': sample_index, 'Sample Hashes': len(sample_hashes), 'Maps': n_maps})  # type: ignore
+                        game_iter.set_postfix({'Samples': sample_index, 'Sample Hashes': len(sample_hashes), 'Exceptions': total_sampling_exception_count, 'Maps': n_maps})  # type: ignore
 
     else:
         regrowth_sampler = RegrowthSampler(samplers, # type: ignore
                                            section_sample_weights, depth_weight_function,
-                                           args.fix_contexts, args.random_seed)
+                                           fix_contexts=args.fix_contexts, seed=args.random_seed)
 
         for real_game in game_iter:
             regrowth_sampler.set_source_ast(real_game)  # type: ignore
@@ -1666,12 +1679,14 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
                 sample_iter = tqdm.tqdm(sample_iter, total=args.num_samples, desc='Samples')
 
             attempts = 0
+            total_sampling_exception_count = 0
             for sample_index in sample_iter:
                 new_sample_generated = False
 
                 while not new_sample_generated:
                     attempts += 1
-                    sample_str, sample_hash = regrow_single_sample(regrowth_sampler, sample_index, grammar_parser, args)  # type: ignore
+                    sample_str, sample_hash, sampling_execption_count = regrow_single_sample(regrowth_sampler, sample_index, grammar_parser, args)  # type: ignore
+                    total_sampling_exception_count += sampling_execption_count
 
                     if sample_hash in sample_hashes:
                         if args.verbose: print('Regrowth generated identical games, repeating')
@@ -1682,7 +1697,7 @@ def _generate_regrowth_samples(args: argparse.Namespace, samplers: typing.Union[
                         yield sample_str + '\n\n'
 
                         if args.sample_tqdm:
-                            game_iter.set_postfix({'Samples': sample_index, 'Attempts': attempts})  # type: ignore
+                            game_iter.set_postfix({'Samples': sample_index, 'Attempts': attempts, 'Exceptions': total_sampling_exception_count})  # type: ignore
 
 
 def main(args):
@@ -1743,6 +1758,7 @@ def main(args):
     # sys.setrecursionlimit(original_recursion_limit)
 
     if args.save_samples:
+        logger.info(f'Saving samples to {args.samples_output_path}')
         open_method = gzip.open if args.samples_output_path.endswith('.gz') else open
         with open_method(args.samples_output_path, args.file_open_mode) as out_file:
             buffer = []

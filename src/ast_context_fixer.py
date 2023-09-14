@@ -59,6 +59,7 @@ class ASTContextFixer(ASTParentMapper):
         self.rng = rng
         self.preference_name_finder = ASTDefinedPreferenceNamesFinder()
         self.preference_count_nodes = defaultdict(list)
+        self.strict = strict
 
     def _add_ast_to_mapping(self, ast, **kwargs):
         # NOOP here since I don't actually care about building a parent mapping, just wanted to use the structure
@@ -159,9 +160,9 @@ class ASTContextFixer(ASTParentMapper):
                                                       for var in owned_variables
                                                       if var in variable_ref_counts and variable_ref_counts[var] > 1}
 
-                            if not potential_replacements:
+                            if not potential_replacements or len(potential_replacements) == 0:
                                 if self.strict:
-                                    raise SamplingException(f'Could not find a replacement for variable {missing_var}')
+                                    raise ast_counter_sampler.SamplingException(f'Could not find a replacement for variable {missing_var}')
                                 break
 
                             var_to_replace = self._sample_from_sequence(list(potential_replacements.keys()))
@@ -347,9 +348,10 @@ if __name__ == '__main__':
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
 (:setup (and
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
-        (exists (?h - block)
-            (game-conserved (< (distance ?h ?r) 1))
-        )
+        (exists (?h - block) (game-conserved (and
+            (< (distance ?h ?r) 1)
+            (not (touch ?h ?r))
+        )))
     )
 ))
 (:constraints (and
@@ -381,7 +383,7 @@ if __name__ == '__main__':
 
     # Used to generate the initial population of complete games
     sampler = ASTSampler(grammar_parser, counter, seed=args.random_seed)  # type: ignore
-    context_fixer = ASTContextFixer(sampler, np.random.default_rng(args.random_seed))
+    context_fixer = ASTContextFixer(sampler, np.random.default_rng(args.random_seed), strict=True)
     ast = grammar_parser.parse(test_game)  # type: ignore
     print(ast_printer.ast_to_string(ast, '\n'))
     context_fixer.fix_contexts(ast)

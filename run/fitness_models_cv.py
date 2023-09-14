@@ -49,14 +49,14 @@ parser.add_argument('--fitness-features-file', type=str, default=latest_model_pa
 parser.add_argument('--output-name', type=str, required=True)
 parser.add_argument('--output-folder', type=str, default='./data/fitness_cv')
 parser.add_argument('--output-relative-path', type=str, default='.')
-parser.add_argument('--feature-score-threshold', type=float, required=True)
+parser.add_argument('--feature-score-threshold', type=float, default=-0.01)
 parser.add_argument('--device', type=str, required=False)
 parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED)
 parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
 parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
-parser.add_argument('--ignore-categories', type=str, nargs='+', default=[])
+parser.add_argument('--ignore-categories-key', type=str, default='full')
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
 parser.add_argument('--output-activation', type=str, default=None)
 parser.add_argument('--output-scaling', type=float, default=1.0)
@@ -99,8 +99,7 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float,
 
 
 def main(args: argparse.Namespace):
-    if args.random_seed != utils.DEFAULT_RANDOM_SEED:
-        args.output_name = f'{args.output_name}_seed_{args.random_seed}'
+    args.output_name = f'{args.output_name}_categories_{args.ignore_categories_key}_seed_{args.random_seed}'
 
     model_name = args.output_name
     if 'fitness_sweep_' in model_name:
@@ -110,7 +109,6 @@ def main(args: argparse.Namespace):
 
 
     logger.info(f'Starting fitness CV for {model_name}')
-
     logger.info(f'Loading fitness data from {args.fitness_features_file}')
     fitness_df = utils.load_fitness_data(args.fitness_features_file)
     logger.info(f'Unique source files: {fitness_df.src_file.unique()}')
@@ -123,14 +121,24 @@ def main(args: argparse.Namespace):
 
     feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove)
 
+    with open(args.cv_settings_json, 'r') as f:
+        cv_settings = json.load(f)
+
+    logger.debug(f'CV settings:\n{pformat(cv_settings)}')
+
     if args.ignore_features:
         logger.info(f'Ignoring features: {args.ignore_features}')
         feature_columns = [c for c in feature_columns if c not in args.ignore_features]
 
-    if args.ignore_categories:
-        logger.info(f'Ignoring categories: {args.ignore_categories}')
+    if args.ignore_categories_key not in cv_settings['ignore_categories_mapping']:
+        raise ValueError(f'Unknown ignore categories key: {args.ignore_categories_key}, valid keys: {cv_settings["ignore_categories_mapping"].keys()}')
+
+    ignore_categories = cv_settings['ignore_categories_mapping'][args.ignore_categories_key]
+
+    if ignore_categories:
+        logger.info(f'Ignoring categories: {ignore_categories}')
         all_ignore_features = set()
-        for category in args.ignore_categories:
+        for category in ignore_categories:
             for feature in FEATURE_CATEGORIES[category]:
                 if isinstance(feature, re.Pattern):
                     all_ignore_features.update([f for f in feature_columns if feature.match(f)])
@@ -141,10 +149,7 @@ def main(args: argparse.Namespace):
 
     logger.info(f'Fitting models with {len(feature_columns)} features')
 
-    with open(args.cv_settings_json, 'r') as f:
-        cv_settings = json.load(f)
 
-    logger.debug(f'CV settings:\n{pformat(cv_settings)}')
     logger.info(f'Using param grid key "{args.param_grid_json_key}", train kwargs key "{args.train_kwargs_json_key}", cv kwargs key "{args.cv_kwargs_json_key}"')
     param_grid = cv_settings[args.param_grid_json_key]
     cv_kwargs = cv_settings[args.cv_kwargs_json_key]
@@ -227,7 +232,7 @@ def main(args: argparse.Namespace):
 
             full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
             real_game_scores = full_tensor_scores[:, 0]
-            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, max = {real_game_scores.max():.4f}')
+            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, median = {torch.median(real_game_scores)}, max = {real_game_scores.max():.4f}')
 
             negatives_scores = full_tensor_scores[:, 1:].ravel()
             print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))

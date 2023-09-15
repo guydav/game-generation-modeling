@@ -109,7 +109,7 @@ class InitialProposalSamplerType(enum.Enum):
 
 
 def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSamplerType,
-                                    sampler: ASTSampler,
+                                    sampler: ASTSampler, context_fixer: typing.Callable,
                                     ngram_model_path: typing.Optional[str] = None,
                                     section_sampler_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None):
     if initial_proposal_type == InitialProposalSamplerType.MAP:
@@ -145,7 +145,7 @@ def create_initial_proposal_sampler(initial_proposal_type: InitialProposalSample
         with open(ngram_model_path, 'rb') as f:
             ngram_model = pickle.load(f)
 
-        return SectionBySectionNGramScoreSampler(sampler, ngram_model, **section_sampler_kwargs)
+        return SectionBySectionNGramScoreSampler(sampler, ngram_model, context_fixer, **section_sampler_kwargs)
 
 
 def _load_pickle_gzip(path: str):

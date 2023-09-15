@@ -451,14 +451,15 @@ class PopulationBasedSampler():
         self.sampler_keys = list(self.samplers.keys())
         self.first_sampler_key = self.sampler_keys[0]
 
+        # Used to fix the AST context after crossover / mutation
+        self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed), strict=True)
+
         self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self.samplers[self.first_sampler_key], ngram_model_path, section_sampler_kwargs)  # type: ignore
+            initial_proposal_type, self.samplers[self.first_sampler_key], self.context_fixer,
+            ngram_model_path, section_sampler_kwargs)  # type: ignore
 
         # Used as the mutation operator to modify existing games
         self.regrowth_sampler = RegrowthSampler(self.samplers, seed=self.random_seed, rng=np.random.default_rng(self.random_seed))
-
-        # Used to fix the AST context after crossover / mutation
-        self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed))
 
         # Initialize the candidate pools in each genera
         self.candidates = SingleStepResults([], [], [], [], [])
@@ -530,26 +531,6 @@ class PopulationBasedSampler():
 
     def _sampler(self, rng: np.random.Generator) -> ASTSampler:
         return self.samplers[self._choice(self.sampler_keys, rng=rng)]  # type: ignore
-
-    # @property
-    # def regrowth_sampler(self) -> RegrowthSampler:
-    #     return self._regrowth_samplers[self._process_index()]
-
-    # @property
-    # def context_fixer(self) -> ASTContextFixer:
-    #     return self._context_fixers[self._process_index()]
-
-    # @property
-    # def fitness_featurizer(self) -> ASTFitnessFeaturizer:
-    #     return self._fitness_featurizers[self._process_index()]
-
-    # @property
-    # def fitness_function(self) -> typing.Callable[[torch.Tensor], float]:
-    #     return self._fitness_functions[self._process_index()]
-
-    # @property
-    # def postprocessor(self) -> ast_parser.ASTSamplePostprocessor:
-    #     return self._postprocessors[self._process_index()]
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore

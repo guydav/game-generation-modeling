@@ -185,6 +185,40 @@ class PredicateHandler:
             self.state_cache_object_last_updated[AGENT_STATE_KEY] = state_index
             self.state_cache_object_last_updated['agent'] = state_index
 
+    def _evaluate_comparison_arg(self, comp_arg: typing.Union[float, tatsu.ast.AST], state: FullState,
+                                 mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Tuple[typing.Optional[float], bool]:
+        arg_implemented = True
+        if isinstance(comp_arg, tatsu.ast.AST):
+            try:
+                # If this was passed a comparison arg, operate on the inner argument
+                if comp_arg.parseinfo.rule == "comparison_arg":  # type: ignore
+                    comp_arg = comp_arg["arg"]  # type: ignore
+
+                # If it's an AST, it's a either a number or a function
+                # if it's an ubmer, extract the value
+                if comp_arg.parseinfo.rule == "number_value":  # type: ignore
+                    number = comp_arg["number"]  # type: ignore
+                    sign = 1
+                    if number.parseinfo.rule == "negative_number":  # type: ignore
+                        number = number["number"]  # type: ignore
+                        sign = -1
+
+                    # At this point, the rule is positive_number
+                    comp_arg = float(number["terminal"]) * sign  # type: ignore
+
+                else:
+                    comp_arg = self.evaluate_function(comp_arg, state, mapping, force_evaluation)  # type: ignore
+
+                # If the function is undecidable with the current information, return None
+                if comp_arg is None:
+                    return None, arg_implemented
+
+            except PredicateHandlerPredicateNotImplemented:
+                arg_implemented = False
+                comp_arg = float('-Inf')
+
+        return float(comp_arg), arg_implemented  # type: ignore
+
     def _inner_evaluate_predicate(self, predicate: typing.Optional[tatsu.ast.AST], state: FullState,
         mapping: typing.Dict[str, str], force_evaluation: bool = False) -> typing.Optional[bool]:
         '''
@@ -360,72 +394,43 @@ class PredicateHandler:
                 arg_values = []
 
                 for arg in args:
-                    inner_arg = arg.arg  # type: ignore
-                    if isinstance(inner_arg, tatsu.ast.AST):
-                        try:
-                            # If it's an AST, it's a function, so evaluate it
-                            arg_value = self.evaluate_function(inner_arg, state, mapping, force_evaluation)
+                    arg_value, arg_implemented = self._evaluate_comparison_arg(arg["arg"],  # type: ignore
+                                                                               state, mapping, force_evaluation)
 
-                            # If the function is undecidable with the current information, return None
-                            if arg_value is None:
-                                return None
+                    if arg_value is None:
+                        return None
 
-                            arg_values.append(arg_value)
+                    any_args_implemented = any_args_implemented or arg_implemented
+                    all_args_implemented = all_args_implemented and arg_implemented
 
-                            any_args_implemented = True
+                    if arg_implemented:
+                        arg_values.append(arg_value)
 
-                        except PredicateHandlerPredicateNotImplemented:
-                            all_args_implemented = False
+                if not any_args_implemented:
+                    raise PredicateHandlerPredicateNotImplemented('All arguments of function comparison were not implemented')
 
-                    else:
-                        arg_values.append(inner_arg)
+                if not all_args_implemented:
+                    # check how many args we ended up with values for
+                    if len(arg_values) == 1:
+                        # Presumably the comparison is possible if we had implemented the other values, so return True
+                        return True
 
-                    if not any_args_implemented:
-                        raise PredicateHandlerPredicateNotImplemented('All arguments of function comparison were not implemented')
-
-                    if not all_args_implemented:
-                        # check how many args we ended up with values for
-                        if len(arg_values) == 1:
-                            # Presumably the comparison is possible if we had implemented the other values, so return True
-                            return True
-
-                    # At this point, we have at least one value, so we can compare them
-                    return np.all(np.isclose(arg_values, arg_values[0]))  # type: ignore
+                # At this point, we have at least one value, so we can compare them
+                return np.all(np.isclose(arg_values, arg_values[0]))  # type: ignore
 
             else:
                 # For each comparison argument, evaluate it if it's a function or convert to an int if not
-                comp_arg_1 = comp["arg_1"]["arg"]  # type: ignore
-                comp_arg_1_implemented = True
-                if isinstance(comp_arg_1, tatsu.ast.AST):
-                    try:
-                        # If it's an AST, it's a function, so evaluate it
-                        comp_arg_1 = self.evaluate_function(comp_arg_1, state, mapping, force_evaluation)
+                comp_arg_1, comp_arg_1_implemented = self._evaluate_comparison_arg(comp["arg_1"]["arg"],  # type: ignore
+                                                                                   state, mapping, force_evaluation)
 
-                        # If the function is undecidable with the current information, return None
-                        if comp_arg_1 is None:
-                            return None
+                if comp_arg_1 is None:
+                    return None
 
-                    except PredicateHandlerPredicateNotImplemented:
-                        comp_arg_1_implemented = False
-                        comp_arg_1 = float('-Inf')
+                comp_arg_2, comp_arg_2_implemented = self._evaluate_comparison_arg(comp["arg_2"]["arg"],  # type: ignore
+                                                                                   state, mapping, force_evaluation)
 
-                comp_arg_1 = float(comp_arg_1)
-
-                comp_arg_2 = comp["arg_2"]["arg"]  # type: ignore
-                comp_arg_2_implemented = True
-                if isinstance(comp_arg_2, tatsu.ast.AST):
-                    try:
-                        # If it's an AST, it's a function, so evaluate it
-                        comp_arg_2 = self.evaluate_function(comp_arg_2, state, mapping, force_evaluation)
-
-                        # If the function is undecidable with the current information, return None
-                        if comp_arg_2 is None:
-                            return None
-                    except PredicateHandlerPredicateNotImplemented:
-                        comp_arg_2_implemented = False
-                        comp_arg_2 = float('-Inf')
-
-                comp_arg_2 = float(comp_arg_2)
+                if comp_arg_2 is None:
+                    return None
 
                 if not comp_arg_1_implemented and not comp_arg_1_implemented:
                     raise PredicateHandlerPredicateNotImplemented('Both arguments of function comparison were not implemented')

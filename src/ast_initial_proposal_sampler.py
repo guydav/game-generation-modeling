@@ -11,6 +11,7 @@ from ast_counter_sampler import *
 from fitness_ngram_models import *
 import fitness_energy_utils as utils
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH
+from ast_context_fixer import ASTContextFixer
 
 
 # TODO: get an argparse going
@@ -65,6 +66,7 @@ DEFAULT_SCORE_THRESHOLD_BY_SAMPLE_SECTION = {
 
 
 class SectionBySectionNGramScoreSampler:
+    context_fixer: ASTContextFixer
     max_depth_by_sample_section: typing.Dict[str, int]
     ngram_model: ASTNGramTrieModel
     ngram_model_key_by_section: typing.Dict[str, str]
@@ -78,7 +80,7 @@ class SectionBySectionNGramScoreSampler:
     sampler: ASTSampler
     score_threshold_by_sample_section: typing.Dict[str, float]
 
-    def __init__(self, sampler: ASTSampler, ngram_model: ASTNGramTrieModel,
+    def __init__(self, sampler: ASTSampler, ngram_model: ASTNGramTrieModel, context_fixer: ASTContextFixer,
                  n_preferences_weights: typing.List[float] = DEFAULT_N_PREFERENCE_WEIGHTS,
                  p_setup: float = DEFAULT_P_SETUP, p_terminal: float = DEFAULT_P_TERMINAL,
                  max_depth_by_sample_section: typing.Dict[str, int] = DEFAULT_MAX_DEPTH_BY_SAMPLE_SECTION,
@@ -90,6 +92,7 @@ class SectionBySectionNGramScoreSampler:
                  ):
         self.sampler = sampler
         self.ngram_model = ngram_model
+        self.context_fixer = context_fixer
 
         self.n_preferences_weights = np.array(n_preferences_weights)
         self.n_preferences_weights /= np.sum(self.n_preferences_weights)
@@ -158,6 +161,9 @@ class SectionBySectionNGramScoreSampler:
         return sample  # type: ignore
 
     def sample(self, global_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
+        sampled = False
+        candidate = None
+
         current_sampler_max_depth = self.sampler.max_sample_depth
 
         if global_context is None:
@@ -166,43 +172,54 @@ class SectionBySectionNGramScoreSampler:
         if 'sample_id' not in global_context:
             global_context['sample_id'] = self.sample_id
 
-        setup = None
-        if self.rng.uniform() < self.p_setup:
-            setup = self._sample_rule('setup', ast_parser.SETUP, global_context)
-            setup = ('(:setup', setup, ')')
+        while not sampled:
+            try:
+                setup = None
+                if self.rng.uniform() < self.p_setup:
+                    setup = self._sample_rule('setup', ast_parser.SETUP, global_context)
+                    setup = ('(:setup', setup, ')')
 
-        n_preferences = self.rng.choice(np.arange(1, len(self.n_preferences_weights) + 1), p=self.n_preferences_weights)
-        preference_list = [self._sample_rule('pref_def', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
+                n_preferences = self.rng.choice(np.arange(1, len(self.n_preferences_weights) + 1), p=self.n_preferences_weights)
+                preference_list = [self._sample_rule('pref_def', ast_parser.PREFERENCES, global_context) for _ in range(n_preferences) ]
 
-        preferences_dict = dict(preferences=preference_list)
-        preferences_dict['parseinfo'] = tatsu.infos.ParseInfo(  # type: ignore
-            None, 'preferences', self.sampler.sample_parseinfo_index, self.sampler.sample_parseinfo_index,
-            self.sampler.sample_parseinfo_index, self.sampler.sample_parseinfo_index)
-        self.sampler.sample_parseinfo_index += 1
-        preferences = ('(:constraints', tatsu.ast.AST(preferences_dict), ')')
+                preferences_dict = dict(preferences=preference_list)
+                preferences_dict['parseinfo'] = tatsu.infos.ParseInfo(  # type: ignore
+                    None, 'preferences', self.sampler.sample_parseinfo_index, self.sampler.sample_parseinfo_index,
+                    self.sampler.sample_parseinfo_index, self.sampler.sample_parseinfo_index)
+                self.sampler.sample_parseinfo_index += 1
+                preferences = ('(:constraints', tatsu.ast.AST(preferences_dict), ')')
 
-        terminal = None
-        if self.rng.uniform() < self.p_terminal:
-            terminal = self._sample_rule('terminal', ast_parser.TERMINAL, global_context)
-            terminal = ('(:terminal', terminal, ')')
+                terminal = None
+                if self.rng.uniform() < self.p_terminal:
+                    terminal = self._sample_rule('terminal', ast_parser.TERMINAL, global_context)
+                    terminal = ('(:terminal', terminal, ')')
 
-        scoring = self._sample_rule('scoring_expr', ast_parser.SCORING, global_context)
-        scoring = ('(:scoring', scoring, ')')
+                scoring = self._sample_rule('scoring_expr', ast_parser.SCORING, global_context)
+                scoring = ('(:scoring', scoring, ')')
 
-        game_def = self.sampler.sample('game_def', global_context=global_context)[0]
-        domain_def = self.sampler.sample('domain_def', global_context=global_context)[0]
+                game_def = self.sampler.sample('game_def', global_context=global_context)[0]
+                domain_def = self.sampler.sample('domain_def', global_context=global_context)[0]
 
-        game_sections = ['(define', game_def, domain_def]
-        if setup is not None: game_sections.append(setup)
-        game_sections.append(preferences)
-        if terminal is not None: game_sections.append(terminal)
-        game_sections.append(scoring)
-        game_sections.append(')')
+                game_sections = ['(define', game_def, domain_def]
+                if setup is not None: game_sections.append(setup)
+                game_sections.append(preferences)
+                if terminal is not None: game_sections.append(terminal)
+                game_sections.append(scoring)
+                game_sections.append(')')
+
+                candidate = tuple(game_sections)
+                self.context_fixer.fix_contexts(candidate)  # type: ignore
+                sampled = True
+
+            except SamplingException as e:
+                if self.verbose:
+                    print(f'Failed to sample game with global context {global_context}: {e}')
+                continue
 
         self.sample_id += 1
         self.sampler.max_sample_depth = current_sampler_max_depth
 
-        return tuple(game_sections)
+        return candidate
 
 
 if __name__ == '__main__':
@@ -222,11 +239,12 @@ if __name__ == '__main__':
 
     counter = parse_or_load_counter(DEFAULT_ARGS, grammar_parser=grammar_parser)
     sampler = ASTSampler(grammar_parser, counter, seed=DEFAULT_ARGS.random_seed)  # type: ignore
+    context_fixer = ASTContextFixer(sampler, sampler.rng, True)
 
     with open(LATEST_AST_N_GRAM_MODEL_PATH, 'rb') as f:
         ngram_model = pickle.load(f)
 
-    section_sampler = SectionBySectionNGramScoreSampler(sampler, ngram_model, verbose=0)
+    section_sampler = SectionBySectionNGramScoreSampler(sampler, ngram_model, context_fixer, verbose=0)
 
     N_SAMPLES = 100
 

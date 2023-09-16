@@ -596,7 +596,10 @@ TERMINAL_BLOCKS = (
         \alt (not <terminal>)
         \alt <terminal-comp>""", ('terminal_and', 'terminal_or', 'terminal_not')),
 
-    (r"""<terminal-comp> ::= (<comp-op> <scoring-expr> <scoring-expr>) "#" A comparison operator is used to compare two scoring expressions (see next section).
+    (r"""<terminal-comp> ::= "#" A comparison operator is used to compare two scoring expressions (see next section).
+        \alt (<comp-op> (total-time) <time-number>)
+        \alt (<comp-op> (total-score) <score-number>)
+        \alt (<comp-op> <scoring-expr> <preference-count-number>)
 
     <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =""", 'terminal_comp'),
 )

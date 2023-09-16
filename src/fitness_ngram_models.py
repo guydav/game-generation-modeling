@@ -457,7 +457,7 @@ IGNORE_RULES = [
     'pref_forall_prefs', 'pref_def', 'pref_body', 'seq_func',
     'terminal', 'terminal_expr', 'scoring_expr', 'scoring_expr_or_number',
     'preference_eval', 'pref_object_type',
-    'number_value', 'positive_number', 'negative_number',
+    'comparison_arg_number_value', 'time_number_value', 'score_number_value', 'scoring_number_value',
 ]
 
 
@@ -660,6 +660,9 @@ class NGramASTParser(ast_parser.ASTParser):
             return output
 
         if rule in ('terminal_comp', 'scoring_comp', 'scoring_multi_expr'):
+            if rule == "terminal_comp":
+                ast = typing.cast(tatsu.ast.AST, ast.comp)
+
             return ast.op  # type: ignore
 
         if rule == 'two_arg_comparison':
@@ -671,7 +674,7 @@ class NGramASTParser(ast_parser.ASTParser):
         if rule == 'scoring_neg_expr':
             return '-'
 
-        if rule in ('number_value', 'positive_number', 'negative_number'):
+        if rule in ('comparison_arg_number_value', 'time_number_value', 'score_number_value', 'scoring_number_value'):
             return 'number'
 
         return rule

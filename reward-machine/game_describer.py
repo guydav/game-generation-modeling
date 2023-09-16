@@ -598,15 +598,8 @@ class GameDescriber():
 
             return FUNCTION_DESCRIPTIONS[name].format(*variables)
 
-        elif rule == "number_value":
-            inner_number = predicate["number"]
-            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
-            sign = ""
-            if inner_number_rule == 'negative_number':
-                sign = "-"
-                inner_number = inner_number["number"]  # type: ignore
-
-            return f"{sign}{inner_number['terminal']}"  # type: ignore
+        elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
+            return predicate["terminal"] # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}'")
@@ -635,6 +628,7 @@ class GameDescriber():
             return self.engine.join(["(" + self._describe_terminal(sub) + ")" for sub in terminal_ast["or_args"]], conj="or") # type: ignore
 
         elif rule == "terminal_comp":
+            terminal_ast = typing.cast(tatsu.ast.AST, terminal_ast["comp"])
             comparison_operator = terminal_ast["op"]
 
             expr_1 = self._describe_scoring(terminal_ast["expr_1"]["expr"]) # type: ignore
@@ -651,15 +645,8 @@ class GameDescriber():
             elif comparison_operator == ">=":
                 return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
 
-        elif rule == "number_value":
-            inner_number = terminal_ast["number"]
-            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
-            sign = ""
-            if inner_number_rule == 'negative_number':
-                sign = "-"
-                inner_number = inner_number["number"]  # type: ignore
-
-            return f"{sign}{inner_number['terminal']}"  # type: ignore
+        elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
+            return terminal_ast["terminal"] # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown terminal rule '{rule}'")
@@ -671,7 +658,7 @@ class GameDescriber():
         '''
         if external_object_types is None:
             return ""
-        
+
         specified_variables = list(self.external_forall_preference_mappings[preference_name].keys())[:len(external_object_types)] # type: ignore
         mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
 
@@ -681,6 +668,8 @@ class GameDescriber():
 
         if isinstance(scoring_ast, str):
             return scoring_ast
+
+        scoring_ast = typing.cast(tatsu.ast.AST, scoring_ast)
 
         rule = scoring_ast["parseinfo"].rule  # type: ignore
 
@@ -743,7 +732,7 @@ class GameDescriber():
 
             internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
             return f"the maximum value of ({internal_description}) over all quantifications of {quanitification_string}"
-        
+
         elif rule == "scoring_external_minimize":
             preference_name, _ = self._extract_name_and_types(scoring_ast) # type: ignore
             external_variables = self.external_forall_preference_mappings[preference_name] # type: ignore
@@ -751,7 +740,7 @@ class GameDescriber():
 
             internal_description = self._describe_scoring(scoring_ast["scoring_expr"]) # type: ignore
             return f"the minimum value of ({internal_description}) over all quantifications of {quanitification_string}"
-        
+
         elif rule == "count":
             preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
@@ -804,15 +793,8 @@ class GameDescriber():
 
             return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
 
-        elif rule == "number_value":
-            inner_number = scoring_ast["number"]  # type: ignore
-            inner_number_rule = inner_number["parseinfo"].rule # type: ignore
-            sign = ""
-            if inner_number_rule == 'negative_number':
-                sign = "-"
-                inner_number = inner_number["number"]  # type: ignore
-
-            return f"{sign}{inner_number['terminal']}"  # type: ignore
+        elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
+            return scoring_ast["terminal"]  # type: ignore
 
         else:
             raise ValueError(f"Error: Unknown rule '{rule}' in scoring expression")

@@ -1958,7 +1958,7 @@ def _is_number(s: typing.Any) -> bool:
         return s.replace('.', '', 1).isdigit()
 
     elif isinstance(s, tatsu.ast.AST):
-        if s.parseinfo.rule == 'number_value':  # type: ignore
+        if s.parseinfo.rule in ('comparison_arg_number_value', 'time_number_value', 'score_number_value', 'scoring_number_value'):  # type: ignore
             return True
 
         if s.parseinfo.rule in ('scoring_expr', 'scoring_neg_expr'):  # type: ignore
@@ -1998,6 +1998,7 @@ class NoTwoNumberOperations(FitnessTerm):
                     self.two_number_operations += 1
 
             elif rule == TERMINAL_COMP:
+                ast = typing.cast(tatsu.ast.AST, ast.comp)
                 first_number = 'expr' in ast.expr_1.expr and _is_number(ast.expr_1.expr.expr)  # type: ignore
                 second_number = 'expr' in ast.expr_2.expr and _is_number(ast.expr_2.expr.expr)  # type: ignore
                 if first_number and second_number:

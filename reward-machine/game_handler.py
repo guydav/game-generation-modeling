@@ -370,6 +370,7 @@ class GameHandler():
         # Interestingly, in the grammar a terminal comparison can only over have 2 arguments (i.e. there can be no
         # (= arg1 arg2 arg3)), so this makes extracting the expressions a bit more straightforward
         elif rule == "terminal_comp":
+            terminal_expression = typing.cast(tatsu.ast.AST, terminal_expression["comp"])
             comparison_operator = terminal_expression["op"]
 
             expr_1 = self.score(terminal_expression["expr_1"]["expr"]) # type: ignore
@@ -470,12 +471,8 @@ class GameHandler():
         if rule in ("scoring_expr", "scoring_expr_or_number"):
             return self.score(scoring_expression["expr"], external_mapping)
 
-        elif rule == 'number_value':
-            number = scoring_expression["number"]
-            sign = 1
-            if number.parseinfo.rule == "negative_number":  # type: ignore
-                number = number["number"]  # type: ignore
-                sign = -1
+        elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
+            return float(scoring_expression["terminal"]) # type: ignore
 
             # At this point, the rule is positive_number
             return float(number["terminal"]) * sign  # type: ignore

@@ -624,6 +624,9 @@ class ASTBooleanParser(ASTParser):
             expr = boolean.Symbol(symbol_name)
 
         elif rule in ('two_arg_comparison', 'multiple_args_equal_comparison', 'terminal_comp', 'scoring_comp', 'scoring_equals_comp'):
+            if rule == 'terminal_comp':
+                ast = typing.cast(tatsu.ast.AST, ast.comp)
+
             if 'comp_op' in ast:
                 op = ast.comp_op
             elif 'op' in ast:

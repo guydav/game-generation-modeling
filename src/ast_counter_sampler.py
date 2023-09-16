@@ -207,12 +207,21 @@ class ASTRuleValueCounter(ASTParser):
 
         return super()._handle_tuple(ast, **kwargs)
 
-# TODO: populate the below with actual values, and consider splitting type names by rooms
+
+def _number_prior(number_list: typing.List):
+    return [f'{x:.1f}' if isinstance(x, float) else str(x) for x in set(number_list)]
+
+
 BINARY_OPERATORS = ['-', '/']
 MULTI_OPERATORS = ['+', '*']
 COMPARISON_OPERATORS = ['<=', '<', '=', '>=', '>']
-NUMBER_DEFAULTS = list(range(26)) + list(range(0, 110, 10)) + list(range(0, 360, 60)) + list(np.round(np.arange(0, 1, 0.1), 1))
-NUMBER_DEFAULTS = [f'{x:.1f}' if isinstance(x, float) else str(x) for x in set(NUMBER_DEFAULTS)]
+
+COMPARISON_ARG_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 11)) + list(np.round(np.arange(0, 1, 0.1), 1)))
+TIME_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(30, 360, 30)))
+SCORE_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-10, 11)) + list(range(-50, 110, 10)))
+PREF_COUNT_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 26)))
+SCORING_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-25, 26)) + list(range(-50, 110, 10)))
+
 TYPE_NAMES = []
 FUNCTION_NAMES = []
 PREDICATE_NAMES = []
@@ -497,8 +506,23 @@ def _side_type():
 def _predicate_names():
     return PREDICATE_NAMES
 
-def _number_defaults():
-    return NUMBER_DEFAULTS
+# def _number_defaults():
+#     return NUMBER_DEFAULTS
+
+# def _comparison_arg_number_value_defaults():
+#     return COMPARISON_ARG_NUMBER_VALUE_DEFAULTS
+
+# def _time_number_value_defaults():
+#     return TIME_NUMBER_VALUE_DEFAULTS
+
+# def _score_number_value_defaults():
+#     return SCORE_NUMBER_VALUE_DEFAULTS
+
+# def _pref_count_number_value_defaults():
+#     return PREF_COUNT_NUMBER_VALUE_DEFAULTS
+
+# def _scoring_number_value_defaults():
+#     return SCORING_NUMBER_VALUE_DEFAULTS
 
 def _total_time_defaults():
     return  ['(total-time)']
@@ -552,7 +576,13 @@ DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
         ('game_def', 'game_name'): generate_game_id,
         ('domain_def', 'domain_name'): generate_domain_name,
     },
-    number_pattern=defaultdict(_number_defaults),
+    number_pattern={
+        ('comparison_arg_number_value', 'terminal'): COMPARISON_ARG_NUMBER_VALUE_DEFAULTS,
+        ('time_number_value', 'terminal'): TIME_NUMBER_VALUE_DEFAULTS,
+        ('score_number_value', 'terminal'): SCORE_NUMBER_VALUE_DEFAULTS,
+        ('pref_count_number_value', 'terminal'): PREF_COUNT_NUMBER_VALUE_DEFAULTS,
+        ('scoring_number_value', 'terminal'): SCORING_NUMBER_VALUE_DEFAULTS,
+    },
     predicate_name=defaultdict(_predicate_names),
     preference_name={
         ('preference', 'pref_name'): sample_new_preference_name_factory,
@@ -693,15 +723,15 @@ class ASTSampler:
                  ast_counter: ASTRuleValueCounter,
                  max_sample_depth: typing.Optional[int] = None,
                  max_sample_nodes: typing.Optional[int] = None,
-                 pattern_rule_options: typing.Dict[str, typing.Dict[typing.Tuple[str, str], typing.Callable]] = DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE,
-                 rule_field_value_types: typing.Dict[typing.Tuple[str, str], typing.Union[str, typing.Tuple[str]]] = SPECIAL_RULE_FIELD_VALUE_TYPES,
+                 pattern_rule_options: typing.Dict[str, typing.Dict[typing.Tuple[str, str], typing.Callable]] = DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE,  # type: ignore
+                 rule_field_value_types: typing.Dict[typing.Tuple[str, str], typing.Union[str, typing.Tuple[str]]] = SPECIAL_RULE_FIELD_VALUE_TYPES,  # type: ignore
                  pattern_type_mappings: typing.Dict[str, str] = PATTERN_TYPE_MAPPINGS,
                  local_context_propagating_rules: typing.Set[str] = LOCAL_CONTEXT_PROPAGATING_RULES,
                  omit_rules: typing.Optional[typing.Sequence[str]] = None,
                  omit_tokens: typing.Optional[typing.Sequence[str]] = None,
                  prior_rule_count: int = PRIOR_COUNT, prior_token_count: int = PRIOR_COUNT,
                  length_prior: typing.Dict[int, int] = LENGTH_PRIOR,
-                 min_length_by_rule_and_field: typing.Optional[typing.Dict[typing.Tuple[str, str], int]] = DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD,
+                 min_length_by_rule_and_field: typing.Optional[typing.Dict[typing.Tuple[str, str], int]] = DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD,  # type: ignore
                  hardcoded_rules: typing.Dict[str, dict] = HARDCODED_RULES,
                  single_literal_rules: typing.Set[str] = SINGLE_LITERAL_RULES,
                  verbose: bool = False,
@@ -1328,7 +1358,7 @@ class RegrowthSampler(ASTParentMapper):
         self.rng = rng
 
         if self.fix_contexts:
-            self.context_fixer = ast_context_fixer.ASTContextFixer(self.example_sampler, self.rng, strict=True)
+            self.context_fixer = ast_context_fixer.ASTContextFixer(self.example_sampler, self.rng, strict=False)
 
         self.parent_mapping = dict()
         self.depth_parser = ASTDepthParser()

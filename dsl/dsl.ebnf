@@ -16,7 +16,7 @@ scoring_def = '(:scoring' scoring ')';
 
 id = /[a-z0-9][a-z0-9\-]+/;
 name = /[A-Za-z][A-Za-z0-9_]*/;
-number_pattern = /\d*\.?\d+/;
+number_pattern = /-?\d*\.?\d+/;
 
 variable = /\?[a-w][a-z0-9]*/;
 color_variable = /\?x[0-9]*/;
@@ -52,6 +52,12 @@ number_value = number:(positive_number | negative_number);
 positive_number = terminal:number_pattern;
 negative_number = '-' number:positive_number;
 
+comparison_arg_number_value = terminal:number_pattern;
+time_number_value = terminal:number_pattern;
+score_number_value = terminal:number_pattern;
+pref_count_number_value = terminal:number_pattern;
+scoring_number_value = terminal:number_pattern;
+
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
 two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
@@ -65,7 +71,7 @@ predicate_or_function_side_term = term:(side | side_variable);
 predicate_or_function_type_term = term:(object_type | variable);
 
 
-comparison_arg = arg:(function_eval | number_value);
+comparison_arg = arg:(function_eval | comparison_arg_number_value);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
 function_eval = func:(function_building_size |
     function_distance |
@@ -263,11 +269,19 @@ terminal = terminal:(
 terminal_and = '(and' {and_args+:terminal}+ ')'; # TODO: do we want to enforce more than one?
 terminal_or = '(or' {or_args+:terminal}+ ')'; # TODO: do we want to enforce more than one?
 terminal_not = '(not' not_args:terminal ')';
-terminal_comp = '(' op:binary_comp expr_1:terminal_expr expr_2:terminal_expr ')';
+terminal_comp = comp:(terminal_time_comp | terminal_score_comp | terminal_pref_count_comp);
+
+terminal_time_comp = '(' op:binary_comp expr_1:total_time expr_2:time_number_value ')';
+terminal_score_comp = '(' op:binary_comp expr_1:total_score expr_2:score_number_value ')';
+terminal_pref_count_comp = '(' op:binary_comp expr_1:scoring_expr_or_number expr_2:pref_count_number_value ')';
+
 
 # alternatively, if we don't want scoring to be able to refer to '(total-score)''
 # we recreate the definition from above, and add '(total-score)' as a separate literal option
-terminal_expr = expr:(scoring_expr_or_number | total_time | total_score);
+# terminal_expr = expr:(scoring_expr_or_number | total_time | total_score);
+
+total_time = '(total-time)';
+total_score = '(total-score)' ;
 
 scoring_expr = expr:(
     scoring_external_maximize |
@@ -283,7 +297,7 @@ scoring_expr = expr:(
     );
     # function_eval  # allowing an arbitrary function evaluation as part of scoring -- why do we want this?
 
-scoring_expr_or_number = expr:(scoring_expr | number_value);
+scoring_expr_or_number = expr:(scoring_expr | scoring_number_value);
 
 scoring_external_maximize = '(external-forall-maximize' scoring_expr:scoring_expr ')';
 scoring_external_minimize = '(external-forall-minimize' scoring_expr:scoring_expr ')';
@@ -295,10 +309,6 @@ scoring_neg_expr = '(-' expr:scoring_expr_or_number ')';
 # scoring_and = '(and' {and_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
 # scoring_or = '(or' {or_args:scoring_expr}+ ')'; # TODO: do we want to enforce more than one?
 # scoring_not = '(not' not_args:scoring_expr ')';
-
-
-total_time = '(total-time)';
-total_score = '(total-score)' ;  # allowing to refer to it here to say, double the score if a condition is achieved
 
 multi_op = '+' | '*';
 binary_op = '-' | '/';

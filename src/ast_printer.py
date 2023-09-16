@@ -456,21 +456,6 @@ def _handle_function_eval(caller, rule, ast, depth, increment, context=None, ret
     return _handle_predicate(caller, rule, ast, depth, increment, context, return_str=return_str)
 
 
-def _format_number_value(ast):
-    number = ast.number
-    prefix = ''
-    if number.parseinfo.rule == 'negative_number':
-        number = number.number
-        prefix = '-'
-
-    return f'{prefix}{number.terminal}'
-
-
-@mutation_and_removal_context
-def _handle_number_value(caller, rule, ast, depth, increment, context=None):
-    _indent_print(_format_number_value(ast), depth, increment, context)
-
-
 # @mutation_and_removal_context  -- handles it internally
 def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=None) -> str:
     arg = ast.arg
@@ -480,8 +465,8 @@ def _inline_format_comparison_arg(caller, rule, ast, depth, increment, context=N
         if arg.parseinfo.rule == 'function_eval':  # type: ignore
             # return _inline_format_function_eval(caller, arg.rule, arg, depth, increment, context)
             out_str = _handle_function_eval(caller, arg.rule, arg, depth, increment, context, return_str=True)
-        elif arg.parseinfo.rule == 'number_value':  # type: ignore
-            out_str = _format_number_value(arg)
+        elif arg.parseinfo.rule == 'comparison_arg_number_value':  # type: ignore
+            out_str = arg.terminal
         else:
             raise ValueError(f'Unexpected comparison argument: {arg}')
     else:
@@ -620,8 +605,10 @@ def build_setup_printer():
     printer.register_exact_matches(
         _handle_setup, _handle_statement, _handle_super_predicate,
         _handle_function_comparison, _handle_function_eval, _handle_predicate,
-        _handle_two_arg_comparison, _handle_comparison_arg, _handle_number_value,
-        _handle_multiple_args_equal_comparison, _handle_variable_list, )
+        _handle_two_arg_comparison, _handle_comparison_arg,
+        _handle_multiple_args_equal_comparison, _handle_variable_list,
+    )
+    printer.register_exact_match(_handle_number_value, 'comparison_arg_number_value')
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
     printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
     printer.register_keyword_match('type_definition', _handle_type_definition)
@@ -787,8 +774,9 @@ def build_constraints_printer():
         _handle_hold, _handle_while_hold, _handle_hold_for, _handle_hold_to_end,
         _handle_forall_seq, _handle_function_eval, _handle_two_arg_comparison,
         _handle_multiple_args_equal_comparison, _handle_comparison_arg,
-        _handle_number_value, _handle_variable_list,
+        _handle_variable_list,
     )
+    printer.register_exact_match(_handle_number_value, 'comparison_arg_number_value')
     printer.register_exact_match(_handle_preferences, 'pref_forall_prefs')
     printer.register_exact_match(_handle_predicate, PREDICATES + FUNCTIONS)
     printer.register_keyword_match('variable_type_def', _handle_variable_type_def)
@@ -954,8 +942,18 @@ def _handle_scoring_external_minimize(caller, rule, ast, depth, increment, conte
 
 
 @mutation_and_removal_context
+def _handle_terminal_comp(caller, rule, ast, depth, increment, context=None):
+    _handle_binary_comp(caller, rule, ast.comp, depth, increment, context=None)
+
+
+@mutation_and_removal_context
 def _handle_preference_eval(caller, rule, ast, depth, increment, context=None):
     caller(ast.count_method, depth, increment, context)
+
+
+def _handle_number_value(caller, rule, ast, depth, increment, context=None):
+    _indent_print(ast.terminal, depth, increment, context)
+
 
 def build_terminal_printer():
     printer = ASTPrinter('(:terminal', ('terminal_', 'scoring_'))
@@ -965,10 +963,11 @@ def build_terminal_printer():
         _handle_preference_eval, _handle_scoring_comparison,
         _handle_scoring_external_maximize, _handle_scoring_external_minimize,
         _handle_multi_expr, _handle_binary_expr,
-        _handle_neg_expr, _handle_equals_comp, _handle_number_value,
+        _handle_neg_expr, _handle_equals_comp, _handle_terminal_comp,
         _handle_function_eval, _handle_with, _handle_pref_object_type,
     )
-    printer.register_exact_match(_handle_binary_comp, 'comp')
+    printer.register_exact_match(_handle_terminal_comp, 'comp')
+    printer.register_exact_match(_handle_number_value, ('time_number_value', 'score_number_value', 'pref_count_number_value', 'scoring_number_value'))
     printer.register_keyword_match(('count',), _handle_count_method)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)
     return printer

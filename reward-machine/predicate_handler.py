@@ -195,16 +195,9 @@ class PredicateHandler:
                     comp_arg = comp_arg["arg"]  # type: ignore
 
                 # If it's an AST, it's a either a number or a function
-                # if it's an ubmer, extract the value
-                if comp_arg.parseinfo.rule == "number_value":  # type: ignore
-                    number = comp_arg["number"]  # type: ignore
-                    sign = 1
-                    if number.parseinfo.rule == "negative_number":  # type: ignore
-                        number = number["number"]  # type: ignore
-                        sign = -1
-
-                    # At this point, the rule is positive_number
-                    comp_arg = float(number["terminal"]) * sign  # type: ignore
+                # if it's a nubmer, extract the value
+                if comp_arg.parseinfo.rule == "comparison_arg_number_value":  # type: ignore
+                    comp_arg = float(comp_arg["terminal"])  # type: ignore
 
                 else:
                     comp_arg = self.evaluate_function(comp_arg, state, mapping, force_evaluation)  # type: ignore

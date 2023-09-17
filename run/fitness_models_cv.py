@@ -232,7 +232,7 @@ def main(args: argparse.Namespace):
 
             full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
             real_game_scores = full_tensor_scores[:, 0]
-            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, median = {torch.median(real_game_scores)}, max = {real_game_scores.max():.4f}')
+            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, median = {torch.median(real_game_scores):.4f}, max = {real_game_scores.max():.4f}')
 
             negatives_scores = full_tensor_scores[:, 1:].ravel()
             print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))

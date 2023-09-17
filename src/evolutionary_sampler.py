@@ -2000,20 +2000,38 @@ def filter_samples_then_three_or_longer(sample: ASTType, sample_features: typing
 
 def filter_samples_no_identical_preferences(sample: ASTType, sample_features: typing.Dict[str, int], sample_fitness: float) -> bool:
     preferences = [section for section in sample if isinstance(section, tuple) and section[0] == '(:constraints'][0][1]
-    prefs = preferences.preferences
-    if not isinstance(prefs, list):
-        prefs = [prefs]
+    pref_defs = preferences.preferences
+    if not isinstance(pref_defs, list):
+        return True
 
-    pref_strs = typing.cast(typing.List[str], [ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in prefs])
+    pref_bodies = []
+    for pref_def in pref_defs:
+        pref = pref_def.definition
+        # We don't apply this logic currently to inner preferenecs inside a forall -- we could if that proves to be a mistake
+        if pref.parseinfo.rule == 'pref_forall':
+            pref_bodies.append(pref)
+
+        else:  # pref.parseinfo.rule == 'preferences'
+            pref_body = pref.pref_body.body
+            if pref_body.parseinfo.rule == 'pref_body_exists':
+                pref_body = pref_body.exists_args
+
+            pref_bodies.append(pref_body)
+
+    pref_body_strs = typing.cast(typing.List[str], [ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in pref_defs])
     cleaned_strs = set()
 
-    for s in pref_strs:
-        pref_index = s.index('(preference')
-        space_index = s.index(' ', pref_index)
-        space_after_pref_name_index = s.index(' ', space_index + 1)
-        cleaned_strs.add(s[space_after_pref_name_index:].strip())
+    for s in pref_body_strs:
+        pref_index = s.find('(preference')
+        if pref_index == -1:
+            cleaned_strs.add(s.strip())
 
-    return len(prefs) == len(cleaned_strs)
+        else:
+            space_index = s.index(' ', pref_index)
+            space_after_pref_name_index = s.index(' ', space_index + 1)
+            cleaned_strs.add(s[space_after_pref_name_index:].strip())
+
+    return len(pref_defs) == len(cleaned_strs)
 
 
 SAMPLE_FILTER_FUNCS = {

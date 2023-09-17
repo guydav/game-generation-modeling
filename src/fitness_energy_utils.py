@@ -9,6 +9,7 @@ import logging
 import os
 import pickle
 import typing
+import sys
 
 from IPython.display import display, Markdown, HTML  # type: ignore
 import matplotlib.pyplot as plt
@@ -27,6 +28,27 @@ from tqdm import tqdm
 
 from fitness_features_preprocessing import NON_FEATURE_COLUMNS
 from latest_model_paths import LATEST_FITNESS_FEATURES
+
+
+class LevelFilter(logging.Filter):
+    def __init__(self, level, name: str = ""):
+        self.level = level
+
+    def filter(self, record):
+        return record.levelno == self.level
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+logging_handler_out = logging.StreamHandler(sys.stdout)
+logging_handler_out.setLevel(logging.DEBUG)
+logging_handler_out.addFilter(LevelFilter(logging.INFO))
+logger.addHandler(logging_handler_out)
+
+logging_handler_err = logging.StreamHandler(sys.stderr)
+logging_handler_err.setLevel(logging.WARNING)
+logger.addHandler(logging_handler_err)
 
 
 def _find_nth(text, target, n):
@@ -87,7 +109,7 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
         output_path = os.path.join(folder, filename + period + extensions)
 
     if log_message:
-        logging.debug(f'Saving data to {output_path} ...')
+        logger.info(f'Saving data to {output_path} ...')
     with gzip.open(output_path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -1720,7 +1742,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         if notebook:
             display(Markdown('### Rank (Spearman) correlations between metrics:'))
         else:
-            logging.debug('Rank (Spearman) correlations between metrics:')
+            logger.debug('Rank (Spearman) correlations between metrics:')
 
         metrics_table = [[''] * n_score_funcs for _ in range(n_score_funcs)]
 
@@ -1741,7 +1763,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
         if notebook:
             display(Markdown(table))
         else:
-            logging.info(f'Metric correlation table:\n{table}')
+            logger.debug(f'Metric correlation table:\n{table}')
 
     if display_results_by_metric:
         for name in scoring_names:
@@ -1749,7 +1771,7 @@ def visualize_cv_outputs(cv: GridSearchCV, train_tensor: torch.Tensor,
                 display(Markdown(f'### CV results by {name}:'))
                 display(cv_df.sort_values(by=f'{name}_rank').head(10))
             else:
-                logging.info(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
+                logger.debug(f'CV results by {name}:\n{cv_df.sort_values(by=f"{name}_rank").head(10)}')
 
     # else:
     #     if display_by_ecdf:

@@ -791,6 +791,9 @@ def build_constraints_printer():
 
 @mutation_and_removal_context
 def _handle_binary_comp(caller, rule, ast, depth, increment, context=None):
+    if 'comp' in ast:
+        ast = ast.comp
+
     context = typing.cast(dict, context)
     _indent_print(f'({ast.op}', depth, increment, context)
     context['continue_line'] = True
@@ -968,6 +971,7 @@ def build_terminal_printer():
         _handle_neg_expr, _handle_equals_comp, _handle_terminal_comp,
         _handle_function_eval, _handle_with, _handle_pref_object_type,
     )
+    printer.register_exact_match(_handle_binary_comp, 'comp')
     printer.register_exact_match(_handle_number_value, ('time_number_value', 'score_number_value', 'pref_count_number_value', 'scoring_number_value'))
     printer.register_keyword_match(('count',), _handle_count_method)
     printer.register_keyword_match(('and', 'or', 'not'), _handle_logical)

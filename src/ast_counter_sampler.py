@@ -209,7 +209,7 @@ class ASTRuleValueCounter(ASTParser):
 
 
 def _number_prior(number_list: typing.List):
-    return [f'{x:.1f}' if isinstance(x, float) else str(x) for x in set(number_list)]
+    return ['0' if np.allclose(x, 0) else (f'{x:.1f}' if isinstance(x, float) else str(x)) for x in set(number_list)]
 
 
 BINARY_OPERATORS = ['-', '/']
@@ -220,7 +220,7 @@ COMPARISON_ARG_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 11)) + list(n
 TIME_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(30, 360, 30)))
 SCORE_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-10, 11)) + list(range(-50, 110, 10)))
 PREF_COUNT_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 26)))
-SCORING_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-25, 26)) + list(range(-50, 110, 10)))
+SCORING_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-25, 26)) + list(range(-50, 110, 10)) + list(np.round(np.arange(0, 1, 0.1), 1)))
 
 TYPE_NAMES = []
 FUNCTION_NAMES = []

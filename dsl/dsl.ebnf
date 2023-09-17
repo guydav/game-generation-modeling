@@ -48,9 +48,10 @@ orientation_type = terminal:'orientation';
 orientation = terminal:('diagonal' | 'sideways' | 'upright' | 'upside_down');
 side_type = terminal:'side';
 side = terminal:('back' | 'front' | 'left' | 'right');
-number_value = number:(positive_number | negative_number);
-positive_number = terminal:number_pattern;
-negative_number = '-' number:positive_number;
+
+# number_value = number:(positive_number | negative_number);
+# positive_number = terminal:number_pattern;
+# negative_number = '-' number:positive_number;
 
 comparison_arg_number_value = terminal:number_pattern;
 time_number_value = terminal:number_pattern;

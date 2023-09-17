@@ -144,6 +144,7 @@
                 // "--samples-output-path", "./dsl/ast-mle-samples-large.pddl",
                 // "--samples-output-path", "./dsl/ast-real-regrowth-samples.pddl",
                 "--samples-output-path", "./dsl/ast-mle-samples-medium.pddl",
+                "--fix-contexts"
             ],
             "console": "integratedTerminal",
             // "notes": "--parse-counter",

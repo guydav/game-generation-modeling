@@ -771,6 +771,11 @@ class ASTSamplePostprocessor(ASTParser):
 
 def _extract_variable_type_as_list(var_type: tatsu.ast.AST) -> typing.List[str]:
     var_type_rule = var_type.parseinfo.rule  # type: ignore
+
+    if var_type_rule.endswith('type_definition'):
+        var_type = var_type.type  # type: ignore
+        var_type_rule = var_type.parseinfo.rule  # type: ignore
+
     if var_type_rule.endswith('type'):
         return [var_type.terminal]  # type: ignore
 

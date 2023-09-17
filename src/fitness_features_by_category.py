@@ -5,11 +5,11 @@ from fitness_features_preprocessing import NGRAM_SCORE_PATTERN, ARG_TYPES_PATTER
 
 GRAMMAR_CONTEXT_FEATURES = [
     'variables_defined_all',
-    'variables_defined_incorrect_count',
+    'variables_defined_prop',
     'variables_used_all',
-    'variables_used_incorrect_count',
+    'variables_used_prop',
     'preferences_used_all',
-    'preferences_used_incorrect_count',
+    'preferences_used_prop',
 
     'repeated_variables_found',
     'repeated_variable_type_in_either',
@@ -92,6 +92,7 @@ COMPOSITIONALITY_FEATURES = [
 GRAMMAR_USE_FEATURES = [
     'setup_objects_used',
     'setup_quantified_objects_used',
+    'any_setup_objects_used',
     'adjacent_once_found',
     'no_adjacent_same_modal',
     'starts_and_ends_once',
@@ -107,6 +108,8 @@ GRAMMAR_USE_FEATURES = [
     'redundant_expression_found',
     'redundant_scoring_terminal_expression_found',
     'identical_consecutive_seq_func_predicates_found',
+    'no_disjoint_preferences_all',
+    'no_disjoint_preferences_prop',
     'disjoint_seq_funcs_found',
     'disjoint_at_end_found',
 
@@ -116,8 +119,9 @@ GRAMMAR_USE_FEATURES = [
 
 # The ones that are kept are the ones commented out
 GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
-    'setup_objects_used',
+    # 'setup_objects_used',
     # 'setup_quantified_objects_used',
+    # 'any_setup_objects_used,
     'adjacent_once_found',
     'no_adjacent_same_modal',
     'starts_and_ends_once',
@@ -133,6 +137,8 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'redundant_expression_found',
     # 'redundant_scoring_terminal_expression_found',
     # 'identical_consecutive_seq_func_predicates_found',
+    # 'no_disjoint_preferences_all',
+    # 'no_disjoint_preferences_prop',
     # 'disjoint_seq_funcs_found',
     # 'disjoint_at_end_found',
     # 'two_number_operation_found',

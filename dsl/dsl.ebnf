@@ -216,7 +216,7 @@ pref_body = body:(
 # pref_body_forall |
 
 pref_body_exists = '(exists' exists_vars:variable_list exists_args:(then | at_end) ')';
-pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
+# pref_body_forall = '(forall' forall_vars:variable_list forall_args:pref_body ')';
 at_end = '(at-end' at_end_pred:super_predicate')';
 always = '(always' always_pred:super_predicate')';
 then = '(then' {then_funcs+:seq_func}+ ')';

@@ -26,7 +26,8 @@ NON_FEATURE_COLUMNS = set(['Index', 'src_file', 'game_name', 'domain_name', 'rea
 
 BINARIZE_IGNORE_FEATURES = set([
     'variables_defined_all', 'variables_used_all', 'preferences_used_all',
-    'setup_objects_used', 'setup_quantified_objects_used',
+    'variables_defined_prop', 'variables_used_prop', 'preferences_used_prop',
+    'setup_objects_used', 'setup_quantified_objects_used', 'any_setup_objects_used',
     'starts_and_ends_once', 'scoring_count_expression_repetitions_exist',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
@@ -38,6 +39,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'tautological_expression_found', 'redundant_expression_found',
     'redundant_scoring_terminal_expression_found', 'at_end_found',
     'identical_consecutive_seq_func_predicates_found',
+    'no_disjoint_preferences_all', 'no_disjoint_preferences_prop',
     'disjoint_seq_funcs_found', 'disjoint_at_end_found',
 ])
 

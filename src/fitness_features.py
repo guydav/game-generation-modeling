@@ -513,10 +513,10 @@ class VariableBasedFitnessTerm(FitnessTerm):
         pass
 
     def _get_all_inner_keys(self):
-        return ['all', 'incorrect_count']
+        return ['all', 'prop']
 
 
-class VariablesDefinedTerm(VariableBasedFitnessTerm):
+class AllVariablesDefined(VariableBasedFitnessTerm):
     defined_count: int = 0
     undefined_count: int = 0
 
@@ -538,11 +538,9 @@ class VariablesDefinedTerm(VariableBasedFitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # print(self.defined_count, self.undefined_count)
         if self.defined_count == 0:
-            return dict(all=0, incorrect_count=0)
+            return dict(all=0, prop=0)
 
-        return dict(all=int(self.undefined_count == 0), incorrect_count=self.undefined_count)
-
-        # return self.defined_count / (self.defined_count + self.undefined_count)
+        return dict(all=int(self.undefined_count == 0), prop=self.defined_count / (self.defined_count + self.undefined_count))
 
 
 class AllVariablesUsed(VariableBasedFitnessTerm):
@@ -577,11 +575,11 @@ class AllVariablesUsed(VariableBasedFitnessTerm):
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         # print(self.defined_variables, self.used_variables, self.variable_definition_repeated)
         if len(self.defined_variables) == 0 or self.variable_definition_repeated:
-            return dict(all=0, incorrect_count=0)
+            return dict(all=0, prop=0)
 
         variable_intersection = self.defined_variables.intersection(self.used_variables)
         return dict(all=int(len(variable_intersection) == len(self.defined_variables)),
-                    incorrect_count=len(self.defined_variables) - len(variable_intersection))
+                    prop=len(variable_intersection) / len(self.defined_variables))
 
 
 class AllPreferencesUsed(FitnessTerm):
@@ -603,15 +601,17 @@ class AllPreferencesUsed(FitnessTerm):
             self.used_preferences.add(ast.name_and_types.pref_name)  # type: ignore
 
     def _get_all_inner_keys(self):
-        return ['all', 'incorrect_count']
+        return ['all', 'prop']
 
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.defined_preferences) == 0:
-            return dict(all=0, incorrect_count=0)
+            return dict(all=0, prop=0)
 
-        return dict(all=int(len(self.defined_preferences.intersection(self.used_preferences)) == len(self.defined_preferences.union(self.used_preferences))),
-                    incorrect_count=len(self.defined_preferences.symmetric_difference(self.used_preferences)))
+        defined_preferences_used = self.defined_preferences.intersection(self.used_preferences)
+        all_preferences_referenced = self.defined_preferences.union(self.used_preferences)
+        return dict(all=int(len(defined_preferences_used) == len(all_preferences_referenced)),
+                    prop=len(defined_preferences_used) / len(all_preferences_referenced))
 
 
 class NumPreferencesDefined(FitnessTerm):
@@ -690,6 +690,24 @@ class SetupQuantifiedObjectsUsed(SetupObjectsUsed):
         super().__init__(skip_objects,
                          (VARIABLE_TYPE_DEF_RULES_PATTERN, EITHER_TYPES_RULES_PATTERN, 'pref_name_and_types'),
                          'setup_quantified_objects_used')
+
+
+class AnySetupObjectsUsed(SetupObjectsUsed):
+    def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
+        super().__init__(skip_objects, header='any_setup_objects_used')
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.setup_objects) == 0:
+            return 0
+
+        for object_set in (self.setup_objects, self.used_objects):
+            if room_and_object_types.BALL in object_set:
+                object_set.update(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.BALLS])
+
+            if room_and_object_types.BLOCK in object_set:
+                object_set.update(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.BLOCKS])
+
+        return int(len(self.setup_objects.intersection(self.used_objects)) > 0)
 
 
 PREDICATE_IN_DATA_RULE_TO_CHILD = {
@@ -1445,7 +1463,78 @@ class ASTPredicateTermTracker(ast_parser.ASTParser):
         return super()._handle_ast(ast, **kwargs)
 
 
-class DisjointSeqFuncPredicateTerm(FitnessTerm):
+class DisjointPreferencesTerm(FitnessTerm):
+    types_by_preference: typing.Dict[str, typing.Set[str]]
+
+    def __init__(self):
+        super().__init__(('pref_forall', 'preference'), 'no_disjoint_preferences')
+        self.types_by_preference = {}
+
+    def game_start(self) -> None:
+        self.types_by_preference = {}
+
+    def _extract_variable_types_from_variable_list(self, ast: tatsu.ast.AST) -> typing.List[str]:
+        variable_types = []
+
+        variables = ast.variables
+        if not isinstance(variables, list):
+            variables = [variables]
+
+        for var_def in variables:
+            variable_types.extend(ast_parser._extract_variable_type_as_list(var_def.var_type))
+
+        return variable_types
+
+    def _update_single_preference(self, ast: tatsu.ast.AST, forall_types: typing.Optional[typing.Set[str]] = None) -> None:
+        if ast.pref_name in self.types_by_preference:
+            return
+
+        pref_types = set()
+        if forall_types is not None:
+            pref_types.update(forall_types)
+
+        pref_body = typing.cast(tatsu.ast.AST, ast.pref_body.body)  # type: ignore
+        if pref_body.parseinfo.rule == 'pref_body_exists':  # type: ignore
+            pref_types.update(self._extract_variable_types_from_variable_list(pref_body.exists_vars))  # type: ignore
+
+        self.types_by_preference[ast.pref_name] = pref_types
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if rule == 'preference':
+            self._update_single_preference(ast)
+
+        # rule == 'pref_forall
+        else:
+            forall_types = set(self._extract_variable_types_from_variable_list(ast.forall_vars))  # type: ignore
+            forall_prefs = ast.forall_pref.preferences  # type: ignore
+
+            if not isinstance(forall_prefs, list):
+                forall_prefs = [forall_prefs]
+
+            for pref in forall_prefs:
+                self._update_single_preference(pref, forall_types)
+
+    def _get_all_inner_keys(self):
+        return ['all', 'prop']
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if len(self.types_by_preference) < 2:
+            return dict(all=1, prop=1)
+
+        preference_not_disjoint = {pref: False for pref in self.types_by_preference.keys()}
+
+        for i, j in itertools.combinations(self.types_by_preference.keys(), 2):
+            i_and_j_not_disjoint = len(self.types_by_preference[i].intersection(self.types_by_preference[j])) > 0
+            preference_not_disjoint[i] = preference_not_disjoint[i] or i_and_j_not_disjoint
+            preference_not_disjoint[j] = preference_not_disjoint[j] or i_and_j_not_disjoint
+
+        return dict(
+            all=int(all(preference_not_disjoint.values())),
+            prop=sum(preference_not_disjoint.values()) / len(preference_not_disjoint),
+        )
+
+
+class DisjointSeqFuncPredicatesTerm(FitnessTerm):
     disjoint_found: bool
     term_tracker: ASTPredicateTermTracker
 
@@ -1471,7 +1560,7 @@ class DisjointSeqFuncPredicateTerm(FitnessTerm):
         return self.disjoint_found
 
 
-class DisjointAtEndPredicateTerm(FitnessTerm):
+class DisjointAtEndPredicatesTerm(FitnessTerm):
     disjoint_found: bool
     term_tracker: ASTPredicateTermTracker
 
@@ -1999,8 +2088,8 @@ class NoTwoNumberOperations(FitnessTerm):
 
             elif rule == TERMINAL_COMP:
                 ast = typing.cast(tatsu.ast.AST, ast.comp)
-                first_number = 'expr' in ast.expr_1.expr and _is_number(ast.expr_1.expr.expr)  # type: ignore
-                second_number = 'expr' in ast.expr_2.expr and _is_number(ast.expr_2.expr.expr)  # type: ignore
+                first_number = _is_number(ast.expr_1)  # type: ignore
+                second_number = _is_number(ast.expr_2)  # type: ignore
                 if first_number and second_number:
                     self.two_number_operations += 1
 
@@ -2646,7 +2735,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     fitness = ASTFitnessFeaturizer(args, preprocessors=preprocessors)
 
-    all_variables_defined = VariablesDefinedTerm()
+    all_variables_defined = AllVariablesDefined()
     fitness.register(all_variables_defined)
 
     all_variables_used = AllVariablesUsed()
@@ -2663,6 +2752,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     setup_quantified_objects_used = SetupQuantifiedObjectsUsed()
     fitness.register(setup_quantified_objects_used)
+
+    any_setup_objects_used = AnySetupObjectsUsed()
+    fitness.register(any_setup_objects_used)
 
     predicate_found_in_data = PredicateFoundInData(use_full_databse=False)
     fitness.register(predicate_found_in_data)
@@ -2724,10 +2816,13 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)
 
-    disjoint_seq_funcs = DisjointSeqFuncPredicateTerm()
+    disjoint_preferences = DisjointPreferencesTerm()
+    fitness.register(disjoint_preferences)
+
+    disjoint_seq_funcs = DisjointSeqFuncPredicatesTerm()
     fitness.register(disjoint_seq_funcs)
 
-    disjoint_at_end_preds = DisjointAtEndPredicateTerm()
+    disjoint_at_end_preds = DisjointAtEndPredicatesTerm()
     fitness.register(disjoint_at_end_preds)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()

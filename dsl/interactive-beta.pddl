@@ -136,7 +136,7 @@
 ; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
 
 (define (game 615b40bb6cdb0f1f6f291f45-8) (:domain few-objects-room-v1)  ; 8
-(:setup (andx
+(:setup (and
     (exists (?c - curved_wooden_ramp)
         (game-conserved (on floor ?c))
     )

@@ -1450,15 +1450,38 @@ class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
         return self.identical_predicates_found
 
 
+PREDICATE_OR_FUNCTION_IMPLICIT_TERMS = {
+    'predicate_agent_crouches': 'agent',
+    'predicate_agent_holds': 'agent',
+    'predicate_rug_color_under': 'rug',
+}
+
+
 class ASTPredicateTermTracker(ast_parser.ASTParser):
+    def __init__(self, implicit_terms: typing.Dict[str, str] = PREDICATE_OR_FUNCTION_IMPLICIT_TERMS):
+        super().__init__()
+        self.implicit_terms = implicit_terms
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if not hasattr(self, 'implicit_terms'):
+            self.implicit_terms = PREDICATE_OR_FUNCTION_IMPLICIT_TERMS
+
     def __call__(self, ast, **kwargs) -> typing.Set[str]:
         self._default_kwarg(kwargs, 'terms', set())
         super().__call__(ast, **kwargs)
         return kwargs['terms']
 
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
-        if ast.parseinfo.rule in ('predicate', 'function_eval'):  # type: ignore
+        rule = ast.parseinfo.rule  # type: ignore
+        if rule in ('predicate', 'function_eval'):
             kwargs['terms'].update(extract_predicate_function_args(ast))
+
+        if not hasattr(self, 'implicit_terms'):
+            self.implicit_terms = PREDICATE_OR_FUNCTION_IMPLICIT_TERMS
+
+        if rule in self.implicit_terms:
+            kwargs['terms'].add(self.implicit_terms[rule])
 
         return super()._handle_ast(ast, **kwargs)
 
@@ -1467,7 +1490,7 @@ class DisjointPreferencesTerm(FitnessTerm):
     types_by_preference: typing.Dict[str, typing.Set[str]]
 
     def __init__(self):
-        super().__init__(('pref_forall', 'preference'), 'no_disjoint_preferences')
+        super().__init__(('pref_forall', 'preference'), 'disjoint_preferences')
         self.types_by_preference = {}
 
     def game_start(self) -> None:
@@ -1515,11 +1538,11 @@ class DisjointPreferencesTerm(FitnessTerm):
                 self._update_single_preference(pref, forall_types)
 
     def _get_all_inner_keys(self):
-        return ['all', 'prop']
+        return ['found', 'prop']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.types_by_preference) < 2:
-            return dict(all=1, prop=1)
+            return dict(found=0, prop=0)
 
         preference_not_disjoint = {pref: False for pref in self.types_by_preference.keys()}
 
@@ -1529,8 +1552,8 @@ class DisjointPreferencesTerm(FitnessTerm):
             preference_not_disjoint[j] = preference_not_disjoint[j] or i_and_j_not_disjoint
 
         return dict(
-            all=int(all(preference_not_disjoint.values())),
-            prop=sum(preference_not_disjoint.values()) / len(preference_not_disjoint),
+            found=int(not all(preference_not_disjoint.values())),
+            prop=1 - (sum(preference_not_disjoint.values()) / len(preference_not_disjoint)),
         )
 
 
@@ -1560,6 +1583,87 @@ class DisjointSeqFuncPredicatesTerm(FitnessTerm):
         return self.disjoint_found
 
 
+RULE_TO_CHILD_KEY = {
+    'once': 'once_pred',
+    'once_measure': 'once_measure_pred',
+    'hold': 'hold_pred',
+    'while_hold': 'hold_pred',
+    'at_end': 'at_end_pred',
+    'super_predicate_and': 'and_args',
+    'super_predicate_or': 'or_args',
+    'super_predicate_not': 'not_args',
+    'super_predicate_exists': 'exists_args',
+    'super_predicate_forall': 'forall_args',
+}
+
+
+class DisjointModalPredicatesTerm(FitnessTerm):
+    disjoint_count: int
+    total_count: int
+    term_tracker: ASTPredicateTermTracker
+
+    def __init__(self):
+        super().__init__(MODALS, 'disjoint_modal_predicates')
+        self.disjoint_count = 0
+        self.total_count = 0
+        self.term_tracker = ASTPredicateTermTracker()
+
+    def game_start(self) -> None:
+        self.disjoint_count = 0
+        self.total_count = 0
+        self.current_modal_term_sets = []
+
+    def _find_ast_predicate_terms(self, ast: tatsu.ast.AST):
+        rule = ast.parseinfo.rule  # type: ignore
+
+        if rule == 'super_predicate':
+            self._find_ast_predicate_terms(ast.pred)  # type: ignore
+            return
+
+        if rule in ('predicate', 'function_comparison'):
+            self.current_modal_term_sets.append(self.term_tracker(ast))
+            return
+
+        child_key = RULE_TO_CHILD_KEY.get(rule, None)
+
+        if child_key is None:
+            raise ValueError(f'No child key found for rule {rule} in {ast}')
+
+        child_or_children = ast[child_key]
+
+        if isinstance(child_or_children, tatsu.ast.AST):
+            self._find_ast_predicate_terms(child_or_children)
+
+        else:
+            for child in child_or_children:  # type: ignore
+                self._find_ast_predicate_terms(child)
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        self.current_modal_term_sets = []
+        self._find_ast_predicate_terms(ast)  # type: ignore
+
+        term_sets = [terms for terms in self.current_modal_term_sets if len(terms) > 0]
+        self.total_count += 1
+
+        if len(term_sets) > 1:
+            for i, j in itertools.combinations(range(len(term_sets)), 2):
+                if len(term_sets[i].intersection(term_sets[j])) == 0:
+                    self.disjoint_count += 1
+                    break
+
+    def _get_all_inner_keys(self):
+        return ['found', 'prop']
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        if self.total_count == 0:
+            return dict(found=0, prop=0)
+
+        return dict(
+            found=int(self.disjoint_count == 0),
+            prop=self.disjoint_count / self.total_count,
+        )
+
+
 class DisjointAtEndPredicatesTerm(FitnessTerm):
     disjoint_found: bool
     term_tracker: ASTPredicateTermTracker
@@ -1571,6 +1675,7 @@ class DisjointAtEndPredicatesTerm(FitnessTerm):
 
     def game_start(self) -> None:
         self.disjoint_found = False
+        self.current_at_end_term_sets = []
 
     def _find_ast_predicate_terms(self, ast: tatsu.ast.AST):
         rule = ast.parseinfo.rule  # type: ignore
@@ -1614,7 +1719,7 @@ class DisjointAtEndPredicatesTerm(FitnessTerm):
 
         term_sets = [terms for terms in self.current_at_end_term_sets if len(terms) > 0]
 
-        if len(term_sets) > 1:
+        if len(term_sets) > 1 and not self.disjoint_found:
             for i in range(len(term_sets)):
                 if all(len(term_sets[i].intersection(term_sets[j])) == 0 for j in range(len(term_sets)) if i != j):
                     self.disjoint_found = True
@@ -2756,7 +2861,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     any_setup_objects_used = AnySetupObjectsUsed()
     fitness.register(any_setup_objects_used)
 
-    predicate_found_in_data = PredicateFoundInData(use_full_databse=False)
+    predicate_found_in_data = PredicateFoundInData(use_full_databse=False, split_by_section=False)
     fitness.register(predicate_found_in_data)
 
     no_adjacent_once = NoAdjacentOnce()
@@ -2822,8 +2927,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     disjoint_seq_funcs = DisjointSeqFuncPredicatesTerm()
     fitness.register(disjoint_seq_funcs)
 
-    disjoint_at_end_preds = DisjointAtEndPredicatesTerm()
-    fitness.register(disjoint_at_end_preds)
+    disjoint_modal_preds = DisjointModalPredicatesTerm()
+    fitness.register(disjoint_modal_preds)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used)

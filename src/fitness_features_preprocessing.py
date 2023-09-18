@@ -39,8 +39,9 @@ BINARIZE_IGNORE_FEATURES = set([
     'tautological_expression_found', 'redundant_expression_found',
     'redundant_scoring_terminal_expression_found', 'at_end_found',
     'identical_consecutive_seq_func_predicates_found',
-    'no_disjoint_preferences_all', 'no_disjoint_preferences_prop',
+    'disjoint_preferences_found', 'disjoint_preferences_prop',
     'disjoint_seq_funcs_found', 'disjoint_at_end_found',
+    'disjoint_modal_predicates_found', 'disjoint_modal_predicates_prop',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [

@@ -44,6 +44,7 @@ from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSe
 from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
+from fitness_ngram_models import VARIABLE_PATTERN
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH,\
     LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH,\
     LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
@@ -650,16 +651,16 @@ class PopulationBasedSampler():
 
     @handle_multiple_inputs
     def _gen_regrowth_sample(self, game: ASTType, rng: np.random.Generator):
-        '''
-        Helper function for generating a new sample from an existing game (repeating until one is generated
-        without errors)
-        '''
         # Set the source AST of the regrowth sampler to the current game
         self.regrowth_sampler.set_source_ast(game)
 
         return self._regrowth(rng)
 
     def _regrowth(self, rng: np.random.Generator, node_key_to_regrow: typing.Optional[typing.Hashable] = None) -> ASTType:
+        '''
+        Helper function for generating a new sample from an existing game (repeating until one is generated
+        without errors)
+        '''
         new_proposal = None
         sample_generated = False
 
@@ -1766,12 +1767,12 @@ class MAPElitesSampler(PopulationBasedSampler):
         if self.custom_featurizer is not None:
             features = self.custom_featurizer.get_game_features(game)
 
-        if self.key_type == MAPElitesKeyType.INT:
+        if self.key_type.name == MAPElitesKeyType.INT.name:
             key =  sum([(2 ** i) * int(features[feature_name])
                 for i, feature_name in enumerate(self.map_elites_feature_names)
             ])
 
-        elif self.key_type == MAPElitesKeyType.TUPLE:
+        elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
             key = tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
 
         else:
@@ -1906,10 +1907,10 @@ class MAPElitesSampler(PopulationBasedSampler):
         return self._choice(self.operators, rng=rng, weights=self.operator_weights)  # type: ignore
 
     def _key_to_feature_dict(self, key: KeyTypeAnnotation):
-        if isinstance(key, int):
+        if self.key_type.name == MAPElitesKeyType.INT.name:
             return {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
 
-        elif self.key_type == MAPElitesKeyType.TUPLE:
+        elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
             return {f: key[i] for i, f in enumerate(self.map_elites_feature_names)}
 
         else:
@@ -1961,9 +1962,9 @@ class MAPElitesSampler(PopulationBasedSampler):
             relevant_keys = self.fitness_values.keys()
 
         if n_features_on is not None:
-            if self.key_type == MAPElitesKeyType.INT:
+            if self.key_type.name == MAPElitesKeyType.INT.name:
                 relevant_keys = [key for key in relevant_keys if count_set_bits(key) == n_features_on]  # type: ignore
-            elif self.key_type == MAPElitesKeyType.TUPLE:
+            elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
                 relevant_keys = [key for key in relevant_keys if sum(k != 0 for k in key) == n_features_on]  # type: ignore
             else:
                 raise ValueError(f'Unknown key type {self.key_type}')
@@ -2018,10 +2019,14 @@ def filter_samples_no_identical_preferences(sample: ASTType, sample_features: ty
 
             pref_bodies.append(pref_body)
 
-    pref_body_strs = typing.cast(typing.List[str], [ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in pref_defs])
+    pref_body_strs = typing.cast(typing.List[str], [ast_printer.ast_section_to_string(pref, ast_parser.PREFERENCES) for pref in pref_bodies])
     cleaned_strs = set()
 
     for s in pref_body_strs:
+        preference_variables = set(VARIABLE_PATTERN.findall(s))
+        for v in preference_variables:
+            s = s.replace(v, 'var')
+
         pref_index = s.find('(preference')
         if pref_index == -1:
             cleaned_strs.add(s.strip())

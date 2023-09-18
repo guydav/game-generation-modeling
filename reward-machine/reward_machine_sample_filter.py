@@ -1,7 +1,7 @@
 import argparse
 from collections import defaultdict, Counter
 import cachetools
-from datetime import datetime
+from datetime import datetime, date
 import duckdb
 import json
 import logging
@@ -42,6 +42,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--trace-names-hash', type=str, default=FULL_DATASET_TRACES_HASH)
 parser.add_argument('--map-elites-model-name', type=str, default=None)
 parser.add_argument('--map-elites-model-date-id', type=str, default=None)
+parser.add_argument('--map-elites-run-year', type=str, default=str(date.today().year))
 parser.add_argument('--run-from-real-games', action='store_true')
 parser.add_argument('--map-elites-model-folder', type=str, default='samples')
 parser.add_argument('--relative-path', type=str, default='.')
@@ -391,8 +392,17 @@ def main(args: argparse.Namespace):
             population = list(cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, relative_path='.'))  # type: ignore
 
         else:
-            if args.map_elites_model_date_id is None or args.map_elites_model_name is None:
-                raise ValueError('Must provide map elites model date id and name if not running from real games')
+            if args.map_elites_model_date_id is None:
+                if args.map_elites_model_name is None:
+                    raise ValueError('Must provide map elites model date id and name if not running from real games')
+
+                model_name_year_index = args.map_elites_model_name.find(args.map_elites_run_year)
+                if model_name_year_index == -1:
+                    raise ValueError(f'Model name {args.map_elites_model_name} does not contain year {args.map_elites_run_year}')
+
+                args.map_elites_model_date_id = args.map_elites_model_name[model_name_year_index:]
+                args.map_elites_model_name = args.map_elites_model_name[:model_name_year_index - 1]
+
             logger.info(f'Running from MAP-Elites model | {args.map_elites_model_date_id} | {args.map_elites_model_name}')
             model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
             population = model.population

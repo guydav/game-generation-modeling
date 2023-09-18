@@ -222,6 +222,8 @@ def main(args: argparse.Namespace):
 
     if not args.no_save_full_model:
         logger.debug('Saving full model')
+        extra_data = {}
+
         if not args.full_model_without_test:
             logger.debug('Fitting full model with entire dataset (including test data)')
             full_tensor = utils.df_to_tensor(fitness_df, feature_columns)
@@ -232,13 +234,25 @@ def main(args: argparse.Namespace):
 
             full_tensor_scores = cv.best_estimator_.transform(full_tensor).detach()  # type: ignore
             real_game_scores = full_tensor_scores[:, 0]
-            print(f'Real game scores: {real_game_scores.mean():.4f} ± {real_game_scores.std():.4f}, min = {real_game_scores.min():.4f}, median = {torch.median(real_game_scores):.4f}, max = {real_game_scores.max():.4f}')
+
+            score_mean = real_game_scores.mean()
+            score_std = real_game_scores.std()
+            score_min = real_game_scores.min()
+            score_median = torch.median(real_game_scores)
+            score_max = real_game_scores.max()
+
+            print(f'Real game scores: {score_mean:.4f} ± {score_std:.4f}, min = {score_min:.4f}, median = {score_median:.4f}, max = {score_max:.4f}')
 
             negatives_scores = full_tensor_scores[:, 1:].ravel()
-            print(torch.quantile(negatives_scores, torch.linspace(0, 1, 11)))
+            negative_score_quantiles = torch.quantile(negatives_scores, torch.linspace(0, 1, 11))
+            print(negative_score_quantiles)
             print(torch.quantile(negatives_scores, 0.2))
 
-        utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path)
+            score_dict = dict(mean=score_mean, std=score_std, min=score_min, median=score_median, max=score_max, negative_score_quantiles=negative_score_quantiles.tolist())
+            extra_data['score_dict'] = score_dict
+            cv.best_estimator_.score_dict = score_dict  # type: ignore
+
+        utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path, extra_data=extra_data)
 
 
 if __name__ == '__main__':

@@ -424,7 +424,7 @@ class PopulationBasedSampler():
 
         self.diversity_scorer = None
         if self.diversity_scorer_type is not None:
-            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self._fitness_featurizers[0], feature_names=self.feature_names)
+            self.diversity_scorer = create_diversity_scorer(self.diversity_scorer_type, k=diversity_scorer_k, featurizer=self.fitness_featurizer, feature_names=self.feature_names)
 
         self.sample_filter_func = sample_filter_func
         self.sampler_prior_count = sampler_prior_count
@@ -452,7 +452,7 @@ class PopulationBasedSampler():
         self.first_sampler_key = self.sampler_keys[0]
 
         # Used to fix the AST context after crossover / mutation
-        self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed), strict=True)
+        self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed), strict=False)
 
         self.initial_sampler = create_initial_proposal_sampler(
             initial_proposal_type, self.samplers[self.first_sampler_key], self.context_fixer,

@@ -90,8 +90,11 @@ SAVE_FEATURE_COLUMNS_KEY = 'feature_columns'
 
 
 def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.List[str], name: str = DEFAULT_SAVE_MODEL_NAME,
-                                   relative_path: str = '..', folder: str = MODELS_FOLDER):
-    save_data({SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}, folder=folder, name=name, relative_path=relative_path)
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER, extra_data: typing.Optional[typing.Dict[str, typing.Any]] = None):
+    save_dict = {SAVE_MODEL_KEY: cv.best_estimator_, SAVE_FEATURE_COLUMNS_KEY: feature_columns}
+    if extra_data is not None:
+        save_dict.update(extra_data)
+    save_data(save_dict, folder=folder, name=name, relative_path=relative_path)
 
 
 def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):
@@ -115,18 +118,22 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
 
 
 def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MODEL_NAME,
-                                   relative_path: str = '..', folder: str = MODELS_FOLDER) -> typing.Tuple[GridSearchCV, typing.List[str]]:
+                                   relative_path: str = '..', folder: str = MODELS_FOLDER, return_full_dict: bool = False) -> typing.Tuple[GridSearchCV, typing.List[str]]:
     data = load_data(date_and_id, folder, name, relative_path)
 
     if BUG_SAVE_MODEL_KEY in data:
         return data[BUG_SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
 
+    if return_full_dict:
+        return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY], data  # type: ignore
+
     return data[SAVE_MODEL_KEY], data[SAVE_FEATURE_COLUMNS_KEY]
 
 
 def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
-    return load_data_from_path(f'{relative_path}/{folder}/{name}_{date_and_id}.pkl.gz')
-
+    if date_and_id:
+        name = f'{name}_{date_and_id}'
+    return load_data_from_path(f'{relative_path}/{folder}/{name}.pkl.gz')
 
 
 def load_data_from_path(path: str):

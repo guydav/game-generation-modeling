@@ -69,6 +69,10 @@ DEFAULT_PARAM_GRID_JSON_KEY = 'param_grid'
 parser.add_argument('--param-grid-json-key', type=str, default=DEFAULT_PARAM_GRID_JSON_KEY)
 CV_KWARGS_JSON_KEY = 'cv_kwargs'
 parser.add_argument('--cv-kwargs-json-key', type=str, default=CV_KWARGS_JSON_KEY)
+DEFAULT_TOP_FEATURES_K = 30
+parser.add_argument('--top-features-k', type=int, default=DEFAULT_TOP_FEATURES_K)
+DEFAULT_TOP_FEATURE_MIN_MAGNITUDE = 0.1
+parser.add_argument('--top-feature-min-magnitude', type=float, default=DEFAULT_TOP_FEATURE_MIN_MAGNITUDE)
 
 
 def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
@@ -127,8 +131,15 @@ def main(args: argparse.Namespace):
     logger.debug(f'CV settings:\n{pformat(cv_settings)}')
 
     if args.ignore_features:
-        logger.info(f'Ignoring features: {args.ignore_features}')
-        feature_columns = [c for c in feature_columns if c not in args.ignore_features]
+        ignore_feature_set = set(args.ignore_features)
+        remove_features = [c for c in feature_columns if c in ignore_feature_set]
+        if len(remove_features) == 0:
+            logger.warning(f'No features found in ignore_features: {args.ignore_features}')
+
+        else:
+            logger.info(f'Ignoring features: {remove_features}')
+            for feature in remove_features:
+                feature_columns.remove(feature)
 
     if args.ignore_categories_key not in cv_settings['ignore_categories_mapping']:
         raise ValueError(f'Unknown ignore categories key: {args.ignore_categories_key}, valid keys: {cv_settings["ignore_categories_mapping"].keys()}')
@@ -251,6 +262,30 @@ def main(args: argparse.Namespace):
             score_dict = dict(mean=score_mean, std=score_std, min=score_min, median=score_median, max=score_max, negative_score_quantiles=negative_score_quantiles.tolist())
             extra_data['score_dict'] = score_dict
             cv.best_estimator_.score_dict = score_dict  # type: ignore
+
+            weights = weights = cv.best_estimator_.named_steps['fitness'].model.fc1.weight.data.detach().squeeze()
+            top_features = torch.topk(weights, args.top_features_k)
+            bottom_features = torch.topk(weights, args.top_features_k, largest=False)
+
+            feature_lines = []
+
+            feature_lines.append('Features with largest negative weights (most predictive of real games):')
+            for i in range(args.top_features_k):
+                current_feature_value = bottom_features.values[i]
+                if current_feature_value.abs() < args.top_feature_min_magnitude:
+                    break
+                feature_lines.append(f'{i+1}. {feature_columns[bottom_features.indices[i]]} ({current_feature_value:.4f})')
+
+            feature_lines.append('\nFeatures with largest positive weights (most predictive of fake games):')
+            for i in range(args.top_features_k):
+                current_feature_value = top_features.values[i]
+                if current_feature_value.abs() < args.top_feature_min_magnitude:
+                    break
+                feature_lines.append(f'{i+1}. {feature_columns[top_features.indices[i]]} ({current_feature_value:.4f})')
+
+            print('\n'.join(feature_lines))
+
+
 
         utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path, extra_data=extra_data)
 

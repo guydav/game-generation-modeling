@@ -818,7 +818,10 @@ class PredicateFoundInData(FitnessTerm):
                 #     logger.info(f'predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping} in {n_traces} traces')
 
             except (compile_predicate_statistics_database.PredicateNotImplementedException, compile_predicate_statistics_full_database.PredicateNotImplementedException) as e:
-                self.predicates_found_by_section[section].append(1)
+                if self.split_by_section:
+                    self.predicates_found_by_section[section].append(1)
+                else:
+                    self.predicates_found.append(1)
 
             except (compile_predicate_statistics_database.MissingVariableException, compile_predicate_statistics_full_database.MissingVariableException) as e:
                 # self.predicates_found.append(0)  # a predicate is impossible if a variable isn't defined -- maybe?

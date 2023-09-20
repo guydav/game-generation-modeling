@@ -132,7 +132,10 @@ def load_model_and_feature_columns(date_and_id: str, name: str = DEFAULT_SAVE_MO
 
 def load_data(date_and_id: str, folder: str, name: str, relative_path: str = '..'):
     if date_and_id:
-        name = f'{name}_{date_and_id}'
+        if date_and_id.startswith(name):
+            name = date_and_id
+        else:
+            name = f'{name}_{date_and_id}'
     return load_data_from_path(f'{relative_path}/{folder}/{name}.pkl.gz')
 
 

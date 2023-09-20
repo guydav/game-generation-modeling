@@ -31,6 +31,19 @@
         "regularizer": 1
     },
 
+    "train_kwargs_l2": {
+        "n_epochs": 25000,
+        "patience_epochs": 500,
+        "use_lr_scheduler": false,
+        "shuffle_negatives": true,
+        "split_validation_from_train": true,
+        "evaluate_opposite_shuffle_mode": false,
+        "full_dataset_on_device": true,
+        "bias_init_margin_ratio": 0.01,
+        "negative_score_reduction": "none",
+        "weight_decay": 0.003
+    },
+
     "cv_kwargs": {
         "refit": "overall_ecdf",
         "error_score": "raise"
@@ -84,7 +97,6 @@
         "fitness__loss_function": ["fitness_softmin_loss"],
         "fitness__lr": [4e-3, 1e-3],
         "fitness__k": [256, 512, 1024],
-        "fitness__batch_size": [1, 2, 4],
-        "fitness__weight_decay": [0.001, 0.003, 0.01]
+        "fitness__batch_size": [1, 2, 4]
     }
 }

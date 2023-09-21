@@ -1558,6 +1558,9 @@ class DisjointPreferencesTerm(FitnessTerm):
         self.types_by_preference[ast.pref_name] = pref_types  # type: ignore
         self.predicates_by_preference[ast.pref_name] = body_predicates  # type: ignore
 
+        if len(body_predicates) == 0:
+            logger.warning(f'No predicates found in preference {ast.pref_name}:\n{ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES)}')
+
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if rule == 'pref_name_and_types':
             self.preferences_by_section[context[SECTION_CONTEXT_KEY]].add(ast.pref_name)
@@ -1609,11 +1612,13 @@ class DisjointPreferencesTerm(FitnessTerm):
 
             terminal_predicates = set()
             for pref in self.preferences_by_section[ast_parser.TERMINAL]:
-                terminal_predicates.update(self.predicates_by_preference[pref])
+                if pref in self.predicates_by_preference:
+                    terminal_predicates.update(self.predicates_by_preference[pref])
 
             scoring_predicates = set()
             for pref in self.preferences_by_section[ast_parser.SCORING]:
-                scoring_predicates.update(self.predicates_by_preference[pref])
+                if pref in self.predicates_by_preference:
+                    scoring_predicates.update(self.predicates_by_preference[pref])
 
             scoring_terminal_predicates_jaccard = len(scoring_predicates.intersection(terminal_predicates)) / len(scoring_predicates.union(terminal_predicates))
             scoring_terminal_disjoint_predicates = 1 - scoring_terminal_predicates_jaccard

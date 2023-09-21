@@ -407,10 +407,10 @@ class ASTFitnessFeaturizer:
         previous_key = None
 
         for header, term in self.header_registry.items():
-            if 'full_ast' in signature(term.game_end).parameters:
-                term_result = term.game_end(full_ast)  # type: ignore
-            else:
-                term_result = term.game_end()
+            # if 'full_ast' in signature(term.game_end).parameters:
+            #     term_result = term.game_end(full_ast)  # type: ignore
+            # else:
+            term_result = term.game_end()
 
             if isinstance(term_result, bool):
                 term_result = int(term_result)
@@ -1640,11 +1640,11 @@ class DisjointPreferencesTerm(FitnessTerm):
 
             if len(terminal_predicates) == 0 and len(scoring_predicates) == 0:
                 scoring_terminal_disjoint_predicates = 1
-                if full_ast is not None:
-                    game_str = ast_printer.ast_to_string(full_ast, '\n')
-                    logger.info(f'No predicates found in scoring or terminal preferences:\n{game_str}')
-                else:
-                    logger.info(f'No predicates found in scoring or terminal preferences')
+                # if full_ast is not None:
+                #     game_str = ast_printer.ast_to_string(full_ast, '\n')
+                #     logger.info(f'No predicates found in scoring or terminal preferences:\n{game_str}')
+                # else:
+                #     logger.info(f'No predicates found in scoring or terminal preferences')
 
             else:
                 scoring_terminal_predicates_jaccard = len(scoring_predicates.intersection(terminal_predicates)) / len(scoring_predicates.union(terminal_predicates))

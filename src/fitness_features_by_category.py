@@ -72,6 +72,14 @@ FORALL_FEATURES = [
     re.compile(r'[\w\d_]+_incorrect_count$'),
 ]
 
+
+FORALL_LESS_IMPORTANT_FEATURES = [
+    # re.compile(r'pref_forall_[\w\d_]+_correct$'),
+    # re.compile(r'pref_forall_[\w\d_]+_incorrect$'),
+    re.compile(r'[\w\d_]+_incorrect_count$'),
+]
+
+
 PREDICATE_UNDER_MODAL_FEATURES = [
     re.compile(r'predicate_under_modal_[\w\d_]+'),
 ]
@@ -124,14 +132,16 @@ GRAMMAR_USE_FEATURES = [
 # The ones that are kept are the ones commented out
 GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'setup_objects_used',
-    # 'setup_quantified_objects_used',
+    # 2023-09:21: trying without the specific feature to the quantified objects
+    'setup_quantified_objects_used',
     # 'any_setup_objects_used,
     'adjacent_once_found',
     'no_adjacent_same_modal',
     'starts_and_ends_once',
     'once_in_middle_of_pref_found',
     'pref_without_hold_found',
-    # 'at_end_found',
+    # 2023-09:21: trying without an explicit marking of at_end
+    'at_end_found',
 
     'nested_logicals_found',
     'identical_logical_children_found',
@@ -159,6 +169,7 @@ FEATURE_CATEGORIES = {
     'counting': COUNTING_FEATURES,
     'counting_less_important': COUNTING_LESS_IMPORTANT_FEATURES,
     'forall': FORALL_FEATURES,
+    'forall_less_important': FORALL_LESS_IMPORTANT_FEATURES,
     'predicate_under_modal': PREDICATE_UNDER_MODAL_FEATURES,
     'predicate_role_filler': PREDICATE_ROLE_FILLER_FEATURES,
     'compositionality': COMPOSITIONALITY_FEATURES,

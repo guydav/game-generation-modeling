@@ -4,6 +4,7 @@ from datetime import datetime
 from collections import namedtuple, defaultdict
 import csv
 from enum import Enum
+from inspect import signature
 import itertools
 import glob
 import gzip
@@ -89,8 +90,26 @@ parser.add_argument('--start-index', type=int, default=None)
 parser.add_argument('--end-index', type=int, default=None)
 
 
+class LevelFilter(logging.Filter):
+    def __init__(self, level, name: str = ""):
+        self.level = level
+
+    def filter(self, record):
+        return record.levelno == self.level
+
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+logging_handler_out = logging.StreamHandler(sys.stdout)
+logging_handler_out.setLevel(logging.DEBUG)
+logging_handler_out.addFilter(LevelFilter(logging.INFO))
+logger.addHandler(logging_handler_out)
+
+logging_handler_err = logging.StreamHandler(sys.stderr)
+logging_handler_err.setLevel(logging.WARNING)
+logger.addHandler(logging_handler_err)
 
 mp_logger = multiprocessing.log_to_stderr()
 mp_handler = logging.StreamHandler(sys.stdout)
@@ -388,7 +407,11 @@ class ASTFitnessFeaturizer:
         previous_key = None
 
         for header, term in self.header_registry.items():
-            term_result = term.game_end()
+            if 'full_ast' in signature(term.game_end).parameters:
+                term_result = term.game_end(full_ast)  # type: ignore
+            else:
+                term_result = term.game_end()
+
             if isinstance(term_result, bool):
                 term_result = int(term_result)
 
@@ -1172,18 +1195,11 @@ class NoVariablesRepeated(FitnessTerm):
         return self.count_with_repeats != 0
 
 
-SUBTYPE_IGNORE_TYPES = [
-    room_and_object_types.BED, room_and_object_types.DESK,
-    room_and_object_types.DOOR, room_and_object_types.PEN,
-]
-
-
 class RepeatedVariableTypeInEither(FitnessTerm):
     repeated_type_found: bool = False
 
-    def __init__(self, subtype_ignore_types: typing.Sequence[str] = SUBTYPE_IGNORE_TYPES):
+    def __init__(self):
         super().__init__(EITHER_TYPES_RULES_PATTERN, 'repeated_variable_type_in_either')
-        self.sub_type_ignore_types = subtype_ignore_types
 
     def game_start(self) -> None:
         self.repeated_type_found = False
@@ -1196,10 +1212,12 @@ class RepeatedVariableTypeInEither(FitnessTerm):
                 if len(set(type_names)) < len(type_names):
                     self.repeated_type_found = True
 
-                type_names = [t for t in type_names if t not in self.sub_type_ignore_types]
-                for first_type, second_type in itertools.combinations(type_names, 2):
-                    if first_type in second_type or second_type in first_type:
-                        self.repeated_type_found = True
+                else:
+                    for type_name in type_names:
+                        if type_name in room_and_object_types.TYPES_TO_SUB_TYPES:
+                            if any(other_type_name in room_and_object_types.TYPES_TO_SUB_TYPES[type_name] for other_type_name in type_names):
+                                self.repeated_type_found = True
+                                break
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.repeated_type_found
@@ -1582,7 +1600,7 @@ class DisjointPreferencesTerm(FitnessTerm):
     def _get_all_inner_keys(self):
         return ['found', 'prop', 'scoring_terminal_types', 'scoring_terminal_predicates']
 
-    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+    def game_end(self, full_ast=None) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.types_by_preference) < 2:
             return dict(found=0, prop=0, scoring_terminal_types=0, scoring_terminal_predicates=0)
 
@@ -1620,8 +1638,17 @@ class DisjointPreferencesTerm(FitnessTerm):
                 if pref in self.predicates_by_preference:
                     scoring_predicates.update(self.predicates_by_preference[pref])
 
-            scoring_terminal_predicates_jaccard = len(scoring_predicates.intersection(terminal_predicates)) / len(scoring_predicates.union(terminal_predicates))
-            scoring_terminal_disjoint_predicates = 1 - scoring_terminal_predicates_jaccard
+            if len(terminal_predicates) == 0 and len(scoring_predicates) == 0:
+                scoring_terminal_disjoint_predicates = 1
+                if full_ast is not None:
+                    game_str = ast_printer.ast_to_string(full_ast, '\n')
+                    logger.info(f'No predicates found in scoring or terminal preferences:\n{game_str}')
+                else:
+                    logger.info(f'No predicates found in scoring or terminal preferences')
+
+            else:
+                scoring_terminal_predicates_jaccard = len(scoring_predicates.intersection(terminal_predicates)) / len(scoring_predicates.union(terminal_predicates))
+                scoring_terminal_disjoint_predicates = 1 - scoring_terminal_predicates_jaccard
 
         else:
             scoring_terminal_disjoint_types = False
@@ -2081,7 +2108,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
         count_correct = 0
         for obj, (_, var_def) in zip(object_types, self.pref_forall_prefs_to_types[pref_name].items()):
             var_types = var_def.var_types
-            if obj in var_types or (obj in room_and_object_types.TYPE_TO_META_TYPE and room_and_object_types.TYPE_TO_META_TYPE[obj] in var_types):  # type: ignore
+            if obj in var_types or (obj in room_and_object_types.SUBTYPES_TO_TYPES and room_and_object_types.SUBTYPES_TO_TYPES[obj] in var_types):  # type: ignore
                 count_correct += 1
 
         self.n_incorrect_types_per_pref.append(len(object_types) - count_correct)

@@ -40,6 +40,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'redundant_scoring_terminal_expression_found', 'at_end_found',
     'identical_consecutive_seq_func_predicates_found',
     'disjoint_preferences_found', 'disjoint_preferences_prop',
+    'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_scoring_terminal_predicates',
     'disjoint_seq_funcs_found', 'disjoint_at_end_found',
     'disjoint_modal_predicates_found', 'disjoint_modal_predicates_prop',
 ])

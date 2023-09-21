@@ -467,6 +467,24 @@ ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys
                             list(OBJECTS_BY_ROOM_AND_TYPE[MEDIUM_OBJECTS_ROOM].keys()) + \
                             list(OBJECTS_BY_ROOM_AND_TYPE[MANY_OBJECTS_ROOM].keys())))
 
+
+# Aaccounting for weird glitches/objects clipping
+ON_EXCLUDED_OBJECT_TYPES = set([
+    DOOR,
+    MIRROR,
+    WALL,
+    NORTH_WALL,
+    SOUTH_WALL,
+    EAST_WALL,
+    WEST_SLIDING_DOOR,
+    SLIDING_DOOR,
+    EAST_SLIDING_DOOR,
+    WEST_SLIDING_DOOR,
+    BLINDS,
+    MAIN_LIGHT_SWITCH,
+    POSTER,
+])
+
 # ===================================================================================================
 
 class PseudoObject:

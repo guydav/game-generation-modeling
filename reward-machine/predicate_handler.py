@@ -8,7 +8,7 @@ import typing
 
 from utils import extract_variable_type_mapping, extract_variables, extract_predicate_function_name, get_object_assignments, ast_cache_key, is_type_color_side_orientation, get_object_types, \
     _extract_object_limits, _object_corners, _point_in_object, _point_in_top_half, _object_location, FullState, ObjectState, AgentState, BuildingPseudoObject
-from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG, ROOM_CENTER, ELIGILBLE_IN_OBJECT_IDS
+from config import ALL_OBJECT_TYPES, UNITY_PSEUDO_OBJECTS, PseudoObject, DOOR_ID, WALL_ID, RUG_ID, RUG, ROOM_CENTER, ELIGILBLE_IN_OBJECT_IDS, ON_EXCLUDED_OBJECT_TYPES
 
 # AgentState = typing.NewType('AgentState', typing.Dict[str, typing.Any])
 # ObjectState = typing.NewType('ObjectState', typing.Union[str, typing.Any])
@@ -836,6 +836,10 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
+
+    # Checking for objects where it shouldn't happen unless they weirdly clip in the environment
+    if lower_object.object_type in ON_EXCLUDED_OBJECT_TYPES:
+        return False
 
     # Special case: the agent can only be 'on' the floor or the rug
     if isinstance(upper_object, AgentState):

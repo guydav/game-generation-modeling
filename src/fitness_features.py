@@ -1172,11 +1172,18 @@ class NoVariablesRepeated(FitnessTerm):
         return self.count_with_repeats != 0
 
 
+SUBTYPE_IGNORE_TYPES = [
+    room_and_object_types.BED, room_and_object_types.DESK,
+    room_and_object_types.DOOR, room_and_object_types.PEN,
+]
+
+
 class RepeatedVariableTypeInEither(FitnessTerm):
     repeated_type_found: bool = False
 
-    def __init__(self):
+    def __init__(self, subtype_ignore_types: typing.Sequence[str] = SUBTYPE_IGNORE_TYPES):
         super().__init__(EITHER_TYPES_RULES_PATTERN, 'repeated_variable_type_in_either')
+        self.sub_type_ignore_types = subtype_ignore_types
 
     def game_start(self) -> None:
         self.repeated_type_found = False
@@ -1188,6 +1195,11 @@ class RepeatedVariableTypeInEither(FitnessTerm):
                 type_names = [t.terminal for t in type_names]
                 if len(set(type_names)) < len(type_names):
                     self.repeated_type_found = True
+
+                type_names = [t for t in type_names if t not in self.sub_type_ignore_types]
+                for first_type, second_type in itertools.combinations(type_names, 2):
+                    if first_type in second_type or second_type in first_type:
+                        self.repeated_type_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.repeated_type_found
@@ -1472,12 +1484,22 @@ class ASTPredicateTermTracker(ast_parser.ASTParser):
 
     def __call__(self, ast, **kwargs) -> typing.Set[str]:
         self._default_kwarg(kwargs, 'terms', set())
+        self._default_kwarg(kwargs, 'predicates', set())
         super().__call__(ast, **kwargs)
+        if 'return_predicates' in kwargs and kwargs['return_predicates']:
+            return kwargs['terms'], kwargs['predicates']  # type: ignore
+
         return kwargs['terms']
 
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         rule = ast.parseinfo.rule  # type: ignore
         if rule in ('predicate', 'function_eval'):
+            if rule == 'predicate':
+                kwargs['predicates'].add(ast.pred.parseinfo.rule.replace('predicate_', ''))
+
+            else:  # rule == 'function_eval:
+                kwargs['predicates'].add(ast.func.parseinfo.rule.replace('function_', ''))
+
             kwargs['terms'].update(extract_predicate_function_args(ast))
 
         if not hasattr(self, 'implicit_terms'):
@@ -1489,15 +1511,21 @@ class ASTPredicateTermTracker(ast_parser.ASTParser):
         return super()._handle_ast(ast, **kwargs)
 
 
+
 class DisjointPreferencesTerm(FitnessTerm):
+    term_tracker: ASTPredicateTermTracker
     types_by_preference: typing.Dict[str, typing.Set[str]]
 
     def __init__(self):
-        super().__init__(('pref_forall', 'preference'), 'disjoint_preferences')
+        super().__init__(('pref_forall', 'preference', 'pref_name_and_types'), 'disjoint_preferences')
+        self.term_tracker = ASTPredicateTermTracker()
         self.types_by_preference = {}
+        self.preferences_by_section = {}
 
     def game_start(self) -> None:
         self.types_by_preference = {}
+        self.predicates_by_preference = {}
+        self.preferences_by_section = {ast_parser.TERMINAL: set(), ast_parser.SCORING: set()}
 
     def _extract_variable_types_from_variable_list(self, ast: tatsu.ast.AST) -> typing.List[str]:
         variable_types = []
@@ -1522,11 +1550,19 @@ class DisjointPreferencesTerm(FitnessTerm):
         pref_body = typing.cast(tatsu.ast.AST, ast.pref_body.body)  # type: ignore
         if pref_body.parseinfo.rule == 'pref_body_exists':  # type: ignore
             pref_types.update(self._extract_variable_types_from_variable_list(pref_body.exists_vars))  # type: ignore
+            pref_body = pref_body.exists_args
 
-        self.types_by_preference[ast.pref_name] = pref_types
+        body_terms, body_predicates = self.term_tracker(pref_body, return_predicates=True)  # type: ignore
+        pref_types.update(term for term in body_terms if not term.startswith('?'))
+
+        self.types_by_preference[ast.pref_name] = pref_types  # type: ignore
+        self.predicates_by_preference[ast.pref_name] = body_predicates  # type: ignore
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if rule == 'preference':
+        if rule == 'pref_name_and_types':
+            self.preferences_by_section[context[SECTION_CONTEXT_KEY]].add(ast.pref_name)
+
+        elif rule == 'preference':
             self._update_single_preference(ast)
 
         # rule == 'pref_forall
@@ -1541,22 +1577,55 @@ class DisjointPreferencesTerm(FitnessTerm):
                 self._update_single_preference(pref, forall_types)
 
     def _get_all_inner_keys(self):
-        return ['found', 'prop']
+        return ['found', 'prop', 'scoring_terminal_types', 'scoring_terminal_predicates']
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.types_by_preference) < 2:
-            return dict(found=0, prop=0)
+            return dict(found=0, prop=0, scoring_terminal_types=0, scoring_terminal_predicates=0)
 
         preference_not_disjoint = {pref: False for pref in self.types_by_preference.keys()}
+        pairwise_not_disjoint_mapping = {}
 
-        for i, j in itertools.combinations(self.types_by_preference.keys(), 2):
-            i_and_j_not_disjoint = len(self.types_by_preference[i].intersection(self.types_by_preference[j])) > 0
-            preference_not_disjoint[i] = preference_not_disjoint[i] or i_and_j_not_disjoint
-            preference_not_disjoint[j] = preference_not_disjoint[j] or i_and_j_not_disjoint
+        for first_pref, second_pref in itertools.combinations(self.types_by_preference.keys(), 2):
+            prefs_not_disjoint = len(self.types_by_preference[first_pref].intersection(self.types_by_preference[second_pref])) > 0
+            preference_not_disjoint[first_pref] = preference_not_disjoint[first_pref] or prefs_not_disjoint
+            preference_not_disjoint[second_pref] = preference_not_disjoint[second_pref] or prefs_not_disjoint
+            pairwise_not_disjoint_mapping[(first_pref, second_pref)] = prefs_not_disjoint
+            pairwise_not_disjoint_mapping[(second_pref, first_pref)] = prefs_not_disjoint
+
+        # check if the scoring and terminal preferences are disjoint
+        scoring_terminal_disjoint_types = True
+        scoring_terminal_disjoint_predicates = 0
+
+        if len(self.preferences_by_section[ast_parser.TERMINAL]) > 0:
+            if len(self.preferences_by_section[ast_parser.SCORING].intersection(self.preferences_by_section[ast_parser.TERMINAL])) > 0:
+                scoring_terminal_disjoint_types = False
+
+            else:
+                for scoring_pref, terminal_pref in itertools.product(self.preferences_by_section[ast_parser.SCORING], self.preferences_by_section[ast_parser.TERMINAL]):
+                    if pairwise_not_disjoint_mapping[(scoring_pref, terminal_pref)]:
+                        scoring_terminal_disjoint_types = False
+                        break
+
+            terminal_predicates = set()
+            for pref in self.preferences_by_section[ast_parser.TERMINAL]:
+                terminal_predicates.update(self.predicates_by_preference[pref])
+
+            scoring_predicates = set()
+            for pref in self.preferences_by_section[ast_parser.SCORING]:
+                scoring_predicates.update(self.predicates_by_preference[pref])
+
+            scoring_terminal_predicates_jaccard = len(scoring_predicates.intersection(terminal_predicates)) / len(scoring_predicates.union(terminal_predicates))
+            scoring_terminal_disjoint_predicates = 1 - scoring_terminal_predicates_jaccard
+
+        else:
+            scoring_terminal_disjoint_types = False
 
         return dict(
             found=int(not all(preference_not_disjoint.values())),
             prop=1 - (sum(preference_not_disjoint.values()) / len(preference_not_disjoint)),
+            scoring_terminal_types=int(scoring_terminal_disjoint_types),
+            scoring_terminal_predicates=scoring_terminal_disjoint_predicates,
         )
 
 
@@ -1662,7 +1731,7 @@ class DisjointModalPredicatesTerm(FitnessTerm):
             return dict(found=0, prop=0)
 
         return dict(
-            found=int(self.disjoint_count == 0),
+            found=int(self.disjoint_count > 0),
             prop=self.disjoint_count / self.total_count,
         )
 

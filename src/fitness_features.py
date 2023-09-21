@@ -1606,7 +1606,7 @@ class DisjointPreferencesTerm(FitnessTerm):
 
             else:
                 for scoring_pref, terminal_pref in itertools.product(self.preferences_by_section[ast_parser.SCORING], self.preferences_by_section[ast_parser.TERMINAL]):
-                    if pairwise_not_disjoint_mapping[(scoring_pref, terminal_pref)]:
+                    if pairwise_not_disjoint_mapping.get((scoring_pref, terminal_pref), False):
                         scoring_terminal_disjoint_types = False
                         break
 

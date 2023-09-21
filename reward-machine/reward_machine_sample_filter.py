@@ -264,8 +264,8 @@ class TraceGameEvaluator:
 
         sample = self.population[key]
 
-        logger.info(ast_printer.ast_to_string(sample, '\n'))  # type: ignore
-        logger.info('=' * 120)
+        # logger.info(ast_printer.ast_to_string(sample, '\n'))  # type: ignore
+        # logger.info('=' * 120)
 
         for trace in trace_iter:
             if isinstance(self.trace_finder.predicate_data_estimator, compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase):

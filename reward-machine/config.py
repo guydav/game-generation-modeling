@@ -468,7 +468,7 @@ ALL_OBJECT_TYPES = list(set(list(OBJECTS_BY_ROOM_AND_TYPE[FEW_OBJECTS_ROOM].keys
                             list(OBJECTS_BY_ROOM_AND_TYPE[MANY_OBJECTS_ROOM].keys())))
 
 
-# Aaccounting for weird glitches/objects clipping
+# Accounting for weird glitches/objects clipping
 ON_EXCLUDED_OBJECT_TYPES = set([
     DOOR,
     MIRROR,

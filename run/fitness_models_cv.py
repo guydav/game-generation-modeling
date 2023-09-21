@@ -54,6 +54,7 @@ parser.add_argument('--device', type=str, required=False)
 parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--random-seed', type=int, default=utils.DEFAULT_RANDOM_SEED)
 parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
+parser.add_argument('--full-ngram-score-only', action='store_true')
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
 parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
 parser.add_argument('--ignore-categories-key', type=str, default='full')
@@ -75,14 +76,21 @@ DEFAULT_TOP_FEATURE_MIN_MAGNITUDE = 0.1
 parser.add_argument('--top-feature-min-magnitude', type=float, default=DEFAULT_TOP_FEATURE_MIN_MAGNITUDE)
 
 
+NGRAM_SCORE_TYPES = ('full', 'setup', 'constraints', 'terminal', 'scoring')
+
+
 def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
-                                       ngram_scores_to_remove: typing.Optional[typing.List[str]] = None) -> typing.List[str]:
+                                       ngram_scores_to_remove: typing.Optional[typing.List[str]] = None,
+                                       full_ngram_score_only: bool = False) -> typing.List[str]:
     if ngram_scores_to_remove is None:
         ngram_scores_to_remove = []
 
+    if full_ngram_score_only:
+        ngram_scores_to_remove = [x for x in NGRAM_SCORE_TYPES if x != 'full']
+
     feature_columns = list(diffs[diffs >= score_threshold].index)
 
-    for score_type in ('full', 'setup', 'constraints', 'terminal', 'scoring'):
+    for score_type in NGRAM_SCORE_TYPES:
         col_names = sorted([c for c in feature_columns if c.startswith(f'ast_ngram_{score_type}') and c.endswith('_score')])
 
         if score_type not in ngram_scores_to_remove:
@@ -95,15 +103,21 @@ def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
 
 
 def get_feature_columns(df: pd.DataFrame, score_threshold: float,
-                        ngram_scores_to_remove: typing.Optional[typing.List[str]] = None) -> typing.List[str]:
+                        ngram_scores_to_remove: typing.Optional[typing.List[str]] = None,
+                        full_ngram_score_only: bool = False) -> typing.List[str]:
     mean_features_by_real = df[['real'] + [c for c in df.columns if c not in utils.NON_FEATURE_COLUMNS]].groupby('real').mean()
     feature_diffs = mean_features_by_real.loc[1] - mean_features_by_real.loc[0]
     abs_diffs = feature_diffs.abs()
-    return get_features_by_abs_diff_threshold(abs_diffs, score_threshold, ngram_scores_to_remove)  # type: ignore
+    return get_features_by_abs_diff_threshold(abs_diffs, score_threshold, ngram_scores_to_remove, full_ngram_score_only)  # type: ignore
 
 
 def main(args: argparse.Namespace):
-    args.output_name = f'{args.output_name}_categories_{args.ignore_categories_key}_seed_{args.random_seed}'
+    args.output_name = f'{args.output_name}_categories_{args.ignore_categories_key}'
+
+    if args.full_ngram_score_only:
+        args.output_name += '_full_ngram_only'
+
+    args.output_name = f'{args.output_name}_seed_{args.random_seed}'
 
     model_name = args.output_name
     if 'fitness_sweep_' in model_name:
@@ -123,7 +137,7 @@ def main(args: argparse.Namespace):
     else:
         raise ValueError('Some original games have different numbers of regrowths: {original_game_counts}')
 
-    feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove)
+    feature_columns = get_feature_columns(fitness_df, args.feature_score_threshold, args.ngram_scores_to_remove, args.full_ngram_score_only)
 
     with open(args.cv_settings_json, 'r') as f:
         cv_settings = json.load(f)

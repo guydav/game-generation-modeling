@@ -836,11 +836,6 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
     lower_object = objects[0]
     upper_object = objects[1]
 
-
-    # Checking for objects where it shouldn't happen unless they weirdly clip in the environment
-    if lower_object.object_type in ON_EXCLUDED_OBJECT_TYPES:
-        return False
-
     # Special case: the agent can only be 'on' the floor or the rug
     if isinstance(upper_object, AgentState):
         if 'Rug' not in lower_object.object_id and 'Floor' not in lower_object.object_id:
@@ -856,6 +851,10 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     # Special case: nothing can ever be 'on' the agent
     if isinstance(lower_object, AgentState):
+        return False
+
+    # Checking for objects where it shouldn't happen unless they weirdly clip in the environment
+    if lower_object.object_type in ON_EXCLUDED_OBJECT_TYPES:
         return False
 
     if _pred_touch(agent, objects):

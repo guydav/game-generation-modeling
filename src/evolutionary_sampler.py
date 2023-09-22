@@ -144,6 +144,7 @@ parser.add_argument('--map-elites-key-type', type=int, default=0)
 parser.add_argument('--map-elites-weight-strategy', type=int, default=0)
 parser.add_argument('--map-elites-initialization-strategy', type=int, default=0)
 parser.add_argument('--map-elites-population-seed-path', type=str, default=None)
+parser.add_argument('--map-elites-initial-candidate-pool-size', type=int, default=None)
 
 parser.add_argument('--map-elites-use-crossover', action='store_true')
 parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
@@ -160,8 +161,8 @@ parser.add_argument('--map-elites-pca-behavioral-features-n-components', type=in
 parser.add_argument('--map-elites-behavioral-feature-exemplar-distance-type', type=str, default=None)
 parser.add_argument('--map-elites-behavioral-feature-exemplar-distance-metric', type=str, default=None)
 
-parser.add_argument('--map-elites-good-threshold', type=float, required=True)
-parser.add_argument('--map-elites-great-threshold', type=float, required=True)
+parser.add_argument('--map-elites-good-threshold', type=float, default=None)
+parser.add_argument('--map-elites-great-threshold', type=float, default=None)
 
 DEFAULT_RELATIVE_PATH = '.'
 parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
@@ -329,7 +330,7 @@ class PopulationBasedSampler():
     generation_index: int
     grammar: str
     grammar_parser: tatsu.grammars.Grammar  # type: ignore
-    initial_sampler: typing.Callable[[], ASTType]
+    initial_samplers: typing.Dict[str, typing.Callable[[], ASTType]]
     max_sample_depth: int
     max_sample_nodes: int
     max_sample_total_size: int
@@ -455,9 +456,11 @@ class PopulationBasedSampler():
         # Used to fix the AST context after crossover / mutation
         self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed), strict=False)
 
-        self.initial_sampler = create_initial_proposal_sampler(
-            initial_proposal_type, self.samplers[self.first_sampler_key], self.context_fixer,
-            ngram_model_path, section_sampler_kwargs)  # type: ignore
+        self.initial_samplers = {
+            key: create_initial_proposal_sampler(initial_proposal_type, self.samplers[key], self.context_fixer,
+                                                 ngram_model_path, section_sampler_kwargs)
+            for key in self.sampler_keys
+        }
 
         # Used as the mutation operator to modify existing games
         self.regrowth_sampler = RegrowthSampler(self.samplers, seed=self.random_seed, rng=np.random.default_rng(self.random_seed))
@@ -532,6 +535,9 @@ class PopulationBasedSampler():
 
     def _sampler(self, rng: np.random.Generator) -> ASTSampler:
         return self.samplers[self._choice(self.sampler_keys, rng=rng)]  # type: ignore
+
+    def _initial_sampler(self, rng: np.random.Generator):
+        return self.initial_samplers[self._choice(self.sampler_keys, rng=rng)]  # type: ignore
 
     def _rename_game(self, game: ASTType, name: str) -> None:
         replace_child(game[1], ['game_name'], name)  # type: ignore
@@ -624,7 +630,7 @@ class PopulationBasedSampler():
 
         while sample is None:
             try:
-                sample = typing.cast(tuple, self.initial_sampler.sample(global_context=dict(original_game_id=f'evo-{idx}')))
+                sample = typing.cast(tuple, self._initial_sampler(self.rng).sample(global_context=dict(original_game_id=f'evo-{idx}')))
                 if self.sample_filter_func is not None:
                     sample_fitness, sample_features = self._score_proposal(sample, return_features=True)  # type: ignore
                     if not self.sample_filter_func(sample, sample_features, sample_fitness):
@@ -681,7 +687,7 @@ class PopulationBasedSampler():
             except SamplingException as e:
                 if self.verbose >= 2: logger.info(f'Sampling exception in regrowth, skipping sample: {e.args}')
             except ValueError:
-                if self.verbose >= 2: logger.info(f'Value error in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Value error in sample -- skipping')
 
         return new_proposal  # type: ignore
 
@@ -769,7 +775,7 @@ class PopulationBasedSampler():
             except SamplingException as e:
                 if self.verbose >= 2: logger.info(f'Sampling exception in insert, skipping sample: {e.args}')
             except ValueError:
-                if self.verbose >= 2: logger.info(f'Value error in sample {idx} -- skipping')
+                if self.verbose >= 2: logger.info(f'Value error in sample -- skipping')
 
         if isinstance(new_node, tuple):
             new_node = new_node[0]
@@ -1518,6 +1524,7 @@ class MAPElitesInitializationStrategy(Enum):
     FIXED_SIZE = 0
     ARCHIVE_SIZE = 1
     ARCHIVE_EXEMPLARS = 2
+    ARCHIVE_TOP_EXEMPLARS = 3
 
 PARENT_KEY = 'parent_key'
 
@@ -1560,10 +1567,11 @@ class MAPElitesSampler(PopulationBasedSampler):
                  key_type: MAPElitesKeyType,
                  weight_strategy: MAPElitesWeightStrategy,
                  initialization_strategy: MAPElitesInitializationStrategy,
-                 good_threshold: float, great_threshold: float,
+                 good_threshold: typing.Optional[float] = None, great_threshold: typing.Optional[float] = None,
                  custom_featurizer: typing.Optional[BehavioralFeaturizer] = None,
                  selector_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None,
                  previous_sampler_population_seed_path: typing.Optional[str] = None,
+                 initial_candidate_pool_size: typing.Optional[int] = None,
                  use_crossover: bool = False,
                  use_cognitive_operators: bool = False,
                  *args, **kwargs):
@@ -1572,8 +1580,6 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.key_type = key_type
         self.weight_strategy = weight_strategy
         self.initialization_strategy = initialization_strategy
-        self.good_threshold = good_threshold
-        self.great_threshold = great_threshold
         self.custom_featurizer = custom_featurizer
 
         if selector_kwargs is None:
@@ -1590,6 +1596,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         self.archive_metrics_history = []
         self.previous_sampler_population_seed_path = previous_sampler_population_seed_path
+        self.initial_candidate_pool_size = initial_candidate_pool_size
         self.use_crossover = use_crossover
         self.use_cognitive_operators = use_cognitive_operators
         self.update_fitness_rank_weights = True
@@ -1598,6 +1605,21 @@ class MAPElitesSampler(PopulationBasedSampler):
         self.operator_weights = None  # type: ignore
 
         super().__init__(*args, **kwargs)
+
+        # if one of these was not provided, try to read them from the fitness function
+        if good_threshold is None or great_threshold is None:
+            if not hasattr(self.fitness_function, 'score_dict'):
+                raise ValueError('Must provide good_threshold and great_threshold if fitness_function does not have a score_dict attribute')
+
+            min_real_game_fitness =  -1 * self.fitness_function.score_dict['max']
+            median_real_game_fitness = -1 * self.fitness_function.score_dict['median']
+
+            self.good_threshold = min_real_game_fitness
+            self.great_threshold = median_real_game_fitness
+
+        else:
+            self.good_threshold = good_threshold
+            self.great_threshold = great_threshold
 
         argparse_args = kwargs['args']
 
@@ -1729,10 +1751,87 @@ class MAPElitesSampler(PopulationBasedSampler):
                     pbar.set_postfix(postfix)
 
                 logger.info(f'Generating random samples to fill the rest of the population (current population size: {current_population_size}), required population size: {self.population_size}')
+                pbar = tqdm(total=self.population_size - current_population_size, desc="Filling archive to initial population size")  # type: ignore
 
                 while current_population_size < self.population_size:
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+                    game_key = self._features_to_key(game, game_features)
+                    self._add_to_archive(game, game_fitness, game_key)
+
+                    if len(self.population) > current_population_size:
+                        pbar.update(1)
+                        current_population_size = len(self.population)
+
+
+            # Create initial population by sampling a large number of games, then following the logic above
+            elif self.initialization_strategy == MAPElitesInitializationStrategy.ARCHIVE_TOP_EXEMPLARS:
+                if self.initial_candidate_pool_size is None:
+                    raise ValueError('Must provide initial_candidate_pool_size when using ARCHIVE_TOP_EXEMPLARS initialization strategy')
+
+                initial_candidates = []
+                for i in trange(self.initial_candidate_pool_size, desc='Generating initial candidates'):
+                    game = self._gen_init_sample(i)
+                    game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
+                    initial_candidates.append((game_fitness, game, game_features))
+
+                initial_candidates.sort(key=lambda x: x[0], reverse=True)
+
+                if self.custom_featurizer is not None:
+                    n_values_by_feature = self.custom_featurizer.get_feature_value_counts()
+
+                else:
+                    n_values_by_feature = {feature_name: 2 for feature_name in self.map_elites_feature_names}
+
+                total_feature_count = sum(n_values_by_feature.values())
+
+                pbar = tqdm(total=total_feature_count, desc="Initial archive")  # type: ignore
+
+                feature_values_in_archive = set()
+                current_population_size = 0
+                current_index = 0
+
+                postfix = {}
+
+                while len(feature_values_in_archive) < total_feature_count:
+                    game_fitness, game, game_features = initial_candidates[current_index]
+                    current_index += 1
+
+                    if self.custom_featurizer is not None:
+                        game_key, game_features = self._features_to_key(game, game_features, return_features=True)  # type: ignore
+
+                    else:
+                        game_key = self._features_to_key(game, game_features)
+
+                    self._add_to_archive(game, game_fitness, game_key)
+
+                    for feature in self.map_elites_feature_names:
+                        feature_values_in_archive.add(f"{feature}_{game_features[feature]}")
+
+                    n_feature_values_in = len(feature_values_in_archive)
+
+                    if n_feature_values_in > current_population_size:
+                        pbar.update(n_feature_values_in - current_population_size)
+                        current_population_size = n_feature_values_in
+
+                        postfix = {
+                            feature_name if len(feature_name) <= 12 else feature_name[:12] + '...': f'{sum([1 for feature_value in feature_values_in_archive if feature_value.startswith(feature_name)])}/{n_values_by_feature[feature_name]}'
+                            for feature_name in self.map_elites_feature_names
+                        }
+
+                    postfix['Current'] = current_index  # type: ignore
+                    pbar.set_postfix(postfix)
+
+                logger.info(f'Generating random samples to fill the rest of the population (current population size: {current_population_size}), required population size: {self.population_size}')
+                pbar = tqdm(total=self.population_size - current_population_size, desc="Filling archive to initial population size")  # type: ignore
+
+                while current_population_size < self.population_size:
+                    if current_index >= len(initial_candidates):
+                        logger.info(f'Exhausted initial candidates with population size {current_population_size}, stopping early')
+                        break
+
+                    game_fitness, game, game_features = initial_candidates[current_index]
+                    current_index += 1
                     game_key = self._features_to_key(game, game_features)
                     self._add_to_archive(game, game_fitness, game_key)
 
@@ -2161,6 +2260,7 @@ def main(args):
             good_threshold=args.map_elites_good_threshold,
             great_threshold=args.map_elites_great_threshold,
             previous_sampler_population_seed_path=args.map_elites_population_seed_path,
+            initial_candidate_pool_size=args.map_elites_initial_candidate_pool_size,
             use_crossover=args.map_elites_use_crossover,
             use_cognitive_operators=args.map_elites_use_cognitive_operators,
             args=args,

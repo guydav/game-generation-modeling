@@ -227,13 +227,35 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT = [
     room_and_object_types.ANY_OBJECT,
 ]
 
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_SMALLER = [
+    room_and_object_types.BALLS,
+    room_and_object_types.RECEPTACLES,
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    # [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+    room_and_object_types.ANY_OBJECT,
+]
 
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER = [
+    room_and_object_types.BALLS,
+    room_and_object_types.RECEPTACLES,
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+    room_and_object_types.ANY_OBJECT,
+]
 
 PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
     ['agent_holds', 'in_motion'],
     'in',
     ['on', 'touch'],
     ['adjacent', 'between'],
+]
+
+PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL = [
+    ['agent_holds', 'in_motion'],
+    ['in', 'on'],
+    ['adjacent', 'touch'],
 ]
 
 
@@ -250,6 +272,8 @@ PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
 PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
+EXPERIMENTAL_WITH_SETUP = 'experimental_setup'
+EXPERIMENTAL_WITH_SETUP_AND_TERMINAL = 'experimental_setup_terminal'
 
 
 FEATURE_SETS = [
@@ -265,7 +289,9 @@ FEATURE_SETS = [
     PREDICATE_AND_OBJECT_GROUPS,
     PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT,
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN,
-    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT
+    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT,
+    EXPERIMENTAL_WITH_SETUP,
+    EXPERIMENTAL_WITH_SETUP_AND_TERMINAL,
 ]
 
 
@@ -543,6 +569,16 @@ def build_behavioral_features_featurizer(
         elif feature_set == PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
+
+        elif feature_set == EXPERIMENTAL_WITH_SETUP:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+        elif feature_set == EXPERIMENTAL_WITH_SETUP_AND_TERMINAL:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_SMALLER))
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP, ast_parser.TERMINAL]), section_rule=True)
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

@@ -1208,6 +1208,10 @@ class ASTSampler:
         output = []
         return_ast = False
 
+        if PRODUCTION_PROBABILITY in rule_dict and not initial_call:
+            if global_context['rng'].random() > rule_dict[PRODUCTION_PROBABILITY]:
+                return None, None
+
         for prod_type, prod_value in production:
             if prod_type == TOKEN:
                 if prod_value == EOF:
@@ -1221,7 +1225,8 @@ class ASTSampler:
                 value, context_update = self.sample(prod_value, global_context, local_context, False)
                 if context_update is not None:
                     local_context.update(context_update)
-                output.append(value)
+                if value is not None:
+                    output.append(value)
 
             elif prod_type == NAMED:
                 return_ast = True

@@ -1794,6 +1794,10 @@ class MAPElitesSampler(PopulationBasedSampler):
                 postfix = {}
 
                 while len(feature_values_in_archive) < total_feature_count:
+                    if current_index >= len(initial_candidates):
+                        logger.info(f'Exhausted initial candidates with # featres in archive {current_population_size}, stopping early')
+                        break
+
                     game_fitness, game, game_features = initial_candidates[current_index]
                     current_index += 1
 
@@ -1822,7 +1826,8 @@ class MAPElitesSampler(PopulationBasedSampler):
                     postfix['Current'] = current_index  # type: ignore
                     pbar.set_postfix(postfix)
 
-                logger.info(f'Generating random samples to fill the rest of the population (current population size: {current_population_size}), required population size: {self.population_size}')
+                current_population_size = len(self.population)
+                logger.info(f'Adding random samples to fill the rest of the population (current population size: {current_population_size}), required population size: {self.population_size}')
                 pbar = tqdm(total=self.population_size - current_population_size, desc="Filling archive to initial population size")  # type: ignore
 
                 while current_population_size < self.population_size:
@@ -1858,7 +1863,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             for i, feature_name in enumerate(self.map_elites_feature_names):
                 feature_value_counters[feature_name][self._key_value_at_index(key, i)] += 1
 
-        logger.info(f'Initialized population with {len(self.population)} games in the archive')
+        logger.info(f'Initialized population with {len(self.population)} games in the archive with mean fitness {np.mean(list(self.fitness_values.values())):.4f}')
         feature_value_mesage = '\n'.join(['With the following feature-value occupancy:'] + [f'\t{feature_name}: {feature_value_counters[feature_name]}' for feature_name in self.map_elites_feature_names])
         logger.info(feature_value_mesage)
 

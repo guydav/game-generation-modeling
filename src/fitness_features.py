@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from ast_to_latex_doc import TYPE_RULES, extract_n_args, extract_predicate_function_args, extract_predicate_function_name
 from ast_parser import VariableDefinition, extract_variables_from_ast, update_context_variables, predicate_function_term_to_type_categories,\
-    VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY
+    VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY, PREFERENCE_CONTEXT_KEY
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy
@@ -476,7 +476,10 @@ class ASTFitnessFeaturizer:
             # Check for any handlers of the current node
             rule = ast.parseinfo.rule
 
-            if rule == 'seq_func':
+            if rule == 'preference':
+                context[PREFERENCE_CONTEXT_KEY] = typing.cast(str, ast.pref_name)
+
+            elif rule == 'seq_func':
                 seq_func = ast.seq_func
                 if isinstance(seq_func, str):
                     context[MODAL_CONTEXT_KEY] = seq_func
@@ -1598,11 +1601,11 @@ class DisjointPreferencesTerm(FitnessTerm):
                 self._update_single_preference(pref, forall_types)
 
     def _get_all_inner_keys(self):
-        return ['found', 'prop', 'scoring_terminal_types', 'scoring_terminal_predicates']
+        return ['found', 'prop', 'scoring_terminal_types', 'scoring_terminal_predicates', 'same_predicates_only']
 
     def game_end(self, full_ast=None) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.types_by_preference) < 2:
-            return dict(found=0, prop=0, scoring_terminal_types=0, scoring_terminal_predicates=0)
+            return dict(found=0, prop=0, scoring_terminal_types=0, scoring_terminal_predicates=0, same_predicates_only=0)
 
         preference_not_disjoint = {pref: False for pref in self.types_by_preference.keys()}
         pairwise_not_disjoint_mapping = {}
@@ -1658,6 +1661,9 @@ class DisjointPreferencesTerm(FitnessTerm):
             prop=1 - (sum(preference_not_disjoint.values()) / len(preference_not_disjoint)),
             scoring_terminal_types=int(scoring_terminal_disjoint_types),
             scoring_terminal_predicates=scoring_terminal_disjoint_predicates,
+            same_predicates_only=int(any(len(preference_predicates) > 0 and all(pred.startswith('same_') for pred in preference_predicates)
+                                         for preference_predicates in self.predicates_by_preference.values()
+                                         ))
         )
 
 

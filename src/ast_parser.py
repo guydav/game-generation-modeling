@@ -31,6 +31,7 @@ SECTION_CONTEXT_KEY = 'section'
 VARIABLES_CONTEXT_KEY = 'variables'
 QUANTIFICATIONS_CONTEXT_KEY = 'quantifications'
 MODAL_CONTEXT_KEY = 'modal'
+PREFERENCE_CONTEXT_KEY = 'preference'
 
 
 import ast_printer

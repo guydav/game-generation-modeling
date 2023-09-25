@@ -917,6 +917,9 @@ class PopulationBasedSampler():
         continue_index = index if not replace else index + 1
         return (*game[:index], new_section, *game[continue_index:])  # type: ignore
 
+    def _remove_section_from_game(self, game: ASTType, index: int):
+        return (*game[:index], *game[index + 1:])  # type: ignore
+
     def _crossover_full_sections(self, games: typing.Union[ASTType, typing.List[ASTType]], rng: typing.Optional[np.random.Generator] = None,
                                  crossover_first_game: bool = True, crossover_second_game: bool = True):
 
@@ -1125,48 +1128,59 @@ class PopulationBasedSampler():
         return game
 
     @handle_multiple_inputs
-    def _sample_or_resample_setup(self, game: ASTType, rng: np.random.Generator):
-        new_setup = None
-        global_context = dict(rng=rng)
-        while new_setup is None:
-            try:
-                new_setup = self._sampler(rng).sample('setup', global_context=global_context)[0]
-            except SamplingException as e:
-                if self.verbose > 1:
-                    logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
-                continue
-
-        new_setup_tuple = (ast_parser.SETUP, new_setup, ')')
-
+    def _sample_or_resample_setup(self, game: ASTType, rng: np.random.Generator, p_delete_existing_section: float = 0.5):
         new_game = deepcopy_ast(game)
-        new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
+        game_has_setup = new_game[3][0] == ast_parser.SETUP  # type: ignore
+
+        if game_has_setup and rng.uniform() < p_delete_existing_section:
+            new_game = self._remove_section_from_game(new_game, 3)
+
+        else:
+            new_setup = None
+            global_context = dict(rng=rng)
+            while new_setup is None:
+                try:
+                    new_setup = self._sampler(rng).sample('setup', global_context=global_context)[0]
+                except SamplingException as e:
+                    if self.verbose > 1:
+                        logger.info(f'Failed to sample setup with global context {global_context}: {e.args}')
+                    continue
+
+            new_setup_tuple = (ast_parser.SETUP, new_setup, ')')
+            new_game = self._insert_section_to_game(new_game, new_setup_tuple, 3, replace=new_game[3][0] == ast_parser.SETUP)  # type: ignore
+
         self.context_fixer.fix_contexts(new_game)  # type: ignore
         return new_game
 
     @handle_multiple_inputs
-    def _sample_or_resample_terminal(self, game: ASTType, rng: np.random.Generator):
-        new_terminal = None
-
-        base_scoring_node = game[-2][1]  # type: ignore
-        self.regrowth_sampler.set_source_ast(game)
-        base_scoring_node_key = self.regrowth_sampler._ast_key(base_scoring_node)
-        global_context = self.regrowth_sampler.parent_mapping[base_scoring_node_key][-2]  # type: ignore
-        global_context['rng'] = rng
-
-        while new_terminal is None:
-            try:
-                new_terminal = self._sampler(rng).sample('terminal', global_context=global_context)[0]
-            except SamplingException as e:
-                if self.verbose > 1:
-                    logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
-                continue
-
-        new_terminal_tuple = (ast_parser.TERMINAL, new_terminal, ')')
-
+    def _sample_or_resample_terminal(self, game: ASTType, rng: np.random.Generator, p_delete_existing_section: float = 0.5):
         new_game = deepcopy_ast(game)
-        replace = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore
-        index = len(new_game) - 2 if not replace else len(new_game) - 3
-        new_game = self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=replace)  # type: ignore
+        game_has_terminal = new_game[-3][0] == ast_parser.TERMINAL  # type: ignore
+
+        if game_has_terminal and rng.uniform() < p_delete_existing_section:
+            new_game = self._remove_section_from_game(new_game, len(new_game) - 3)
+
+        else:
+            new_terminal = None
+
+            base_scoring_node = game[-2][1]  # type: ignore
+            self.regrowth_sampler.set_source_ast(game)
+            base_scoring_node_key = self.regrowth_sampler._ast_key(base_scoring_node)
+            global_context = self.regrowth_sampler.parent_mapping[base_scoring_node_key][-2]  # type: ignore
+            global_context['rng'] = rng
+
+            while new_terminal is None:
+                try:
+                    new_terminal = self._sampler(rng).sample('terminal', global_context=global_context)[0]
+                except SamplingException as e:
+                    if self.verbose > 1:
+                        logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
+                    continue
+
+            new_terminal_tuple = (ast_parser.TERMINAL, new_terminal, ')')
+
+            index = len(new_game) - 2 if not game_has_terminal else len(new_game) - 3
+            new_game = self._insert_section_to_game(new_game, new_terminal_tuple, index, replace=game_has_terminal)  # type: ignore
 
         self.context_fixer.fix_contexts(new_game)  # type: ignore
         return new_game

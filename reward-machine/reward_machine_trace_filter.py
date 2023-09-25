@@ -267,57 +267,64 @@ class TraceGameEvaluator:
         # logger.info(ast_printer.ast_to_string(sample, '\n'))  # type: ignore
         # logger.info('=' * 120)
 
-        for trace in trace_iter:
-            if isinstance(self.trace_finder.predicate_data_estimator, compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase):
-                domain = duckdb.sql(f"SELECT domain FROM trace_length_and_domains WHERE trace_id='{trace}'").fetchone()[0]  # type: ignore
-                if domain is None:
-                    raise ValueError(f'No domain found for trace {trace}')
-            else:
-                domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
-            # TODO: figure out what needs to be reset between games to instantiate a game handler only once
-            game_handler = GameHandler(sample, force_domain=domain)  # type: ignore
+        try:
+            for trace in trace_iter:
+                if isinstance(self.trace_finder.predicate_data_estimator, compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase):
+                    domain = duckdb.sql(f"SELECT domain FROM trace_length_and_domains WHERE trace_id='{trace}'").fetchone()[0]  # type: ignore
+                    if domain is None:
+                        raise ValueError(f'No domain found for trace {trace}')
+                else:
+                    domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
+                # TODO: figure out what needs to be reset between games to instantiate a game handler only once
+                game_handler = GameHandler(sample, force_domain=domain)  # type: ignore
 
-            for state, is_final in self._iterate_trace(trace):
-                state = FullState.from_state_dict(state)
-                score = game_handler.process(state, is_final, ignore_terminals=True)
-                if score is not None:
-                    break
+                for state, is_final in self._iterate_trace(trace):
+                    state = FullState.from_state_dict(state)
+                    score = game_handler.process(state, is_final, ignore_terminals=True)
+                    if score is not None:
+                        break
 
-            score = game_handler.score(game_handler.scoring)
-            scores_by_trace[trace] = score
+                score = game_handler.score(game_handler.scoring)
+                scores_by_trace[trace] = score
 
-            if ast_parser.SETUP in expected_keys:
-                counts_by_trace_and_key[ast_parser.SETUP][trace] = game_handler.setup_met
-                stop_count_by_key[ast_parser.SETUP] += int(game_handler.setup_met)
+                if ast_parser.SETUP in expected_keys:
+                    counts_by_trace_and_key[ast_parser.SETUP][trace] = game_handler.setup_met
+                    stop_count_by_key[ast_parser.SETUP] += int(game_handler.setup_met)
 
-            for preference_name in expected_keys:
-                if preference_name in game_handler.preference_satisfactions:
-                    n_preference_satisfcations = len(game_handler.preference_satisfactions[preference_name])
-                    counts_by_trace_and_key[preference_name][trace] = n_preference_satisfcations
-                    stop_count_by_key[preference_name] += int(n_preference_satisfcations > 0)
-                    total_count_by_key[preference_name] += n_preference_satisfcations
+                for preference_name in expected_keys:
+                    if preference_name in game_handler.preference_satisfactions:
+                        n_preference_satisfcations = len(game_handler.preference_satisfactions[preference_name])
+                        counts_by_trace_and_key[preference_name][trace] = n_preference_satisfcations
+                        stop_count_by_key[preference_name] += int(n_preference_satisfcations > 0)
+                        total_count_by_key[preference_name] += n_preference_satisfcations
 
-            if self.verbose:
-                n_satisfactions_by_pref = " ".join(f'{k}: {len(v)}/{total_count_by_key[k]}' for k, v in game_handler.preference_satisfactions.items())
-                logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
+                if self.verbose:
+                    n_satisfactions_by_pref = " ".join(f'{k}: {len(v)}/{total_count_by_key[k]}' for k, v in game_handler.preference_satisfactions.items())
+                    logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
 
-            if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
-                return key, self.stop_after_count, counts_by_trace_and_key
+                if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
+                    return key, self.stop_after_count, counts_by_trace_and_key
 
-        if print_results:
-            for preference_name in expected_keys:
-                non_zero_count_traces = {trace: count for trace, count in counts_by_trace_and_key[preference_name].items() if count > 0 and count is not False}
-                print(f'For preference {preference_name}, {len(non_zero_count_traces)} traces have non-zero counts:')
-                for trace, count in non_zero_count_traces.items():
-                    print(f'    - {trace}: {count}')
-            print()
-            non_zero_score_traces = {trace: score for trace, score in scores_by_trace.items() if score != 0}
-            print(f'For key {key}, {len(non_zero_score_traces)} traces have non-zero scores, while {len(scores_by_trace) - len(non_zero_score_traces)} traces have score zero:')
-            for trace, score in non_zero_score_traces.items():
-                print(f'    - {trace}: {score}')
+            if print_results:
+                for preference_name in expected_keys:
+                    non_zero_count_traces = {trace: count for trace, count in counts_by_trace_and_key[preference_name].items() if count > 0 and count is not False}
+                    print(f'For preference {preference_name}, {len(non_zero_count_traces)} traces have non-zero counts:')
+                    for trace, count in non_zero_count_traces.items():
+                        print(f'    - {trace}: {count}')
+                print()
+                non_zero_score_traces = {trace: score for trace, score in scores_by_trace.items() if score != 0}
+                print(f'For key {key}, {len(non_zero_score_traces)} traces have non-zero scores, while {len(scores_by_trace) - len(non_zero_score_traces)} traces have score zero:')
+                for trace, score in non_zero_score_traces.items():
+                    print(f'    - {trace}: {score}')
 
-        min_count = min(stop_count_by_key.values())
-        return key, min_count, counts_by_trace_and_key
+            min_count = min(stop_count_by_key.values())
+            return key, min_count, counts_by_trace_and_key
+
+        except Exception as e:
+            logger.exception(e)
+            sample_str = ast_printer.ast_to_string(sample, '\n')  # type: ignore
+            logger.warning(f'The following sample produced the exception above:\n{sample_str}\n{"=" * 120}')
+            return key, -1, {}
 
     def __call__(self, key: typing.Optional[KeyTypeAnnotation],
                  max_keys: typing.Optional[int] = None,

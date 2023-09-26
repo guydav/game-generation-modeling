@@ -926,7 +926,7 @@ class NoAdjacentSameModal(FitnessTerm):
     adjacent_identical_modals_found: bool = False
 
     def __init__(self):
-        super().__init__('then', 'no_adjacent_same_modal')
+        super().__init__('then', 'adjacent_same_modal_found')
 
     def game_start(self) -> None:
         self.then_found = False
@@ -946,7 +946,7 @@ class NoAdjacentSameModal(FitnessTerm):
         if not self.then_found:
             return 0
 
-        return -1 if self.adjacent_identical_modals_found else 1
+        return 1 if self.adjacent_identical_modals_found else 0
 
 
 class PrefStartsAndEndsWithOnce(FitnessTerm):

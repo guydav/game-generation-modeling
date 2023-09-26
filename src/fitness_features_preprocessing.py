@@ -30,7 +30,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'setup_objects_used', 'setup_quantified_objects_used', 'any_setup_objects_used',
     'starts_and_ends_once', 'scoring_count_expression_repetitions_exist',
     'correct_predicate_function_arity', 'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring', 'no_adjacent_same_modal',
+    'section_without_pref_or_total_count_scoring', 'adjacent_same_modal_found',
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
     'repeated_variables_found', 'repeated_variable_type_in_either',
     'nested_logicals_found', 'identical_logical_children_found',

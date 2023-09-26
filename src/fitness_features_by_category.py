@@ -137,7 +137,7 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     'setup_quantified_objects_used',
     # 'any_setup_objects_used,
     'adjacent_once_found',
-    'no_adjacent_same_modal',
+    # 'adjacent_same_modal_found',
     'starts_and_ends_once',
     'once_in_middle_of_pref_found',
     'pref_without_hold_found',

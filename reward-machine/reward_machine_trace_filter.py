@@ -35,6 +35,8 @@ from evolutionary_sampler import *
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+logging.getLogger('wandb').setLevel(logging.WARNING)
+logging.getLogger('wandb.docker').setLevel(logging.WARNING)
 logging.getLogger('wandb.docker.auth').setLevel(logging.WARNING)
 
 

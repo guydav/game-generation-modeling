@@ -2267,6 +2267,11 @@ def main(args):
         elif args.map_elites_pca_behavioral_features_indices is not None:
             args.output_name += f'_pca_{"_".join([str(i) for i in args.map_elites_pca_behavioral_features_indices])}'
 
+        args.map_elites_weight_strategy = MAPElitesWeightStrategy(args.map_elites_weight_strategy)
+        weight_strategy_name = args.map_elites_weight_strategy.name.lower()
+        if not args.output_name.endswith(weight_strategy_name):
+            args.output_name += f'_{weight_strategy_name}'
+
         args.output_name += f'_seed_{args.random_seed}'
 
         logger.info(f'Final output name: {args.output_name}')
@@ -2274,7 +2279,7 @@ def main(args):
         evosampler = MAPElitesSampler(
             key_type=MAPElitesKeyType(args.map_elites_key_type),
             generation_size=args.map_elites_generation_size,
-            weight_strategy=MAPElitesWeightStrategy(args.map_elites_weight_strategy),
+            weight_strategy=args.map_elites_weight_strategy,
             initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
             good_threshold=args.map_elites_good_threshold,
             great_threshold=args.map_elites_great_threshold,

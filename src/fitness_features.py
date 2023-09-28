@@ -122,7 +122,7 @@ ContextDict = typing.Dict[str, typing.Union[str, int, VariableDefinition]]
 Number = typing.Union[int, float]
 
 
-TEMP_DIR = '/tmp/gd1279/fitness_features'
+TEMP_DIR = '/scratch/gd1279/tmp_fitness_features'
 
 
 class FitnessTerm(ABC):
@@ -839,6 +839,10 @@ class PredicateFoundInData(FitnessTerm):
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
                 n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=True)
+
+                if n_traces is None:  # query timed out
+                    return
+
                 predicate_found = int(n_traces >= self.min_trace_count)
                 if self.split_by_section:
                     self.predicates_found_by_section[section].append(predicate_found)
@@ -859,7 +863,7 @@ class PredicateFoundInData(FitnessTerm):
 
             except (compile_predicate_statistics_full_database.QueryTimeoutException, RuntimeError) as e:
                 # If the query timed out, ignore this predicate for now
-                logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")  # type: ignore
+                # logger.info(f"Query timed out for predicate `{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` with mapping {mapping}")  # type: ignore
                 pass
 
     def _get_all_inner_keys(self):
@@ -897,7 +901,7 @@ class PredicateFoundInData(FitnessTerm):
         return result
 
 
-MAX_LOGICAL_ARGUMENTS = 3
+MAX_LOGICAL_ARGUMENTS = 4
 
 
 class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
@@ -3017,7 +3021,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     predicate_found_in_data = PredicateFoundInData(use_full_databse=False, split_by_section=False)
     fitness.register(predicate_found_in_data)
 
-    predicate_found_in_data_small_logicals = PredicateFoundInDataSmallLogicals(3)
+    predicate_found_in_data_small_logicals = PredicateFoundInDataSmallLogicals()
     fitness.register(predicate_found_in_data_small_logicals)
 
     no_adjacent_once = NoAdjacentOnce()

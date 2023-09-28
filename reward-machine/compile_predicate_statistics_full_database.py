@@ -171,7 +171,7 @@ def stable_hash_list(list_data: typing.Sequence[str]):
 DEBUG = False
 MAX_CACHE_SIZE = 2 ** 12
 MAX_CHILD_ARGS = 4  # 6
-DEFAULT_QUERY_TIMEOUT = 5  # seconds
+DEFAULT_QUERY_TIMEOUT = 15  # 5  # seconds
 
 class CommonSensePredicateStatisticsFullDatabase():
     def __init__(self,
@@ -229,7 +229,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
     def __del__(self):
         if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
-            # if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
+            if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
             if shutil is not None: shutil.rmtree(self.temp_dir)
 
     def _create_databases(self):
@@ -326,7 +326,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
         result_query = None
         try:
@@ -372,6 +372,10 @@ class CommonSensePredicateStatisticsFullDatabase():
 
             raise e
 
+        except QueryTimeoutException:
+            logger.warn(f"Query timed out for predicate with cache key `{self._predicate_and_mapping_cache_key(predicate, mapping)}`, returning None so a value is cached")
+            return None
+
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
@@ -379,7 +383,13 @@ class CommonSensePredicateStatisticsFullDatabase():
         if predicate_name not in self.all_predicates:
             raise PredicateNotImplementedException(predicate_name)
 
-        variables = extract_variables(predicate)  # type: ignore
+        try:
+            variables = extract_variables(predicate, error_on_repeat=True)  # type: ignore
+
+        except ValueError:
+            logger.warn('Variable repeated in predicate arguments')
+            raise MissingVariableException('Variable repeated in predicate arguments')
+
         used_variables = set(variables)
 
         # Restrict the mapping to just the referenced variables and expand meta-types

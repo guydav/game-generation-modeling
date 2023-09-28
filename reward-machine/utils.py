@@ -402,7 +402,7 @@ def extract_predicate_function_name(ast: tatsu.ast.AST):
 
     return name
 
-def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None]) -> typing.List[str]:
+def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None], error_on_repeat: bool = False) -> typing.List[str]:
     '''
     Recursively extract every variable referenced in the predicate (including inside functions
     used within the predicate)
@@ -461,6 +461,9 @@ def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], ta
         for var in pred_vars:
             if var not in unique_vars and var not in exists_forall_vars:
                 unique_vars.append(var)
+
+        if error_on_repeat and predicate.parseinfo.rule == 'predicate' and len(unique_vars) != len(pred_vars):
+            raise ValueError(f'Found duplicate variables in predicate: {pred_vars}')
 
         return unique_vars
 

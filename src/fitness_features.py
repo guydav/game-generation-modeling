@@ -764,21 +764,25 @@ class PredicateFoundInData(FitnessTerm):
 
     _predicate_data_estimator = None
 
-    def __init__(self, rule: str = 'predicate', use_full_databse: bool = False, split_by_section: bool = True,
+    def __init__(self, rule: typing.Union[str, typing.Sequence[str]] = 'predicate', use_full_databse: bool = False, split_by_section: bool = False,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
                  min_interval_count: int = PREDICATE_IN_DATA_MIN_INTERVAL_COUNT,
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
                  trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH,
-                 predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES)):
+                 predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES),
+                 header: str = 'predicate_found_in_data'):
 
         self.use_full_databse = use_full_databse
-        if self.use_full_databse:
+        if self.use_full_databse and rule == 'predicate':
             rules = list(PREDICATE_IN_DATA_RULE_TO_CHILD.keys())
-        else:
+        elif isinstance(rule, str):
             rules = [rule]
+        else:
+            rules = rule
+
         self.split_by_section = split_by_section
 
-        super().__init__(rules, f'predicate_found_in_data')
+        super().__init__(rules, header)  # type: ignore
         self.min_trace_count = min_trace_count
         self.min_interval_count = min_interval_count
         self.min_total_interval_state_count = min_total_interval_state_count
@@ -891,6 +895,45 @@ class PredicateFoundInData(FitnessTerm):
 
 
         return result
+
+
+MAX_LOGICAL_ARGUMENTS = 3
+
+
+class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
+    max_logical_arguments: int
+
+    def __init__(self, max_logical_arguments: int = MAX_LOGICAL_ARGUMENTS, split_by_section: bool = False):
+        super().__init__(
+            rule=['super_predicate_and', 'super_predicate_or'],
+            use_full_databse=False,
+            split_by_section=split_by_section,
+            header='predicate_found_in_data_small_logicals'
+        )
+        self.max_logical_arguments = max_logical_arguments
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            children = ast[RULE_TO_CHILD_KEY[rule]]
+            if isinstance(children, tatsu.ast.AST):
+                return
+
+            children = typing.cast(typing.List[tatsu.ast.AST], children)
+
+            if len(children) > self.max_logical_arguments:
+                return
+
+            for child in children:
+                child_pred_rule = child.pred.parseinfo.rule  # type: ignore
+                if child_pred_rule in ('predicate', 'function_comparison'):
+                    continue
+
+                if child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule in ('predicate', 'function_comparison'):  # type: ignore
+                    continue
+
+                return
+
+            super().update(ast, rule, context)
 
 
 class NoAdjacentOnce(FitnessTerm):
@@ -2973,6 +3016,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     predicate_found_in_data = PredicateFoundInData(use_full_databse=False, split_by_section=False)
     fitness.register(predicate_found_in_data)
+
+    predicate_found_in_data_small_logicals = PredicateFoundInDataSmallLogicals(3)
+    fitness.register(predicate_found_in_data_small_logicals)
 
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)

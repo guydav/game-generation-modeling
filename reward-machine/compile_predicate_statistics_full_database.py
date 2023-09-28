@@ -706,7 +706,6 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         except PredicateNotImplementedException as e:
             raise PredicateNotImplementedException(f"Sub-predicate of the not ({e.args}) was not implemented")
 
-
         relevant_vars = list(used_variables)
         potential_missing_values_query = self._build_potential_missing_values_query(mapping, relevant_vars)
         potential_missing_values_table_name = self._next_temp_table_name()

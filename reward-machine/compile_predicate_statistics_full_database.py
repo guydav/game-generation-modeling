@@ -99,6 +99,7 @@ DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 CLUSTER_BASE_TRACE_PATH = '/misc/vlgscratch4/LakeGroup/guy/participant-traces'
+DUCKDB_TMP_FOLDER = '/tmp/duckdb'
 
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
@@ -228,9 +229,10 @@ class CommonSensePredicateStatisticsFullDatabase():
         self._create_databases()
 
     def __del__(self):
-        if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
-            if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
-            if shutil is not None: shutil.rmtree(self.temp_dir)
+        # if self.temp_dir is not None and os is not None and os.path.exists(self.temp_dir):
+        #     if logger is not None: logger.info(f"Deleting temp directory {self.temp_dir}")
+        #     if shutil is not None: shutil.rmtree(self.temp_dir)
+        pass
 
     def _create_databases(self):
         table_query = duckdb.sql("SHOW TABLES")
@@ -261,7 +263,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        self.temp_dir = f"/tmp/duckdb/{os.getpid()}"
+        self.temp_dir = f"{DUCKDB_TMP_FOLDER}/{os.getpid()}"
         os.makedirs(self.temp_dir, exist_ok=True)
         duckdb.sql(f"SET temp_directory='{self.temp_dir}';")
         duckdb.sql("SET enable_progress_bar=false;")
@@ -353,14 +355,13 @@ class CommonSensePredicateStatisticsFullDatabase():
                     select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
                     output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query})"
                     return duckdb.sql(output_query).fetchdf()
-
                 elif 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
                     output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query})"
                     return tuple(chain.from_iterable(duckdb.sql(output_query).fetchall()))
-
                 else:
                     output_query = f"SELECT COUNT(*) FROM ({result_query})"
-                    return duckdb.sql(output_query).fetchone()[0]  # type: ignore
+                    query_result = duckdb.sql(output_query)
+                    return query_result.fetchall()[0][0]  # type: ignore
 
         except PredicateNotImplementedException as e:
             # Pass the exception through and let the caller handle it

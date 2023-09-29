@@ -5,6 +5,7 @@ from functools import wraps
 import os
 import re
 import signal
+import shutil
 import sys
 import tempfile
 import traceback
@@ -48,6 +49,10 @@ from fitness_ngram_models import VARIABLE_PATTERN
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH,\
     LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH,\
     LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
+
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
+from compile_predicate_statistics_full_database import DUCKDB_TMP_FOLDER  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -2220,6 +2225,10 @@ BEHAVIORAL_FEATURE_SETS = {
 
 
 def main(args):
+    logger.info('Starting MAP-Elites sampler by cleaning up duckdb temp folder')
+    shutil.rmtree(DUCKDB_TMP_FOLDER)
+    os.makedirs(DUCKDB_TMP_FOLDER, exist_ok=True)
+
     if args.use_specific_objects_models:
         if args.fitness_function_date_id == DEFAULT_FITNESS_FUNCTION_DATE_ID:
             logger.info(f'Using specific objects fitness function date id LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID="{LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID}"')
@@ -2370,6 +2379,7 @@ def main(args):
 
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
+        shutil.rmtree(DUCKDB_TMP_FOLDER)
 
         if tracer is not None:
             tracer.stop()

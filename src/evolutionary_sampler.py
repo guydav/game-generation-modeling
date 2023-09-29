@@ -1883,7 +1883,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
         if self.custom_featurizer is not None:
-            features = self.custom_featurizer.get_game_features(game)
+            features = self.custom_featurizer.get_game_features(game, features)
 
         if self.key_type.name == MAPElitesKeyType.INT.name:
             key =  sum([(2 ** i) * int(features[feature_name])

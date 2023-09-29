@@ -16,7 +16,7 @@ from sklearn.decomposition import PCA
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
-from fitness_features import ASTFitnessFeaturizer, FitnessTerm, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
+from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
 import room_and_object_types
 
 logger = logging.getLogger(__name__)
@@ -195,6 +195,57 @@ class ObjectCategoryUsed(SetupObjectsUsed):
                 for cat_or_list in self.categories]
 
 
+class FullFeaturesFitnessTerm(FitnessTerm):
+    @abc.abstractmethod
+    def parse_full_features(self, features: typing.Dict[str, float]) -> None:
+        pass
+
+
+EXPECTED_VALUE_1_FEATURES =  (
+    'variables_defined_all', 'variables_defined_prop',
+    'variables_used_all', 'variables_used_prop',
+    'preferences_used_all', 'preferences_used_prop'
+)
+
+EXPECTED_VALUE_0_FEATURES = (
+    'repeated_variables_found', 'repeated_variable_type_in_either',
+    'redundant_expression_found', 'redundant_scoring_terminal_expression_found',
+    'identical_consecutive_seq_func_predicates_found',
+    'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_same_predicates_only', 'disjoint_seq_funcs_found',
+    'pref_forall_count_once_per_external_objects_used_incorrect', 'pref_forall_external_forall_used_incorrect', 'pref_forall_used_incorrect',
+    'pref_forall_pref_forall_correct_arity_incorrect', 'pref_forall_pref_forall_correct_types_incorrect',
+    'two_number_operation_found', 'section_without_pref_or_total_count_scoring',
+)
+
+EXPECTED_FEATURE_VALUES = {
+   feature: expected_value
+   for feature_list, expected_value in zip((EXPECTED_VALUE_1_FEATURES, EXPECTED_VALUE_0_FEATURES), (1, 0))
+   for feature in feature_list
+}
+
+
+class ExpectedFeatureValuesBehavioralFeature(FullFeaturesFitnessTerm):
+    feature_to_value_dict: typing.Dict[str, int]
+    game_result: bool
+    def __init__(self, feature_to_value_dict: typing.Dict[str, int] = EXPECTED_FEATURE_VALUES, header: str = 'expected_feature_values'):
+        super().__init__('', header)
+        self.feature_to_value_dict = feature_to_value_dict
+        self.game_result = False
+
+    def game_start(self) -> None:
+        self.game_result = False
+
+    def update(self, ast, rule: str, context: ContextDict) -> None:
+        pass
+
+    def parse_full_features(self, features: typing.Dict[str, float]) -> None:
+        self.game_result = all(value == int(features[feature]) for feature, value in self.feature_to_value_dict.items())
+
+    def game_end(self):
+        return self.game_result
+
+
+
 PREDICATE_AND_OBJECT_GROUP_OBJECTS = [
     [room_and_object_types.BALLS, room_and_object_types.RECEPTACLES],
     [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
@@ -272,8 +323,9 @@ PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
 PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
-EXPERIMENTAL_WITH_SETUP = 'experimental_setup'
-EXPERIMENTAL_WITH_SETUP_AND_TERMINAL = 'experimental_setup_terminal'
+LATEST_WITH_SETUP = 'latest_setup'
+LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
+LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
 
 
 FEATURE_SETS = [
@@ -290,8 +342,9 @@ FEATURE_SETS = [
     PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT,
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN,
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT,
-    EXPERIMENTAL_WITH_SETUP,
-    EXPERIMENTAL_WITH_SETUP_AND_TERMINAL,
+    LATEST_WITH_SETUP,
+    LATEST_WITH_SETUP_AND_TERMINAL,
+    LATEST_SETUP_EXPECTED_VALUES,
 ]
 
 
@@ -305,11 +358,25 @@ class BehavioralFeaturizer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
         pass
 
 
+
 class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeaturizer):
+    feature_value_counts_ignored_features: typing.List[str]
+    full_features_registry: typing.Dict[str, FullFeaturesFitnessTerm]
+
+    def __init__(self, args: argparse.Namespace,):
+        super().__init__(args)
+        self.full_features_registry = {}
+        self.feature_value_counts_ignored_features = []
+
+    def register_full_features_term(self, term: FullFeaturesFitnessTerm, ignore_in_feature_value_counts: bool = True):
+        self.full_features_registry[term.header] = term
+        if ignore_in_feature_value_counts:
+            self.feature_value_counts_ignored_features.append(term.header)
+
     def get_feature_names(self) -> typing.List[str]:
         #  [4:] to remove the first few automatically-added columns
         return self.get_all_column_keys()[4:]
@@ -318,6 +385,9 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
         feature_to_term_mapping = self.get_column_to_term_mapping()
         n_values_by_feature = {}
         for feature_name in self.get_feature_names():
+            if feature_name in self.feature_value_counts_ignored_features:
+                continue
+
             feature_term = feature_to_term_mapping[feature_name]
             if hasattr(feature_term, 'bins'):
                 n_values = (len(feature_term.bins) + 1)  # type: ignore
@@ -329,8 +399,29 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
 
         return n_values_by_feature
 
-    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
-        return self.parse(game, return_row=True)  # type: ignore
+    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
+        behavioral_features = typing.cast(typing.Dict[str, float], self.parse(game, return_row=True))
+
+        if len(self.full_features_registry) == 0:
+            return behavioral_features  # type: ignore
+
+        for header, term in self.full_features_registry.items():
+            term.game_start()
+            term.parse_full_features(features)
+            term_result = term.game_end()
+
+            if isinstance(term_result, bool):
+                term_result = int(term_result)
+
+            if isinstance(term_result, dict):
+                for key, val in term_result.items():
+                    header_key = f'{header}_{key}'
+                    behavioral_features[header_key] = val
+            else:
+                behavioral_features[header] = term_result  # type: ignore
+
+        return behavioral_features
+
 
 
 DEFAULT_N_COMPONENTS = 32
@@ -404,7 +495,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         game_vector = self._game_to_feature_vector(game)
         return self.pca.transform(game_vector.reshape(1, -1))[0]
 
-    def get_game_features(self, game) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
         game_projection = self._project_game_pre_binning(game)
         return {self._feature_name(i): np.digitize(game_projection[i], self.bins_by_feature_index[i]) for i in self.feature_indices}
 
@@ -570,15 +661,22 @@ def build_behavioral_features_featurizer(
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
 
-        elif feature_set == EXPERIMENTAL_WITH_SETUP:
+        elif feature_set == LATEST_WITH_SETUP:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == EXPERIMENTAL_WITH_SETUP_AND_TERMINAL:
+        elif feature_set == LATEST_WITH_SETUP_AND_TERMINAL:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_SMALLER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP, ast_parser.TERMINAL]), section_rule=True)
+
+        elif feature_set == LATEST_SETUP_EXPECTED_VALUES:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

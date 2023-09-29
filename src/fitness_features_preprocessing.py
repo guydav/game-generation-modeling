@@ -68,7 +68,7 @@ BINARIZE_NON_ONE = [
 
 NGRAM_SCORE_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_score$')
 NGRAM_PATTERN = re.compile(r'^(ast|text)_ngram(_\w+)?(_n_\d+)?_\d+$')
-ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types_[\w_]+')
+ARG_TYPES_PATTERN = re.compile(r'[\w\d+_]+_arg_types[\w_]*')
 
 SCALE_ZERO_ONE_PATTERNS = [
     NGRAM_SCORE_PATTERN,

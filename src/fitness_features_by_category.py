@@ -42,13 +42,18 @@ COUNTING_FEATURES = [
 
 # A Smaller set of counting features to exclude
 COUNTING_LESS_IMPORTANT_FEATURES = [
+    # How many preferences are defined
+    # re.compile(r'num_preferences_defined_[\d_]+'),
     # How many modals are under a then
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     # Various features related to variable quantifications
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
-    re.compile(r'mean_depth_[\w\d_]+'),
-    re.compile(r'max_width_[\w\d_]+'),
+    # Man and max depth and node count
+    re.compile(r'max_depth_[\w\d_]+'),
+    # re.compile(r'mean_depth_[\w\d_]+'),
+    re.compile(r'node_count_[\w\d_]+'),
+    # re.compile(r'max_width_[\w\d_]+'),
 ]
 
 COUNTING_FEATURES_PATTERN_DICT = {

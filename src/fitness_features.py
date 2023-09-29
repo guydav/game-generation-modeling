@@ -89,6 +89,10 @@ parser.add_argument('--single-process-n-rows-to-temp-file', type=int, default=No
 parser.add_argument('--start-index', type=int, default=None)
 parser.add_argument('--end-index', type=int, default=None)
 
+parser.add_argument('--include-arg-types-terms', action='store_true')
+parser.add_argument('--include-compositionality-terms', action='store_true')
+parser.add_argument('--include-predicate-under-modal-terms', action='store_true')
+
 
 class LevelFilter(logging.Filter):
     def __init__(self, level, name: str = ""):
@@ -2771,12 +2775,12 @@ SECTION_COUNT_THRESHOLDS = {
         ast_parser.TERMINAL: [0.0, 0.6, 9.0, 12.0],  # [0.0, 0.0, 7.0, 12.0]
         ast_parser.SCORING: [3.0, 7.5, 10.0, 17.0],  # [3.0, 3.0, 10.0, 17.0]
     },
-    SectionMeanDepth: {
-        ast_parser.SETUP: [0.0, 6.3, 7.5, 14.7],
-        ast_parser.PREFERENCES: [5.1, 9.2, 10.3, 14.0],
-        ast_parser.TERMINAL: [0.0, 1.6, 3.3, 6.0],
-        ast_parser.SCORING: [1.5, 4.9, 5.6, 8.4],  # [1.5, 1.5, 5.2, 8.4]
-    },
+    # SectionMeanDepth: {
+    #     ast_parser.SETUP: [0.0, 6.3, 7.5, 14.7],
+    #     ast_parser.PREFERENCES: [5.1, 9.2, 10.3, 14.0],
+    #     ast_parser.TERMINAL: [0.0, 1.6, 3.3, 6.0],
+    #     ast_parser.SCORING: [1.5, 4.9, 5.6, 8.4],  # [1.5, 1.5, 5.2, 8.4]
+    # },
     SectionNodeCount: {
         ast_parser.SETUP: [0.0, 19.0, 36.5, 131.0],
         ast_parser.PREFERENCES: [14.0, 64.0, 110.0, 565.0],
@@ -2992,7 +2996,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     if not args.no_binarize:
         preprocessors.append(BinarizeFitnessFeatures())
 
-    if not args.no_merge:
+    if not args.no_merge and args.include_arg_types_terms:  # the merge is only used for the arg_types featuers
         preprocessors.append(MergeFitnessFeatures(COMMON_SENSE_PREDICATES_FUNCTIONS))
 
     fitness = ASTFitnessFeaturizer(args, preprocessors=preprocessors)
@@ -3121,14 +3125,17 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
     fitness.register(no_count_in_scoring, section_rule=True)
 
-    predicate_under_modal = PredicateUnderModal(MODALS, COMMON_SENSE_PREDICATES_FUNCTIONS)
-    fitness.register(predicate_under_modal)
+    if args.include_predicate_under_modal_terms:
+        predicate_under_modal = PredicateUnderModal(MODALS, COMMON_SENSE_PREDICATES_FUNCTIONS)
+        fitness.register(predicate_under_modal)
 
-    argument_types_fitness_terms = build_argument_types_fitness_terms()
-    fitness.register_multiple(argument_types_fitness_terms)
+    if args.include_arg_types_terms:
+        argument_types_fitness_terms = build_argument_types_fitness_terms()
+        fitness.register_multiple(argument_types_fitness_terms)
 
-    compositionality_fitness_term = CompositionalityStructureCounter()
-    fitness.register(compositionality_fitness_term)
+    if args.include_compositionality_terms:
+        compositionality_fitness_term = CompositionalityStructureCounter()
+        fitness.register(compositionality_fitness_term)
 
     section_count_fitness_terms = build_section_count_fitness_terms()
     fitness.register_multiple(section_count_fitness_terms, section_rule=True)

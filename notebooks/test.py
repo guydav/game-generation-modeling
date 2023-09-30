@@ -32,7 +32,14 @@ if __name__ == '__main__':
     if MEMORY_TRACE:
         tracemalloc.start()
 
-    args = Namespace(no_binarize=False, no_merge=False, use_specific_objects_ngram_model=False)
+    args = Namespace(
+        no_binarize=False,
+        no_merge=False,
+        use_specific_objects_ngram_model=False,
+        include_arg_types_terms=False,
+        include_predicate_under_modal_terms=False,
+        include_compositionality_terms=False,
+    )
     featurizer = build_fitness_featurizer(args)
     np.seterr(all='raise')
 

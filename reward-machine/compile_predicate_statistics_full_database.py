@@ -298,8 +298,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql('CREATE INDEX idx_obj_id_type ON object_type_to_id (type)')
         duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
 
-        duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_2_id arg_id, arg_2_type arg_type, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_2_id, arg_2_type, trace_id, domain, intervals FROM data_df")
+        duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_1_is_game_object BOOLEAN, arg_2_id arg_id, arg_2_type arg_type, arg_2_is_game_object BOOLEAN, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
+        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_1_is_game_object, arg_2_id, arg_2_type, arg_2_is_game_object, trace_id, domain, intervals FROM data_df")
 
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
@@ -412,11 +412,17 @@ class CommonSensePredicateStatisticsFullDatabase():
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
-                exclude_types = self.game_object_excluded_arg_types.copy()
-                for type in arg_types:
-                    exclude_types.discard(type)
+                game_object_where_clause = f"arg_{i + 1}_is_game_object=true"
+                non_game_object_types = []
 
-                where_items.append(f"arg_{i + 1}_type NOT IN {self._types_to_arg_casts(exclude_types)}")
+                for arg_type in arg_types:
+                    if arg_type != GAME_OBJECT and arg_type in self.game_object_excluded_arg_types:
+                        non_game_object_types.append
+
+                if non_game_object_types:
+                    game_object_where_clause = f"(({game_object_where_clause}) OR (arg_{i + 1}_type IN {self._types_to_arg_casts(non_game_object_types)}))"
+
+                where_items.append(game_object_where_clause)
 
             else:
                 if len(arg_types) == 1:

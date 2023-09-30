@@ -220,6 +220,15 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         self._create_databases()
 
+        self.logger = logging.getLogger(f'duckdb_queries_{os.getpid()}')
+        self.logger.propagate = False
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.handlers.clear()
+
+        self.file_handler = logging.FileHandler(f'{DUCKDB_TMP_FOLDER}/{os.getpid()}_queries.log')
+        self.file_handler.setLevel(logging.DEBUG)
+        self.logger.addHandler(self.file_handler)
+
     # def __getstate__(self) -> typing.Dict[str, typing.Any]:
     #     state = self.__dict__.copy()
     #     return state
@@ -241,10 +250,6 @@ class CommonSensePredicateStatisticsFullDatabase():
             if 'data' in all_tables:
                 # logger.info('Skipping creating tables because they already exist')
                 return
-
-        # duckdb.sql('INSTALL postgres_scanner; LOAD postgres_scanner;')
-        # duckdb.sql("CALL POSTGRES_ATTACH('postgresql://gd1279:Mati7878@localhost:33333/fitness')")
-        # return
 
         logger.info("Loading data from files")
         open_method = gzip.open if self.stats_filename.endswith('.gz') else open
@@ -269,6 +274,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql("SET enable_progress_bar=false;")
         duckdb.sql("SET enable_progress_bar_print=false;")
         duckdb.sql("SET memory_limit='32GB';")
+
+        # duckdb.sql(f"SET log_query_path='{DUCKDB_TMP_FOLDER}/{os.getpid()}_queries.log';")
 
         duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
         duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
@@ -336,6 +343,8 @@ class CommonSensePredicateStatisticsFullDatabase():
                 self.temp_table_index = -1
 
             result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
+            self.logger.info(result_query)
+            self.file_handler.flush()
 
             if DEBUG: print(result_query)
 

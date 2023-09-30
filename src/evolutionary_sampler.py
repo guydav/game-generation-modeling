@@ -2226,7 +2226,8 @@ BEHAVIORAL_FEATURE_SETS = {
 
 def main(args):
     logger.info('Starting MAP-Elites sampler by cleaning up duckdb temp folder')
-    shutil.rmtree(DUCKDB_TMP_FOLDER)
+    if os.path.exists(DUCKDB_TMP_FOLDER):
+        shutil.rmtree(DUCKDB_TMP_FOLDER)
     os.makedirs(DUCKDB_TMP_FOLDER, exist_ok=True)
 
     if args.use_specific_objects_models:

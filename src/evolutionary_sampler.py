@@ -3,6 +3,7 @@ from collections import OrderedDict, Counter
 from datetime import datetime
 from functools import wraps
 import os
+import platform
 import re
 import signal
 import shutil
@@ -52,7 +53,7 @@ from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEAT
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
-from compile_predicate_statistics_full_database import DUCKDB_TMP_FOLDER  # type: ignore
+from compile_predicate_statistics_full_database import DUCKDB_TMP_FOLDER, DUCKDB_QUERY_LOG_FOLDER  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -2226,9 +2227,17 @@ BEHAVIORAL_FEATURE_SETS = {
 
 def main(args):
     logger.info('Starting MAP-Elites sampler by cleaning up duckdb temp folder')
-    if os.path.exists(DUCKDB_TMP_FOLDER):
-        shutil.rmtree(DUCKDB_TMP_FOLDER)
-    os.makedirs(DUCKDB_TMP_FOLDER, exist_ok=True)
+    hostname = platform.node().split('.', 1)[0]
+    host_duckdb_tmp_folder = os.path.join(DUCKDB_TMP_FOLDER, hostname)
+
+    if os.path.exists(host_duckdb_tmp_folder):
+        shutil.rmtree(host_duckdb_tmp_folder)
+
+    if os.path.exists(DUCKDB_QUERY_LOG_FOLDER):
+        shutil.rmtree(DUCKDB_QUERY_LOG_FOLDER)
+
+    os.makedirs(host_duckdb_tmp_folder, exist_ok=True)
+    os.makedirs(DUCKDB_QUERY_LOG_FOLDER, exist_ok=True)
 
     if args.use_specific_objects_models:
         if args.fitness_function_date_id == DEFAULT_FITNESS_FUNCTION_DATE_ID:
@@ -2380,7 +2389,11 @@ def main(args):
 
     finally:
         evosampler.save(suffix='final' if not exception_caught else 'error')
-        shutil.rmtree(DUCKDB_TMP_FOLDER)
+        if os.path.exists(host_duckdb_tmp_folder):
+            shutil.rmtree(host_duckdb_tmp_folder)
+
+        if os.path.exists(DUCKDB_QUERY_LOG_FOLDER):
+            shutil.rmtree(DUCKDB_QUERY_LOG_FOLDER)
 
         if tracer is not None:
             tracer.stop()

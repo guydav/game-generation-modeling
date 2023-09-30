@@ -15,6 +15,7 @@ import operator
 import pandas as pd
 import pathlib
 import pickle
+import platform
 import polars as pl
 pl.enable_string_cache(True)
 import pstats
@@ -99,7 +100,8 @@ DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 CLUSTER_BASE_TRACE_PATH = '/misc/vlgscratch4/LakeGroup/guy/participant-traces'
-DUCKDB_TMP_FOLDER = '/tmp/duckdb'
+DUCKDB_TMP_FOLDER = '/scratch/gd1279/duckdb'
+DUCKDB_QUERY_LOG_FOLDER = '/tmp/duckdb_query_logs'
 
 
 DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
@@ -192,6 +194,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.temp_dir = None
         self.max_child_args = max_child_args
         self.query_timeout = query_timeout
+        self.hostname = platform.node().split('.', 1)[0]
 
         signal.signal(signal.SIGALRM, raise_query_timeout)
 
@@ -213,19 +216,20 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.game_object_excluded_arg_types = set(GAME_OBJECT_EXCLUDED_TYPES)
         self.game_object_excluded_arg_types.difference_update(META_TYPES.keys())
 
-
         self.trace_names_hash = force_trace_names_hash
         self.stats_filename = os.path.join(cache_dir, cache_filename_format.format(traces_hash=self.trace_names_hash))
         self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=self.trace_names_hash))
 
         self._create_databases()
+        self._create_query_logger()
 
+    def _create_query_logger(self):
         self.logger = logging.getLogger(f'duckdb_queries_{os.getpid()}')
         self.logger.propagate = False
         self.logger.setLevel(logging.DEBUG)
         self.logger.handlers.clear()
 
-        self.file_handler = logging.FileHandler(f'{DUCKDB_TMP_FOLDER}/{os.getpid()}_queries.log')
+        self.file_handler = logging.FileHandler(f'{DUCKDB_QUERY_LOG_FOLDER}/{os.getpid()}.log')
         self.file_handler.setLevel(logging.DEBUG)
         self.logger.addHandler(self.file_handler)
 
@@ -268,7 +272,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
 
         logger.info("Creating DuckDB table...")
-        self.temp_dir = f"{DUCKDB_TMP_FOLDER}/{os.getpid()}"
+        self.temp_dir = os.path.join(DUCKDB_TMP_FOLDER, self.hostname, str(os.getpid()))
         os.makedirs(self.temp_dir, exist_ok=True)
         duckdb.sql(f"SET temp_directory='{self.temp_dir}';")
         duckdb.sql("SET enable_progress_bar=false;")

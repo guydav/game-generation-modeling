@@ -28,7 +28,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING
+from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING, BLOCK
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -100,11 +100,15 @@ DEFAULT_TRACE_LENGTHS_FILE_NAME_FORMAT = 'trace_lengths_{traces_hash}.pkl'
 DEFAULT_IN_PROCESS_TRACES_FILE_NAME_FORMAT = 'in_progress_traces_{traces_hash}.pkl'
 DEFAULT_BASE_TRACE_PATH = os.path.join(os.path.dirname(__file__), "traces/participant-traces/")
 CLUSTER_BASE_TRACE_PATH = '/misc/vlgscratch4/LakeGroup/guy/participant-traces'
-DUCKDB_TMP_FOLDER = '/scratch/gd1279/duckdb'
+
+if os.path.exists('/scratch/gd1279'):
+    DUCKDB_TMP_FOLDER = '/scratch/gd1279/duckdb'
+else:
+    DUCKDB_TMP_FOLDER = '/tmp/duckdb'
 DUCKDB_QUERY_LOG_FOLDER = '/tmp/duckdb_query_logs'
 
 
-DEFAULT_COLUMNS = ['predicate', 'arg_1_id', 'arg_1_type', 'arg_2_id', 'arg_2_type', 'trace_id', 'domain', 'intervals']
+
 FULL_PARTICIPANT_TRACE_SET = [os.path.splitext(os.path.basename(t))[0] for t in glob.glob(os.path.join(DEFAULT_BASE_TRACE_PATH, '*.json'))]
 
 
@@ -229,6 +233,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.logger.setLevel(logging.DEBUG)
         self.logger.handlers.clear()
 
+        if not os.path.exists(DUCKDB_QUERY_LOG_FOLDER):
+            os.makedirs(DUCKDB_QUERY_LOG_FOLDER)
+
         self.file_handler = logging.FileHandler(f'{DUCKDB_QUERY_LOG_FOLDER}/{os.getpid()}.log')
         self.file_handler.setLevel(logging.DEBUG)
         self.logger.addHandler(self.file_handler)
@@ -309,8 +316,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql('CREATE INDEX idx_obj_id_type ON object_type_to_id (type)')
         duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
 
-        duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_1_is_game_object BOOLEAN, arg_2_id arg_id, arg_2_type arg_type, arg_2_is_game_object BOOLEAN, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_1_is_game_object, arg_2_id, arg_2_type, arg_2_is_game_object, trace_id, domain, intervals FROM data_df")
+        duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_1_is_game_object BOOLEAN, arg_1_is_block BOOLEAN, arg_2_id arg_id, arg_2_type arg_type, arg_2_is_game_object BOOLEAN, arg_2_is_block BOOLEAN, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
+        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_1_is_game_object, arg_1_is_block, arg_2_id, arg_2_type, arg_2_is_game_object, arg_2_is_block, trace_id, domain, intervals FROM data_df")
 
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
@@ -410,7 +417,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         relevant_arg_mapping = {}
         for var in variables:
             if var in mapping:
-                relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) for arg_type in mapping[var]], [])
+                # added an exception fo the generic block type because we handle it with a separate check later
+                relevant_arg_mapping[var] = sum([META_TYPES.get(arg_type, [arg_type]) if arg_type != BLOCK else [BLOCK] for arg_type in mapping[var]], [])
 
             # This handles variables which are referenced directly, like the desk and bed
             elif not var.startswith("?"):
@@ -425,7 +433,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
             # if it can be the generic object type, we filter for it specifically
             if GAME_OBJECT in arg_types:
-                game_object_where_clause = f"arg_{i + 1}_is_game_object=true"
+                game_object_where_clause = f"arg_{i + 1}_is_game_object IS TRUE"
                 non_game_object_types = []
 
                 for arg_type in arg_types:
@@ -436,6 +444,19 @@ class CommonSensePredicateStatisticsFullDatabase():
                     game_object_where_clause = f"(({game_object_where_clause}) OR (arg_{i + 1}_type IN {self._types_to_arg_casts(non_game_object_types)}))"
 
                 where_items.append(game_object_where_clause)
+
+            elif BLOCK in arg_types:
+                block_where_clause = f"arg_{i + 1}_is_block IS TRUE"
+                non_block_types = []
+
+                for arg_type in arg_types:
+                    if arg_type != BLOCK and arg_type not in META_TYPES[BLOCK]:
+                        non_block_types.append(arg_type)
+
+                if non_block_types:
+                    block_where_clause = f"(({block_where_clause}) OR (arg_{i + 1}_type IN {self._types_to_arg_casts(non_block_types)}))"
+
+                where_items.append(block_where_clause)
 
             else:
                 if len(arg_types) == 1:

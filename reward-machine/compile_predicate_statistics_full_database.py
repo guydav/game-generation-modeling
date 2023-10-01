@@ -442,20 +442,18 @@ class CommonSensePredicateStatisticsFullDatabase():
                 if GAME_OBJECT in arg_types:
                     check_game_object = True
                     custom_where_clause_components.append(f"arg_{i + 1}_is_game_object IS TRUE")
-                    arg_types.remove(GAME_OBJECT)
 
                 if BLOCK in arg_types:
                     check_block = True
                     custom_where_clause_components.append(f"arg_{i + 1}_is_block IS TRUE")
-                    arg_types.remove(BLOCK)
 
                 remaining_arg_types = []
                 for arg_type in arg_types:
                     include_arg_type = True
-                    if check_game_object and arg_type not in self.game_object_excluded_arg_types:
+                    if check_game_object and (arg_type == GAME_OBJECT or arg_type not in self.game_object_excluded_arg_types):
                         include_arg_type = False
 
-                    if check_block and arg_type in META_TYPES[BLOCK]:
+                    if check_block and (arg_type == BLOCK or arg_type in META_TYPES[BLOCK]):
                         include_arg_type = False
 
                     if include_arg_type:

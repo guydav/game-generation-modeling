@@ -431,32 +431,43 @@ class CommonSensePredicateStatisticsFullDatabase():
         where_items = [f"predicate='{predicate_name}'"]
 
         for i, (arg_var, arg_types) in enumerate(relevant_arg_mapping.items()):
-            # if it can be the generic object type, we filter for it specifically
-            if GAME_OBJECT in arg_types:
-                game_object_where_clause = f"arg_{i + 1}_is_game_object IS TRUE"
-                non_game_object_types = []
+            # if it can be the generic object type or a block, we filter for them specifically
+            if GAME_OBJECT in arg_types or BLOCK in arg_types:
+                custom_where_clause_components = []
+                check_game_object = False
+                check_block = False
 
+                if GAME_OBJECT in arg_types:
+                    check_game_object = True
+                    custom_where_clause_components.append(f"arg_{i + 1}_is_game_object IS TRUE")
+                    arg_types.remove(GAME_OBJECT)
+
+                if BLOCK in arg_types:
+                    check_block = True
+                    custom_where_clause_components.append(f"arg_{i + 1}_is_block IS TRUE")
+                    arg_types.remove(BLOCK)
+
+                remaining_arg_types = []
                 for arg_type in arg_types:
-                    if arg_type != GAME_OBJECT and arg_type in self.game_object_excluded_arg_types:
-                        non_game_object_types.append
+                    include_arg_type = True
+                    if check_game_object and arg_type not in self.game_object_excluded_arg_types:
+                        include_arg_type = False
 
-                if non_game_object_types:
-                    game_object_where_clause = f"(({game_object_where_clause}) OR (arg_{i + 1}_type IN {self._types_to_arg_casts(non_game_object_types)}))"
+                    if check_block and arg_type in META_TYPES[BLOCK]:
+                        include_arg_type = False
 
-                where_items.append(game_object_where_clause)
+                    if include_arg_type:
+                        remaining_arg_types.append(arg_type)
 
-            elif BLOCK in arg_types:
-                block_where_clause = f"arg_{i + 1}_is_block IS TRUE"
-                non_block_types = []
+                if remaining_arg_types:
+                    custom_where_clause_components.append(f"arg_{i + 1}_type IN {self._types_to_arg_casts(remaining_arg_types)}")
 
-                for arg_type in arg_types:
-                    if arg_type != BLOCK and arg_type not in META_TYPES[BLOCK]:
-                        non_block_types.append(arg_type)
+                if len(custom_where_clause_components) == 1:
+                    where_items.append(custom_where_clause_components[0])
 
-                if non_block_types:
-                    block_where_clause = f"(({block_where_clause}) OR (arg_{i + 1}_type IN {self._types_to_arg_casts(non_block_types)}))"
-
-                where_items.append(block_where_clause)
+                else:
+                    custom_where_clause_components = [f"({c})" for c in custom_where_clause_components]
+                    where_items.append(f"({' OR '.join(custom_where_clause_components)})")
 
             else:
                 if len(arg_types) == 1:

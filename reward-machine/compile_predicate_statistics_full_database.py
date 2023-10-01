@@ -643,8 +643,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         if len(sub_queries) == 1:
             return sub_queries[0], used_variables_by_child[0]
 
-        sub_queries.insert(0, self._build_potential_missing_values_query(mapping, list(all_used_variables)))
-        used_variables_by_child.insert(0, all_used_variables)
+        # Trying to remove this since I only handle one OR/AND at a time
+        # sub_queries.insert(0, self._build_potential_missing_values_query(mapping, list(all_used_variables)))
+        # used_variables_by_child.insert(0, all_used_variables)
 
         subquery_table_names = [self._next_temp_table_name() for _ in range(len(sub_queries))]
 
@@ -671,8 +672,9 @@ class CommonSensePredicateStatisticsFullDatabase():
 
                 join_clauses.append(" AND ".join(join_parts))
 
-        intervals_coalesce = [f"COALESCE({intervals_select}, {intervals[0]})" if i > 0 else intervals_select for i, intervals_select in enumerate(intervals)]
-        select_items.append(f'({" | ".join(intervals_coalesce)}) AS intervals')
+        # intervals_coalesce = [f"COALESCE({intervals_select}, {intervals[0]})" if i > 0 else intervals_select for i, intervals_select in enumerate(intervals)]
+        # select_items.append(f'({" | ".join(intervals_coalesce)}) AS intervals')
+        select_items.append(f'({" | ".join(intervals)}) AS intervals')
 
         inner_query = f"WITH {', '.join(with_items)} SELECT {', '.join(select_items)} FROM {subquery_table_names[0]} {' '.join(join_clauses)}"
 

@@ -842,7 +842,7 @@ class PredicateFoundInData(FitnessTerm):
                 mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
                 # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                 # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
-                n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=True)
+                n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=False)
 
                 if n_traces is None:  # query timed out
                     return

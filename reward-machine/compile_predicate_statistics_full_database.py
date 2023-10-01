@@ -655,6 +655,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         selected_variables = set()
         intervals = []
         join_clauses = []
+        first_table_name_by_variable = {}
 
         for i, (sub_table_name, sub_used_variables) in enumerate(zip(subquery_table_names, used_variables_by_child)):
             intervals.append(f"{sub_table_name}.intervals")
@@ -667,8 +668,16 @@ class CommonSensePredicateStatisticsFullDatabase():
             if i > 0:
                 join_parts = [f"LEFT JOIN {sub_table_name} ON ({subquery_table_names[0]}.trace_id={sub_table_name}.trace_id)"]
 
-                shared_variables = sub_used_variables & all_used_variables
-                join_parts.extend([f'({subquery_table_names[0]}."{v}"={sub_table_name}."{v}")' for v in shared_variables])
+                for var in sub_used_variables:
+                    if var in first_table_name_by_variable:
+                        join_parts.append(f'({first_table_name_by_variable[var]}."{var}"={sub_table_name}."{var}")')
+
+                    else:
+                        first_table_name_by_variable[var] = sub_table_name
+
+                # I think the below is an empty statement since all_used_variables is a conjunction of all sub_used_variables
+                # shared_variables = sub_used_variables & all_used_variables
+                # join_parts.extend([f'({subquery_table_names[0]}."{v}"={sub_table_name}."{v}")' for v in shared_variables])
 
                 join_clauses.append(" AND ".join(join_parts))
 

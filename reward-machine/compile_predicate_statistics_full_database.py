@@ -381,7 +381,7 @@ class CommonSensePredicateStatisticsFullDatabase():
                     output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query})"
                     return tuple(chain.from_iterable(duckdb.sql(output_query).fetchall()))
                 else:
-                    output_query = f"SELECT COUNT(*) FROM ({result_query})"
+                    output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1)"
                     query_result = duckdb.sql(output_query)
                     return query_result.fetchall()[0][0]  # type: ignore
 

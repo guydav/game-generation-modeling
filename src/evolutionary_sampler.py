@@ -2,6 +2,7 @@ import argparse
 from collections import OrderedDict, Counter
 from datetime import datetime
 from functools import wraps
+import glob
 import os
 import platform
 import re
@@ -43,7 +44,7 @@ from ast_utils import *
 from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS, BehavioralFeaturizer, DEFAULT_N_COMPONENTS
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
-from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
+from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, get_data_path, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
 from fitness_features import *
 from fitness_ngram_models import *
 from fitness_ngram_models import VARIABLE_PATTERN
@@ -219,6 +220,9 @@ parser.add_argument('--profile', action='store_true')
 parser.add_argument('--profile-output-file', type=str, default='tracer.json')
 parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
+parser.add_argument('--resume', action='store_true')
+parser.add_argument('--start-step', type=int, default=0)
+
 
 class CrossoverType(Enum):
     SAME_RULE = 0
@@ -349,6 +353,7 @@ class PopulationBasedSampler():
     population_size: int
     random_seed: int
     regrowth_sampler: RegrowthSampler
+    resume: bool
     relative_path: str
     rng: np.random.Generator
     sample_filter_func: typing.Optional[typing.Callable[[ASTType, typing.Dict[str, typing.Any], float], bool]]
@@ -399,6 +404,7 @@ class PopulationBasedSampler():
                  max_sample_depth: int = DEFAULT_MAX_SAMPLE_DEPTH,
                  max_sample_nodes: int = DEFAULT_MAX_SAMPLE_NODES,
                  max_sample_total_size: int = DEFAULT_MAX_SAMPLE_TOTAL_SIZE,
+                 resume: bool = False,
                  ):
 
         self.args = args
@@ -462,7 +468,7 @@ class PopulationBasedSampler():
         # Used to fix the AST context after crossover / mutation
         self.context_fixer = ASTContextFixer(self.samplers[self.first_sampler_key], rng=np.random.default_rng(self.random_seed), strict=False)
 
-        self.initial_samplers = {
+        self.initial_samplers = {  # type: ignore
             key: create_initial_proposal_sampler(initial_proposal_type, self.samplers[key], self.context_fixer,
                                                  ngram_model_path, section_sampler_kwargs)
             for key in self.sampler_keys
@@ -484,6 +490,7 @@ class PopulationBasedSampler():
         self.saving = False
         self.population_initialized = False
         self.signal_received = False
+        self.resume = resume
 
     def initialize_population(self):
         """
@@ -1413,17 +1420,19 @@ class PopulationBasedSampler():
             "DivMin": f"{self.diversity_metrics_history[-1]['min']:.2f}",
         }
 
-    def multiple_evolutionary_steps(self, num_steps: int, pool: typing.Optional[mpp.Pool] = None,
+    def multiple_evolutionary_steps(self, total_steps: int, pool: typing.Optional[mpp.Pool] = None,
                                     chunksize: int = 1, should_tqdm: bool = False, inner_tqdm: bool = False,
-                                    use_imap: bool = True,
+                                    use_imap: bool = True, start_step: int = 0,
                                     compute_diversity_metrics: bool = False, save_interval: int = 0):
 
         if hasattr(self, 'population_initialized') and not self.population_initialized:
             raise ValueError('Cannot run multiple evolutionary steps without initializing the population first')
 
-        step_iter = range(num_steps)
+        step_iter = range(start_step, total_steps)
         if should_tqdm:
-            pbar = tqdm(total=num_steps, desc="Evolutionary steps") # type: ignore
+            pbar = tqdm(total=total_steps, desc="Evolutionary steps") # type: ignore
+            if start_step > 0:
+                pbar.update(start_step)
 
         for _ in step_iter:  # type: ignore
             self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm, use_imap=use_imap)
@@ -1465,7 +1474,7 @@ class PopulationBasedSampler():
             self.regrowth_sampler.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index))
             self.context_fixer.rng = np.random.default_rng(self.random_seed + (self.population_size * self.generation_index))
 
-            if (save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != num_steps) or self.signal_received:
+            if (save_interval > 0 and ((self.generation_index % save_interval) == 0) and self.generation_index != total_steps) or self.signal_received:
                 self.save(suffix=f'gen_{self.generation_index}', log_message=False)
 
             if self.signal_received:
@@ -1474,7 +1483,7 @@ class PopulationBasedSampler():
 
     def multiple_evolutionary_steps_parallel(self, num_steps: int, should_tqdm: bool = False,
                                              inner_tqdm: bool = False, use_imap: bool = True,
-                                             compute_diversity_metrics: bool = False, save_interval: int = 0,
+                                             compute_diversity_metrics: bool = False, save_interval: int = 0, start_step: int = 0,
                                              n_workers: int = 8, chunksize: int = 1, maxtasksperchild: typing.Optional[int] = None):
 
         if hasattr(self, 'population_initialized') and not self.population_initialized:
@@ -1486,6 +1495,7 @@ class PopulationBasedSampler():
                                              should_tqdm=should_tqdm, inner_tqdm=inner_tqdm,
                                              use_imap=use_imap,
                                              compute_diversity_metrics=compute_diversity_metrics,
+                                             start_step=start_step,
                                              save_interval=save_interval)
 
     def signal_handler(self, *args, **kwargs):
@@ -2294,43 +2304,68 @@ def main(args):
         args.output_name += f'_seed_{args.random_seed}'
 
         logger.info(f'Final output name: {args.output_name}')
+        evosampler = None
 
-        evosampler = MAPElitesSampler(
-            key_type=MAPElitesKeyType(args.map_elites_key_type),
-            generation_size=args.map_elites_generation_size,
-            weight_strategy=args.map_elites_weight_strategy,
-            initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
-            good_threshold=args.map_elites_good_threshold,
-            great_threshold=args.map_elites_great_threshold,
-            previous_sampler_population_seed_path=args.map_elites_population_seed_path,
-            initial_candidate_pool_size=args.map_elites_initial_candidate_pool_size,
-            use_crossover=args.map_elites_use_crossover,
-            use_cognitive_operators=args.map_elites_use_cognitive_operators,
-            args=args,
-            population_size=args.population_size,
-            verbose=args.verbose,
-            initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
-            fitness_featurizer_path=args.fitness_featurizer_path,
-            fitness_function_date_id=args.fitness_function_date_id,
-            fitness_function_model_name=args.fitness_function_model_name,
-            flip_fitness_sign=not args.no_flip_fitness_sign,
-            ngram_model_path=args.ngram_model_path,
-            sampler_kwargs=sampler_kwargs,
-            relative_path=args.relative_path,
-            output_folder=args.output_folder,
-            output_name=args.output_name,
-            sample_parallel=args.sample_parallel,
-            n_workers=args.parallel_n_workers,
-            sample_filter_func=args.sample_filter_func,
-            sampler_prior_count=args.sampler_prior_count,
-            weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
-            sample_patience=args.sample_patience,
-            max_sample_depth=args.max_sample_depth,
-            max_sample_nodes=args.max_sample_nodes,
-            max_sample_total_size=args.max_sample_total_size,
-        )
+        if args.resume:
+            logger.info('Trying to resume from previous run')
+            output_name = args.output_name + '_gen_*'
+            output_glob_path = get_data_path(args.output_folder, output_name, args.relative_path)
+            relevant_files = glob.glob(output_glob_path)
+            load_path = None
+            latest_generation = None
 
-        evosampler.initialize_population()
+            if len(relevant_files) == 0:
+                logger.info('No relevant files found, starting from scratch')
+                args.resume = False
+            else:
+                gen_index = relevant_files[0].find('gen_')
+                number_start_index = gen_index + 4
+                generation_to_path = {int(path[number_start_index:path.find('_', number_start_index)]): path for path in relevant_files}
+                latest_generation = max(generation_to_path.keys())
+                load_path = generation_to_path[latest_generation]
+
+            if load_path is not None:
+                logger.info(f'Loading sampler with latest generation {latest_generation} from {load_path}')
+                evosampler = typing.cast(MAPElitesSampler, load_data_from_path(load_path))
+                args.start_step = int(latest_generation)  # type: ignore
+
+        if evosampler is None:
+            evosampler = MAPElitesSampler(
+                key_type=MAPElitesKeyType(args.map_elites_key_type),
+                generation_size=args.map_elites_generation_size,
+                weight_strategy=args.map_elites_weight_strategy,
+                initialization_strategy=MAPElitesInitializationStrategy(args.map_elites_initialization_strategy),
+                good_threshold=args.map_elites_good_threshold,
+                great_threshold=args.map_elites_great_threshold,
+                previous_sampler_population_seed_path=args.map_elites_population_seed_path,
+                initial_candidate_pool_size=args.map_elites_initial_candidate_pool_size,
+                use_crossover=args.map_elites_use_crossover,
+                use_cognitive_operators=args.map_elites_use_cognitive_operators,
+                args=args,
+                population_size=args.population_size,
+                verbose=args.verbose,
+                initial_proposal_type=InitialProposalSamplerType(args.initial_proposal_type),
+                fitness_featurizer_path=args.fitness_featurizer_path,
+                fitness_function_date_id=args.fitness_function_date_id,
+                fitness_function_model_name=args.fitness_function_model_name,
+                flip_fitness_sign=not args.no_flip_fitness_sign,
+                ngram_model_path=args.ngram_model_path,
+                sampler_kwargs=sampler_kwargs,
+                relative_path=args.relative_path,
+                output_folder=args.output_folder,
+                output_name=args.output_name,
+                sample_parallel=args.sample_parallel,
+                n_workers=args.parallel_n_workers,
+                sample_filter_func=args.sample_filter_func,
+                sampler_prior_count=args.sampler_prior_count,
+                weight_insert_delete_nodes_by_length=not args.no_weight_insert_delete_nodes_by_length,
+                sample_patience=args.sample_patience,
+                max_sample_depth=args.max_sample_depth,
+                max_sample_nodes=args.max_sample_nodes,
+                max_sample_total_size=args.max_sample_total_size,
+            )
+
+            evosampler.initialize_population()
 
     else:
         raise ValueError(f'Unknown sampler type {args.sampler_type}')
@@ -2362,12 +2397,12 @@ def main(args):
                 n_workers=args.parallel_n_workers, chunksize=args.parallel_chunksize,
                 maxtasksperchild=args.parallel_maxtasksperchild,
                 compute_diversity_metrics=args.compute_diversity_metrics,
-                save_interval=args.save_interval,
+                save_interval=args.save_interval, start_step=args.start_step
                 )
 
         else:
             evosampler.multiple_evolutionary_steps(
-                num_steps=args.n_steps, should_tqdm=args.should_tqdm,
+                total_steps=args.n_steps, should_tqdm=args.should_tqdm,
                 inner_tqdm=args.within_step_tqdm,
                 compute_diversity_metrics=args.compute_diversity_metrics,
                 save_interval=args.save_interval,

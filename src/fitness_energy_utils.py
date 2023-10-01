@@ -97,8 +97,12 @@ def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.Lis
     save_data(save_dict, folder=folder, name=name, relative_path=relative_path)
 
 
+def get_data_path(folder: str, name: str, relative_path: str = '..'):
+    return f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
+
+
 def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):
-    output_path = f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
+    output_path = get_data_path(folder, name, relative_path)
 
     i = 0
     while os.path.exists(output_path):

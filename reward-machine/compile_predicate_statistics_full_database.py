@@ -323,6 +323,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
 
         duckdb.sql('CREATE INDEX idx_data_trace_id ON data (trace_id)')
+        # duckdb.sql('CREATE INDEX idx_data_predicate ON data (predicate)')
         duckdb.sql('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id)')
         duckdb.sql('CREATE INDEX idx_data_arg_2_id ON data (arg_2_id)')
         data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
@@ -354,7 +355,8 @@ class CommonSensePredicateStatisticsFullDatabase():
                 self.temp_table_index = -1
 
             result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
-            self.logger.info(result_query)
+            key = self._predicate_and_mapping_cache_key(predicate, mapping, **kwargs)
+            self.logger.info(f'{key}:\n{result_query}\n{"=" * 100}')
             self.file_handler.flush()
 
             if DEBUG: print(result_query)
@@ -394,7 +396,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise e
 
         except QueryTimeoutException:
-            logger.warn(f"Query timed out for predicate with cache key `{self._predicate_and_mapping_cache_key(predicate, mapping)}`, returning None so a value is cached")
+            logger.warn(f"Query timed out in PID {os.getpid()} for predicate with cache key `{self._predicate_and_mapping_cache_key(predicate, mapping)}`, returning None so a value is cached")
             return None
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
@@ -737,9 +739,12 @@ class CommonSensePredicateStatisticsFullDatabase():
 
                     join_statements.append(f"JOIN {table_name} ON {' AND '.join(join_clauses)}")
 
-            query = f"""WITH {', '.join(ctes)}
+            with_statement = ',\n'.join(ctes)
+            join_statement = '\n'.join(join_statements)
+
+            query = f"""WITH {with_statement}
 SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names[0]}
-{' '.join(join_statements)}
+{join_statement}
 """
 
         return query

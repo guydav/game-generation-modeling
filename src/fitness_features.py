@@ -774,7 +774,7 @@ class PredicateFoundInData(FitnessTerm):
                  min_total_interval_state_count: int = PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT,
                  trace_names_hash: typing.Optional[str] = FULL_DATASET_TRACES_HASH,
                  predicate_sections: typing.Tuple[str, ...] = (ast_parser.SETUP, ast_parser.PREFERENCES),
-                 header: str = 'predicate_found_in_data'):
+                 log_queries: bool = False, header: str = 'predicate_found_in_data'):
 
         self.use_full_databse = use_full_databse
         if self.use_full_databse and rule == 'predicate':
@@ -792,12 +792,14 @@ class PredicateFoundInData(FitnessTerm):
         self.min_total_interval_state_count = min_total_interval_state_count
         self.predicate_sections = predicate_sections
         self.trace_names_hash = trace_names_hash
+        self.log_queries = log_queries
         self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
         # if self.use_full_databse:
         self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-            force_trace_names_hash=self.trace_names_hash
+            force_trace_names_hash=self.trace_names_hash,
+            log_queries=self.log_queries,
         )
 
         # else:
@@ -819,6 +821,8 @@ class PredicateFoundInData(FitnessTerm):
             self.use_full_databse = False
         if not hasattr(self, 'split_by_section'):
             self.split_by_section = True
+        if not hasattr(self, 'log_queries'):
+            self.log_queries = True
 
         self._init_predicate_data_estimator()
 
@@ -911,11 +915,12 @@ MAX_LOGICAL_ARGUMENTS = 4
 class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
     max_logical_arguments: int
 
-    def __init__(self, max_logical_arguments: int = MAX_LOGICAL_ARGUMENTS, split_by_section: bool = False):
+    def __init__(self, max_logical_arguments: int = MAX_LOGICAL_ARGUMENTS, split_by_section: bool = False, log_queries: bool = False):
         super().__init__(
             rule=['super_predicate_and', 'super_predicate_or'],
             use_full_databse=False,
             split_by_section=split_by_section,
+            log_queries=log_queries,
             header='predicate_found_in_data_small_logicals'
         )
         self.max_logical_arguments = max_logical_arguments
@@ -3025,7 +3030,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     predicate_found_in_data = PredicateFoundInData(use_full_databse=False, split_by_section=False)
     fitness.register(predicate_found_in_data)
 
-    predicate_found_in_data_small_logicals = PredicateFoundInDataSmallLogicals()
+    predicate_found_in_data_small_logicals = PredicateFoundInDataSmallLogicals(log_queries=True)
     fitness.register(predicate_found_in_data_small_logicals)
 
     no_adjacent_once = NoAdjacentOnce()

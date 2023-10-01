@@ -190,6 +190,7 @@ class CommonSensePredicateStatisticsFullDatabase():
                  max_cache_size: int = MAX_CACHE_SIZE,
                  max_child_args: int = MAX_CHILD_ARGS,
                  query_timeout: int = DEFAULT_QUERY_TIMEOUT,
+                 log_queries: bool = False,
                  ):
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
@@ -199,6 +200,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.max_child_args = max_child_args
         self.query_timeout = query_timeout
         self.hostname = platform.node().split('.', 1)[0]
+        self.log_queries = log_queries
 
         signal.signal(signal.SIGALRM, raise_query_timeout)
 
@@ -225,7 +227,8 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.trace_lengths_and_domains_filename = os.path.join(cache_dir, trace_lengths_filename_format.format(traces_hash=self.trace_names_hash))
 
         self._create_databases()
-        self._create_query_logger()
+        if self.log_queries:
+            self._create_query_logger()
 
     def _create_query_logger(self):
         self.logger = logging.getLogger(f'duckdb_queries_{os.getpid()}')
@@ -355,9 +358,10 @@ class CommonSensePredicateStatisticsFullDatabase():
                 self.temp_table_index = -1
 
             result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
-            key = self._predicate_and_mapping_cache_key(predicate, mapping, **kwargs)
-            self.logger.info(f'{key}:\n{result_query}\n{"=" * 100}')
-            self.file_handler.flush()
+            if self.log_queries:
+                key = self._predicate_and_mapping_cache_key(predicate, mapping, **kwargs)
+                self.logger.info(f'{key}:\n{result_query}\n{"=" * 100}')
+                self.file_handler.flush()
 
             if DEBUG: print(result_query)
 

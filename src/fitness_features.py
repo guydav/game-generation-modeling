@@ -760,13 +760,10 @@ FULL_DATASET_TRACES_HASH = '028b3733'
 class PredicateFoundInData(FitnessTerm):
     min_interval_count: int
     min_trace_count: int
-    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
-                                              typing.Tuple[int, int, int]]
+    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]], typing.Tuple[int, int, int]] = None  # type: ignore
     predicate_sections: typing.Tuple[str, ...]
     predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
-
-    _predicate_data_estimator = None
 
     def __init__(self, rule: typing.Union[str, typing.Sequence[str]] = 'predicate', use_full_databse: bool = False, split_by_section: bool = False,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
@@ -796,11 +793,11 @@ class PredicateFoundInData(FitnessTerm):
         self._init_predicate_data_estimator()
 
     def _init_predicate_data_estimator(self):
-        # if self.use_full_databse:
-        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-            force_trace_names_hash=self.trace_names_hash,
-            log_queries=self.log_queries,
-        )
+        if PredicateFoundInData.predicate_data_estimator is None:
+            PredicateFoundInData.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+                force_trace_names_hash=self.trace_names_hash,
+                log_queries=self.log_queries,
+            )
 
         # else:
         #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
@@ -810,7 +807,8 @@ class PredicateFoundInData(FitnessTerm):
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
-        del state['predicate_data_estimator']
+        if 'predicate_data_estimator' in state:
+            del state['predicate_data_estimator']
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:

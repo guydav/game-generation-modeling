@@ -424,7 +424,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             return None
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
         if predicate_name not in self.all_predicates:
@@ -519,7 +519,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for and_arg in and_args:  # type: ignore
             try:
-                sub_query, sub_used_variables = self._inner_filter(and_arg, mapping)  # type: ignore
+                sub_query, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(sub_query)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -585,7 +585,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for and_arg in and_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(and_arg, mapping)  # type: ignore
+                subquery, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -653,7 +653,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for or_arg in or_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(or_arg, mapping)  # type: ignore
+                subquery, sub_used_variables = self._inner_filter(or_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -800,7 +800,7 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         try:
-            inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
+            inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping, **kwargs)  # type: ignore
         except PredicateNotImplementedException as e:
             raise PredicateNotImplementedException(f"Sub-predicate of the not ({e.args}) was not implemented")
 

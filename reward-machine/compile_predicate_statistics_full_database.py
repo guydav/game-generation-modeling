@@ -404,8 +404,8 @@ class CommonSensePredicateStatisticsFullDatabase():
                     output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query});"
                     return tuple(chain.from_iterable(self.con.execute(output_query).fetchall()))
                 else:
-                    # output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1);"
-                    output_query = f"SELECT COUNT(*) FROM ({result_query});"
+                    output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1);"
+                    # output_query = f"SELECT COUNT(*) FROM ({result_query});"
                     query_result = self.con.execute(output_query)
                     return query_result.fetchall()[0][0]  # type: ignore
 

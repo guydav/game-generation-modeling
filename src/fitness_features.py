@@ -239,6 +239,13 @@ class ASTFitnessFeaturizer:
         del state['rows_df']
         return state
 
+    def __reduce__(self):
+        # Same as above but for dill instead of pickle
+        state = self.__dict__.copy()
+        del state['rows']
+        del state['rows_df']
+        return (self.__class__, (self.args, ), state)
+
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
         self.rows = []
@@ -800,6 +807,8 @@ class PredicateFoundInData(FitnessTerm):
                 force_trace_names_hash=self.trace_names_hash,
                 log_queries=self.log_queries,
             )
+        # else:
+        #     print(f'Using existing predicate data estimator with type {type(PredicateFoundInData.predicate_data_estimator)}')
 
         # else:
         #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
@@ -813,6 +822,13 @@ class PredicateFoundInData(FitnessTerm):
             del state['predicate_data_estimator']
         return state
 
+    def __reduce__(self):
+        # Same as above but for dill instead of pickle
+        state = self.__dict__.copy()
+        if 'predicate_data_estimator' in state:
+            del state['predicate_data_estimator']
+        return (self.__class__, None, state)
+
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
         if not hasattr(self, 'trace_names_hash'):
@@ -823,6 +839,8 @@ class PredicateFoundInData(FitnessTerm):
             self.split_by_section = True
         if not hasattr(self, 'log_queries'):
             self.log_queries = True
+        if not hasattr(self, 'boolean_parser'):
+            self.boolean_parser = BOOLEAN_PARSER
 
         self._init_predicate_data_estimator()
 

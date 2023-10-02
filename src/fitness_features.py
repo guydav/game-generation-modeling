@@ -758,15 +758,13 @@ PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
 FULL_DATASET_TRACES_HASH = '028b3733'
 
 class PredicateFoundInData(FitnessTerm):
+    boolean_parser: ast_parser.ASTBooleanParser
     min_interval_count: int
     min_trace_count: int
-    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]],
-                                              typing.Tuple[int, int, int]]
+    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]], typing.Tuple[int, int, int]] = None  # type: ignore
     predicate_sections: typing.Tuple[str, ...]
     predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
-
-    _predicate_data_estimator = None
 
     def __init__(self, rule: typing.Union[str, typing.Sequence[str]] = 'predicate', use_full_databse: bool = False, split_by_section: bool = False,
                  min_trace_count: int = PREDICATE_IN_DATA_MIN_TRACE_COUNT,
@@ -794,13 +792,14 @@ class PredicateFoundInData(FitnessTerm):
         self.trace_names_hash = trace_names_hash
         self.log_queries = log_queries
         self._init_predicate_data_estimator()
+        self.boolean_parser = BOOLEAN_PARSER
 
     def _init_predicate_data_estimator(self):
-        # if self.use_full_databse:
-        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-            force_trace_names_hash=self.trace_names_hash,
-            log_queries=self.log_queries,
-        )
+        if PredicateFoundInData.predicate_data_estimator is None:
+            PredicateFoundInData.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+                force_trace_names_hash=self.trace_names_hash,
+                log_queries=self.log_queries,
+            )
 
         # else:
         #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
@@ -810,7 +809,8 @@ class PredicateFoundInData(FitnessTerm):
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
-        del state['predicate_data_estimator']
+        if 'predicate_data_estimator' in state:
+            del state['predicate_data_estimator']
         return state
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
@@ -843,15 +843,48 @@ class PredicateFoundInData(FitnessTerm):
             context_variables = typing.cast(typing.Dict[str, typing.Union[VariableDefinition, typing.List[VariableDefinition]]], context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
             section = typing.cast(str, context[SECTION_CONTEXT_KEY])
             try:
-                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
-                # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
-                # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
-                n_traces = self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=False)
+                full_mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
+                relevant_variables = ast_parser.extract_variables(pred)
+                relevant_mapping = {k: v for k, v in full_mapping.items() if k in relevant_variables}
+                predicate_found = None
 
-                if n_traces is None:  # query timed out
-                    return
+                # If it's a predicate and all argument types can be a game object, assume it can be true
+                if rule == 'predicate' and len(relevant_mapping) > 0 and all(room_and_object_types.GAME_OBJECT in var_types for var_types in relevant_mapping.values()):
+                    predicate_found = 1
 
-                predicate_found = int(n_traces >= self.min_trace_count)
+                if rule in PREDICATE_CONJUNCTION_DISJUNCTION_RULES:
+                    logical_expr = self.boolean_parser(ast, **simplified_context_deepcopy(context))
+                    logical_evaluation = self.boolean_parser.evaluate_unnecessary_detailed_return_value(logical_expr)  # type: ignore
+
+                    if logical_evaluation == 1:
+                        predicate_found = 1
+
+                    elif logical_evaluation == 2:
+                        predicate_found = 0
+
+                    else:
+                        # If we haven't hit on either of the above cases, and all arguments can be game objects, assume it can be true
+                        if len(relevant_mapping) > 0 and all(room_and_object_types.GAME_OBJECT in var_types for var_types in relevant_mapping.values()):
+                            predicate_found = 1
+
+                # If neither of the above happened, query the database
+                if predicate_found is None:
+                    # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
+                    # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
+                    n_traces = self.predicate_data_estimator.filter(pred, full_mapping, use_de_morgans=False)
+
+                    if n_traces is None:  # query timed out
+                        return
+
+                    predicate_found = int(n_traces >= self.min_trace_count)
+
+                # if predicate_found is None:
+                #     predicate_found = cache_predicate_found
+
+                # elif cache_predicate_found != predicate_found:
+                #     logger.info(f'`{ast_printer.ast_section_to_string(pred, context[SECTION_CONTEXT_KEY])}` | {full_mapping} | logic {predicate_found} | cache {cache_predicate_found}')
+                #     predicate_found = cache_predicate_found
+
                 if self.split_by_section:
                     self.predicates_found_by_section[section].append(predicate_found)
                 else:
@@ -910,6 +943,7 @@ class PredicateFoundInData(FitnessTerm):
 
 
 MAX_LOGICAL_ARGUMENTS = 4
+PREDICATE_CONJUNCTION_DISJUNCTION_RULES = ['super_predicate_and', 'super_predicate_or']
 
 
 class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
@@ -917,7 +951,7 @@ class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
 
     def __init__(self, max_logical_arguments: int = MAX_LOGICAL_ARGUMENTS, split_by_section: bool = False, log_queries: bool = False):
         super().__init__(
-            rule=['super_predicate_and', 'super_predicate_or'],
+            rule=PREDICATE_CONJUNCTION_DISJUNCTION_RULES,
             use_full_databse=False,
             split_by_section=split_by_section,
             log_queries=log_queries,
@@ -1472,7 +1506,7 @@ class TautologicalBooleanExpression(BooleanLogicTerm):
         self.tautalogy_found = False
 
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
-        if self.boolean_parser.evaluate_tautology(expr):  # type: ignore
+        if not self.tautalogy_found and self.boolean_parser.evaluate_tautology(expr):  # type: ignore
             self.tautalogy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -1489,7 +1523,7 @@ class RedundantBooleanExpression(BooleanLogicTerm):
         self.redundancy_found = False
 
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
-        if self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
+        if not self.redundancy_found and self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
             self.redundancy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -1507,11 +1541,28 @@ class RedundantBooleanScoringTerminalExpression(BooleanLogicTerm):
         self.redundancy_found = False
 
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
-        if self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
+        if not self.redundancy_found and self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
             self.redundancy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.redundancy_found
+
+
+class UnnecessaryBooleanExpression(BooleanLogicTerm):
+    def __init__(self):
+        super().__init__('unnecessary_expression_found')
+        self.unnecessary_found = False
+
+    def game_start(self) -> None:
+        super().game_start()
+        self.unnecessary_found = False
+
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        if not self.unnecessary_found and self.boolean_parser.evaluate_unnecessary(expr):
+            self.unnecessary_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.unnecessary_found
 
 
 class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
@@ -3086,6 +3137,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     redundant_boolean_scoring_terminal_expression = RedundantBooleanScoringTerminalExpression()
     fitness.register(redundant_boolean_scoring_terminal_expression)
+
+    unnecessary_boolean_expression = UnnecessaryBooleanExpression()
+    fitness.register(unnecessary_boolean_expression)
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)

@@ -179,6 +179,8 @@ DEBUG = False
 MAX_CACHE_SIZE = 2 ** 12
 MAX_CHILD_ARGS = 4  # 6
 DEFAULT_QUERY_TIMEOUT = 15  # 5  # seconds
+IGNORE_PREDICATES = ['equal_x_position', 'equal_z_position']
+
 
 class CommonSensePredicateStatisticsFullDatabase():
     def __init__(self,
@@ -191,8 +193,11 @@ class CommonSensePredicateStatisticsFullDatabase():
                  max_child_args: int = MAX_CHILD_ARGS,
                  query_timeout: int = DEFAULT_QUERY_TIMEOUT,
                  log_queries: bool = False,
+                 duckdb_database_str: str = ':memory:',
+                 ignore_predicates: typing.Sequence[str] = IGNORE_PREDICATES,
                  ):
 
+        self.con = duckdb.connect(database=duckdb_database_str)
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.temp_table_index = -1
         self.temp_table_prefix = 't'
@@ -201,6 +206,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         self.query_timeout = query_timeout
         self.hostname = platform.node().split('.', 1)[0]
         self.log_queries = log_queries
+        self.ignore_predicates = ignore_predicates
 
         signal.signal(signal.SIGALRM, raise_query_timeout)
 
@@ -211,7 +217,7 @@ class CommonSensePredicateStatisticsFullDatabase():
                 trace_folder = DEFAULT_BASE_TRACE_PATH
 
         self.all_trace_ids = [os.path.splitext(os.path.basename(t))[0] for t in glob.glob(os.path.join(trace_folder, '*.json'))]
-        self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS])
+        self.all_predicates = set([t[0] for t in COMMON_SENSE_PREDICATES_AND_FUNCTIONS if t[0] not in self.ignore_predicates])
         self.all_types = set(reduce(lambda x, y: x + y, [list(x.keys()) for x in chain(OBJECTS_BY_ROOM_AND_TYPE.values(), SPECIFIC_NAMED_OBJECTS_BY_ROOM.values())]))
         self.all_types.difference_update(META_TYPES.keys())
         self.all_types.remove(GAME_OBJECT)
@@ -258,7 +264,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         pass
 
     def _create_databases(self):
-        table_query = duckdb.sql("SHOW TABLES")
+        table_query = self.con.execute("SHOW TABLES;")
         if table_query is not None:
             all_tables = set(t.lower() for t in chain.from_iterable(table_query.fetchall()))
             if 'data' in all_tables:
@@ -284,26 +290,27 @@ class CommonSensePredicateStatisticsFullDatabase():
         logger.info("Creating DuckDB table...")
         self.temp_dir = os.path.join(DUCKDB_TMP_FOLDER, self.hostname, str(os.getpid()))
         os.makedirs(self.temp_dir, exist_ok=True)
-        duckdb.sql(f"SET temp_directory='{self.temp_dir}';")
-        duckdb.sql("SET enable_progress_bar=false;")
-        duckdb.sql("SET enable_progress_bar_print=false;")
-        duckdb.sql("SET memory_limit='32GB';")
+        self.con.execute(f"SET temp_directory='{self.temp_dir}';")
+        self.con.execute("SET enable_progress_bar=false;")
+        self.con.execute("SET enable_progress_bar_print=false;")
+        self.con.execute("SET memory_limit='32GB';")
 
-        # duckdb.sql(f"SET log_query_path='{DUCKDB_TMP_FOLDER}/{os.getpid()}_queries.log';")
+        # self.con.execute(f"SET log_query_path='{DUCKDB_TMP_FOLDER}/{os.getpid()}_queries.log';")
 
-        duckdb.sql(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
-        duckdb.sql(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
-        duckdb.sql(f"CREATE TYPE predicate AS ENUM {tuple(sorted(self.all_predicates))};")
-        duckdb.sql(f"CREATE TYPE arg_type AS ENUM {tuple(sorted(self.all_types))};")
-        duckdb.sql(f"CREATE TYPE arg_id AS ENUM {tuple(sorted(self.all_arg_ids))};")
+        self.con.execute(f"CREATE TYPE domain AS ENUM {tuple(ROOMS)};")
+        self.con.execute(f"CREATE TYPE trace_id AS ENUM {tuple(self.all_trace_ids)};")
+        self.con.execute(f"CREATE TYPE predicate AS ENUM {tuple(sorted(self.all_predicates))};")
+        self.con.execute(f"CREATE TYPE arg_type AS ENUM {tuple(sorted(self.all_types))};")
+        self.con.execute(f"CREATE TYPE arg_id AS ENUM {tuple(sorted(self.all_arg_ids))};")
 
         trace_length_and_domain_rows = [(trace_id, domain, length) for (trace_id, (length, domain)) in trace_lengths_and_domains.items()]
-        duckdb.sql('CREATE TABLE trace_length_and_domains(trace_id trace_id PRIMARY KEY, domain domain NOT NULL, length INTEGER NOT NULL);')
-        duckdb.sql(f'INSERT INTO trace_length_and_domains VALUES {str(tuple(trace_length_and_domain_rows))[1:-1]}')
-        duckdb.sql('CREATE INDEX idx_tld_domain ON trace_length_and_domains (domain)')
+        self.con.execute('CREATE TABLE trace_length_and_domains(trace_id trace_id PRIMARY KEY, domain domain NOT NULL, length INTEGER NOT NULL, intervals BITSTRING);')
+        self.con.execute(f'INSERT INTO trace_length_and_domains(trace_id, domain, length) VALUES {str(tuple(trace_length_and_domain_rows))[1:-1]};')
+        self.con.execute("UPDATE trace_length_and_domains SET intervals = BITSTRING('0', length);")
+        self.con.execute('CREATE INDEX idx_tld_domain ON trace_length_and_domains (domain);')
 
-        duckdb.sql("CREATE TABLE empty_bitstrings(trace_id trace_id PRIMARY KEY, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO empty_bitstrings SELECT trace_id, BITSTRING('0', length) as intervals FROM trace_length_and_domains")
+        # self.con.execute("CREATE TABLE empty_bitstrings(trace_id trace_id PRIMARY KEY, intervals BITSTRING NOT NULL);")
+        # self.con.execute("INSERT INTO empty_bitstrings SELECT trace_id, BITSTRING('0', length) as intervals FROM trace_length_and_domains;")
 
         data_rows = []
         for domain in ROOMS:
@@ -313,23 +320,35 @@ class CommonSensePredicateStatisticsFullDatabase():
                         for object_id in object_ids:
                             data_rows.append((domain, object_type, object_id))
 
-        duckdb.sql('CREATE TABLE object_type_to_id(domain domain NOT NULL, type arg_type NOT NULL, object_id arg_id NOT NULL);')
-        duckdb.sql(f'INSERT INTO object_type_to_id VALUES {str(tuple(data_rows))[1:-1]}')
-        duckdb.sql('CREATE INDEX idx_obj_id_domain ON object_type_to_id (domain)')
-        duckdb.sql('CREATE INDEX idx_obj_id_type ON object_type_to_id (type)')
-        duckdb.sql('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id)')
+        self.con.execute('CREATE TABLE object_type_to_id(domain domain NOT NULL, type arg_type NOT NULL, object_id arg_id NOT NULL);')
+        self.con.execute(f'INSERT INTO object_type_to_id VALUES {str(tuple(data_rows))[1:-1]};')
+        # self.con.execute('CREATE INDEX idx_obj_id_domain ON object_type_to_id (domain);')
+        # self.con.execute('CREATE INDEX idx_obj_id_type ON object_type_to_id (type);')
+        # self.con.execute('CREATE INDEX idx_obj_id_id ON object_type_to_id (object_id);')
+        self.con.execute('CREATE INDEX idx_obj_id_joint ON object_type_to_id (type, domain, object_id);')
 
-        duckdb.sql("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_1_is_game_object BOOLEAN, arg_1_is_block BOOLEAN, arg_2_id arg_id, arg_2_type arg_type, arg_2_is_game_object BOOLEAN, arg_2_is_block BOOLEAN, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
-        duckdb.sql("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_1_is_game_object, arg_1_is_block, arg_2_id, arg_2_type, arg_2_is_game_object, arg_2_is_block, trace_id, domain, intervals FROM data_df")
+        data_df = data_df[~data_df.predicate.isin(self.ignore_predicates)]
 
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains")
-        duckdb.sql("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains")
+        self.con.execute("CREATE TABLE data(predicate predicate NOT NULL, arg_1_id arg_id, arg_1_type arg_type, arg_1_is_game_object BOOLEAN, arg_1_is_block BOOLEAN, arg_2_id arg_id, arg_2_type arg_type, arg_2_is_game_object BOOLEAN, arg_2_is_block BOOLEAN, trace_id trace_id NOT NULL, domain domain NOT NULL, intervals BITSTRING NOT NULL);")
+        self.con.execute("INSERT INTO data SELECT predicate, arg_1_id, arg_1_type, arg_1_is_game_object, arg_1_is_block, arg_2_id, arg_2_type, arg_2_is_game_object, arg_2_is_block, trace_id, domain, intervals FROM data_df;")
 
-        duckdb.sql('CREATE INDEX idx_data_trace_id ON data (trace_id)')
-        # duckdb.sql('CREATE INDEX idx_data_predicate ON data (predicate)')
-        duckdb.sql('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id)')
-        duckdb.sql('CREATE INDEX idx_data_arg_2_id ON data (arg_2_id)')
-        data_rows = duckdb.sql("SELECT count(*) FROM data").fetchone()[0]  # type: ignore
+        self.con.execute("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_start' as predicate, trace_id, domain, set_bit(bitstring('0', length), 0, 1) as intervals FROM trace_length_and_domains;")
+        self.con.execute("INSERT INTO data (predicate, trace_id, domain, intervals) SELECT 'game_over' as predicate, trace_id, domain, bitstring('1', length) as intervals FROM trace_length_and_domains;")
+
+        logger.info(f"Creating data table indices...")
+        self.con.execute('CREATE INDEX idx_data_trace_id ON data (trace_id);')
+        # self.con.execute('CREATE INDEX idx_data_predicate ON data (predicate);')
+        self.con.execute('CREATE INDEX idx_data_arg_1_id ON data (arg_1_id);')
+        self.con.execute('CREATE INDEX idx_data_arg_2_id ON data (arg_2_id);')
+        self.con.execute('CREATE INDEX idx_data_predicate_types ON data (predicate, arg_1_type, arg_2_type);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_type_2_block ON data (predicate, arg_1_type, arg_2_is_block);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_block_2_type ON data (predicate, arg_1_is_block, arg_2_type);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_type_2_go ON data (predicate, arg_1_type, arg_2_is_game_object);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_go_2_type ON data (predicate, arg_1_is_game_object, arg_2_type);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_go_2_go ON data (predicate, arg_1_is_game_object, arg_2_is_game_object);')
+        self.con.execute('CREATE INDEX idx_data_predicate_1_block_2_block ON data (predicate, arg_1_is_block, arg_2_is_block);')
+
+        data_rows = self.con.execute("SELECT count(*) FROM data;").fetchone()[0]  # type: ignore
         logger.info(f"Loaded data, found {data_rows} rows")
         del data_df
         del trace_lengths_and_domains
@@ -367,26 +386,27 @@ class CommonSensePredicateStatisticsFullDatabase():
 
             with Timeout(seconds=self.query_timeout):
                 if 'return_full_result' in kwargs and kwargs['return_full_result']:
-                    output_query = f"SELECT DISTINCT(*) FROM ({result_query})"
-                    return duckdb.sql(output_query).fetchdf()
+                    output_query = f"SELECT DISTINCT(*) FROM ({result_query});"
+                    return self.con.execute(output_query).fetchdf()
                 if 'return_interval_counts' in kwargs and kwargs['return_interval_counts']:
                     select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
-                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, bit_count(intervals) AS 'bit_count', {select_variables} FROM ({result_query})"
-                    return duckdb.sql(output_query).fetchdf()
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, bit_count(intervals) AS 'bit_count', {select_variables} FROM ({result_query});"
+                    return self.con.execute(output_query).fetchdf()
                 if 'last_interval_bit_set' in kwargs and kwargs['last_interval_bit_set']:
                     select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
-                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, get_bit(intervals, bit_length(intervals)::INTEGER - 1) AS 'last_bit', {select_variables} FROM ({result_query})"
-                    return duckdb.sql(output_query).fetchdf()
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, get_bit(intervals, bit_length(intervals)::INTEGER - 1) AS 'last_bit', {select_variables} FROM ({result_query});"
+                    return self.con.execute(output_query).fetchdf()
                 if 'return_first_state_index' in kwargs and kwargs['return_first_state_index']:
                     select_variables = ', '.join(f'"{v}"' for v in relevant_variables)
-                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query})"
-                    return duckdb.sql(output_query).fetchdf()
+                    output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query});"
+                    return self.con.execute(output_query).fetchdf()
                 elif 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-                    output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query})"
-                    return tuple(chain.from_iterable(duckdb.sql(output_query).fetchall()))
+                    output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query});"
+                    return tuple(chain.from_iterable(self.con.execute(output_query).fetchall()))
                 else:
-                    output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1)"
-                    query_result = duckdb.sql(output_query)
+                    output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1);"
+                    # output_query = f"SELECT COUNT(*) FROM ({result_query});"
+                    query_result = self.con.execute(output_query)
                     return query_result.fetchall()[0][0]  # type: ignore
 
         except PredicateNotImplementedException as e:
@@ -404,7 +424,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             return None
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], return_trace_ids: bool = False, **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
 
         if predicate_name not in self.all_predicates:
@@ -499,7 +519,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for and_arg in and_args:  # type: ignore
             try:
-                sub_query, sub_used_variables = self._inner_filter(and_arg, mapping)  # type: ignore
+                sub_query, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(sub_query)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -565,7 +585,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for and_arg in and_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(and_arg, mapping)  # type: ignore
+                subquery, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -633,7 +653,7 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         for or_arg in or_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(or_arg, mapping)  # type: ignore
+                subquery, sub_used_variables = self._inner_filter(or_arg, mapping, **kwargs)  # type: ignore
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -769,12 +789,10 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         object_assignments_query = self.object_assignments_query(relevant_var_mapping)
 
         select_variables = ', '.join(f'object_assignments."{var}" as "{var}"' for var in relevant_vars)
-        query = f"SELECT trace_length_and_domains.trace_id as trace_id, trace_length_and_domains.domain as domain, empty_bitstrings.intervals as intervals, {select_variables} FROM trace_length_and_domains"
+        query = f"SELECT trace_length_and_domains.trace_id AS trace_id, trace_length_and_domains.domain AS domain, trace_length_and_domains.intervals AS intervals, {select_variables} FROM trace_length_and_domains"
 
         if object_assignments_query is not None:
             query += f" JOIN ({object_assignments_query}) AS object_assignments ON (trace_length_and_domains.domain = object_assignments.domain)"
-
-        query += " JOIN empty_bitstrings ON (trace_length_and_domains.trace_id = empty_bitstrings.trace_id)"
 
         if DEBUG: print(query)
         return query
@@ -782,7 +800,7 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
         try:
-            inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping)  # type: ignore
+            inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping, **kwargs)  # type: ignore
         except PredicateNotImplementedException as e:
             raise PredicateNotImplementedException(f"Sub-predicate of the not ({e.args}) was not implemented")
 

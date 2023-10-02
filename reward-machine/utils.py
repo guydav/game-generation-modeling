@@ -11,6 +11,7 @@ import typing
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 import ast_printer
 import ast_parser
+from ast_parser import extract_variables
 
 from config import ALL_OBJECT_TYPES, COLORS, ORIENTATIONS, SIDES, NAMED_OBJECTS, OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM, \
     PseudoObject, FEW_OBJECTS_ROOM, MEDIUM_OBJECTS_ROOM, MANY_OBJECTS_ROOM
@@ -332,6 +333,7 @@ def _point_in_object(point: np.ndarray, object: typing.Union[ObjectState, Pseudo
 
     return np.all(point >= bbox_center - bbox_extents) and np.all(point <= bbox_center + bbox_extents)
 
+
 def _point_in_top_half(point: np.ndarray, object: typing.Union[ObjectState, PseudoObject]):
     '''
     Returns whether a point is contained with the top half of the bounding box of the provided object
@@ -344,6 +346,7 @@ def _point_in_top_half(point: np.ndarray, object: typing.Union[ObjectState, Pseu
     high_corner = bbox_center + bbox_extents
 
     return np.all(point >= low_corner) and np.all(point <= high_corner)
+
 
 def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST]) -> typing.Dict[str, typing.List[str]]:
     '''
@@ -402,73 +405,6 @@ def extract_predicate_function_name(ast: tatsu.ast.AST):
 
     return name
 
-def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None], error_on_repeat: bool = False) -> typing.List[str]:
-    '''
-    Recursively extract every variable referenced in the predicate (including inside functions
-    used within the predicate)
-    '''
-    if predicate is None:
-        return []
-
-    if isinstance(predicate, list) or isinstance(predicate, tuple):
-        pred_vars = []
-        for sub_predicate in predicate:
-            pred_vars.extend(extract_variables(sub_predicate))
-
-        unique_vars = []
-        for var in pred_vars:
-            if var not in unique_vars:
-                unique_vars.append(var)
-
-        return unique_vars
-
-    elif isinstance(predicate, tatsu.ast.AST):
-        pred_vars = []
-        exists_forall_vars = []
-
-        for key in predicate:
-            if key == "term":
-                term = predicate["term"]
-
-                # Different structure for predicate args vs. function args
-                if isinstance(term, tatsu.ast.AST):
-                    if "terminal" in term:
-                        pred_vars.append(term["terminal"])
-
-                    elif "arg" in term:  # comparison argument
-                        pred_vars.append(term["arg"])  # type: ignore
-
-                    else:
-                        raise ValueError(f'Unexpected predicate term structure in `extract_variables`: {term}')
-                else:
-                    pred_vars.append(term)
-
-            elif key == "var_names":
-                pred_vars.append(predicate["var_names"]) # type: ignore
-
-            # We don't want to capture any variables within an (exists) or (forall) that's inside
-            # the preference, since those are not globally required -- see evaluate_predicate()
-            elif key == "exists_vars":
-                exists_forall_vars += extract_variables(predicate[key])
-
-            elif key == "forall_vars":
-                exists_forall_vars += extract_variables(predicate[key])
-
-            elif key != "parseinfo":
-                pred_vars.extend(extract_variables(predicate[key]))
-
-        unique_vars = []
-        for var in pred_vars:
-            if var not in unique_vars and var not in exists_forall_vars:
-                unique_vars.append(var)
-
-        if error_on_repeat and predicate.parseinfo.rule == 'predicate' and len(unique_vars) != len(pred_vars):
-            raise ValueError(f'Found duplicate variables in predicate: {pred_vars}')
-
-        return unique_vars
-
-    else:
-        return []
 
 def get_object_assignments(domain: str, variable_types: typing.Sequence[typing.Sequence[str]],
                            used_objects: typing.Union[None, typing.Container, typing.Iterable] = None):

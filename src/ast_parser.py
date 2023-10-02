@@ -479,6 +479,8 @@ def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, 
 
 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16
+OPPOSITEֹֹֹ_CONTRADICTS_PREDICATES = ['above', 'in', 'on']
+OPPOSITE_REDUNDANT_PREDICATE = ['adjacent', 'opposite', 'touch', 'same_color', 'same_object', 'same_type']
 
 
 class ASTBooleanParser(ASTParser):
@@ -487,8 +489,14 @@ class ASTBooleanParser(ASTParser):
     str_to_expression_mapping: typing.Dict[str, boolean.Expression]
     # valid_symbol_names: typing.List[str]
     whitespace_pattern: re.Pattern
-    def __init__(self, max_tautology_eval_length: int = DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH):
+    def __init__(self, max_tautology_eval_length: int = DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH,
+                 opposite_contradicts_predicates: typing.List[str] = OPPOSITEֹֹֹ_CONTRADICTS_PREDICATES,
+                 opposite_redundant_predicates: typing.List[str] = OPPOSITE_REDUNDANT_PREDICATE):
         self.max_tautology_eval_length = max_tautology_eval_length
+        self.opposite_contrdicts_predicates = opposite_contradicts_predicates
+        self.opposite_redundant_predicates = opposite_redundant_predicates
+        self.opposite_unnecesary_predicates = opposite_contradicts_predicates + opposite_redundant_predicates
+
         self.algebra = boolean.BooleanAlgebra()
         self.true = self.algebra.parse('TRUE')
         self.false = self.algebra.parse('FALSE')
@@ -506,6 +514,37 @@ class ASTBooleanParser(ASTParser):
         # Returns True if all the elements are equal to each other -- from Python itertools recipes
         g = itertools.groupby(iterable)
         return next(g, True) and not next(g, False)
+
+    def evaluate_unnecessary_detailed_return_value(self, expr: boolean.Expression) -> int:
+        if not isinstance(expr, (boolean.AND, boolean.OR)):
+            return 0
+
+        simplified = expr.simplify()
+        if simplified == self.true:
+            return 1
+
+        if simplified == self.false:
+            return 2
+
+        for arg in expr.args:
+            if isinstance(arg, boolean.Symbol):
+                if arg.obj[0] == '(' and arg.obj[-1] == ')':
+                    arg_text = arg.obj[1:-1]
+                    arg_components = arg_text.split('__')
+                    predicate = arg_components[0]
+                    if len(arg_components) == 3 and predicate in self.opposite_unnecesary_predicates:
+                        opposite_predicate_symbol = boolean.Symbol(f'({predicate}__{arg_components[2]}__{arg_components[1]})')
+
+                        if opposite_predicate_symbol in expr.args:
+                            if isinstance(expr, boolean.AND) and predicate in self.opposite_contrdicts_predicates:
+                                return 2
+
+                            return 1
+
+        return 0
+
+    def evaluate_unnecessary(self, expr: boolean.Expression) -> bool:
+        return self.evaluate_unnecessary_detailed_return_value(expr) > 0
 
     def evaluate_tautology(self, expr: boolean.Expression) -> bool:
         symbols = list(expr.symbols)
@@ -559,8 +598,8 @@ class ASTBooleanParser(ASTParser):
                         var_def = var_def[0]
 
                     var_types = var_def.var_types
-                    var_types_str = '_. '.join(var_types)
-                    key = key.replace(var, f'{var}__{var_types_str}')
+                    var_types_str = '|'.join(var_types)
+                    key = key.replace(var, f'{var}-{var_types_str}')
 
         if key in self.str_to_expression_mapping:
             return self.str_to_expression_mapping[key]
@@ -621,7 +660,7 @@ class ASTBooleanParser(ASTParser):
             expr = self(ast.pred, **kwargs)  # type: ignore
 
         elif rule == 'predicate':
-            symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '_')
+            symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '__')
             expr = boolean.Symbol(symbol_name)
 
         elif rule in ('two_arg_comparison', 'multiple_args_equal_comparison', 'terminal_comp', 'scoring_comp', 'scoring_equals_comp'):
@@ -660,7 +699,7 @@ class ASTBooleanParser(ASTParser):
                     expr = self.algebra.TRUE if eval(f'{arg_numbers[0]} {op} {arg_numbers[1]}') else self.algebra.FALSE
 
             else:
-                symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '_')
+                symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '__')
                 expr = boolean.Symbol(symbol_name)
 
         else:
@@ -789,3 +828,72 @@ def _extract_variable_type_as_list(var_type: tatsu.ast.AST) -> typing.List[str]:
 
     else:
         raise ValueError(f'Unexpected variable type rule: {var_type_rule}')
+
+
+def extract_variables(predicate: typing.Union[typing.Sequence[tatsu.ast.AST], tatsu.ast.AST, None], error_on_repeat: bool = False) -> typing.List[str]:
+    '''
+    Recursively extract every variable referenced in the predicate (including inside functions
+    used within the predicate)
+    '''
+    if predicate is None:
+        return []
+
+    if isinstance(predicate, list) or isinstance(predicate, tuple):
+        pred_vars = []
+        for sub_predicate in predicate:
+            pred_vars.extend(extract_variables(sub_predicate))
+
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars:
+                unique_vars.append(var)
+
+        return unique_vars
+
+    elif isinstance(predicate, tatsu.ast.AST):
+        pred_vars = []
+        exists_forall_vars = []
+
+        for key in predicate:
+            if key == "term":
+                term = predicate["term"]
+
+                # Different structure for predicate args vs. function args
+                if isinstance(term, tatsu.ast.AST):
+                    if "terminal" in term:
+                        pred_vars.append(term["terminal"])
+
+                    elif "arg" in term:  # comparison argument
+                        pred_vars.append(term["arg"])  # type: ignore
+
+                    else:
+                        raise ValueError(f'Unexpected predicate term structure in `extract_variables`: {term}')
+                else:
+                    pred_vars.append(term)
+
+            elif key == "var_names":
+                pred_vars.append(predicate["var_names"]) # type: ignore
+
+            # We don't want to capture any variables within an (exists) or (forall) that's inside
+            # the preference, since those are not globally required -- see evaluate_predicate()
+            elif key == "exists_vars":
+                exists_forall_vars += extract_variables(predicate[key])
+
+            elif key == "forall_vars":
+                exists_forall_vars += extract_variables(predicate[key])
+
+            elif key != "parseinfo":
+                pred_vars.extend(extract_variables(predicate[key]))
+
+        unique_vars = []
+        for var in pred_vars:
+            if var not in unique_vars and var not in exists_forall_vars:
+                unique_vars.append(var)
+
+        if error_on_repeat and predicate.parseinfo.rule == 'predicate' and len(unique_vars) != len(pred_vars):
+            raise ValueError(f'Found duplicate variables in predicate: {pred_vars}')
+
+        return unique_vars
+
+    else:
+        return []

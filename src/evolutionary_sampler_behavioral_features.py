@@ -362,7 +362,6 @@ class BehavioralFeaturizer(abc.ABC):
         pass
 
 
-
 class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeaturizer):
     feature_value_counts_ignored_features: typing.List[str]
     full_features_registry: typing.Dict[str, FullFeaturesFitnessTerm]
@@ -374,6 +373,9 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
 
     def register_full_features_term(self, term: FullFeaturesFitnessTerm, ignore_in_feature_value_counts: bool = True):
         self.full_features_registry[term.header] = term
+        self.header_registry[term.header] = term
+        self.headers.append(term.header)
+
         if ignore_in_feature_value_counts:
             self.feature_value_counts_ignored_features.append(term.header)
 

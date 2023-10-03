@@ -804,7 +804,8 @@ class PredicateFoundInData(FitnessTerm):
     def _init_predicate_data_estimator(self):
         self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
             force_trace_names_hash=self.trace_names_hash,
-            log_queries=self.log_queries,
+            # log_queries=self.log_queries,
+            log_queries=True,
         )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:

@@ -82,9 +82,32 @@ class TraceFinderASTParser(ast_parser.ASTParser):
     def __init__(self, trace_names_hash: str = FULL_DATASET_TRACES_HASH):
         self.not_implemented_predicate_counts = defaultdict(int)
         self.trace_names_hash = trace_names_hash
+        self._init_predicate_data_estimator()
+
+    def _init_predicate_data_estimator(self):
         self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
             force_trace_names_hash=self.trace_names_hash
         )
+
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        if 'predicate_data_estimator' in state:
+            del state['predicate_data_estimator']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        # if not hasattr(self, 'trace_names_hash'):
+        #     self.trace_names_hash = FULL_DATASET_TRACES_HASH
+        # if not hasattr(self, 'use_full_databse'):
+        #     self.use_full_databse = False
+        # if not hasattr(self, 'split_by_section'):
+        #     self.split_by_section = True
+        # if not hasattr(self, 'log_queries'):
+        #     self.log_queries = True
+        # if not hasattr(self, 'boolean_parser'):
+        #     self.boolean_parser = BOOLEAN_PARSER
+        self._init_predicate_data_estimator()
 
     def __call__(self, ast, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']

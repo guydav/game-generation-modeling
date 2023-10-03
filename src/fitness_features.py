@@ -807,8 +807,10 @@ class PredicateFoundInData(FitnessTerm):
                 force_trace_names_hash=self.trace_names_hash,
                 log_queries=self.log_queries,
             )
-        # else:
-        #     print(f'Using existing predicate data estimator with type {type(PredicateFoundInData.predicate_data_estimator)}')
+        else:
+            print(f'Using existing predicate data estimator with type {type(PredicateFoundInData.predicate_data_estimator)}')
+
+        self.predicate_data_estimator = PredicateFoundInData.predicate_data_estimator
 
         # else:
         #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
@@ -827,7 +829,12 @@ class PredicateFoundInData(FitnessTerm):
         state = self.__dict__.copy()
         if 'predicate_data_estimator' in state:
             del state['predicate_data_estimator']
-        return (self.__class__, None, state)
+
+        clazz = self.__class__
+        if hasattr(clazz, 'predicate_data_estimator'):
+            clazz.predicate_data_estimator = None  # type: ignore
+
+        return (clazz, tuple(), state)
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)

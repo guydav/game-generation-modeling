@@ -82,9 +82,9 @@ class TraceFinderASTParser(ast_parser.ASTParser):
     def __init__(self, trace_names_hash: str = FULL_DATASET_TRACES_HASH):
         self.not_implemented_predicate_counts = defaultdict(int)
         self.trace_names_hash = trace_names_hash
-        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
+        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
             force_trace_names_hash=self.trace_names_hash
-        )  # type: ignore
+        )
 
     def __call__(self, ast, **kwargs):
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
@@ -272,7 +272,7 @@ class TraceGameEvaluator:
         try:
             for trace in trace_iter:
                 if isinstance(self.trace_finder.predicate_data_estimator, compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase):
-                    domain = duckdb.sql(f"SELECT domain FROM trace_length_and_domains WHERE trace_id='{trace}'").fetchone()[0]  # type: ignore
+                    domain = self.trace_finder.predicate_data_estimator.con.execute(f"SELECT domain FROM trace_length_and_domains WHERE trace_id='{trace}';").fetchone()[0]  # type: ignore
                     if domain is None:
                         raise ValueError(f'No domain found for trace {trace}')
                 else:

@@ -183,6 +183,16 @@ IGNORE_PREDICATES = ['equal_x_position', 'equal_z_position']
 
 
 class CommonSensePredicateStatisticsFullDatabase():
+    __instance = None
+
+    @staticmethod
+    def get_instance(**kwargs):
+        if CommonSensePredicateStatisticsFullDatabase.__instance is None:
+            CommonSensePredicateStatisticsFullDatabase(**kwargs)
+
+        return CommonSensePredicateStatisticsFullDatabase.__instance
+
+
     def __init__(self,
                  cache_dir: typing.Union[str, pathlib.Path] = DEFAULT_CACHE_DIR,
                  cache_filename_format: str = DEFAULT_CACHE_FILE_NAME_FORMAT,
@@ -196,6 +206,10 @@ class CommonSensePredicateStatisticsFullDatabase():
                  duckdb_database_str: str = ':memory:',
                  ignore_predicates: typing.Sequence[str] = IGNORE_PREDICATES,
                  ):
+        if CommonSensePredicateStatisticsFullDatabase.__instance is not None:
+            raise Exception("This class is a singleton!")
+
+        CommonSensePredicateStatisticsFullDatabase.__instance = self
 
         self.con = duckdb.connect(database=duckdb_database_str)
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
@@ -933,7 +947,7 @@ if __name__ == '__main__':
         if var_type in META_TYPES:
             continue
 
-        n_intervals = duckdb.sql(f"SELECT count(*) FROM data WHERE (arg_1_type='{var_type}' OR arg_2_type='{var_type}')").fetchone()[0]  # type: ignore
+        n_intervals = stats.con.execute(f"SELECT count(*) FROM data WHERE (arg_1_type='{var_type}' OR arg_2_type='{var_type}');").fetchone()[0]  # type: ignore
 
         prefix = "[+]" if n_intervals > 0 else "[-]"
         print(f"{prefix} {var_type} has {n_intervals} appearances")

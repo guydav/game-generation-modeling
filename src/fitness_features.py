@@ -768,7 +768,7 @@ class PredicateFoundInData(FitnessTerm):
     boolean_parser: ast_parser.ASTBooleanParser
     min_interval_count: int
     min_trace_count: int
-    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]], typing.Tuple[int, int, int]] = None  # type: ignore
+    predicate_data_estimator: typing.Callable[[tatsu.ast.AST, typing.Dict[str, typing.Union[str, typing.List[str]]]], typing.Tuple[int, int, int]]
     predicate_sections: typing.Tuple[str, ...]
     predicates_found_by_section: typing.Dict[str, typing.List[int]]
     rules_to_child_keys: typing.Dict[str, str]
@@ -802,39 +802,16 @@ class PredicateFoundInData(FitnessTerm):
         self.boolean_parser = BOOLEAN_PARSER
 
     def _init_predicate_data_estimator(self):
-        if PredicateFoundInData.predicate_data_estimator is None:
-            PredicateFoundInData.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase(
-                force_trace_names_hash=self.trace_names_hash,
-                log_queries=self.log_queries,
-            )
-        else:
-            print(f'Using existing predicate data estimator with type {type(PredicateFoundInData.predicate_data_estimator)}')
-
-        self.predicate_data_estimator = PredicateFoundInData.predicate_data_estimator
-
-        # else:
-        #     self.predicate_data_estimator = compile_predicate_statistics_database.CommonSensePredicateStatisticsDatabase(
-        #         use_no_intervals=True,
-        #         force_trace_names_hash=self.trace_names_hash
-        #     )
+        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
+            force_trace_names_hash=self.trace_names_hash,
+            log_queries=self.log_queries,
+        )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
         if 'predicate_data_estimator' in state:
             del state['predicate_data_estimator']
         return state
-
-    def __reduce__(self):
-        # Same as above but for dill instead of pickle
-        state = self.__dict__.copy()
-        if 'predicate_data_estimator' in state:
-            del state['predicate_data_estimator']
-
-        clazz = self.__class__
-        if hasattr(clazz, 'predicate_data_estimator'):
-            clazz.predicate_data_estimator = None  # type: ignore
-
-        return (clazz, tuple(), state)
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)

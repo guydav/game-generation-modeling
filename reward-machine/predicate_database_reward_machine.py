@@ -218,7 +218,7 @@ class PredicateDatabaseRewardMachine(ASTParser):
             force_trace_names_hash=self.trace_names_hash
         )
 
-        self.trace_id_to_length_df = duckdb.sql('SELECT * FROM trace_length_and_domains').fetchdf()
+        self.trace_id_to_length_df = self.predicate_data_estimator.con.execute('SELECT * FROM trace_length_and_domains;').fetchdf()
         self.trace_id_to_length_df.drop(columns=['domain'], inplace=True)
         self.trace_id_to_length_df.rename(columns=dict(length='trace_length'), inplace=True)
 

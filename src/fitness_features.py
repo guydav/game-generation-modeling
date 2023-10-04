@@ -2469,6 +2469,24 @@ class NoSingleArgumentMultiOperations(FitnessTerm):
         return self.single_argument_multi_operations > 0
 
 
+class PredicateOrFunctionWithoutVariablesOrAgent(FitnessTerm):
+    found: bool
+
+    def __init__(self):
+        super().__init__(PREDICATE_AND_FUNCTION_RULES, 'predicate_without_variables_or_agent')
+
+    def game_start(self) -> None:
+        self.found = False
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if not self.found and isinstance(ast, tatsu.ast.AST):
+            args = extract_predicate_function_args(ast)
+            # > 1 because some one-argument predicates make sense: (open top_drawer), (toggled_on main_light_switch), etc.
+            if len(args) > 1 and not any(arg.startswith('?') or arg == 'agent' for arg in args):
+                self.found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.found
 
 
 # COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
@@ -3155,6 +3173,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     disjoint_modal_preds = DisjointModalPredicatesTerm()
     fitness.register(disjoint_modal_preds)
+
+    predicate_without_variables_or_agent = PredicateOrFunctionWithoutVariablesOrAgent()
+    fitness.register(predicate_without_variables_or_agent)
 
     count_once_per_external_objects_used = CountOncePerExternalObjectsUsedCorrectly()
     fitness.register(count_once_per_external_objects_used)

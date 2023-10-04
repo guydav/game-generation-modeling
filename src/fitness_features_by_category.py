@@ -131,6 +131,7 @@ GRAMMAR_USE_FEATURES = [
     'disjoint_at_end_found',
     'disjoint_modal_predicates_found',
     'disjoint_modal_predicates_prop',
+    'predicate_without_variables_or_agent',
 
     'two_number_operation_found',
     'single_argument_multi_operation_found',
@@ -168,6 +169,8 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'disjoint_at_end_found',
     # 'disjoint_modal_predicates_found',
     # 'disjoint_modal_predicates_prop',
+    # 'predicate_without_variables_or_agent',
+
     # 'two_number_operation_found',
     'single_argument_multi_operation_found',
 ]

@@ -4,8 +4,6 @@ from fitness_features import COMMON_SENSE_PREDICATES_FUNCTIONS
 from fitness_features_preprocessing import NGRAM_SCORE_PATTERN, ARG_TYPES_PATTERN
 
 GRAMMAR_CONTEXT_FEATURES = [
-    'variables_defined_all',
-    'variables_defined_prop',
     'variables_used_all',
     'variables_used_prop',
     'preferences_used_all',
@@ -103,6 +101,9 @@ COMPOSITIONALITY_FEATURES = [
 ]
 
 GRAMMAR_USE_FEATURES = [
+    'variables_defined_all',
+    'variables_defined_prop',
+
     'setup_objects_used',
     'setup_quantified_objects_used',
     'any_setup_objects_used',
@@ -138,6 +139,10 @@ GRAMMAR_USE_FEATURES = [
 
 # The ones that are kept are the ones commented out
 GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
+    # Trying without these, since the minor context-fixing we do now handles this
+    'variables_defined_all',
+    'variables_defined_prop',
+
     # 'setup_objects_used',
     # 2023-09:21: trying without the specific feature to the quantified objects
     'setup_quantified_objects_used',

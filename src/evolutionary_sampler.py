@@ -1851,6 +1851,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                         postfix = {
                             feature_name if len(feature_name) <= 12 else feature_name[:12] + '...': f'{sum([1 for feature_value in feature_values_in_archive if feature_value.startswith(feature_name)])}/{n_values_by_feature[feature_name]}'
                             for feature_name in self.map_elites_feature_names
+                            if feature_name in n_values_by_feature
                         }
 
                     postfix['Current'] = current_index  # type: ignore

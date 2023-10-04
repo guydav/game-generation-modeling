@@ -1569,6 +1569,7 @@ def count_set_bits(n: int) -> int:
 
 
 class MAPElitesSampler(PopulationBasedSampler):
+    archive_cell_first_occupied: typing.Dict[KeyTypeAnnotation, int]
     archive_metrics_history: typing.List[typing.Dict[str, int | float]]
     custom_featurizer: typing.Optional[BehavioralFeaturizer]
     fitness_rank_weights: np.ndarray
@@ -1702,6 +1703,7 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         self.population = OrderedDict()
         self.fitness_values = OrderedDict()
+        self.archive_cell_first_occupied = OrderedDict()
 
     def _inner_initialize_population(self):
         '''
@@ -1725,7 +1727,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
                     game_key = self._features_to_key(game, game_features)
-                    self._add_to_archive(game, game_fitness, game_key)
+                    self._add_to_archive(game, game_fitness, game_key, generation_index=-1)
 
                     if len(self.population) > current_population_size:
                         pbar.update(1)
@@ -1759,7 +1761,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     else:
                         game_key = self._features_to_key(game, game_features)
 
-                    self._add_to_archive(game, game_fitness, game_key)
+                    self._add_to_archive(game, game_fitness, game_key, generation_index=-1)
 
                     for feature in self.map_elites_feature_names:
                         feature_values_in_archive.add(f"{feature}_{game_features[feature]}")
@@ -1787,7 +1789,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     game = self._gen_init_sample(len(self.population))
                     game_fitness, game_features = self._score_proposal(game, return_features=True)  # type: ignore
                     game_key = self._features_to_key(game, game_features)
-                    self._add_to_archive(game, game_fitness, game_key)
+                    self._add_to_archive(game, game_fitness, game_key, generation_index=-1)
 
                     if len(self.population) > current_population_size:
                         pbar.update(1)
@@ -1837,7 +1839,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     else:
                         game_key = self._features_to_key(game, game_features)
 
-                    self._add_to_archive(game, game_fitness, game_key)
+                    self._add_to_archive(game, game_fitness, game_key, generation_index=-1)
 
                     for feature in self.map_elites_feature_names:
                         feature_values_in_archive.add(f"{feature}_{game_features[feature]}")
@@ -1869,7 +1871,7 @@ class MAPElitesSampler(PopulationBasedSampler):
                     game_fitness, game, game_features = initial_candidates[current_index]
                     current_index += 1
                     game_key = self._features_to_key(game, game_features)
-                    self._add_to_archive(game, game_fitness, game_key)
+                    self._add_to_archive(game, game_fitness, game_key, generation_index=-1)
 
                     if len(self.population) > current_population_size:
                         pbar.update(1)
@@ -1947,14 +1949,23 @@ class MAPElitesSampler(PopulationBasedSampler):
         for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
             self._add_to_archive(sample, fitness, key)
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None):
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None,
+                        generation_index: typing.Optional[int] = None):
         '''
         Determines whether a provided candidate should be added to the archive. By default, this happens if the candidate is in a previously unoccupied
         cell or if the candidate has a higher fitness than the candidate already in the cell. If the candidate is added to the archive, the fitness rank
         of each cell is updated. If a selector is provided, the selector is also updated with the parent information (i.e. the cell that produced the candidate)
         '''
-        # TODO: any thresholding here? or keeping multiple candidates per cell?
-        successful = (key not in self.population) or (fitness_value > self.fitness_values[key])
+        successful = False
+
+        if key not in self.population:
+            successful = True
+            generation_index = generation_index if generation_index is not None else self.generation_index
+            self.archive_cell_first_occupied[key] = generation_index + 1
+
+        else:
+            successful = fitness_value >= self.fitness_values[key]
+
         if successful:
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value

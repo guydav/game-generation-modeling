@@ -41,14 +41,14 @@ The mandatory ones are the \dsl{constraints} section, which defines gameplay pre
 The optional ones are the \dsl{setup} section, which defines how the environment must be prepared before gameplay can begin, and the \dsl{terminal} conditions, which specify when and how the game ends.
 
 \begin{grammar}
-<game> ::= (define (game <name>) \\
-  (:domain <name>) \\
+<game> ::= (define (game <ID>) \\
+  (:domain <ID>) \\
   (:setup <setup>) \\
   (:constraints <constraints>) \\
   (:terminal <terminal>) \\
   (:scoring <scoring>) \\)
 
-<name> ::= /[A-z][A-z0-9_]*/ "#" a letter, optionally followed by letters, numbers, and underscores
+<id> ::= /[a-z0-9][a-z0-9\-]+/  "#" a letter or digit, followed by one or more letters, digits, or dashes
 \end{grammar}
 
 We will now proceed to introduce and define the syntax for each of these sections, followed by the non-grammar elements of our domain: predicates, functions, and types.
@@ -156,11 +156,10 @@ The initial \dsl{setup} element can expand to conjunctions, disjunctions, negati
 \dsl{setup-statement} elements specify two different types of setup conditions: either those that must be conserved through gameplay (`game-conserved'), or those that are optional through gameplay (`game-optional').
 These different conditions arise as some setup elements must be maintain through gameplay (for example, a participant specified to place a bin on the bed to throw balls into, it shouldn't move unless specified otherwise), while other setup elements can or must change (if a participant specified to set the balls on the desk to throw them, an agent will have to pick them up (and off the desk) in order to throw them).
 
-Inside the \dsl{setup-statement} tags we find \dsl{setup-predicate} elements, which can again resolve into logical conditions and quantifications of other \dsl{setup-predicate} elements, but also to function comparisons (\dsl{f-comp}) and predicates (\dsl{predicate}).
+Inside the \dsl{setup-statement} tags we find \dsl{super-predicate} elements, which are logical operations and quantifications over other \dsl{super-predicate} elements,  function comparisons (\dsl{function-comparison}, which like predicates also resolve to a truth value), and predicates (\dsl{predicate}).
 Function comparisons usually consist of a comparison operator and two arguments, which can either be the evaluation of a function or a number.
 The one exception is the case where the comparison operator is the equality operator (=), in which case any number of arguments can be provided.
 Finally, the \dsl{predicate} element expands to a predicate acting on one or more objects or variables.
-We assume the list of predicate existing in a domain will be provided to any models as part of their inputs rather than hard-coded into the grammar.
 For a full list of the predicates we found ourselves using so far, see \fullref{sec:predicates}.
         """,
     },
@@ -174,13 +173,12 @@ A \dsl{preference} is defined by a name and a \dsl{preference-quantifier}, which
 
 A \dsl{preference-body} expands into one of two options:
 The first is a set of conditions that should be true at the end of gameplay, using the \dsl{at-end} operator.
-Inside an \dsl{at-end} we find a \dsl{pref-predicate}, which like the \dsl{setup-predicate} term, can expand to logical operations over predicates, quantifications over predicates, a function comparison, or a predicate.
+Inside an \dsl{at-end} we find a \dsl{super-predicate}, which like in the setup section, expands to logical operations or quantifications over other \dsl{super-predicate} elements, function comparisons, or predicates.
 
 The second option is specified using the \dsl{then} syntax, which defines a series of temporal conditions that should hold over a sequence of states.
 Under a \dsl{then} operator, we find two or more sequence functions (\dsl{seq-func}), which define the specific conditions that must hold and how many states we expect them to hold for.
 We assume that there are no unaccounted states between the states accounted for by the different operators -- in other words, the \dsl{then} operators expects to find a sequence of contiguous states that satisfy the different sequence functions.
 The operators under a \dsl{then} operator map onto linear temporal logic (LTL) operators, see \fullref{sec:LTL} for the mapping and examples.
-
 
 The \dsl{once} operator specifies a predicate that must hold for a single world state.
 If a \dsl{once} operators appears as the first operator of a \dsl{then} definition, and a sequence of states $S_a, S_{a+1}, \cdots, S_b$ satisfy the \dsl{then} operator, it could be the case that the predicate is satisfied before this sequence of states (e.g. by $S_{a-1}, S_{a-2}$, and so forth).
@@ -219,7 +217,8 @@ Conditions explicitly specified in this section terminate the game.
 If none are specified, a game is assumed to terminate whenever the player chooses to end the game.
 
 The terminal conditions expand from the \dsl{terminal} element, which can expand to logical conditions on nested \dsl{terminal} elements, or to a terminal comparison.
-The terminal comparison (\dsl{terminal-comp}) compares two scoring expressions (\dsl{scoring-expr}; see \fullref{sec:scoring}), where in most cases, the scoring expressions are either a preference counting operation or a number literal.
+The terminal comparison (\dsl{terminal-comp}) expands to one of three different types of copmarisons: \dsl{terminal_time_comp}, a comparison between the total time spent in the game (\lstinline{(total-time)}) and a time number token, \dsl{terminal-score-comp}, a comparison between the total score (\lstinline{(total-score)}) and a score number token, or \dsl{terminal-pref-count-comp}, a comparison between a scoring expression (\dsl{scoring-expr}, see below) and a preference count number token.
+In most cases, the scoring expression is a preference counting operation.
         """,
         POST_NOTES_KEY: r"""For the full specification of the \dsl{scoring-expr} element, see \fullref{sec:scoring} below.
         """,
@@ -227,24 +226,22 @@ The terminal comparison (\dsl{terminal-comp}) compares two scoring expressions (
     SCORING_SECTION_KEY: {
         PRE_NOTES_KEY: r"""Scoring rules specify how to count preferences (count once, once for each unique objects that fulfill the preference, each time a preference is satisfied, etc.), and the arithmetic to combine preference counts to a final score in the game.
 
-The \dsl{scoring} tag is defined by the maximization or minimization of a particular scoring expression, defined by the \dsl{scoring-expr} rule.
 A \dsl{scoring-expr} can be defined by arithmetic operations on other scoring expressions, references to the total time or total score (for instance, to provide a bonus if a certain score is reached), comparisons between scoring expressions (\dsl{scoring-comp}), or by preference evaluation rules.
 Various preference evaluation modes can expand the \dsl{preference-eval} rule, see the full list and descriptions below.
         """  # .format(unused_color=UNUSED_RULE_OR_ELEMENT_COLOR) # Any syntax elements that are defined (because at some point a game needed them) but are currently unused (in the interactive games) will appear in {{ \color{{{unused_color}}} {unused_color} }}.
     },
     PREDICATES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The following section described valid expansions of the \dsl{predicate} rule,
-        which are all of the predicates we consider valid in the current domain.
+        PRE_NOTES_KEY: r"""The following section describes the predicates we define.
         Predicates operate over a specified number of arguments, which can be variables or object names, and return a boolean value (true/false).
 """  # .format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any predicates I forgot to provide a description for will appear in {{ \color{{{undescribed_color}}} {undescribed_color} }}.
     },
     FUNCTIONS_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""he following section described valid expansions of the \dsl{function_eval} rule,
-        which are all of the functions we consider valid in the current domain.
+        PRE_NOTES_KEY: r"""he following section describes the functions we define.
         Functions operate over a specified number of arguments, which can be variables or object names, and return a number.""",
     },
     TYPES_SECTION_KEY: {
-        PRE_NOTES_KEY: r"""The types are currently not defined as part of the grammar, but you can consider the following as enumerating all observed expansions of the \dsl{type-name} rule:
+        PRE_NOTES_KEY: r"""The types are currently not defined as part of the grammar, other than the small list of \dsl{object-name} tokens that can be directly referred to, and are marked with an asterisk below.
+        The following enumerates all expansions of the various \dsl{type} rules:
         """  # .format(undescribed_color=UNDESCRIBED_ELEMENT_COLOR) # Any types we forgot to provide a description for will appear in {{\color{{{undescribed_color}}}{undescribed_color} }}.
     }
 }
@@ -426,19 +423,21 @@ def predicate_data_to_lines(count_data, is_new_data, additional_data, descriptio
     return lines
 
 
-TypeDesc = namedtuple('TypeDesc', ('key', 'description', 'preformatted'), defaults=(None, '', False))
+TypeDesc = namedtuple('TypeDesc', ('key', 'description', 'preformatted', 'can_directly_refer'), defaults=(None, '', False, False))
 
 
 def section_separator_typedesc(section_name):
     return TypeDesc(section_name, f'---------- (* \\textbf{{{section_name}}} *) ----------', True)
 
 
-def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, external_mode=False, omit_unused=False):
+def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, external_mode=True, omit_unused=False):
     lines = []
     unused_keys = set(count_data.keys())
 
+    directly_refer_mark = r'*'
+
     for type_desc in descriptions:
-        key, description, preformatted = type_desc
+        key, description, preformatted, can_directly_refer = type_desc
 
         if preformatted:
             lines.append(description)
@@ -449,17 +448,17 @@ def type_data_to_lines(count_data, is_new_data, additional_data, descriptions, e
 
             count = count_data[key] if key in count_data else 0
             # TODO: consider doing something with co-ocurrence data
-            line = f'{key} [{count if count != 0 else "N/A"} reference{"s" if count != 1 else ""}] {"; " + description if description else ""}'
+            line = f'{key}{directly_refer_mark if can_directly_refer else ""} [{count if count != 0 else "0"} reference{"s" if count != 1 else ""}] {"; " + description if description else ""}'
 
-            if count == 0:
-                if omit_unused:
-                    continue
+            # if count == 0:
+            #     if omit_unused:
+            #         continue
 
-                if not external_mode:
-                    line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)
+            #     if not external_mode:
+            #         line = _format_line_to_color(line, UNUSED_RULE_OR_ELEMENT_COLOR)
 
-            elif is_new_data[key] and not external_mode:
-                line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
+            # elif is_new_data[key] and not external_mode:
+            #     line = _format_line_to_color(line, NEW_RULE_OR_ELEMENT_COLOR)
 
             lines.append(line)
 
@@ -487,33 +486,92 @@ VARIABLE_LIST = 'variable_list'
 PREDICATE = 'predicate'
 FUNCTION = 'function_eval'
 SHARED_BLOCKS = {
-    FUNCTION_COMPARISON: (r"""<f-comp> ::= "#" A function comparison: either comparing two function evaluations, or checking that two ore more functions evaluate to the same result.
+    FUNCTION_COMPARISON: (r"""<function-comparison> ::= "#" A function comparison: either comparing two function evaluations, or checking that two ore more functions evaluate to the same result.
     \alt (<comp-op> <function-eval-or-number> <function-eval-or-number>)
     \alt (= <function-eval-or-number>$^+$)
 
 <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle = "#" Any of the comparison operators.
 
-<function-eval-or-number> ::= <function-eval> | <number>
+<function-eval-or-number> ::= <function-eval> | <comparison-arg-number>
+
+<comparison-arg-number> ::= <number>
+
+<number> ::=  /-?\textbackslash d*\textbackslash .?\textbackslash d+/  "#" A number, either an integer or a float.
 
 <function-eval> ::= "#" See valid expansions in a separate section below
-""", ('function_comparison', 'multiple_args_equal_comparison', 'two_arg_comparison', 'comparison_arg', FUNCTION,  re.compile('function_[A-Za-z_]+'))),
+""", ('function_comparison', 'multiple_args_equal_comparison', 'two_arg_comparison', 'comparison_arg', FUNCTION, 'comparison_arg_number_value', re.compile('function_[A-Za-z_]+'))),
 
-    VARIABLE_LIST: (r"""<variable-list> ::= (<variable-type-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
+    VARIABLE_LIST: (r"""<variable-list> ::= (<variable-def>$^+$) "#" One or more variables definitions, enclosed by parentheses.
+
+<variable-def> ::= <variable-type-def> | <color-variable-type-def> | <orientation-variable-type-def> | <side-variable-type-def> "#" Colors, sides, and orientations are special types as they are not interchangable with objects.
 
 <variable-type-def> ::= <variable>$^+$ - <type-def> "#" Each variable is defined by a variable (see next) and a type (see after).
 
-<variable> ::= /\textbackslash?[a-z][a-z0-9]*/  "#" a question mark followed by a letter, optionally followed by additional letters or numbers.
+<color-variable-type-def> ::= <color-variable>$^+$ - <color-type-def> "#" A color variable is defined by a variable (see below) and a color type.
 
-<type-def> ::= <type-name> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified by the next rule:
+<orientation-variable-type-def> ::= <orientation-variable>$^+$ - <orientation-type-def> "#" An orientation variable is defined by a variable (see below) and an orientation type.
 
-<either-types> ::= (either <type-name>$^+$)
+<side-variable-type-def> ::= <side-variable>$^+$ - <side-type-def> "#" A side variable is defined by a variable (see below) and a side type.
 
-<type-name> ::= <name>""", ('variable_list', 'variable_type_def', 'type_definition', 'either_types')),
+<variable> ::= /\textbackslash?[a-w][a-z0-9]*/  "#" a question mark followed by a lowercase a-w, optionally followed by additional letters or numbers.
+
+<color-variable> ::= /\textbackslash?x[0-9]*/  "#" a question mark followed by an x and an optional number.
+
+<orientation-variable> ::= /\textbackslash?y[0-9]*/  "#" a question mark followed by an y and an optional number.
+
+<side-variable> ::= /\textbackslash?z[0-9]*/  "#" a question mark followed by an z and an optional number.
+
+<type-def> ::= <object-type> | <either-types> "#" A veriable type can either be a single name, or a list of type names, as specified below
+
+<color-type-def> ::= <color-type> | <either-color-types> "#" A color variable type can either be a single color name, or a list of color names, as specified below
+
+<orientation-type-def> ::= <orientation-type> | <either-orientation-types> "#" An orientation variable type can either be a single orientation name, or a list of orientation names, as specified below
+
+<side-type-def> ::= <side-type> | <either-side-types> "#" A side variable type can either be a single side name, or a list of side names, as specified below
+
+<either-types> ::= (either <object-type>$^+$)
+
+<either-color-types> ::= (either <color>$^+$)
+
+<either-orientation-types> ::= (either <orientation>$^+$)
+
+<either-side-types> ::= (either <side>$^+$)
+
+<object-type> ::= <name>
+
+<name> ::= /[A-Za-z][A-za-z0-9\_]+/  "#" a letter, followed by one or more letters, digits, or underscores
+
+<color-type> ::= 'color'
+
+<color> ::= 'blue' | 'brown' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'tan' | 'white' | 'yellow'
+
+<orientation-type> ::= 'orientation'
+
+<orientation> ::= 'diagonal' | 'sideways' | 'upright' | 'upside_down'
+
+<side-type> ::= 'side'
+
+<side> ::= 'back' | 'front' | 'left' | 'right'""", ('variable_list', 'variable_type_def', 'color_variable_type_def', 'orientation_variable_type_def',  'side_variable_type_def',
+                                                    'type_definition', 'color_type_definition', 'orientation_type_definition', 'side_type_definition',
+                                                    'either_types', 'either_color_types', 'either_orientation_types', 'either_side_types',
+                                                    'object_type', 'color_type', 'color', 'orientation_type', 'orientation', 'side_type', 'side', 'name',
+                                                    )),
 
     PREDICATE: (r"""<predicate> ::= "#" See valid expansions in a separate section below
 
-<predicate-or-function-term> ::= <type-name> | <variable>""",
-('predicate', 'predicate_term', 'predicate_or_function_term', re.compile('predicate_[A-Za-z_]+'))),
+<predicate-or-function-term> ::= <object-name> | <variable> "#" A predicate or function term can either be an object name (from a small list allowed to be directly referred to) or a variable.
+
+<predicate-or-function-color-term> ::= <color> | <color-variable>
+
+<predicate-or-function-orientation-term> ::= <orientation> | <orientation-variable>
+
+<predicate-or-function-side-term> ::= <side> | <side-variable>
+
+<predicate-or-function-type-term> ::= <object-type> | <variable>
+
+<object_name> ::= 'agent' | 'bed' | 'desk' | 'door' | 'floor' | 'main_light_switch' | 'mirror' | 'room_center' | 'rug' | 'side_table' | 'bottom_drawer' | 'bottom_shelf' | 'east_sliding_door' | 'east_wall' | 'north_wall' | 'south_wall' | 'top_drawer' | 'top_shelf' | 'west_sliding_door' | 'west_wall'
+""",
+('predicate', 'predicate_or_function_term', 'predicate_or_function_color_term', 'predicate_or_function_orientation_term', 'predicate_or_function_side_term', 'predicate_or_function_type_term', 'object_name', re.compile('predicate_[A-Za-z_]+'))),
 }
 
 
@@ -594,14 +652,28 @@ TERMINAL_BLOCKS = (
         \alt (and <terminal>$^+$)
         \alt (or <terminal>$+$)
         \alt (not <terminal>)
-        \alt <terminal-comp>""", ('terminal_and', 'terminal_or', 'terminal_not')),
+        \alt <terminal-comp>""", ('terminal', 'terminal_and', 'terminal_or', 'terminal_not')),
 
-    (r"""<terminal-comp> ::= "#" A comparison operator is used to compare two scoring expressions (see next section).
-        \alt (<comp-op> (total-time) <time-number>)
-        \alt (<comp-op> (total-score) <score-number>)
-        \alt (<comp-op> <scoring-expr> <preference-count-number>)
+    (r"""<terminal-comp> ::= "#" We support three ttypes of terminal comparisons:
+        \alt <terminal-time-comp>
+        \alt <terminal-score-comp>
+        \alt <terminal-pref-count-comp>
 
-    <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =""", 'terminal_comp'),
+
+    <terminal-time-comp> ::= (<comp-op> (total-time) <time-number>) "#" The total time of the game must satisfy the comparison.
+
+    <terminal-score-comp> ::= (<comp-op> (total-score) <score-number>) "#" The total score of the game must satisfy the comparison.
+
+    <terminal-pref-count-comp> ::= (<comp-op> <scoring-expr> <preference-count-number>) "#" The number of times the preference specified by the name and types must satisfy the comparison.
+
+    <time-number> ::= <number>  "#" Separate type so the we can learn a separate distribution over times than, say, scores.
+
+    <score-number> ::= <number>
+
+    <preference-count-number> ::= <number>
+
+    <comp-op> ::=  \textlangle \ | \textlangle = \ | = \ | \textrangle \ | \textrangle =""", ('terminal_comp', 'terminal_time_comp', 'terminal_score_comp', 'terminal_pref_count_comp', 'total_time', 'total_score',
+                                                                                              'time_number_value', 'score_number_value', 'pref_count_number_value')),
 )
 
 
@@ -618,8 +690,9 @@ SCORING_BLOCKS = (
         \alt (total-score)
         \alt <scoring-comp>
         \alt <preference-eval>
+        \alt <scoring-number-value>
 
-    """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr')),
+    """, ('scoring_multi_expr', 'scoring_binary_expr', 'scoring_neg_expr', 'scoring_expr_or_number')),
 
     (r"""<scoring-external-maximize> ::= (external-forall-maximize <scoring-expr>) "#" For any preferences under this expression inside a (forall ...), score only for the single externally-quantified object that maximizes this scoring expression.
     """, ('scoring_external_maximize',)),
@@ -630,7 +703,7 @@ SCORING_BLOCKS = (
     (r"""<scoring-comp> ::=  "#" A scoring comparison: either comparing two expressions, or checking that two ore more expressions are equal.
         \alt (<comp-op> <scoring-expr> <scoring-expr>)
         \alt (= <scoring-expr>$^+$)
-    """, 'scoring_comparison'),
+    """, ('scoring_comparison', 'scoring_comp', 'scoring_equals_comp')),
 
     (r"""<preference-eval> ::= "#" A preference evaluation applies one of the scoring operators (see below) to a particular preference referenced by name (with optional types).
         \alt <count>
@@ -665,7 +738,9 @@ SCORING_BLOCKS = (
     (r"""<pref-name-and-types> ::= <name> <pref-object-type>$^*$ "#" The optional <pref-object-type>s are used to specify a particular instance of the preference for a given object, see the <pref-forall> syntax above.
 
     <pref-object-type> ::= : <type-name>  "#" The optional type name specification for the above syntax. For example, pref-name:dodgeball would refer to the preference where the first quantified object is a dodgeball.
-    """, ('pref_name_and_types', 'pref_object_type')),
+
+    <scoring-number-value> ::= <number>
+     """, ('pref_name_and_types', 'pref_object_type', 'scoring_number_value')),
 )
 
 PREDICATE_DESCRIPTIONS = {
@@ -707,23 +782,42 @@ FUNCTION_DESCRIPTIONS = {
 
 TYPE_DESCRIPTIONS = (
     TypeDesc('game_object', 'Parent type of all objects'),
-    TypeDesc('agent', 'The agent'),
+    TypeDesc('agent', 'The agent', can_directly_refer=True),
     TypeDesc('building', 'Not a real game object, but rather, a way to refer to structures the agent builds'),
     section_separator_typedesc('Blocks'),
 	TypeDesc('block', 'Parent type of all block types:'),
 	TypeDesc('bridge_block'),
+    TypeDesc('bridge_block_green'),
+    TypeDesc('bridge_block_pink'),
+    TypeDesc('bridge_block_tan'),
 	TypeDesc('cube_block'),
     TypeDesc('cube_block_blue'),
     TypeDesc('cube_block_tan'),
     TypeDesc('cube_block_yellow'),
+    TypeDesc('cylindrical_block'),
+    TypeDesc('cylindrical_block_blue'),
+    TypeDesc('cylindrical_block_green'),
+    TypeDesc('cylindrical_block_tan'),
 	TypeDesc('flat_block'),
+    TypeDesc('flat_block_gray'),
+    TypeDesc('flat_block_tan'),
+    TypeDesc('flat_block_yellow'),
 	TypeDesc('pyramid_block'),
     TypeDesc('pyramid_block_blue'),
     TypeDesc('pyramid_block_red'),
-    TypeDesc('triangle_block'),
     TypeDesc('pyramid_block_yellow'),
-	TypeDesc('cylindrical_block'),
-	TypeDesc('tall_cylindrical_block'),
+    TypeDesc('tall_cylindrical_block'),
+    TypeDesc('tall_cylindrical_block_green'),
+    TypeDesc('tall_cylindrical_block_tan'),
+    TypeDesc('tall_cylindrical_block_yellow'),
+    TypeDesc('tall_rectangular_block'),
+    TypeDesc('tall_rectangular_block_blue'),
+    TypeDesc('tall_rectangular_block_green'),
+    TypeDesc('tall_rectangular_block_tan'),
+    TypeDesc('triangle_block'),
+    TypeDesc('triangle_block_blue'),
+    TypeDesc('triangle_block_green'),
+    TypeDesc('triangle_block_tan'),
     section_separator_typedesc('Balls'),
 	TypeDesc('ball', 'Parent type of all ball types:'),
 	TypeDesc('beachball'),
@@ -734,72 +828,85 @@ TYPE_DESCRIPTIONS = (
 	TypeDesc('dodgeball_pink'), #, '(* \\textbf Do we want to specify colored objects or not? *)'),
 	TypeDesc('golfball'),
     TypeDesc('golfball_green'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
+    TypeDesc('golfball_white'),
 	section_separator_typedesc('Colors'),
     TypeDesc('color', 'Likewise, not a real game object, mostly used to refer to the color of the rug under an object'),
 	TypeDesc('blue'),
     TypeDesc('brown'),
+    TypeDesc('gray'),
     TypeDesc('green'),
-	TypeDesc('pink'),
-    TypeDesc('orange'),
+	TypeDesc('orange'),
+    TypeDesc('pink'),
 	TypeDesc('purple'),
     TypeDesc('red'),
     TypeDesc('tan'),
 	TypeDesc('white'),
 	TypeDesc('yellow'),
-    section_separator_typedesc('Other moveable/interactable objects'),
-	TypeDesc('alarm_clock'),
-	TypeDesc('book'),
-	TypeDesc('blinds', 'The blinds on the windows'),
-	TypeDesc('chair'),
-	TypeDesc('cellphone'),
-	TypeDesc('cd'),
-	TypeDesc('credit_card'),
-	TypeDesc('curved_wooden_ramp'),
-	TypeDesc('desktop'),
-	TypeDesc('doggie_bed'),
-	TypeDesc('hexagonal_bin'),
-	TypeDesc('key_chain'),
-	TypeDesc('lamp'),
-	TypeDesc('laptop'),
-    TypeDesc('main_light_switch', 'The main light switch on the wall'),
-	TypeDesc('mug'),
-	TypeDesc('triangular_ramp'),
-	TypeDesc('triangular_ramp_green'), # '(* \\textbf Do we want to specify colored objects or not? *)'),
-	TypeDesc('pen'),
-    TypeDesc('pencil'),
+    section_separator_typedesc('Furniture'),
+    TypeDesc('bed', can_directly_refer=True),
+    TypeDesc('blinds', 'The blinds on the windows'),
+    TypeDesc('desk', can_directly_refer=True),
+    TypeDesc('desktop'),
+    TypeDesc('main_light_switch', 'The main light switch on the wall', can_directly_refer=True),
+    TypeDesc('side_table', 'The side table/nightstand next to the bed', can_directly_refer=True),
+    TypeDesc('shelf_desk', 'The shelves under the desk'),
+    section_separator_typedesc('Large moveable/interactable objects'),
+    TypeDesc('book'),
+    TypeDesc('chair'),
+    TypeDesc('laptop'),
     TypeDesc('pillow'),
 	TypeDesc('teddy_bear'),
-	TypeDesc('watch'),
-    section_separator_typedesc('Immoveable objects'),
-	TypeDesc('bed'),
-    TypeDesc('corner', 'Any of the corners of the room'),
-    TypeDesc('door', 'The door out of the room'),
-	TypeDesc('desk'),
-    TypeDesc('shelf_desk', 'The shelves under the desk'),
-	TypeDesc('drawer', 'Either drawer in the side table'),
-	TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.'), # (* \\textbf Do we want to specify this differently? *)'),
-	TypeDesc('floor'),
-    TypeDesc('rug'),
-	TypeDesc('shelf'),
-    TypeDesc('bottom_shelf'),
-    TypeDesc('top_shelf'),
-	TypeDesc('side_table', 'The side table/nightstand next to the bed'),
-	TypeDesc('sliding_door', 'The sliding doors on the south wall (big windows)'),
-    TypeDesc('east_sliding_door', 'The eastern of the two sliding doors (the one closer to the desk)'),
-	TypeDesc('wall', 'Any of the walls in the room'),
-    TypeDesc('north_wall', 'The wall with the door to the room'),
-    TypeDesc('south_wall', 'The wall with the sliding doors'),
-    TypeDesc('west_wall', 'The wall the bed is aligned to'),
-    section_separator_typedesc('Non-object-type predicate arguments'),
-    TypeDesc('back'),
-    TypeDesc('front'),
-    TypeDesc('left'),
-    TypeDesc('right'),
+    section_separator_typedesc('Orientations'),
     TypeDesc('diagonal'),
     TypeDesc('sideways'),
     TypeDesc('upright'),
     TypeDesc('upside_down'),
-    TypeDesc('front_left_corner', 'The front-left corner of a specific object (as determined by its front)'),
+    section_separator_typedesc('Ramps'),
+    TypeDesc('ramp', 'Parent type of all ramp types:'),
+    TypeDesc('curved_wooden_ramp'),
+    TypeDesc('triangular_ramp'),
+	TypeDesc('triangular_ramp_green'),
+    TypeDesc('triangular_ramp_tan'),
+    section_separator_typedesc('Receptacles'),
+    TypeDesc('doggie_bed'),
+	TypeDesc('hexagonal_bin'),
+    TypeDesc('drawer', 'Either drawer in the side table'),
+    TypeDesc('bottom_drawer', 'The bottom of the two drawers in the nightstand near the bed.', can_directly_refer=True),
+    TypeDesc('top_drawer', 'The top of the two drawers in the nightstand near the bed.', can_directly_refer=True),
+    section_separator_typedesc('Room features'),
+    TypeDesc('door', 'The door out of the room', can_directly_refer=True),
+    TypeDesc('floor', can_directly_refer=True),
+    TypeDesc('mirror', can_directly_refer=True),
+    TypeDesc('poster', can_directly_refer=True),
+    TypeDesc('room_center', can_directly_refer=True),
+    TypeDesc('rug', can_directly_refer=True),
+    TypeDesc('shelf'),
+    TypeDesc('bottom_shelf', can_directly_refer=True),
+    TypeDesc('top_shelf', can_directly_refer=True),
+    TypeDesc('sliding_door', 'The sliding doors on the south wall (big windows)'),
+    TypeDesc('east_sliding_door', 'The eastern of the two sliding doors (the one closer to the desk)', can_directly_refer=True),
+    TypeDesc('west_sliding_door', 'The western of the two sliding doors (the one closer to the bed)', can_directly_refer=True),
+    TypeDesc('wall', 'Any of the walls in the room'),
+    TypeDesc('east_wall', 'The wall behind the desk', can_directly_refer=True),
+    TypeDesc('north_wall', 'The wall with the door to the room', can_directly_refer=True),
+    TypeDesc('south_wall', 'The wall with the sliding doors', can_directly_refer=True),
+    TypeDesc('west_wall', 'The wall the bed is aligned to', can_directly_refer=True),
+    section_separator_typedesc('Small objects'),
+	TypeDesc('alarm_clock'),
+	TypeDesc('cellphone'),
+	TypeDesc('cd'),
+	TypeDesc('credit_card'),
+	TypeDesc('key_chain'),
+	TypeDesc('lamp'),
+	TypeDesc('mug'),
+	TypeDesc('pen'),
+    TypeDesc('pencil'),
+	TypeDesc('watch'),
+    section_separator_typedesc('Sides'),
+    TypeDesc('back'),
+    TypeDesc('front'),
+    TypeDesc('left'),
+    TypeDesc('right'),
 )
 
 
@@ -944,10 +1051,12 @@ def main(args):
 
     parser = DSLToLatexParser(args.template_file, args.output_file, args.new_data_start)
 
+    pref_consider_described_rules = list(chain.from_iterable([block_rules for block_description, block_rules in SHARED_BLOCKS.values()])) + ['super_predicate', 'super_predicate_and', 'super_predicate_or', 'super_predicate_not', 'super_predicate_forall', 'super_predicate_exists']
+
     setup_translator = SectionTranslator(SETUP_SECTION_KEY, SETUP_BLOCKS, (SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE]),
-        consider_used_rules=['setup_not', 'setup_statement'])
+        consider_used_rules=['setup_not', 'setup_statement', 'setup_or'])
     pref_translator = SectionTranslator(PREFERENCES_SECTION_KEY, PREFERENCES_BLOCKS, section_name='Gameplay Preferences',
-        consider_described_rules=[re.compile('predicate_[A-Za-z_]+'), re.compile('function_[A-Za-z_]+')])  # additional_blocks=(SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE])
+        consider_described_rules=pref_consider_described_rules)  # additional_blocks=(SHARED_BLOCKS[FUNCTION_COMPARISON], SHARED_BLOCKS[VARIABLE_LIST], SHARED_BLOCKS[PREDICATE])
     terminal_translator = SectionTranslator(TERMINAL_SECTION_KEY, TERMINAL_BLOCKS, None, section_name='Terminal Conditions', consider_used_rules=['terminal_not'])
     scoring_translator = SectionTranslator(SCORING_SECTION_KEY, SCORING_BLOCKS, None, consider_used_rules=SCORING_CONSIDER_USED_RULES)
 

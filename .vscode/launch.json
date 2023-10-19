@@ -100,11 +100,11 @@
             "request": "launch",
             "program": "/Users/guydavidson/projects/game-generation-modeling/src/ast_to_latex_doc.py",
             "args": [
-                "--compile-pdf",
+                // "--compile-pdf",
                 "--grammar-file", "./dsl/dsl.ebnf",
                 "--test-files", "./dsl/interactive-beta.pddl",
                 "--output-file", "./latex/updated_dsl_doc.tex",
-                "--external"
+                "--external",
             ],
             "console": "integratedTerminal",
             // "notes": "\"-n\", \"61541833a06877a656163b10\"",

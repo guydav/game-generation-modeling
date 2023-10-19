@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import re
 
 from fitness_features import COMMON_SENSE_PREDICATES_FUNCTIONS
@@ -48,10 +49,10 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     # Man and max depth and node count
-    re.compile(r'max_depth_[\w\d_]+'),
-    # re.compile(r'mean_depth_[\w\d_]+'),
-    re.compile(r'node_count_[\w\d_]+'),
-    # re.compile(r'max_width_[\w\d_]+'),
+    # re.compile(r'max_depth_[\w\d_]+'),
+    re.compile(r'mean_depth_[\w\d_]+'),
+    # re.compile(r'node_count_[\w\d_]+'),
+    re.compile(r'max_width_[\w\d_]+'),
 ]
 
 COUNTING_FEATURES_PATTERN_DICT = {
@@ -193,3 +194,81 @@ FEATURE_CATEGORIES = {
     'grammar_use': GRAMMAR_USE_FEATURES,
     'grammar_use_less_important': GRAMMAR_USE_LESS_IMPORTANT_FEATURES,
 }
+
+
+
+@dataclass
+class FeatureDescription:
+    name: str
+    description: str
+    type: str
+
+    def __str__(self):
+        return f'{self.name} ({self.type}): {self.description}'
+
+    def to_latex(self):
+        name = self.name.replace('_', '\\_')
+        desc = self.description.replace('_', '\\_')
+        return f'\\item \\texttt{{{name} [{self.type}]}}: {desc}'
+
+BINARY_FEATURE = 'b'
+FLOAT_FEATURE = 'f'
+DISCRETIZED_FEATURE = 'd'
+PROPORTION_FEATURE = 'p'
+
+
+FITNESS_FEATURE_DESCRIPTIONS = [
+    FeatureDescription('ast_ngram_full_n_5_score', 'What is the mean 5-gram model score under an n-gram model trained on the real games?', FLOAT_FEATURE),
+    FeatureDescription('ast_ngram_setup_n_5_score', 'What is the mean 5-gram model score of the setup section under an n-gram model trained on the real game setup sections?', FLOAT_FEATURE),
+    FeatureDescription('ast_ngram_constraints_n_5_score', 'What is the mean 5-gram model score of the gameplay preferences section under an n-gram model trained on the real game preferences sections?', FLOAT_FEATURE),
+    FeatureDescription('ast_ngram_terminal_n_5_score', 'What is the mean 5-gram model score of the terminal conditions section under an n-gram model trained on the real game terminal sections?', FLOAT_FEATURE),
+    FeatureDescription('ast_ngram_scoring_n_5_score', 'What is the mean 5-gram model score of the scoring section under an n-gram model trained on the real game scoring sections?', FLOAT_FEATURE),
+
+    FeatureDescription('predicate_found_in_data_prop', 'What proportion of predicates are satisfied at least once in our human play trace data?', PROPORTION_FEATURE),
+    FeatureDescription('predicate_found_in_data_small_logicals_prop', 'What proportion of logical expressions over predicates (with four or fewer children, limited for computational reasons) are satisfied at least once in our human play trace data?', PROPORTION_FEATURE),
+
+    FeatureDescription('section_doesnt_exist_setup', 'Does a game not have an (optional) setup section? (to allow counteracting feature values for the setup for games that do not have a setup component)', BINARY_FEATURE),
+    FeatureDescription('section_doesnt_exist_terminal', 'Does a game not have an (optional) terminal conditions section? (to allow counteracting feature values for the terminal conditions for games that do not have a terminal conditions component)', BINARY_FEATURE),
+
+    FeatureDescription('variables_used_all', 'Are all variables defined used at least once?', BINARY_FEATURE),
+    FeatureDescription('variables_used_prop', 'What proportion of variables defined are used at least once?', PROPORTION_FEATURE),
+    FeatureDescription('preferences_used_all', 'Are all preferences defined referenced at least once in terminal or scoring expressions?', BINARY_FEATURE),
+    FeatureDescription('preferences_used_prop', 'What proportion of preferences defined are referenced at least once in terminal or scoring expressions?', PROPORTION_FEATURE),
+    FeatureDescription('num_preferences_defined', 'How many preferences are defined? (1-7)', DISCRETIZED_FEATURE),
+    FeatureDescription('setup_objects_used', 'What proportion of objects referenced in the setup are also referenced in the gameplay preferences?', PROPORTION_FEATURE),
+    FeatureDescription('any_setup_objects_used', 'Are any objects referenced in the setup also referenced in the gameplay preferences?', BINARY_FEATURE),
+    FeatureDescription('repeated_variables_found', 'Are there any cases where the same variable is used twice in the same predicate?', BINARY_FEATURE),
+    FeatureDescription('repeated_variable_type_in_either', 'Are there any cases where the same variable types is used twice in an \\texttt{either} quantification?', BINARY_FEATURE),
+    FeatureDescription('redundant_expression_found', 'Are there any cases where a logical expression over predicates is redundant (can be trivially simplified)?', BINARY_FEATURE),
+    FeatureDescription('redundant_scoring_terminal_expression_found', 'Are there any cases where a scoring terminal expression is redundant (can be trivially simplified)?', BINARY_FEATURE),
+    FeatureDescription('unnecessary_expression_found', 'Are there any cases where a logical expression over predicates is unnecessary (contradicts itself, or is trivially true)?', BINARY_FEATURE),
+    FeatureDescription('adjacent_same_modal_found', 'Are there any cases where the same modal is used twice in a row?', BINARY_FEATURE),
+    FeatureDescription('identical_consecutive_seq_func_predicates_found', 'Are there any cases where the same exact predicates (and their arguments) are applied in consecutive modals (making them redundant)?', BINARY_FEATURE),
+    FeatureDescription('disjoint_preferences_found', 'Are there any preferences which quantify over disjoint sets of objects?', BINARY_FEATURE),
+    FeatureDescription('disjoint_preferences_prop', 'What proportion of preferences quantify over disjoint sets of objects?', PROPORTION_FEATURE),
+    FeatureDescription('disjoint_preferences_scoring_terminal_types', 'Do the preferences referenced in the scoring and terminal section quantify over disjoint sets of object types?', PROPORTION_FEATURE),
+    FeatureDescription('disjoint_preferences_scoring_terminal_predicates', 'Do the preferences referenced in the scoring and terminal section use disjoint sets of predicates?', PROPORTION_FEATURE),
+    FeatureDescription('disjoint_preferences_same_predicates_only', 'Do any preferences make use solely of the \\texttt{same_color},  \\texttt{same_object}, and \\texttt{same_type} predicates?', BINARY_FEATURE),
+    FeatureDescription('disjoint_seq_funcs_found', 'Are there any cases where modals in a preference refer to disjoint sets of variables or objects?', BINARY_FEATURE),
+    FeatureDescription('disjoint_modal_predicates_found', 'Are there any cases where modals in a preference refer to disjoint sets of predicates?', BINARY_FEATURE),
+    FeatureDescription('disjoint_modal_predicates_prop', 'What proportion of modals in a preference refer to disjoint sets of predicates?', PROPORTION_FEATURE),
+    FeatureDescription('predicate_without_variables_or_agent', 'Are there any predicates that do not reference any variables or the agent?', BINARY_FEATURE),
+    FeatureDescription('two_number_operation_found', 'Are there any cases where an arithmetic operation is applied to two numbers? (e.g. \\texttt{(+ 5 5)} instead of simplifying it)', BINARY_FEATURE),
+    FeatureDescription('section_without_pref_or_total_count_terminal', 'Does the terminal section in this game fail to reference any preferences, or the \\texttt{(total-time)} or \\texttt{(total-score)} tokens?', BINARY_FEATURE),
+    FeatureDescription('section_without_pref_or_total_count_scoring', 'Does the scoring section in this game fail to reference any preferences, or the \\texttt{(total-time)} or \\texttt{(total-score)} tokens?', BINARY_FEATURE),
+
+    FeatureDescription('pref_forall_used_correct', 'For the \\texttt{forall} over preferences syntax, if it is used, is it used correctly in this game?', BINARY_FEATURE),
+    FeatureDescription('pref_forall_used_incorrect', 'For the \\texttt{forall} over preferences syntax, if it is used, is it used incorrectly in this game? (to allow learning differential values between correct and incorrect usage)', BINARY_FEATURE),
+
+    FeatureDescription('pref_forall_external_forall_used_correct', 'If the \\texttt{external-forall-maximize} or \\texttt{external-forall-minimize} syntax is used, is it used correctly in this game?', BINARY_FEATURE),
+    FeatureDescription('pref_forall_external_forall_used_incorrect', 'If the \\texttt{external-forall-maximize} or \\texttt{external-forall-minimize} syntax is used, is it used incorrectly in this game?', BINARY_FEATURE),
+
+    FeatureDescription('pref_forall_external_forall_used_correct', 'If the \\texttt{count-once-per-external-objects} count operator is used, is it used correctly in this game?', BINARY_FEATURE),
+    FeatureDescription('pref_forall_external_forall_used_incorrect', 'If the \\texttt{count-once-per-external-objects} count operator is used, is it used incorrectly in this game?', BINARY_FEATURE),
+
+    FeatureDescription('pref_forall_pref_forall_correct_arity_correct', 'If optional object names and types are provided to a count operation, are they provided with an arity consistent with the \\texttt{forall} variable quantifications?', BINARY_FEATURE),
+    FeatureDescription('pref_forall_pref_forall_correct_arity_incorrect', 'If optional object names and types are provided to a count operation, are they provided with an arity inconsistent with the \\texttt{forall} variable quantifications?', BINARY_FEATURE),
+
+    FeatureDescription('pref_forall_pref_forall_correct_types_correct', 'If optional object names and types are provided to a count operation, are they provided with types consistent with the \\texttt{forall} variable quantifications?', BINARY_FEATURE),
+    FeatureDescription('pref_forall_pref_forall_correct_types_incorrect', 'If optional object names and types are provided to a count operation, are they provided with types inconsistent with the \\texttt{forall} variable quantifications?', BINARY_FEATURE),
+]

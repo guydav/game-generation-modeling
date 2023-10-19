@@ -1051,11 +1051,15 @@ def _postprocess_ast_to_string(ast_str: str):
     return ast_str.replace(' )', ')')
 
 
-def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAULT_INCREMENT, context=None, postprocess: bool = True) -> str:
+def ast_to_lines(ast: tatsu.ast.AST, increment=DEFAULT_INCREMENT, context=None) -> typing.List[str]:
     reset_buffers(to_list=True)
     pretty_print_ast(ast, increment=increment, context=context)
     _flush_line_buffer()
-    out_str = line_delimiter.join(BUFFER).strip()  # type: ignore
+    return BUFFER  # type: ignore
+
+
+def ast_to_string(ast: tatsu.ast.AST, line_delimiter: str = '', increment=DEFAULT_INCREMENT, context=None, postprocess: bool = True) -> str:
+    out_str = line_delimiter.join(ast_to_lines(ast, increment, context)).strip()  # type: ignore
     if postprocess:
         return _postprocess_ast_to_string(out_str)
 

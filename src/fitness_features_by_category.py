@@ -48,7 +48,7 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     # Various features related to variable quantifications
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
-    # Man and max depth and node count
+    # Man and max depth and node count -- keep max depth and node count
     # re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
     # re.compile(r'node_count_[\w\d_]+'),

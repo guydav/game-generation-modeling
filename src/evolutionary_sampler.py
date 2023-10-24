@@ -268,6 +268,7 @@ class SingleStepResults(typing.NamedTuple):
     parent_infos: typing.List[typing.Dict[str, typing.Any]]
     diversity_scores: typing.List[float]
     sample_features: typing.List[typing.Dict[str, typing.Any]]
+    operators: typing.List[str]
 
     def __len__(self):
         return len(self.samples)
@@ -278,6 +279,7 @@ class SingleStepResults(typing.NamedTuple):
         if other.parent_infos is not None: self.parent_infos.extend(other.parent_infos)
         if other.diversity_scores is not None: self.diversity_scores.extend(other.diversity_scores)
         if other.sample_features is not None: self.sample_features.extend(other.sample_features)
+        if other.operators is not None: self.operators.extend(other.operators)
 
 
 
@@ -364,6 +366,7 @@ class PopulationBasedSampler():
     samplers: typing.Dict[str, ASTSampler]
     saving: bool
     signal_received: bool
+    success_by_generation_and_operator: typing.List[typing.Dict[str, int]]
     verbose: int
     weight_insert_delete_nodes_by_length: bool
 
@@ -478,12 +481,13 @@ class PopulationBasedSampler():
         self.regrowth_sampler = RegrowthSampler(self.samplers, seed=self.random_seed, rng=np.random.default_rng(self.random_seed))
 
         # Initialize the candidate pools in each genera
-        self.candidates = SingleStepResults([], [], [], [], [])
+        self.candidates = SingleStepResults([], [], [], [], [], [])
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
         self.generation_index = 0
         self.fitness_metrics_history = []
         self.diversity_metrics_history = []
+        self.success_by_generation_and_operator = []
 
         self.generation_diversity_scores = np.zeros(self.population_size)
         self.generation_diversity_scores_index = -1
@@ -1198,6 +1202,31 @@ class PopulationBasedSampler():
         self.context_fixer.fix_contexts(new_game)  # type: ignore
         return new_game
 
+    @handle_multiple_inputs
+    def _resample_scoring(self, game: ASTType, rng: np.random.Generator):
+        new_game = deepcopy_ast(game)
+        base_scoring_node = game[-2][1]  # type: ignore
+        new_scoring = None
+
+        self.regrowth_sampler.set_source_ast(game)
+        base_scoring_node_key = self.regrowth_sampler._ast_key(base_scoring_node)
+        global_context = self.regrowth_sampler.parent_mapping[base_scoring_node_key][-2]  # type: ignore
+        global_context['rng'] = rng
+
+        while new_scoring is None:
+            try:
+                new_scoring = self._sampler(rng).sample('scoring_expr', global_context=global_context)[0]
+            except SamplingException as e:
+                if self.verbose > 1:
+                    logger.info(f'Failed to sample terminal with global context {global_context}: {e.args}')
+                continue
+
+        new_scoring_tuple = (ast_parser.SCORING, new_scoring, ')')
+
+        index = len(new_game) - 2
+        new_game = self._insert_section_to_game(new_game, new_scoring_tuple, index, replace=True)  # type: ignore
+
+
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
         Returns a function (operator) which takes in a list of games and returns a list of new games.
@@ -1303,6 +1332,7 @@ class PopulationBasedSampler():
                 children = []
                 children_fitness_scores = []
                 children_features = []
+                operators = []
 
                 for i, child in enumerate(child_or_children):
                     # child_size = object_total_size(child)
@@ -1327,6 +1357,7 @@ class PopulationBasedSampler():
                     children.append(child)
                     children_fitness_scores.append(fitness)
                     children_features.append(features)
+                    operators.append(operator.__name__)
 
                 if len(children) == 0:
                     raise SamplingException('No children passed the filter func')
@@ -1337,7 +1368,7 @@ class PopulationBasedSampler():
                 if not isinstance(parent_info, list) or len(parent_info) != len(children):
                     parent_info = itertools.repeat(parent_info)  # type: ignore
 
-                return SingleStepResults(children, children_fitness_scores, parent_info, children_diversity_scores, children_features)  # type: ignore
+                return SingleStepResults(children, children_fitness_scores, parent_info, children_diversity_scores, children_features, operators)  # type: ignore
 
             except SamplingException as e:
                 # if self.verbose:
@@ -1358,7 +1389,7 @@ class PopulationBasedSampler():
 
         # Parent is already in the population, so returning nothing
         # raise SamplingException(f'Could not validly sample an operator and apply it to a child in {self.sample_patience} attempts')
-        return SingleStepResults([], [], [], [], [])
+        return SingleStepResults([], [], [], [], [], [])
 
     def _sample_and_apply_operator_map_wrapper(self, args):
         """
@@ -1435,6 +1466,7 @@ class PopulationBasedSampler():
                 pbar.update(start_step)
 
         for _ in step_iter:  # type: ignore
+            self.success_by_generation_and_operator.append(defaultdict(int))
             self.evolutionary_step(pool, chunksize, should_tqdm=inner_tqdm, use_imap=use_imap)
 
             if compute_diversity_metrics:
@@ -1950,7 +1982,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             self._add_to_archive(sample, fitness, key)
 
     def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None,
-                        generation_index: typing.Optional[int] = None):
+                        generation_index: typing.Optional[int] = None, operator: typing.Optional[str] = None):
         '''
         Determines whether a provided candidate should be added to the archive. By default, this happens if the candidate is in a previously unoccupied
         cell or if the candidate has a higher fitness than the candidate already in the cell. If the candidate is added to the archive, the fitness rank
@@ -1970,14 +2002,16 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.population[key] = candidate
             self.fitness_values[key] = fitness_value
             self.update_fitness_rank_weights = True
+            if operator is not None:
+                self.success_by_generation_and_operator[-1][operator] += 1
 
         if self.selector is not None and parent_info is not None:
             self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _handle_single_operator_results(self, results: SingleStepResults):
-        for candidate, fitness_value, features, parent_info in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos):
+        for candidate, fitness_value, features, parent_info, operator in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos, results.operators):
             key = self._features_to_key(candidate, features)
-            self._add_to_archive(candidate, fitness_value, key, parent_info)   # type: ignore
+            self._add_to_archive(candidate, fitness_value, key, parent_info, operator=operator)   # type: ignore
 
     def _end_single_evolutionary_step(self, samples: typing.Optional[SingleStepResults] = None):
         self._update_population_statistics()
@@ -2040,7 +2074,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             else:
                 cognitive_operators = [self._resample_variable_types, self._resample_first_condition, self._resample_last_condition,
                                     self._resample_variable_types_and_first_condition, self._resample_variable_types_and_last_condition]
-                section_resample_operators = [self._sample_or_resample_setup, self._sample_or_resample_terminal]
+                section_resample_operators = [self._sample_or_resample_setup, self._sample_or_resample_terminal, self._resample_scoring]
 
                 basic_operator_weights = [0.5 / len(basic_operators)] * len(basic_operators)
                 cognitive_operator_weights = [0.4 / len(cognitive_operators)] * len(cognitive_operators)

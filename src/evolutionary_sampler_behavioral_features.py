@@ -2,6 +2,7 @@ import abc
 import argparse
 from collections import Counter
 import enum
+import itertools
 from Levenshtein import distance as edit_distance
 import logging
 import numpy as np
@@ -326,7 +327,8 @@ PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_g
 LATEST_WITH_SETUP = 'latest_setup'
 LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
 LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
-
+EXEMPLAR_PREFERENCES_AND_SETUP = 'exemplar_preferences_and_setup'
+EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
 
 FEATURE_SETS = [
     BASIC_BINNED,
@@ -345,6 +347,8 @@ FEATURE_SETS = [
     LATEST_WITH_SETUP,
     LATEST_WITH_SETUP_AND_TERMINAL,
     LATEST_SETUP_EXPECTED_VALUES,
+    EXEMPLAR_PREFERENCES_AND_SETUP,
+    EXEMPLAR_PREFERENCES_EXPECTED_VALUES,
 ]
 
 
@@ -592,6 +596,131 @@ class ExemplarDistanceFeaturizer(PCABehavioralFeaturizer):
             raise ValueError(f'Invalid distance type: {self.distance_type}')
 
 
+
+EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 0.15, 2: 0.3}
+EXEMPLAR_PREFERENCE_IDS = [(5, 1), (8, 1), (48, 5), (66, 1), (74, 1)]
+
+
+class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeaturizer):
+    def __init__(self, ast_file_path: str,
+                 grammar_parser: tatsu.grammars.Grammar,  # type: ignore
+                 additional_featurizer: BehavioralFeaturizer,
+                 thresholds: typing.Dict[int, float] = EXEMPLAR_PREFERENCE_THRESHOLDS,
+                 exemplar_preference_ids: typing.List[typing.Tuple[int, int]] = EXEMPLAR_PREFERENCE_IDS):
+
+        self.ast_file_path = ast_file_path
+        self.grammar_parser = grammar_parser
+        self.additional_featurizer = additional_featurizer
+        self.thresholds = thresholds
+        self.max_threshold = max(self.thresholds.values())
+        self.exemplar_preference_ids = exemplar_preference_ids
+
+        self.postprocessor = ast_parser.ASTSamplePostprocessor()
+
+        self.exemplar_preference_indices = []
+        self.all_preference_strings = []
+        self.exemplar_index_quantiles = {}
+
+        self.current_ast_preference_strings = []
+
+        self._init_exemplars()
+
+    def _init_exemplars(self):
+        game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
+
+        exemplar_index = 0
+        for i, game_ast in enumerate(game_asts):
+            game_preferences = self(game_ast, should_postprocess=True)
+            if exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
+                self.exemplar_preference_indices.append(len(self.all_preference_strings) + self.exemplar_preference_ids[exemplar_index][1])
+                exemplar_index += 1
+
+            self.all_preference_strings.extend(game_preferences)
+
+        pairwise_distances = np.zeros((len(self.all_preference_strings), len(self.all_preference_strings)))
+        for i, j in itertools.combinations(range(len(self.all_preference_strings)), 2):
+            pairwise_distances[i, j] = edit_distance(self.all_preference_strings[i], self.all_preference_strings[j])
+            pairwise_distances[j, i] = pairwise_distances[i, j]
+
+        for exemplar_index in self.exemplar_preference_indices:
+            self.exemplar_index_quantiles[exemplar_index] = np.quantile(pairwise_distances[exemplar_index], np.linspace(0.01, 1, 100))
+
+    def get_game_features(self, game, features, should_postprocess=False):
+        game_features = self.additional_featurizer.get_game_features(game, features)
+
+        game_preference_strings = self(game, should_postprocess=should_postprocess)
+        all_distance_tuples = []
+        for idx, pref_str in enumerate(game_preference_strings):
+            for exemplar_idx in self.exemplar_preference_indices:
+                d = edit_distance(pref_str, self.all_preference_strings[exemplar_idx])
+                q = np.searchsorted(self.exemplar_index_quantiles[exemplar_idx], d) / 100
+                all_distance_tuples.append((q, idx, exemplar_idx))
+
+        all_distance_tuples.sort()
+        exemplar_feature_values = {exemplar_idx: 0 for exemplar_idx in self.exemplar_preference_indices}
+        used_preferences = set()
+        used_exemplars = set()
+
+        while all_distance_tuples:
+            q, idx, exemplar_idx = all_distance_tuples.pop(0)
+
+            if q > self.max_threshold:
+                break
+
+            if idx in used_preferences or exemplar_idx in used_exemplars:
+                continue
+
+            used_preferences.add(idx)
+            used_exemplars.add(exemplar_idx)
+            for feature_value, threshold in self.thresholds.items():
+                if q <= threshold:
+                    exemplar_feature_values[exemplar_idx] = feature_value
+                    break
+
+        for exemplar_idx in self.exemplar_preference_indices:
+            game_features[f'exemplar_preference_{exemplar_idx}'] = exemplar_feature_values[exemplar_idx]
+
+        return game_features
+
+    def get_feature_names(self) -> typing.List[str]:
+        feature_names = self.additional_featurizer.get_feature_names()
+        for exemplar_idx in self.exemplar_preference_indices:
+            feature_names.append(f'exemplar_preference_{exemplar_idx}')
+
+        return feature_names
+
+    def get_feature_value_counts(self) -> typing.Dict[str, int]:
+        feature_value_counts = self.additional_featurizer.get_feature_value_counts()
+        for exemplar_idx in self.exemplar_preference_indices:
+            feature_value_counts[f'exemplar_preference_{exemplar_idx}'] = len(self.thresholds) + 1
+
+        return feature_value_counts
+
+    def __call__(self, ast: typing.Any, **kwargs) -> typing.List[str]:
+        initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
+        if initial_call:
+            self.current_ast_preference_strings = []
+            self._default_kwarg(kwargs, 'inner_call', True)
+            self._default_kwarg(kwargs, 'should_postprocess', False)
+            if kwargs['should_postprocess']:
+                ast = self.postprocessor(ast)
+
+        preference_node = isinstance(ast, tatsu.ast.AST) and ast.parseinfo.rule in ('pref_body_exists', 'then', 'at_end')  # type: ignore
+
+        if preference_node:
+            self.current_ast_preference_strings.append(ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES, '\n'))
+            inner_result = None
+
+        else:
+            inner_result = super().__call__(ast, **kwargs)
+
+        if not initial_call:
+            return inner_result  # type: ignore
+
+        return self.current_ast_preference_strings
+
+
+
 def build_behavioral_features_featurizer(
         args: argparse.Namespace,
         grammar_parser: tatsu.grammars.Grammar,  # type: ignore
@@ -679,6 +808,28 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
+        elif feature_set == EXEMPLAR_PREFERENCES_AND_SETUP:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+            exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(
+                args.map_elites_exemplar_preferences_and_setup_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            return exemplar_preferences_featurizer
+
+        elif feature_set == EXEMPLAR_PREFERENCES_EXPECTED_VALUES:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+
+            exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(
+                args.map_elites_exemplar_preferences_and_setup_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            return exemplar_preferences_featurizer
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

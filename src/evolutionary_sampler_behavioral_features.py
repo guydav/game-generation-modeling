@@ -327,7 +327,7 @@ PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_g
 LATEST_WITH_SETUP = 'latest_setup'
 LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
 LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
-EXEMPLAR_PREFERENCES_AND_SETUP = 'exemplar_preferences_and_setup'
+EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
 EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
 
 FEATURE_SETS = [
@@ -347,7 +347,7 @@ FEATURE_SETS = [
     LATEST_WITH_SETUP,
     LATEST_WITH_SETUP_AND_TERMINAL,
     LATEST_SETUP_EXPECTED_VALUES,
-    EXEMPLAR_PREFERENCES_AND_SETUP,
+    EXEMPLAR_PREFERENCES_SETUP,
     EXEMPLAR_PREFERENCES_EXPECTED_VALUES,
 ]
 
@@ -808,7 +808,7 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
-        elif feature_set == EXEMPLAR_PREFERENCES_AND_SETUP:
+        elif feature_set == EXEMPLAR_PREFERENCES_SETUP:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
             exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(

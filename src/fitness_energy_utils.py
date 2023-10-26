@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 import copy
 from dataclasses import dataclass
@@ -97,8 +97,11 @@ def save_model_and_feature_columns(cv: GridSearchCV, feature_columns: typing.Lis
     save_data(save_dict, folder=folder, name=name, relative_path=relative_path)
 
 
-def get_data_path(folder: str, name: str, relative_path: str = '..'):
-    return f'{relative_path}/{folder}/{name}_{datetime.now().strftime("%Y_%m_%d")}.pkl.gz'
+def get_data_path(folder: str, name: str, relative_path: str = '..', delta: typing.Optional[timedelta] = None):
+    date = datetime.now()
+    if delta is not None:
+        date -= delta
+    return f'{relative_path}/{folder}/{name}_{date.strftime("%Y_%m_%d")}.pkl.gz'
 
 
 def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):

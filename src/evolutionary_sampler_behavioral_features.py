@@ -812,7 +812,7 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
             exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(
-                args.map_elites_exemplar_preferences_and_setup_ast_file_path,
+                args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
                 featurizer
             )
@@ -824,7 +824,7 @@ def build_behavioral_features_featurizer(
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
             exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(
-                args.map_elites_exemplar_preferences_and_setup_ast_file_path,
+                args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
                 featurizer
             )

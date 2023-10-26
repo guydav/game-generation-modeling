@@ -1,6 +1,6 @@
 import argparse
 from collections import OrderedDict, Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import glob
 import os
@@ -1225,7 +1225,7 @@ class PopulationBasedSampler():
 
         index = len(new_game) - 2
         new_game = self._insert_section_to_game(new_game, new_scoring_tuple, index, replace=True)  # type: ignore
-
+        return new_game
 
     def _get_operator(self, rng: typing.Optional[np.random.Generator] = None) -> typing.Callable[[typing.Union[ASTType, typing.List[ASTType]], np.random.Generator], typing.Union[ASTType, typing.List[ASTType]]]:
         '''
@@ -2361,8 +2361,14 @@ def main(args):
             latest_generation = None
 
             if len(relevant_files) == 0:
-                logger.info('No relevant files found, starting from scratch')
+                logger.info('No relevant files found today, trying yesterday')
+                output_glob_path = get_data_path(args.output_folder, output_name, args.relative_path, delta=timedelta(days=1))
+                relevant_files = glob.glob(output_glob_path)
+
+            if len(relevant_files) == 0:
+                logger.info('No relevant files found today or yesterday, starting from scratch')
                 args.resume = False
+
             else:
                 gen_index = relevant_files[0].find('gen_')
                 number_start_index = gen_index + 4

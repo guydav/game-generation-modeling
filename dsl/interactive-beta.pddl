@@ -1627,7 +1627,7 @@
         (preference blockPlacedInBuilding (exists (?l - cube_block)
             (then
                 (once (agent_holds ?l))
-                (hold (and (in_motion ?l) (not (agent_holds ?l))))
+                (hold (not (agent_holds ?l)))
                 (hold (in ?b ?l))
                 (once (or (not (in ?b ?l)) (game_over)))
             )
@@ -1932,7 +1932,7 @@
         (preference blockPlacedInBuilding (exists (?l - block)
             (then
                 (once (agent_holds ?l))
-                (hold (and (in_motion ?l) (not (agent_holds ?l))))
+                (hold (not (agent_holds ?l)))
                 (hold (in ?b ?l))
                 (once (or (not (in ?b ?l)) (game_over)))
             )
@@ -1940,7 +1940,7 @@
         (preference nonBlockPlacedInBuilding (exists (?o - game_object)
             (then
                 (once (and (agent_holds ?o) (not (same_type ?o block))))
-                (hold (and (in_motion ?o) (not (agent_holds ?o))))
+                (hold (not (agent_holds ?o)))
                 (hold (in ?b ?o))
                 (once (or (not (in ?b ?o)) (game_over)))
             )

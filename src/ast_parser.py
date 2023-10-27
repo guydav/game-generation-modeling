@@ -407,7 +407,7 @@ def update_context_variables(ast: tatsu.ast.AST, context: typing.Dict[str, typin
 
     elif len(vars_keys) > 0:
         vars_key = vars_keys[0]
-        context_vars = typing.cast(dict, context[VARIABLES_CONTEXT_KEY]) if VARIABLES_CONTEXT_KEY in context else {}
+        context_vars = typing.cast(dict, context.get(VARIABLES_CONTEXT_KEY, {}))
         extract_variables_from_ast(ast, vars_key, context_vars)
         context = context.copy()
         context[VARIABLES_CONTEXT_KEY] = context_vars  # type: ignore

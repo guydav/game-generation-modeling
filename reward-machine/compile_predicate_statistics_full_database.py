@@ -383,7 +383,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
         result_query = None
         try:

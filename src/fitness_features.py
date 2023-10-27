@@ -391,29 +391,41 @@ class ASTFitnessFeaturizer:
 
         self.temp_file_writer_dict[pid].writerow(row)  # type: ignore
 
-    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True):
+    def parse(self, full_ast: typing.Tuple[tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST, tatsu.ast.AST], src_file: str = '', return_row: bool = False, preprocess_row: bool = True,
+              partial_ast: bool = False, additional_context: typing.Optional[typing.Dict[str, typing.Any]] = None):
         row = {}
         row['src_file'] = os.path.basename(src_file)
-        game_name = full_ast[1]['game_name']
-        domain_name = full_ast[2]['domain_name']
+
+        if partial_ast:
+            game_name = 'partial-game'
+            domain_name = 'partial-domain'
+            ast = full_ast
+
+        else:
+            game_name = full_ast[1]['game_name']
+            domain_name = full_ast[2]['domain_name']
+            ast = full_ast[3:]  # type: ignore
+
         row['game_name'] = game_name  # type: ignore
         row['domain_name'] = domain_name  # type: ignore
         row['real'] = row['src_file'] == self.real_games_src_file
-        ast = full_ast[3:]  # type: ignore
 
         for term in self.header_registry.values():
             term.game_start()
 
         context = dict(game_name=game_name, domain_name=domain_name)
+        if additional_context is not None:
+            context.update(additional_context)
 
         self._parse(ast, context=context)  # type: ignore
 
-        for term in self.full_ast_registry:
-            term.update(full_ast, 'full_ast', context=context.copy())
+        if not partial_ast:
+            for term in self.full_ast_registry:
+                term.update(full_ast, 'full_ast', context=context.copy())
 
-        ast_full_text = typing.cast(str, ast_printer.ast_to_string(full_ast, ' '))   # type: ignore
-        for term in self.full_text_registry:
-            term.parse_full_text(ast_full_text)
+            ast_full_text = typing.cast(str, ast_printer.ast_to_string(full_ast, ' '))   # type: ignore
+            for term in self.full_text_registry:
+                term.parse_full_text(ast_full_text)
 
         previous_key = None
 
@@ -684,7 +696,7 @@ class SetupObjectsUsed(FitnessTerm):
     used_objects: typing.Set[str] = set()
 
     def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS, rules: typing.Optional[typing.Sequence[typing.Union[str, re.Pattern]]] = None,
-                 header: str = 'setup_objects_used'):
+                 header: str = 'setup_objects_used', parse_variables: bool = False):
         if rules is None:
             rules = list(TYPE_RULES.keys())
         else:
@@ -695,6 +707,7 @@ class SetupObjectsUsed(FitnessTerm):
 
         super().__init__(rules, header)
         self.skip_objects = skip_objects
+        self.parse_variables = parse_variables
 
     def game_start(self) -> None:
         self.setup_objects = set()
@@ -710,7 +723,20 @@ class SetupObjectsUsed(FitnessTerm):
         if SECTION_CONTEXT_KEY not in context:
             raise ValueError('Section not found in context', context)
 
-        self._add_result(self.setup_objects if context[SECTION_CONTEXT_KEY] == ast_parser.SETUP else self.used_objects, TYPE_RULES[rule][0](ast))
+        result_set = self.setup_objects if context[SECTION_CONTEXT_KEY] == ast_parser.SETUP else self.used_objects
+        self._add_result(result_set, TYPE_RULES[rule][0](ast))
+
+        if self.parse_variables and rule in ('predicate', 'function') and VARIABLES_CONTEXT_KEY in context:
+            context_vars = context[VARIABLES_CONTEXT_KEY]
+            var_args = [arg for arg in extract_predicate_function_args(ast) if arg in context_vars]  # type: ignore
+            for var in var_args:
+                var_def_or_defs = context[VARIABLES_CONTEXT_KEY][var]  # type: ignore
+                if not isinstance(var_def_or_defs, list):
+                    var_def_or_defs = [var_def_or_defs]
+
+                for var_type in var_def_or_defs:
+                    self._add_result(result_set, var_type.var_types)  # type: ignore
+
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         if len(self.setup_objects) == 0:

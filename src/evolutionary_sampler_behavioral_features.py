@@ -170,7 +170,7 @@ SPECIFIC_CATEGORIES = [room_and_object_types.BALLS, room_and_object_types.BLOCKS
 class ObjectCategoryUsed(SetupObjectsUsed):
     def __init__(self, categories: typing.Union[typing.List[str], typing.List[typing.List[str]], typing.List[typing.Union[str, typing.List[str]]]] = SPECIFIC_CATEGORIES,
                  skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS):
-        super().__init__(skip_objects=skip_objects, header='object_category_used')
+        super().__init__(skip_objects=skip_objects, header='object_category_used', parse_variables=True)
         self.categories = categories
 
     def game_end(self):
@@ -329,6 +329,8 @@ LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
 LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
 EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
 EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
+EXEMPLAR_PREFERENCES_BC_SETUP = 'exemplar_preferences_bc_setup'
+EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES = 'exemplar_preferences_bc_expected_values'
 
 FEATURE_SETS = [
     BASIC_BINNED,
@@ -349,6 +351,8 @@ FEATURE_SETS = [
     LATEST_SETUP_EXPECTED_VALUES,
     EXEMPLAR_PREFERENCES_SETUP,
     EXEMPLAR_PREFERENCES_EXPECTED_VALUES,
+    EXEMPLAR_PREFERENCES_BC_SETUP,
+    EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES,
 ]
 
 
@@ -362,11 +366,12 @@ class BehavioralFeaturizer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game, features, partial_game: bool = False) -> typing.Dict[str, typing.Any]:
         pass
 
 
 class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeaturizer):
+    _feature_names_set: typing.Set[str]
     feature_value_counts_ignored_features: typing.List[str]
     full_features_registry: typing.Dict[str, FullFeaturesFitnessTerm]
 
@@ -374,6 +379,7 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
         super().__init__(args)
         self.full_features_registry = {}
         self.feature_value_counts_ignored_features = []
+        self._feature_names_set = set()
 
     def register_full_features_term(self, term: FullFeaturesFitnessTerm, ignore_in_feature_value_counts: bool = True):
         self.full_features_registry[term.header] = term
@@ -386,6 +392,13 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
     def get_feature_names(self) -> typing.List[str]:
         #  [4:] to remove the first few automatically-added columns
         return self.get_all_column_keys()[4:]
+
+    @property
+    def feature_names_set(self):
+        if len(self._feature_names_set) == 0:
+            self._feature_names_set = set(self.get_feature_names())
+
+        return self._feature_names_set
 
     def get_feature_value_counts(self) -> typing.Dict[str, int]:
         feature_to_term_mapping = self.get_column_to_term_mapping()
@@ -405,8 +418,9 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
 
         return n_values_by_feature
 
-    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
-        behavioral_features = typing.cast(typing.Dict[str, float], self.parse(game, return_row=True))
+    def get_game_features(self, game, features, partial_game: bool = False, parse_context: typing.Optional[typing.Dict[str, typing.Any]] = None) -> typing.Dict[str, typing.Any]:
+        behavioral_features = typing.cast(typing.Dict[str, float], self.parse(game, return_row=True, partial_ast=partial_game, additional_context=parse_context))
+        behavioral_features = {key: val for key, val in behavioral_features.items() if key in self.feature_names_set}
 
         if len(self.full_features_registry) == 0:
             return behavioral_features  # type: ignore
@@ -501,7 +515,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
         game_vector = self._game_to_feature_vector(game)
         return self.pca.transform(game_vector.reshape(1, -1))[0]
 
-    def get_game_features(self, game, features) -> typing.Dict[str, typing.Any]:
+    def get_game_features(self, game, features, partial_game: bool = False) -> typing.Dict[str, typing.Any]:
         game_projection = self._project_game_pre_binning(game)
         return {self._feature_name(i): np.digitize(game_projection[i], self.bins_by_feature_index[i]) for i in self.feature_indices}
 
@@ -645,7 +659,7 @@ class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeatu
         for exemplar_index in self.exemplar_preference_indices:
             self.exemplar_index_quantiles[exemplar_index] = np.quantile(pairwise_distances[exemplar_index], np.linspace(0.01, 1, 100))
 
-    def get_game_features(self, game, features, should_postprocess=False):
+    def get_game_features(self, game, features, partial_game: bool = False, should_postprocess=False):
         game_features = self.additional_featurizer.get_game_features(game, features)
 
         game_preference_strings = self(game, should_postprocess=should_postprocess)
@@ -705,10 +719,10 @@ class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeatu
             if kwargs['should_postprocess']:
                 ast = self.postprocessor(ast)
 
-        preference_node = isinstance(ast, tatsu.ast.AST) and ast.parseinfo.rule in ('pref_body_exists', 'then', 'at_end')  # type: ignore
+        preference_node = isinstance(ast, tatsu.ast.AST) and ast.parseinfo.rule == 'preference'  # type: ignore
 
         if preference_node:
-            self.current_ast_preference_strings.append(ast_printer.ast_section_to_string(ast, ast_parser.PREFERENCES, '\n'))
+            self.current_ast_preference_strings.append(ast_printer.ast_section_to_string(ast.pref_body.body, ast_parser.PREFERENCES, '\n'))  # type: ignore
             inner_result = None
 
         else:
@@ -718,6 +732,146 @@ class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeatu
             return inner_result  # type: ignore
 
         return self.current_ast_preference_strings
+
+
+BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 1, 2: 2}
+BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (8, 2), (44, 1), (59, 0), (90, 2)]
+
+
+def dict_distance(d1, d2):
+    return sum(int(d1[k] != d2[k]) for k in d1)
+
+
+class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeaturizer):
+    def __init__(self, preference_behavioral_featurizer: BehavioralFeaturizer,
+                 ast_file_path: str,
+                 grammar_parser: tatsu.grammars.Grammar,  # type: ignore
+                 additional_features_featurizer: BehavioralFeaturizer,
+                 thresholds: typing.Dict[int, int] = BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS,
+                 exemplar_preference_ids: typing.List[typing.Tuple[int, int]] = BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS
+
+                 ):
+        self.preference_behavioral_featurizer = preference_behavioral_featurizer
+
+        self.ast_file_path = ast_file_path
+        self.grammar_parser = grammar_parser
+        self.additional_features_featurizer = additional_features_featurizer
+        self.thresholds = thresholds
+        self.max_threshold = max(self.thresholds.values())
+        self.exemplar_preference_ids = exemplar_preference_ids
+
+        self.postprocessor = ast_parser.ASTSamplePostprocessor()
+
+        self.exemplar_preference_indices = []
+        self.exemplar_features = {}
+
+        self.current_ast_preference_features = []
+
+        self._init_exemplars()
+
+    def _init_exemplars(self):
+        game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
+        all_preference_features = []
+
+        exemplar_index = 0
+        for i, game_ast in enumerate(game_asts):
+            game_preference_features = self(game_ast, should_postprocess=True)
+            if exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
+                self.exemplar_preference_indices.append(len(all_preference_features) + self.exemplar_preference_ids[exemplar_index][1])
+                exemplar_index += 1
+
+            all_preference_features.extend(game_preference_features)
+
+        for exemplar_index in self.exemplar_preference_indices:
+            self.exemplar_features[exemplar_index] = all_preference_features[exemplar_index]
+
+    def get_game_features(self, game, features, partial_game: bool = False, should_postprocess=False):
+        game_features = self.additional_features_featurizer.get_game_features(game, features)
+
+        game_preference_features = self(game, should_postprocess=should_postprocess)
+        all_distance_tuples = []
+        for idx, pref_features in enumerate(game_preference_features):
+            for exemplar_idx in self.exemplar_preference_indices:
+                d = dict_distance(pref_features, self.exemplar_features[exemplar_idx])
+                all_distance_tuples.append((d, idx, exemplar_idx))
+
+        all_distance_tuples.sort()
+        exemplar_feature_values = {exemplar_idx: 0 for exemplar_idx in self.exemplar_preference_indices}
+        used_preferences = set()
+        used_exemplars = set()
+
+        while all_distance_tuples:
+            d, idx, exemplar_idx = all_distance_tuples.pop(0)
+
+            if d > self.max_threshold:
+                break
+
+            if idx in used_preferences or exemplar_idx in used_exemplars:
+                continue
+
+            used_preferences.add(idx)
+            used_exemplars.add(exemplar_idx)
+            for feature_value, threshold in self.thresholds.items():
+                if d <= threshold:
+                    exemplar_feature_values[exemplar_idx] = feature_value
+                    break
+
+        for exemplar_idx in self.exemplar_preference_indices:
+            game_features[f'exemplar_preference_{exemplar_idx}'] = exemplar_feature_values[exemplar_idx]
+
+        return game_features
+
+    def get_feature_names(self) -> typing.List[str]:
+        feature_names = self.additional_features_featurizer.get_feature_names()
+        for exemplar_idx in self.exemplar_preference_indices:
+            feature_names.append(f'exemplar_preference_{exemplar_idx}')
+
+        return feature_names
+
+    def get_feature_value_counts(self) -> typing.Dict[str, int]:
+        feature_value_counts = self.additional_features_featurizer.get_feature_value_counts()
+        for exemplar_idx in self.exemplar_preference_indices:
+            feature_value_counts[f'exemplar_preference_{exemplar_idx}'] = len(self.thresholds) + 1
+
+        return feature_value_counts
+
+    def __call__(self, ast: typing.Any, **kwargs) -> typing.List[typing.Dict[str, float]]:
+        initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
+        if initial_call:
+            self.current_ast_preference_features = []
+            self._default_kwarg(kwargs, 'inner_call', True)
+
+        preference_node = False
+
+        if isinstance(ast, tatsu.ast.AST):
+            rule = ast.parseinfo.rule  # type: ignore
+            if rule == 'preference':
+                preference_node = True
+
+            elif rule == 'pref_forall':
+                kwargs = ast_parser.update_context_variables(ast, kwargs)
+
+        preference_node = isinstance(ast, tatsu.ast.AST) and ast.parseinfo.rule == 'preference'  # type: ignore
+
+        if preference_node:
+            context_vars = kwargs.get(ast_parser.VARIABLES_CONTEXT_KEY, {})
+            pref_features = self.preference_behavioral_featurizer.get_game_features(
+                ast, None, True,
+                {
+                    ast_parser.SECTION_CONTEXT_KEY: ast_parser.PREFERENCES,
+                    ast_parser.VARIABLES_CONTEXT_KEY: context_vars,
+                }  # type: ignore
+            )
+            self.current_ast_preference_features.append(pref_features)
+            inner_result = None
+
+        else:
+            inner_result = super().__call__(ast, **kwargs)
+
+        if not initial_call:
+            return inner_result  # type: ignore
+
+        return self.current_ast_preference_features
 
 
 
@@ -817,7 +971,7 @@ def build_behavioral_features_featurizer(
                 featurizer
             )
 
-            return exemplar_preferences_featurizer
+            featurizer = exemplar_preferences_featurizer
 
         elif feature_set == EXEMPLAR_PREFERENCES_EXPECTED_VALUES:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
@@ -829,7 +983,40 @@ def build_behavioral_features_featurizer(
                 featurizer
             )
 
-            return exemplar_preferences_featurizer
+            featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == EXEMPLAR_PREFERENCES_BC_SETUP:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            featurizer = exemplar_preferences_featurizer
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

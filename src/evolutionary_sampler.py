@@ -226,9 +226,11 @@ parser.add_argument('--start-step', type=int, default=0)
 
 class CrossoverType(Enum):
     SAME_RULE = 0
-    SAME_PARENT_SELECTOR = 1
-    SAME_PARENT_RULE = 2
-    SAME_PARENT_RULE_SELECTOR = 3
+    SAME_PARENT_INITIAL_SELECTOR = 1
+    SAME_PARENT_FULL_SELECTOR = 2
+    SAME_PARENT_RULE = 3
+    SAME_PARENT_RULE_INITIAL_SELECTOR = 4
+    SAME_PARENT_RULE_FULL_SELECTOR = 5
 
 
 def _get_node_key(node: typing.Any):
@@ -245,13 +247,19 @@ def node_info_to_key(crossover_type: CrossoverType, node_info: ast_parser.ASTNod
     if crossover_type == CrossoverType.SAME_RULE:
         return _get_node_key(node_info[0])
 
-    elif crossover_type == CrossoverType.SAME_PARENT_SELECTOR:
+    elif crossover_type == CrossoverType.SAME_PARENT_INITIAL_SELECTOR:
+        return '_'.join([_get_node_key(node_info[1]),  str(node_info[2][0])])
+
+    elif crossover_type == CrossoverType.SAME_PARENT_FULL_SELECTOR:
         return '_'.join([_get_node_key(node_info[1]),  *[str(s) for s in node_info[2]]])
 
     elif crossover_type == CrossoverType.SAME_PARENT_RULE:
         return '_'.join([_get_node_key(node_info[1]), _get_node_key(node_info[0])])
 
-    elif crossover_type == CrossoverType.SAME_PARENT_RULE_SELECTOR:
+    elif crossover_type == CrossoverType.SAME_PARENT_RULE_INITIAL_SELECTOR:
+        return '_'.join([_get_node_key(node_info[1]),  str(node_info[2][0]),  _get_node_key(node_info[0])])
+
+    elif crossover_type == CrossoverType.SAME_PARENT_RULE_FULL_SELECTOR:
         return '_'.join([_get_node_key(node_info[1]),  *[str(s) for s in node_info[2]],  _get_node_key(node_info[0])])
 
     else:
@@ -710,7 +718,7 @@ class PopulationBasedSampler():
 
     def _get_valid_insert_or_delete_nodes(
             self, game: ASTType, min_length: int = 1,
-            weigh_nodes_by_length: bool = True, shortest_weight_maximal: bool = False
+            weigh_nodes_by_length: bool = True, shortest_weight_maximal: bool = False, return_keys: bool = False,
             ) -> typing.Tuple[typing.List[typing.Tuple[tatsu.ast.AST, typing.List[typing.Union[str, int]], str, typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]], np.ndarray]:
         '''
         Returns a list of every node in the game which is a valid candidate for insertion or deletion
@@ -723,38 +731,44 @@ class PopulationBasedSampler():
         # Collect all nodes whose final selector is an integet (i.e. an index into a list) and whose parent
         # yields a list when its first selector is applied. Also make sure that the list has a minimum length
         valid_nodes = []
-        for _, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
-            if isinstance(selector[-1], int) and isinstance(parent[selector[0]], list) and len(parent[selector[0]]) >= min_length:  # type: ignore
-                valid_nodes.append((parent, selector[0], section, global_context, local_context))
+        for node, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
+            first_parent = parent[selector[0]]
+            if isinstance(selector[-1], int) and isinstance(first_parent, list) and len(first_parent) >= min_length:  # type: ignore
+                valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
 
         if len(valid_nodes) == 0:
             raise SamplingException('No valid nodes found for insertion or deletion')
 
         # Dedupe valid nodes based on their parent and selector
         valid_node_keys = set()
-        valid_nodes = []
-        valid_node_weights = []
-        for parent, selector, section, global_context, local_context in valid_nodes:
+        output_valid_nodes = []
+        output_node_keys = []
+        output_node_weights = []
+        for node, parent, selector, section, global_context, local_context in valid_nodes:
             key = (*self.regrowth_sampler._ast_key(parent), selector)
             if key not in valid_node_keys:
                 valid_node_keys.add(key)
-                valid_nodes.append((parent, selector, section, global_context, local_context))
-                valid_node_weights.append(len(parent[selector]))
+                output_valid_nodes.append((parent, selector, section, global_context, local_context))
+                output_node_keys.append(self.regrowth_sampler._ast_key(node))
+                output_node_weights.append(len(parent[selector]))
 
-        if len(valid_nodes) > 0:
+        if len(output_valid_nodes) > 0:
             if not weigh_nodes_by_length:
-                valid_node_weights = np.ones(len(valid_nodes)) / len(valid_nodes)
+                output_node_weights = np.ones(len(output_valid_nodes)) / len(output_valid_nodes)
 
             else:
-                valid_node_weights = np.array(valid_node_weights, dtype=float)
+                output_node_weights = np.array(output_node_weights, dtype=float)
                 if shortest_weight_maximal:
-                    valid_node_weights = valid_node_weights.max() + valid_node_weights.min() - valid_node_weights
-                valid_node_weights /= valid_node_weights.sum()
+                    output_node_weights = output_node_weights.max() + output_node_weights.min() - output_node_weights
+                output_node_weights /= output_node_weights.sum()
 
         else:
-            valid_node_weights = np.array([])
+            output_node_weights = np.array([])
 
-        return valid_nodes, valid_node_weights
+        if return_keys:
+            return output_valid_nodes, output_node_weights, output_node_keys  # type: ignore
+
+        return output_valid_nodes, output_node_weights
 
     @handle_multiple_inputs
     def _insert(self, game: ASTType, rng: np.random.Generator):
@@ -915,6 +929,82 @@ class PopulationBasedSampler():
             game_1_crossover_node = deepcopy_ast(g1_node, copy_type=ASTCopyType.NODE)
             replace_child(g2_parent, g2_selector, game_1_crossover_node) # type: ignore
             self.context_fixer.fix_contexts(game_2, g2_node, game_1_crossover_node)  # type: ignore
+
+        return [game_1, game_2]
+
+    def _crossover_insert(self, games: typing.Union[ASTType, typing.List[ASTType]],
+                   rng: typing.Optional[np.random.Generator] = None,
+                   crossover_first_game: bool = True, crossover_second_game: bool = True):
+
+        if rng is None:
+            rng = self.rng
+
+        crossover_type = CrossoverType.SAME_PARENT_INITIAL_SELECTOR
+
+        game_2 = None
+        if isinstance(games, list):
+            game_1 = games[0]
+
+            if len(games) > 1:
+                game_2 = games[1]
+        else:
+            game_1 = games
+
+        if game_2 is None:
+            game_2 = typing.cast(ASTType, self._choice(self.population, rng=rng))
+
+        if crossover_first_game:
+            game_1 = deepcopy_ast(game_1)
+
+        if crossover_second_game:
+            game_2 = deepcopy_ast(game_2)
+
+        # Create a map from crossover_type keys to lists of nodeinfos for each game
+        _, _, game_1_insertion_node_keys = self._get_valid_insert_or_delete_nodes(  # type: ignore
+            game_1, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
+            shortest_weight_maximal=True, return_keys=True)
+
+        game_1_crossover_map = defaultdict(list)
+        for node_key in game_1_insertion_node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
+            game_1_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
+
+        _, _, game_2_insertion_node_keys = self._get_valid_insert_or_delete_nodes(  # type: ignore
+            game_2, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
+            shortest_weight_maximal=True, return_keys=True)
+
+        game_2_crossover_map = defaultdict(list)
+        for node_key in game_2_insertion_node_keys:
+            node_info = self.regrowth_sampler.parent_mapping[node_key]
+            game_2_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
+
+        # Find the set of crossover_type keys that are shared between the two games
+        shared_crossover_keys = set(game_1_crossover_map.keys()).intersection(set(game_2_crossover_map.keys()))
+
+        # If there are no shared crossover keys, then throw an exception
+        if len(shared_crossover_keys) == 0:
+            raise SamplingException("No insertion-friendly crossover keys shared between the two games")
+
+        # Select a random crossover key and a nodeinfo for each game with that key
+        crossover_key = self._choice(list(shared_crossover_keys), rng=rng)
+        # print('Crossover key', crossover_key)
+        game_1_selected_node_info = self._choice(game_1_crossover_map[crossover_key], rng=rng)
+        game_2_selected_node_info = self._choice(game_2_crossover_map[crossover_key], rng=rng)
+
+        # Create new copies of the nodes to be crossed over
+        g1_node, g1_parent, g1_selector = game_1_selected_node_info[:3]
+        g2_node, g2_parent, g2_selector = game_2_selected_node_info[:3]
+
+        # Insert the new node into the parent at a random index
+        if crossover_first_game:
+            game_2_crossover_node = deepcopy_ast(g2_node, copy_type=ASTCopyType.NODE)
+            g1_parent[g1_selector[0]].insert(rng.integers(len(g1_parent[g1_selector[0]]) + 1), game_2_crossover_node)
+            self.context_fixer.fix_contexts(game_1, crossover_child=game_2_crossover_node)  # type: ignore
+
+        if crossover_second_game:
+            game_1_crossover_node = deepcopy_ast(g1_node, copy_type=ASTCopyType.NODE)
+            g2_parent[g2_selector[0]].insert(rng.integers(len(g2_parent[g2_selector[0]]) + 1), game_1_crossover_node)
+            self.context_fixer.fix_contexts(game_2, crossover_child=game_1_crossover_node)  # type: ignore
 
         return [game_1, game_2]
 
@@ -2065,7 +2155,7 @@ class MAPElitesSampler(PopulationBasedSampler):
             basic_operators = [self._gen_regrowth_sample, self._insert, self._delete]
 
             if self.use_crossover:
-                basic_operators.append(self._crossover)  # type: ignore
+                basic_operators.extend([self._crossover, self._crossover_insert])  # type: ignore
 
             if not self.use_cognitive_operators:
                 self.operators = basic_operators
@@ -2074,11 +2164,11 @@ class MAPElitesSampler(PopulationBasedSampler):
             else:
                 cognitive_operators = [self._resample_variable_types, self._resample_first_condition, self._resample_last_condition,
                                     self._resample_variable_types_and_first_condition, self._resample_variable_types_and_last_condition]
-                section_resample_operators = [self._sample_or_resample_setup, self._sample_or_resample_terminal, self._resample_scoring]
+                section_resample_operators = [self._sample_or_resample_setup, self._sample_or_resample_terminal, self._resample_scoring, self._crossover_full_sections]
 
                 basic_operator_weights = [0.5 / len(basic_operators)] * len(basic_operators)
-                cognitive_operator_weights = [0.4 / len(cognitive_operators)] * len(cognitive_operators)
-                section_resample_operator_weights = [0.1 / len(section_resample_operators)] * len(section_resample_operators)
+                cognitive_operator_weights = [0.3 / len(cognitive_operators)] * len(cognitive_operators)
+                section_resample_operator_weights = [0.2 / len(section_resample_operators)] * len(section_resample_operators)
 
                 self.operators = basic_operators + cognitive_operators + section_resample_operators
                 self.operator_weights = np.array(basic_operator_weights + cognitive_operator_weights + section_resample_operator_weights)

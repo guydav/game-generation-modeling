@@ -83,13 +83,17 @@ class ASTContextFixer(ASTParentMapper):
         preference_names_to_add.difference_update(names_in_both_sets)
         preference_names_to_remove.difference_update(names_in_both_sets)
 
+        # print('Before', preference_names_to_add, preference_names_to_remove)
+
         self(crossed_over_game, global_context={
             PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_add,
-            PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY: preference_names_to_remove,
+            PREFERENCE_NAMES_TO_REMOVE_CONTEXT_KEY: preference_names_to_remove,
             REPLACEMENT_MAPPINGS_CONTEXT_KEY: dict(),
             LOCAL_VARIABLE_REF_COUNTS_CONTEXT_KEY: defaultdict(dict),
             'rng': self.rng,
         })
+
+        # print('After', preference_names_to_add, preference_names_to_remove)
 
         # If any preference names still remain unadded, we need to add them to the game
         if len(preference_names_to_add) > 0:
@@ -276,6 +280,7 @@ class ASTContextFixer(ASTParentMapper):
                 new_pref_name = self.sampler.rules[rule]['pref_name']['samplers']['preference_name'](global_context, local_context)
                 replace_child(ast, ['pref_name'], new_pref_name)
                 global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].add(new_pref_name)
+                print(f'Adding preference name {new_pref_name} to global context')
                 preference_names[ast.pref_name] -= 1
 
         elif rule in ('predicate', 'function_eval'):
@@ -313,7 +318,7 @@ class ASTContextFixer(ASTParentMapper):
                 raise ast_counter_sampler.SamplingException('No preference names found in global context when updating a count.pref_name_and_types node')
 
             preference_names = global_context['preference_names']
-            if ast.pref_name not in preference_names:
+            if ast.pref_name not in preference_names or ast.pref_name in global_context[PREFERENCE_NAMES_TO_REMOVE_CONTEXT_KEY]:
                 # TODO: do we want to be consistent with the preference names we map to?
                 # if ast.pref_name in global_context['preference_names_to_remove']:
                 if len(global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY]) > 0:
@@ -324,6 +329,9 @@ class ASTContextFixer(ASTParentMapper):
                     new_pref_name = self._sample_from_sequence(list(preference_names))
 
                 replace_child(ast, ['pref_name'], new_pref_name)
+
+            elif ast.pref_name in global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY]:
+                global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].remove(ast.pref_name)
 
             self.preference_count_nodes[ast.pref_name].append(ast)  # type: ignore
 

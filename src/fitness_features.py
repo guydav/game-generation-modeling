@@ -709,6 +709,11 @@ class SetupObjectsUsed(FitnessTerm):
         self.skip_objects = skip_objects
         self.parse_variables = parse_variables
 
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if 'parse_variables' not in self.__dict__:
+            self.parse_variables = False
+
     def game_start(self) -> None:
         self.setup_objects = set()
         self.used_objects = set()

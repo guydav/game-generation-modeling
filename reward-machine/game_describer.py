@@ -638,8 +638,8 @@ class GameDescriber():
             terminal_ast = typing.cast(tatsu.ast.AST, terminal_ast["comp"])
             comparison_operator = terminal_ast["op"]
 
-            expr_1 = self._describe_scoring(terminal_ast["expr_1"]["expr"]) # type: ignore
-            expr_2 = self._describe_scoring(terminal_ast["expr_2"]["expr"]) # type: ignore
+            expr_1 = self._describe_scoring(terminal_ast["expr_1"]) # type: ignore
+            expr_2 = self._describe_scoring(terminal_ast["expr_2"]) # type: ignore
 
             if comparison_operator == "=":
                 return f"{expr_1} is equal to {expr_2}" # type: ignore
@@ -665,6 +665,12 @@ class GameDescriber():
         '''
         if external_object_types is None:
             return ""
+        
+        # Issue: it's possible for regrown games to apply the external scoring syntax to games without and
+        # external forall. In this case, I suppose we'll just ignore it? (Other options are adding an error message)
+        if preference_name not in self.external_forall_preference_mappings:
+            return ""
+        
 
         specified_variables = list(self.external_forall_preference_mappings[preference_name].keys())[:len(external_object_types)] # type: ignore
         mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
@@ -682,6 +688,9 @@ class GameDescriber():
 
         if rule in ("scoring_expr", "scoring_expr_or_number"):
             return self._describe_scoring(scoring_ast["expr"]) # type: ignore
+
+        elif rule == "pref_count_number_value":
+            return str(scoring_ast["terminal"]) # type: ignore
 
         elif rule == "scoring_multi_expr":
             operator = scoring_ast["op"] # type: ignore

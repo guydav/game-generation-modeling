@@ -1,6 +1,7 @@
 import argparse
 from itertools import groupby
 import os
+import re
 import typing
 
 import logging
@@ -521,6 +522,12 @@ class GameDescriber():
             if name == "adjacent_side":
                 name += f"_{len(variables)}_args"
 
+            # Issue: if a predicate uses the same variable in both arguments, extract_variables will only return it once
+            # We can sidestep this by copying out variables to the right length
+            if len(variables) < PREDICATE_DESCRIPTIONS[name].count('{'): # type: ignore
+                diff = PREDICATE_DESCRIPTIONS[name].count('{') - len(variables) # type: ignore
+                variables += [variables[-1]] * diff
+
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
         elif rule == "super_predicate":
@@ -813,7 +820,7 @@ class GameDescriber():
             delimiter = '<br>'
             formatting = "<pre><code>{0}</code></pre>"
         else:
-            delimiter = ''
+            delimiter = '\n'
             formatting = "{0}"
 
         setup_description = ""

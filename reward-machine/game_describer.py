@@ -689,9 +689,6 @@ class GameDescriber():
         if rule in ("scoring_expr", "scoring_expr_or_number"):
             return self._describe_scoring(scoring_ast["expr"]) # type: ignore
 
-        elif rule == "pref_count_number_value":
-            return str(scoring_ast["terminal"]) # type: ignore
-
         elif rule == "scoring_multi_expr":
             operator = scoring_ast["op"] # type: ignore
             expressions = scoring_ast["expr"] # type: ignore
@@ -808,6 +805,13 @@ class GameDescriber():
             external_scoring_desc = self._external_scoring_description(preference_name, object_types)
 
             return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
+
+        # TODO: is this correct?
+        elif rule == "count_shortest":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied in the shortest possible sequence of states" + external_scoring_desc
 
         elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
             return scoring_ast["terminal"]  # type: ignore

@@ -2207,6 +2207,13 @@ class MAPElitesSampler(PopulationBasedSampler):
         population_keys = list(self.population.keys())
         return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
+    def visualize_random_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                         postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+
+        population_keys = list(self.population.keys())
+        key = self._choice(population_keys, rng=self.rng)
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
+
     def _key_value_at_index(self, key: KeyTypeAnnotation, index: int):
         if isinstance(key, int):
             return (key >> index) % 2

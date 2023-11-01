@@ -1848,22 +1848,30 @@ def display_game_diff_html(before: str, after: str, html_diff_substitutions: typ
     display(HTML(diff))
 
 
-def evaluate_single_game_energy_contributions(cv: typing.Union[GridSearchCV, Pipeline], game_features: torch.Tensor, game_text: str,
-    feature_names: typing.List[str], top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,):
+def evaluate_single_game_energy_contributions(
+        cv: typing.Optional[typing.Union[GridSearchCV, Pipeline]], game_features: typing.Optional[torch.Tensor], game_text: str,
+        feature_names: typing.List[str], top_k: int = 20, display_overall_features: bool = True,
+        display_game: bool = True, min_display_threshold: float = 0.0005,
+        game_energy: typing.Optional[float] = None) -> None:
 
-    energy_model = cv
-    if isinstance(cv, GridSearchCV):
-        energy_model = cv.best_estimator_
-    weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
+    if cv is None or game_features is None:
+        if game_energy is not None:
+            display(Markdown(f'### Energy of visualized game: {game_energy:.3f}'))
 
-    index_energy_contributions = game_features * weights
+    else:
+        energy_model = cv
+        if isinstance(cv, GridSearchCV):
+            energy_model = cv.best_estimator_
+        weights = energy_model['fitness'].model.fc1.weight.data.detach().squeeze()  # type: ignore
 
-    real_game_energy = energy_model.transform(game_features).item()  # type: ignore
+        index_energy_contributions = game_features * weights
 
-    display(Markdown(f'### Energy of visualized game: {real_game_energy:.3f}'))
+        game_energy = energy_model.transform(game_features).item()  # type: ignore
 
-    if display_overall_features:
-        display_energy_contributions_table(index_energy_contributions, game_features, weights, feature_names, top_k, min_display_threshold)
+        display(Markdown(f'### Energy of visualized game: {game_energy:.3f}'))
+
+        if display_overall_features:
+            display_energy_contributions_table(index_energy_contributions, game_features, weights, feature_names, top_k, min_display_threshold)
 
     if display_game:
         display(Markdown(f'### Game:'))

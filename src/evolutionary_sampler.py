@@ -328,7 +328,7 @@ def handle_multiple_inputs(operator):
 
 
 PARENT_INDEX = 'parent_index'
-
+SKIP_LOAD_FEATURIZER = True
 
 class PopulationBasedSampler():
     args: argparse.Namespace
@@ -579,6 +579,9 @@ class PopulationBasedSampler():
         return state
 
     def __setstate__(self, state):
+        if SKIP_LOAD_FEATURIZER:
+            state['fitness_featurizer'] = None
+
         self.__dict__.update(state)
         # Set unique random seed per process X generation index
         self.random_seed = self.args.random_seed + (self._process_index() * (self.generation_index + 1))
@@ -1629,10 +1632,17 @@ class PopulationBasedSampler():
         if postprocess_sample:
             sample = self.postprocessor(sample)  # type: ignore
 
-        sample_features = self._proposal_to_features(sample)  # type: ignore
-        sample_features_tensor = self._features_to_tensor(sample_features)
+        sample_features = None
+        sample_features_tensor = None
+
+        if self.fitness_featurizer is not None:
+            sample_features = self._proposal_to_features(sample)  # type: ignore
+            sample_features_tensor = self._features_to_tensor(sample_features)
 
         if feature_keywords_to_print is not None:
+            if sample_features is None:
+                raise ValueError(f'Cannot print features for sample {sample} when skipping loading the fitness featurizer')
+
             print('\nFeatures with keywords:')
             for keyword in feature_keywords_to_print:
                 keyword_features = [feature for feature, value in sample_features.items() if keyword in feature and value]
@@ -1642,7 +1652,7 @@ class PopulationBasedSampler():
                 print(f'"{keyword}": {keyword_features}')
 
         evaluate_single_game_energy_contributions(
-            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,
+            self.fitness_function, sample_features_tensor, ast_printer.ast_to_string(sample, '\n'), self.feature_names,  # type: ignore
             top_k=top_k, display_overall_features=display_overall_features,
             display_game=display_game, min_display_threshold=min_display_threshold,
             )

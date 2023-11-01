@@ -794,6 +794,7 @@ PREDICATE_IN_DATA_MIN_INTERVAL_COUNT = 1
 PREDICATE_IN_DATA_MIN_TOTAL_INTERVAL_STATE_COUNT = 5  # 200
 
 FULL_DATASET_TRACES_HASH = '028b3733'
+SKIP_CREATE_DATABASE = True
 
 class PredicateFoundInData(FitnessTerm):
     boolean_parser: ast_parser.ASTBooleanParser
@@ -833,11 +834,12 @@ class PredicateFoundInData(FitnessTerm):
         self.boolean_parser = BOOLEAN_PARSER
 
     def _init_predicate_data_estimator(self):
-        self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
-            force_trace_names_hash=self.trace_names_hash,
-            # log_queries=self.log_queries,
-            log_queries=False,
-        )
+        if not SKIP_CREATE_DATABASE:
+            self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
+                force_trace_names_hash=self.trace_names_hash,
+                # log_queries=self.log_queries,
+                log_queries=False,
+            )
 
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
         state = self.__dict__.copy()
@@ -867,6 +869,9 @@ class PredicateFoundInData(FitnessTerm):
             self.predicates_found = []
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if SKIP_CREATE_DATABASE:
+            raise ValueError('Cannot use PredicateFoundInData without creating the database')
+
         if isinstance(ast, tatsu.ast.AST):
             if self.use_full_databse:
                 pred = ast[PREDICATE_IN_DATA_RULE_TO_CHILD[rule]]

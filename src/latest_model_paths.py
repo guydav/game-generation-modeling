@@ -53,7 +53,7 @@ class MapElitesModelSpec:
         return load_data(date_and_id, folder, load_path)
 
 
-MAP_ELIETS_MODELS = {
+MAP_ELITES_MODELS = {
     'previous_object_and_predicates_with_expected_values_bc': MapElitesModelSpec(
         'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_gen_4096_2023_10_25',
         'Using New "Goodness" BC | Uniform archive sampling | L2 regularization'

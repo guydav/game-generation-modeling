@@ -1063,7 +1063,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_1_sections, game_2_section)
             section_copy = deepcopy_ast(game_2[3 + game_2_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
-            self.context_fixer.fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
+            self.context_fixer.fix_contexts(game_1, crossover_child=section_copy[1])  # type: ignore
 
         if crossover_second_game:
             game_1_section_index = rng.integers(len(game_1_sections))

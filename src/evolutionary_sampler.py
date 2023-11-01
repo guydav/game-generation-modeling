@@ -1063,7 +1063,7 @@ class PopulationBasedSampler():
             index, replace = self._find_index_for_section(game_1_sections, game_2_section)
             section_copy = deepcopy_ast(game_2[3 + game_2_section_index], copy_type=ASTCopyType.SECTION)
             self._insert_section_to_game(game_1, section_copy, index, replace)  # type: ignore
-            self.context_fixer.fix_contexts(game_1, crossover_child=section_cop[1])  # type: ignore
+            self.context_fixer.fix_contexts(game_1, crossover_child=section_copy[1])  # type: ignore
 
         if crossover_second_game:
             game_1_section_index = rng.integers(len(game_1_sections))
@@ -2206,6 +2206,13 @@ class MAPElitesSampler(PopulationBasedSampler):
                          postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
         population_keys = list(self.population.keys())
         return self._visualize_sample_by_key(population_keys[sample_index], top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
+
+    def visualize_random_sample(self, sample_index: int, top_k: int = 20, display_overall_features: bool = True, display_game: bool = True, min_display_threshold: float = 0.0005,
+                         postprocess_sample: bool = True, feature_keywords_to_print: typing.Optional[typing.List[str]] = None):
+
+        population_keys = list(self.population.keys())
+        key = self._choice(population_keys, rng=self.rng)
+        return self._visualize_sample_by_key(key, top_k, display_overall_features, display_game, min_display_threshold, postprocess_sample, feature_keywords_to_print)
 
     def _key_value_at_index(self, key: KeyTypeAnnotation, index: int):
         if isinstance(key, int):

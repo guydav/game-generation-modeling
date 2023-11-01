@@ -27,7 +27,7 @@ from torch.utils.data import TensorDataset, DataLoader, IterableDataset
 from tqdm import tqdm
 
 from fitness_features_preprocessing import NON_FEATURE_COLUMNS
-from latest_model_paths import LATEST_FITNESS_FEATURES
+import latest_model_paths
 
 
 class LevelFilter(logging.Filter):
@@ -69,7 +69,7 @@ def _add_original_game_name_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_fitness_data(path: str = LATEST_FITNESS_FEATURES) -> pd.DataFrame:
+def load_fitness_data(path: str = latest_model_paths.LATEST_FITNESS_FEATURES) -> pd.DataFrame:
     fitness_df = pd.read_csv(path)
     return process_fitness_df(fitness_df)
 

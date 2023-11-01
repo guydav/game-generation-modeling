@@ -720,6 +720,10 @@ class GameDescriber():
         elif rule == "scoring_comparison":
             comparison_operator = scoring_ast["comp"]["op"] # type: ignore
 
+            # Issue: occasional syntax errors can cause the operator to be invalid / not appear
+            if comparison_operator is None:
+                return "[SYNTAX ERROR IN SCORING]"
+
             expr_1 = self._describe_scoring(scoring_ast["comp"]["expr_1"]) # type: ignore
             expr_2 = self._describe_scoring(scoring_ast["comp"]["expr_2"]) # type: ignore
 

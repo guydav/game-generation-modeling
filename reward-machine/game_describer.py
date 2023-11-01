@@ -1,6 +1,7 @@
 import argparse
 from itertools import groupby
 import os
+import re
 import typing
 
 import logging
@@ -521,6 +522,12 @@ class GameDescriber():
             if name == "adjacent_side":
                 name += f"_{len(variables)}_args"
 
+            # Issue: if a predicate uses the same variable in both arguments, extract_variables will only return it once
+            # We can sidestep this by copying out variables to the right length
+            if len(variables) < PREDICATE_DESCRIPTIONS[name].count('{'): # type: ignore
+                diff = PREDICATE_DESCRIPTIONS[name].count('{') - len(variables) # type: ignore
+                variables += [variables[-1]] * diff
+
             return PREDICATE_DESCRIPTIONS[name].format(*variables)
 
         elif rule == "super_predicate":
@@ -631,8 +638,8 @@ class GameDescriber():
             terminal_ast = typing.cast(tatsu.ast.AST, terminal_ast["comp"])
             comparison_operator = terminal_ast["op"]
 
-            expr_1 = self._describe_scoring(terminal_ast["expr_1"]["expr"]) # type: ignore
-            expr_2 = self._describe_scoring(terminal_ast["expr_2"]["expr"]) # type: ignore
+            expr_1 = self._describe_scoring(terminal_ast["expr_1"]) # type: ignore
+            expr_2 = self._describe_scoring(terminal_ast["expr_2"]) # type: ignore
 
             if comparison_operator == "=":
                 return f"{expr_1} is equal to {expr_2}" # type: ignore
@@ -658,6 +665,12 @@ class GameDescriber():
         '''
         if external_object_types is None:
             return ""
+        
+        # Issue: it's possible for regrown games to apply the external scoring syntax to games without and
+        # external forall. In this case, I suppose we'll just ignore it? (Other options are adding an error message)
+        if preference_name not in self.external_forall_preference_mappings:
+            return ""
+        
 
         specified_variables = list(self.external_forall_preference_mappings[preference_name].keys())[:len(external_object_types)] # type: ignore
         mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
@@ -706,6 +719,10 @@ class GameDescriber():
 
         elif rule == "scoring_comparison":
             comparison_operator = scoring_ast["comp"]["op"] # type: ignore
+
+            # Issue: occasional syntax errors can cause the operator to be invalid / not appear
+            if comparison_operator is None:
+                return "[SYNTAX ERROR IN SCORING]"
 
             expr_1 = self._describe_scoring(scoring_ast["comp"]["expr_1"]) # type: ignore
             expr_2 = self._describe_scoring(scoring_ast["comp"]["expr_2"]) # type: ignore
@@ -793,6 +810,13 @@ class GameDescriber():
 
             return f"the number of times '{preference_name}' has been satisfied with different quantifications of {self.engine.join(external_variables, conj='and')}" + external_scoring_desc
 
+        # TODO: is this correct?
+        elif rule == "count_shortest":
+            preference_name, object_types = self._extract_name_and_types(scoring_ast) # type: ignore
+            external_scoring_desc = self._external_scoring_description(preference_name, object_types)
+
+            return f"the number of times '{preference_name}' has been satisfied in the shortest possible sequence of states" + external_scoring_desc
+
         elif rule in ("comparison_arg_number_value", "time_number_value", "score_number_value", "pref_count_number_value", "scoring_number_value"):
             return scoring_ast["terminal"]  # type: ignore
 
@@ -813,7 +837,7 @@ class GameDescriber():
             delimiter = '<br>'
             formatting = "<pre><code>{0}</code></pre>"
         else:
-            delimiter = ''
+            delimiter = '\n'
             formatting = "{0}"
 
         setup_description = ""

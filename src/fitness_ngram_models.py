@@ -41,6 +41,9 @@ parser.add_argument('--zero-log-prob', type=float, default=DEFAULT_ZERO_LOG_PROB
 parser.add_argument('--from-asts', action='store_true')
 parser.add_argument('--no-pad', action='store_true')
 parser.add_argument('--padding', default=None, type=int)
+parser.add_argument('--fit-shuffle-list-elements', action='store_true')
+DEFAULT_RANDOM_SEED = 33
+parser.add_argument('--random-seed', default=DEFAULT_RANDOM_SEED, type=int)
 
 
 WHITESPACE_PATTERN = re.compile(r'\s+')
@@ -464,13 +467,17 @@ IGNORE_RULES = [
 class NGramASTParser(ast_parser.ASTParser):
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
                  use_specific_objects: bool = False,
-                 preorder_traversal: bool = True, pad: int = 0, skip_game_and_domain: bool = True):
+                 preorder_traversal: bool = True, pad: int = 0,
+                 skip_game_and_domain: bool = True,
+                 random_seed: int = DEFAULT_RANDOM_SEED):
         self.n = n
         self.ignore_rules = set(ignore_rules)
         self.use_specific_objects = use_specific_objects
         self.preorder_traversal = preorder_traversal
         self.pad = pad
         self.skip_game_and_domain = skip_game_and_domain
+        self.random_seed = random_seed
+        self.rng = np.random.default_rng(self.random_seed)
 
         self.ngram_counts = defaultdict(int)
         self.ngram_counts_by_section = {section: defaultdict(int) for section in ast_parser.SECTION_KEYS}
@@ -520,6 +527,7 @@ class NGramASTParser(ast_parser.ASTParser):
     def __call__(self, ast, **kwargs):
         self._default_kwarg(kwargs, 'update_model_counts', False)
         self._default_kwarg(kwargs, 'skip_game_and_domain', self.skip_game_and_domain)
+        self._default_kwarg(kwargs, 'shuffle_list_elements', False)
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
         if initial_call:
             kwargs['inner_call'] = True
@@ -715,6 +723,12 @@ class NGramASTParser(ast_parser.ASTParser):
             if child_key != 'parseinfo':
                 self(ast[child_key], **kwargs)
 
+    def _handle_list(self, ast: list, **kwargs):
+        if kwargs['shuffle_list_elements']:
+            self.rng.shuffle(ast)
+
+        return super()._handle_list(ast, **kwargs)
+
 
 DEFAULT_N_BY_SECTION = {
     ast_parser.SETUP: 5,
@@ -729,12 +743,16 @@ class ASTNGramTrieModel:
                  use_specific_objects: bool = False,
                  stupid_backoff_discount: float = DEFAULT_STUPID_BACKOFF_DISCOUNT,
                  zero_log_prob: float = DEFAULT_ZERO_LOG_PROB,
-                 preorder_traversal: bool = True, pad: int = 0, n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
+                 preorder_traversal: bool = True, pad: int = 0,
+                 fit_shuffle_list_elements: bool = False, random_seed: int = DEFAULT_RANDOM_SEED,
+                 n_by_section: typing.Dict[str, int] = DEFAULT_N_BY_SECTION,
                  sections: typing.Sequence[str] = ast_parser.SECTION_KEYS):
 
         self.n = n
         self.ignore_rules = ignore_rules
         self.use_specific_objects = use_specific_objects
+        self.fit_shuffle_list_elements = fit_shuffle_list_elements
+        self.random_seed = random_seed
         self.sections = sections
         for section in sections:
             if section not in n_by_section:
@@ -742,7 +760,7 @@ class ASTNGramTrieModel:
         self.n_by_sections = n_by_section
 
         self.ngram_ast_parser = NGramASTParser(n, ignore_rules=ignore_rules, use_specific_objects=use_specific_objects,
-                                               preorder_traversal=preorder_traversal, pad=pad)
+                                               preorder_traversal=preorder_traversal, pad=pad, random_seed=random_seed)
         self.model = NGramTrieModel(n, stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False)
         self.model_by_section = {section: NGramTrieModel(self.n_by_sections[section], stupid_backoff_discount=stupid_backoff_discount, zero_log_prob=zero_log_prob, should_pad=False) for section in sections}
 
@@ -754,7 +772,7 @@ class ASTNGramTrieModel:
 
     def fit(self, asts: typing.Sequence[typing.Union[tuple,tatsu.ast.AST]]):
         for ast in asts:
-            self.ngram_ast_parser(ast, update_model_counts=True)
+            self.ngram_ast_parser(ast, update_model_counts=True, shuffle_list_elements=self.fit_shuffle_list_elements)
 
         self.model.fit(ngram_counts=self.ngram_ast_parser.ngram_counts, n_games=len(asts))
         for section, model in self.model_by_section.items():
@@ -810,7 +828,8 @@ def main(args: argparse.Namespace):
     if args.from_asts:
         model = ASTNGramTrieModel(n=args.n, use_specific_objects=args.use_specific_objects,
                                   stupid_backoff_discount=args.stupid_backoff_discount,
-                                  zero_log_prob=args.zero_log_prob, pad=0 if args.no_pad else args.padding)
+                                  zero_log_prob=args.zero_log_prob, pad=0 if args.no_pad else args.padding,
+                                  fit_shuffle_list_elements=args.fit_shuffle_list_elements,)
     else:
         model = NGramTrieModel(n=args.n, stupid_backoff_discount=args.stupid_backoff_discount, zero_log_prob=args.zero_log_prob)
 

@@ -1628,8 +1628,6 @@ class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
 
 
 PREDICATE_OR_FUNCTION_IMPLICIT_TERMS = {
-    'predicate_agent_crouches': 'agent',
-    'predicate_agent_holds': 'agent',
     'predicate_rug_color_under': 'rug',
 }
 

@@ -717,7 +717,7 @@ class PopulationBasedSampler():
         return new_proposal  # type: ignore
 
     def _get_valid_insert_or_delete_nodes(
-            self, game: ASTType, min_length: int = 1,
+            self, game: ASTType, insert: bool = True,
             weigh_nodes_by_length: bool = True, shortest_weight_maximal: bool = False, return_keys: bool = False,
             ) -> typing.Tuple[typing.List[typing.Tuple[tatsu.ast.AST, typing.List[typing.Union[str, int]], str, typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]], np.ndarray]:
         '''
@@ -733,8 +733,15 @@ class PopulationBasedSampler():
         valid_nodes = []
         for node, parent, selector, _, section, global_context, local_context in self.regrowth_sampler.parent_mapping.values():
             first_parent = parent[selector[0]]
-            if isinstance(selector[-1], int) and isinstance(first_parent, list) and len(first_parent) >= min_length:  # type: ignore
-                valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
+            if isinstance(selector[-1], int) and isinstance(first_parent, list):
+                parent_length = len(first_parent)
+                if insert and parent_length >= 1:
+                    valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
+
+                elif not insert:
+                    min_length = self.samplers[self.first_sampler_key].rules[parent.parseinfo.rule][selector[0]][MIN_LENGTH]
+                    if parent_length >= min_length + 1:
+                        valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
 
         if len(valid_nodes) == 0:
             raise SamplingException('No valid nodes found for insertion or deletion')
@@ -779,7 +786,7 @@ class PopulationBasedSampler():
         # Make a copy of the game
         new_game = deepcopy_ast(game)
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
-            new_game, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=True)
+            new_game, insert=True, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=True)
 
         if len(valid_nodes) == 0:
             raise SamplingException('No valid nodes found for insertion')
@@ -829,7 +836,7 @@ class PopulationBasedSampler():
         new_game = deepcopy_ast(game)
 
         valid_nodes, valid_node_weights = self._get_valid_insert_or_delete_nodes(
-            new_game, min_length=2, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=False)
+            new_game, insert=False, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length, shortest_weight_maximal=False)
 
         if len(valid_nodes) == 0:
             raise SamplingException('No valid nodes found for deletion')
@@ -961,7 +968,7 @@ class PopulationBasedSampler():
 
         # Create a map from crossover_type keys to lists of nodeinfos for each game
         _, _, game_1_insertion_node_keys = self._get_valid_insert_or_delete_nodes(  # type: ignore
-            game_1, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
+            game_1, insert=True, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
             shortest_weight_maximal=True, return_keys=True)
 
         game_1_crossover_map = defaultdict(list)
@@ -970,7 +977,7 @@ class PopulationBasedSampler():
             game_1_crossover_map[node_info_to_key(crossover_type, node_info)].append(node_info)
 
         _, _, game_2_insertion_node_keys = self._get_valid_insert_or_delete_nodes(  # type: ignore
-            game_2, min_length=1, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
+            game_2, insert=True, weigh_nodes_by_length=self.weight_insert_delete_nodes_by_length,
             shortest_weight_maximal=True, return_keys=True)
 
         game_2_crossover_map = defaultdict(list)

@@ -1,10 +1,10 @@
 
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
         (game-conserved (< (distance ?h ?r) 1))
     )
-))
+)
 (:constraints (and
     (preference throwToRampToBin
         (exists (?b - ball ?r - triangular_ramp ?h - hexagonal_bin)
@@ -36,9 +36,9 @@
 ; 1 is invalid
 
 (define (game 5f77754ba932fb2c4ba181d8-2) (:domain many-objects-room-v1)  ; 2
-(:setup (and
+(:setup
     (game-conserved (open top_drawer))
-))
+)
 (:constraints (and
     (forall (?b - (either dodgeball golfball) ?t - (either top_drawer hexagonal_bin))
         (preference throwToDrawerOrBin
@@ -136,11 +136,11 @@
 ; 7 is invalid -- vastly under-constrained -- I could probably make some guesses but leaving alone
 
 (define (game 615b40bb6cdb0f1f6f291f45-8) (:domain few-objects-room-v1)  ; 8
-(:setup (and
+(:setup
     (exists (?c - curved_wooden_ramp)
         (game-conserved (on floor ?c))
     )
-))
+)
 (:constraints (and
     (preference throwOverRamp  ; TODO: does this quanitfy over reasonably?
         (exists (?d - dodgeball ?c - curved_wooden_ramp)
@@ -181,14 +181,14 @@
 
 ; Taking the first game this participant provided
 (define (game 615452aaabb932ada88ef3ca-9) (:domain many-objects-room-v1)  ; 9
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin)
         (game-conserved (or
             (on bed ?h)
             (exists (?w - wall) (adjacent ?w ?h))
         ))
     )
-))
+)
 (:constraints (and
     (preference throwBallToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
@@ -302,11 +302,11 @@
 ; 12 requires quantifying based on position -- something like
 
 (define (game 613bb29f16252362f4dc11a3-12) (:domain medium-objects-room-v1)  ; 12
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin)
         (game-conserved (< (distance room_center ?h) 1))
     )
-))
+)
 (:constraints (and
     (preference throwToRampToBin
         (exists (?r - triangular_ramp ?d - dodgeball ?h - hexagonal_bin)
@@ -328,14 +328,14 @@
 
 
 (define (game 616e5ae706e970fe0aff99b6-13) (:domain many-objects-room-v1)  ; 13
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved
         (and
             (< (distance ?h ?r) 1)
             (< (distance room_center ?r) 0.5)
         )
     ))
-))
+)
 (:constraints (and
     (forall (?d - (either dodgeball golfball))
         (preference throwToRampToBin
@@ -387,7 +387,7 @@
 ))
 
 (define (game 5f5d6c3cbacc025bf0a03440-15) (:domain few-objects-room-v1)  ; 15
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?b - building) (and
         (game-conserved (adjacent ?h bed))
         (game-conserved (object_orientation ?h upside_down))
@@ -402,7 +402,7 @@
            (on ?c4 ?c6)
         )))
     ))
-))
+)
 
 (:constraints (and
     (preference blockInTowerKnockedByDodgeball (exists (?b - building ?c - cube_block
@@ -439,7 +439,7 @@
 
 
 (define (game 616e4f7a16145200573161a6-16) (:domain few-objects-room-v1)  ; 16
-(:setup (and
+(:setup
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin ?b1 ?b2 ?b3 ?b4 - block)
         (game-conserved (and
             (adjacent_side ?h front ?c back)
@@ -451,7 +451,7 @@
             (on ?b3 ?b4)
         ))
     )
-))
+)
 (:constraints (and
     (preference rollBallToBin
         (exists (?d - dodgeball ?r - curved_wooden_ramp ?h - hexagonal_bin)
@@ -491,11 +491,11 @@
 ))
 
 (define (game 60e93f64ec69ecdac3107555-19) (:domain medium-objects-room-v1)  ; 19
-(:setup (and
+(:setup
     (forall (?b - ball)
         (game-optional (< (distance door ?b) 1))
     )
-))
+)
 (:constraints (and
     (forall (?b - ball ?t - (either doggie_bed hexagonal_bin))
         (preference ballThrownIntoTarget
@@ -548,9 +548,7 @@
     (forall (?b - building) (and
         (preference blockInTowerAtEnd (exists (?l - block)
             (at-end
-                (and
-                    (in ?b ?l)
-                )
+                (in ?b ?l)
             )
         ))
         (preference blockInTowerKnockedByDodgeball (exists (?l - block ?d - dodgeball)
@@ -597,13 +595,13 @@
 )))
 
 (define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)  ; 21
-(:setup (and
+(:setup
     (exists (?c - chair) (game-conserved (and
         (< (distance room_center ?c) 1)
         (not (faces ?c desk))
         (not (faces ?c bed))
     )))
-))
+)
 (:constraints (and
     (preference ballThrownToBin
         (exists (?d - dodgeball ?h - hexagonal_bin)
@@ -732,9 +730,9 @@
 
 
 (define (game 5996d2256b939900012d9f22-24) (:domain few-objects-room-v1)  ; 24
-(:setup (and
+(:setup
     (exists (?c - chair ?h - hexagonal_bin) (game-conserved (on ?c ?h)))
-))
+)
 (:constraints (and
     (forall (?d - dodgeball ?x - color)
         (preference throwBallToBin
@@ -798,16 +796,16 @@
     )
     (preference smallItemsInPlace
         (exists (?o - (either cellphone key_chain) ?d - drawer)
-            (at-end (and
+            (at-end
                 (in ?d ?o)
-            ))
+            )
         )
     )
     (preference itemsTurnedOff
         (exists (?o - (either main_light_switch desktop laptop))
-            (at-end (and
+            (at-end
                 (not (toggled_on ?o))
-            ))
+            )
         )
     )
 ))
@@ -823,9 +821,9 @@
 
 
 (define (game 610aaf651f5e36d3a76b199f-28) (:domain few-objects-room-v1)  ; 28
-(:setup (and
+(:setup
     (forall (?c - cube_block) (game-conserved (on rug ?c)))
-))
+)
 (:constraints (and
     (forall (?x - color)
         (preference thrownBallHitsBlock
@@ -998,11 +996,11 @@
 
 
 (define (game 614e1599db14d8f3a5c1486a-33) (:domain many-objects-room-v1)  ; 33
-(:setup (and
+(:setup
     (forall (?g - game_object) (game-optional
         (not (in top_drawer ?g))
     ))
-))
+)
 (:constraints (and
     (preference itemInClosedDrawerAtEnd (exists (?g - game_object)
         (at-end (and
@@ -1155,7 +1153,6 @@
 
 
 (define (game 614fb15adc48d3f9ffcadd41-39) (:domain many-objects-room-v1)  ; 39
-
 (:constraints (and
     (preference ballThrownToWallToAgent
         (exists (?b - ball ?w - wall)
@@ -1176,9 +1173,9 @@
 
 
 (define (game 5c71bdec87f8cd0001b458f5-40) (:domain many-objects-room-v1)  ; 40
-(:setup (and
+(:setup
     (exists (?r - curved_wooden_ramp) (game-conserved (adjacent ?r rug)))
-))
+)
 (:constraints (and
     (forall (?x - color)
         (preference ballRolledOnRampToRug
@@ -1206,7 +1203,7 @@
 
 
 (define (game 5f8d77f0b348950659f1919e-41) (:domain many-objects-room-v1)  ; 41
-(:setup (and
+(:setup
     (exists (?w1 ?w2 - wall) (and
         (game-conserved (opposite ?w1 ?w2))
         (forall (?b - bridge_block) (game-conserved (and
@@ -1218,7 +1215,7 @@
             (> (distance ?w1 ?g) (distance ?w2 ?g))
         )))
     ))
-))
+)
 (:constraints (and
     (forall (?w1 ?w2 - wall)
         (preference objectMovedRoomSide (exists (?g - game_object)
@@ -1250,7 +1247,7 @@
 
 
 (define (game 5edc195a95d5090e1c3f91b-42) (:domain few-objects-room-v1)  ; 42
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (and
         (forall (?g - game_object) (game-optional (or
             (same_object ?h ?g)
@@ -1261,7 +1258,7 @@
             (< (distance ?h ?d) 6)
         )))
     ))
-))
+)
 (:constraints (and
     (preference throwBallFromOtherBallToBin
         (exists (?d1 ?d2 - dodgeball ?h - hexagonal_bin)
@@ -1291,9 +1288,9 @@
 
 
 (define (game 617378aeffbba11d8971051c-43) (:domain medium-objects-room-v1)  ; 43
-(:setup (and
+(:setup
     (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 1)))
-))
+)
 (:constraints (and
     (forall (?b - ball) (and
         (preference throwBallToDoggieBed
@@ -1332,7 +1329,7 @@
 ; 44 is another find the hidden object game
 
 (define (game 60e7044ddc2523fab6cbc0cd-45) (:domain many-objects-room-v1)  ; 45
-(:setup (and
+(:setup
     (exists (?t1 ?t2 - teddy_bear) (game-optional (and
         (on floor ?t1)
         (on bed ?t2)
@@ -1340,7 +1337,7 @@
         (equal_z_position ?t1 ?t2)
         (equal_z_position bed ?t1)
     )))
-))
+)
 (:constraints (and
     (forall (?b - (either golfball dodgeball)) (and
         (preference throwKnocksOverBear (exists (?t - teddy_bear ?s - sliding_door)
@@ -1378,11 +1375,11 @@
 )))
 
 (define (game 5d5b0dd7c032a2001ad7cf5d-46) (:domain few-objects-room-v1)  ; 46
-(:setup (and
+(:setup
     (exists (?c - curved_wooden_ramp) (game-conserved
         (< (distance room_center ?c) 3)
     ))
-))
+)
 (:constraints (and
     (preference ballThrownToRampToBed (exists (?d - dodgeball_pink ?c - curved_wooden_ramp)
         (then
@@ -1439,14 +1436,14 @@
 
 (define (game 61254c5a6facc8ed023a64de-48) (:domain medium-objects-room-v1)  ; 48
 ; SETUP:
-(:setup (and
+(:setup
     (exists (?b - building ?h - hexagonal_bin) (game-conserved (and
         (in ?b ?h)
         (>= (building_size ?b) 4) ; TODO: could also quantify out additional objects
         (not (exists (?g - game_object) (and (in ?b ?g) (on ?h ?g))))
         (< (distance room_center ?b) 1)
     )))
-))
+)
 (:constraints (and
     (forall (?d - (either dodgeball basketball beachball))
         (preference ballThrownToBin (exists (?b - building ?h - hexagonal_bin)
@@ -1498,10 +1495,12 @@
 )))
 
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
-(:setup (exists (?g - golfball_green) (and
-    (game-conserved (< (distance door ?g) 0.5))
-    (forall (?d - dodgeball) (game-optional (< (distance ?d ?g) 1)))
-)))
+(:setup
+    (exists (?g - golfball_green) (and
+        (game-conserved (< (distance door ?g) 0.5))
+        (forall (?d - dodgeball) (game-optional (< (distance ?d ?g) 1)))
+    ))
+)
 (:constraints (and
     (forall (?d - dodgeball) (and
         (preference dodgeballThrownToBin (exists (?h - hexagonal_bin ?g - golfball_green)
@@ -1537,9 +1536,9 @@
 ))
 
 (define (game 5f3aee04e30eac7cb73b416e-50) (:domain medium-objects-room-v1)  ; 50
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (game-conserved (< (distance room_center ?h) 1)))
-))
+)
 (:constraints (and
     (preference gameObjectToBin (exists (?g - game_object ?h - hexagonal_bin)
         (then
@@ -1597,19 +1596,25 @@
 (:constraints (and
     (preference dodgeballsInPlace
         (exists (?d - dodgeball ?h - hexagonal_bin ?w1 ?w2 - wall)
-            (at-end (and (in ?h ?d) (adjacent ?h ?w1) (adjacent ?h ?w2)))
+            (at-end (and
+                (in ?h ?d)
+                (adjacent ?h ?w1)
+                (adjacent ?h ?w2)
+            ))
         )
     )
     (preference blocksInPlace
         (exists (?c - cube_block ?s - shelf)
-            (at-end (on ?s ?c))
+            (at-end
+                (on ?s ?c)
+            )
         )
     )
     (preference smallItemsInPlace
         (exists (?o - (either cellphone key_chain mug credit_card cd watch alarm_clock) ?d - drawer)
-            (at-end (and
+            (at-end
                 (in ?d ?o)
-            ))
+            )
         )
     )
 ))
@@ -1652,11 +1657,11 @@
 
 
 (define (game 5f7654f879a4420e6d20971b-55) (:domain few-objects-room-v1)  ; 55
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin)
         (game-conserved (< (distance room_center ?h) 1))
     )
-))
+)
 (:constraints (and
     (preference objectToBinOnFirstTry (exists (?o - game_object ?h - hexagonal_bin)
         (then
@@ -1806,9 +1811,9 @@
 )))
 
 (define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (game-conserved (< (distance door ?h) 1)))
-))
+)
 (:constraints (and
     (forall (?b - (either golfball dodgeball beachball))
         (preference ballThrownToBin (exists (?h - hexagonal_bin)
@@ -2105,9 +2110,9 @@
 ; 68 has subjective scoring -- I could attempt to objectify, but it's hard
 
 (define (game 61262b36d0426eaefdb70725-69) (:domain many-objects-room-v1)  ; 69
-(:setup (and
+(:setup
     (exists (?c - curved_wooden_ramp ?h - hexagonal_bin) (game-conserved (adjacent ?c ?h)))
-))
+)
 (:constraints (and
     (preference ballThrownThroughRampToBin (exists (?d - dodgeball ?c - curved_wooden_ramp ?h - hexagonal_bin)
         (then
@@ -2255,9 +2260,9 @@
 ))
 
 (define (game 613bd3a683a2ac56a4119aa6-74) (:domain many-objects-room-v1)  ; 74
-(:setup (and
+(:setup
     (game-conserved (exists (?h - hexagonal_bin ?p - pillow) (< (distance ?h ?p) 3)))
-))
+)
 (:constraints (and
     (preference golfballInBinFromPillow (exists (?g - golfball ?h - hexagonal_bin ?p - pillow)
         (then
@@ -2528,7 +2533,7 @@
 )))
 
 (define (game 5fdee4d96a36576ca62e4518-81) (:domain many-objects-room-v1)  ; 81
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?r1 ?r2 - (either triangular_ramp curved_wooden_ramp))
         (game-conserved (and
             (adjacent ?h desk)
@@ -2537,7 +2542,7 @@
             (not (exists (?o - game_object) (adjacent_side ?h front ?o)))
         ))
     )
-))
+)
 (:constraints (and
     (preference dodgeballFromRugToBin (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
@@ -2572,12 +2577,12 @@
 ))
 
 (define (game 5bdfb648484288000130dad0-83) (:domain many-objects-room-v1)  ; 83
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?c1 ?c2 - chair) (game-conserved (and
         (object_orientation ?h sideways)
         (between ?c1 ?h ?c2)
     )))
-))
+)
 (:constraints (and
     (forall (?b - (either dodgeball golfball))
         (preference ballToBinFromBed (exists (?h - hexagonal_bin)
@@ -2639,12 +2644,12 @@
 ; 86 is a dup of 84 -- and is aldo invalid
 
 (define (game 6158d01f302cf46b673dd597-87) (:domain few-objects-room-v1)  ; 87
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?w - wall) (game-conserved (and
         (on desk ?h)
         (adjacent ?h ?w)
     )))
-))
+)
 (:constraints (and
     (forall (?o - (either dodgeball block))
         (preference basketMadeFromRug (exists (?h - hexagonal_bin)
@@ -2663,7 +2668,7 @@
 
 
 (define (game 5fefd5b2173bfbe890bc98ed-88) (:domain few-objects-room-v1)  ; 88
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?p - pillow ?b1 ?b2 ?b3 ?b4 ?b5 ?b6 - cube_block)
         (game-conserved (and
             (on bed ?h)
@@ -2678,7 +2683,7 @@
             (on ?b5 ?b6)
         ))
     )
-))
+)
 (:constraints (and
     (preference throwFromEdgeOfRug (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
@@ -2732,12 +2737,12 @@
 ))
 
 (define (game 6103ec2bf88328284fd894bc-89) (:domain medium-objects-room-v1)  ; 89
-(:setup (and
+(:setup
     (exists (?d - desktop ?h - hexagonal_bin) (game-conserved (and
         (on desk ?h)
         (not (on desk ?d))
     )))
-))
+)
 (:constraints (and
     (forall (?b - ball)
         (preference ballThrownFromRug (exists (?h - hexagonal_bin)
@@ -2895,13 +2900,13 @@
 ))
 
 (define (game 5c7ceda01d2afc0001f4ad1d-100) (:domain medium-objects-room-v1)  ; 100
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?d - doggie_bed) (game-conserved (and
         (on floor ?d)
         (on bed ?h)
         (equal_z_position ?h ?d)
     )))
-))
+)
 (:constraints (and
     (forall (?t - (either hexagonal_bin doggie_bed))
         (preference dodgeballFromDeskToTarget (exists (?d - dodgeball)
@@ -2974,12 +2979,12 @@
 
 
 (define (game 5b94d723839c0a00010f88d9-103) (:domain few-objects-room-v1)  ; 103
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (game-conserved (and
         (on bed ?h)
         (object_orientation ?h sideways)
     )))
-))
+)
 (:constraints (and
     (preference dodgeballHitsBin (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
@@ -3019,11 +3024,11 @@
 
 
 (define (game 6106ac34408681f3b0d07396-104) (:domain few-objects-room-v1)  ; 104
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (game-conserved (and
         (equal_x_position east_sliding_door ?h)
     )))
-))
+)
 (:constraints (and
     (preference throwFromEdgeOfRug (exists (?d - dodgeball ?h - hexagonal_bin)
         (then
@@ -3271,7 +3276,7 @@
 ; 112 is definitely invalid and underdefined
 
 (define (game 6005e777d1d8768d5808b5fd-113) (:domain few-objects-room-v1)  ; 113
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?c1 ?c2 ?c3 ?c4 - cube_block ?r - curved_wooden_ramp) (game-conserved (and
         (adjacent_side ?h front ?c1)
         (adjacent ?c1 ?c3)
@@ -3281,7 +3286,7 @@
         (adjacent_side ?r back ?c3)
         (between ?r ?c3 ?c1)
     )))
-))
+)
 (:constraints (and
     (preference ballThrownThroughRampAndBlocksToBin (exists (?b - ball ?r - curved_wooden_ramp ?h - hexagonal_bin ?c1 ?c2 - cube_block)
         (then
@@ -3301,9 +3306,9 @@
 ))
 
 (define (game 61087e4fc006ee7d6be38641-114) (:domain medium-objects-room-v1)  ; 114
-(:setup (and
+(:setup
     (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 0.5)))
-))
+)
 (:constraints (and
     (preference objectInBuilding (exists (?o - game_object ?d - doggie_bed ?b - building)
         (at-end (and
@@ -3358,9 +3363,9 @@
 )))
 
 (define (game 60bb404e01d599dfb1c3d71c-116) (:domain medium-objects-room-v1)  ; 116
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin) (game-conserved (or (on bed ?h) (on desk ?h))))
-))
+)
 (:constraints (and
     (forall (?b - (either basketball dodgeball)) (and
         (preference ballThrownToBin (exists (?h - hexagonal_bin)
@@ -3388,9 +3393,9 @@
 
 
 (define (game 613e18e92e4ed15176362aa2-117) (:domain medium-objects-room-v1)  ; 117
-(:setup (and
+(:setup
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved (< (distance ?h ?r) 2)))
-))
+)
 (:constraints (and
     (preference redDodgeballThrownToBinWithoutTouchingFloor (exists (?h - hexagonal_bin ?r - dodgeball_red)
         (then

@@ -673,7 +673,26 @@ EMPTY_LIST = 'empty_list'
 
 
 DEFAULT_MIN_LENGTH_BY_RULE_AND_FIELD = {
+    ('either_types', 'type_names'): 2,
+    ('either_color_types', 'type_names'): 2,
+    ('either_orientation_types', 'type_names'): 2,
+    ('either_side_types', 'type_names'): 2,
+
+    ('multiple_args_equal_comparison', 'equal_comp_args'): 2,
+
+    ('setup_and', 'and_args'): 2,
+    ('setup_or', 'or_args'): 2,
+
+    ('super_predicate_and', 'and_args'): 2,
+    ('super_predicate_or', 'or_args'): 2,
+
     ('then', 'then_funcs'): 3,
+
+    ('terminal_and', 'and_args'): 2,
+    ('terminal_or', 'or_args'): 2,
+
+    ('scoring_multi_expr', 'expr'): 2,
+    ('scoring_equals_comp', 'expr'): 2,
 }
 
 
@@ -853,6 +872,7 @@ class ASTSampler:
         field_counter: typing.Optional[RuleKeyValueCounter]):
 
         min_length = self.min_length_by_rule_and_field.get((rule_name, field_name), typing.cast(int, field_prior[MIN_LENGTH]))
+        field_prior[MIN_LENGTH] = min_length  # type: ignore
         length_posterior = Counter({k: v for k, v in self.length_prior.items() if k >= min_length})
 
         if field_counter is not None:

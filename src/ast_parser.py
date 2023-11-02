@@ -481,6 +481,8 @@ def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16
 OPPOSITEֹֹֹ_CONTRADICTS_PREDICATES = ['above', 'in', 'on']
 OPPOSITE_REDUNDANT_PREDICATE = ['adjacent', 'opposite', 'touch', 'same_color', 'same_object', 'same_type']
+DOUBLE_UNDERSCORE_NUMBER_PATTERN = re.compile(r'__\d+')
+NUMBER_SUB = '__NUMBER'
 
 
 class ASTBooleanParser(ASTParser):
@@ -584,6 +586,9 @@ class ASTBooleanParser(ASTParser):
             raise ValueError(f'Context key {SECTION_CONTEXT_KEY} not found in kwargs')
         return super().__call__(ast, **kwargs)  # type: ignore
 
+    def _key_to_symbol_str(self, key: str):
+        return key.replace(') )', '))').replace('?', '').replace(' ', '__')
+
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs) -> boolean.Expression:
         rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
         key = self._ast_to_string_key(ast, **kwargs)
@@ -660,8 +665,7 @@ class ASTBooleanParser(ASTParser):
             expr = self(ast.pred, **kwargs)  # type: ignore
 
         elif rule == 'predicate':
-            symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '__')
-            expr = boolean.Symbol(symbol_name)
+            expr = boolean.Symbol(self._key_to_symbol_str(key))
 
         elif rule in ('two_arg_comparison', 'multiple_args_equal_comparison', 'terminal_comp', 'scoring_comp', 'scoring_equals_comp'):
             if rule == 'terminal_comp':
@@ -699,8 +703,8 @@ class ASTBooleanParser(ASTParser):
                     expr = self.algebra.TRUE if eval(f'{arg_numbers[0]} {op} {arg_numbers[1]}') else self.algebra.FALSE
 
             else:
-                symbol_name = key.replace(') )', '))').replace('?', '').replace(' ', '__')
-                expr = boolean.Symbol(symbol_name)
+                symbol_name = self._key_to_symbol_str(key)
+                expr = boolean.Symbol(DOUBLE_UNDERSCORE_NUMBER_PATTERN.sub(NUMBER_SUB, symbol_name))
 
         else:
             keys = set(ast.keys())
@@ -711,7 +715,6 @@ class ASTBooleanParser(ASTParser):
                 expr = self(ast[keys.pop()], **kwargs)  # type: ignore
 
         if expr is None:
-            # TODO: debug how/why I get here
             logger.warn(f'No expression found for rule {rule}, using "{key}"')
             expr = boolean.Symbol(key)
 

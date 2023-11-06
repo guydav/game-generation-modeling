@@ -59,8 +59,6 @@ def compile_prompts_from_data(initial_stage: int,
     # breakpoint()
     for idx, row in enumerate(data):
 
-        print(idx, idx%5, row[0])
-
         # Identifier
         if idx%5 == 0:
             continue
@@ -68,7 +66,7 @@ def compile_prompts_from_data(initial_stage: int,
         # Setup (optional)
         elif idx%5 == 1:
             stages = row[1:]
-            if stages[final_stage] != "":
+            if stages[initial_stage] != "":
                 setup_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         # Preferences (required)
@@ -79,7 +77,7 @@ def compile_prompts_from_data(initial_stage: int,
         # Terminal (optional)
         elif idx%5 == 3:
             stages = row[1:]
-            if stages[final_stage] != "":
+            if stages[initial_stage] != "":
                 terminal_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         # Scoring (required)

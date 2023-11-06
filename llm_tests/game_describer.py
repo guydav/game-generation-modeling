@@ -19,7 +19,7 @@ from tqdm import tqdm
 # For some reason utils needs to be imported first?
 sys.path.append(os.path.abspath('../reward-machine'))
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
-from describer_lm_prompts import *
+from describer_lm_prompts import compile_prompts_from_data
 from preference_handler import PredicateType
 
 from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
@@ -929,23 +929,29 @@ class GameDescriber():
         else:
             setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = stage_1_descriptions
 
+
+        # Generate prompts
+        all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
+                                                translations_path="./selected_human_and_map_elites_translations.csv")
+        setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt = all_prompts
+
         if setup_stage_1 != "":
-            setup_description = self._query_openai(SETUP_STAGE_1_TO_STAGE_2_PROMPT.format(setup_stage_1))
+            setup_description = self._query_openai(setup_prompt.format(setup_stage_1))
         else:
             setup_description = ""
 
         if preferences_stage_1 != "":
-            preferences_description = self._query_openai(PREFERENCES_STAGE_1_TO_STAGE_2_PROMPT.format(preferences_stage_1))
+            preferences_description = self._query_openai(preferences_prompt.format(preferences_stage_1))
         else:
             preferences_description = ""
 
         if terminal_stage_1 != "":
-            terminal_description = self._query_openai(TERMINAL_STAGE_1_TO_STAGE_2_PROMPT.format(terminal_stage_1))
+            terminal_description = self._query_openai(terminal_prompt.format(terminal_stage_1))
         else:
             terminal_description = ""
 
         if scoring_stage_1 != "":
-            scoring_description = self._query_openai(SCORING_STAGE_1_TO_STAGE_2_PROMPT.format(scoring_stage_1))
+            scoring_description = self._query_openai(scoring_prompt.format(scoring_stage_1))
         else:
             scoring_description = ""
 
@@ -975,6 +981,7 @@ class GameDescriber():
         {scoring_stage_2}
         """
 
+        # TODO: adjust to use new prompt format
         stage_3_description = self._query_openai(STAGE_2_TO_STAGE_3_PROMPT.format(prompt_format))
 
         return stage_3_description

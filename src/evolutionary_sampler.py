@@ -221,6 +221,7 @@ parser.add_argument('--profile-output-file', type=str, default='tracer.json')
 parser.add_argument('--profile-output-folder', type=str, default=tempfile.gettempdir())
 
 parser.add_argument('--resume', action='store_true')
+parser.add_argument('--resume-max-days-back', type=int, default=1)
 parser.add_argument('--start-step', type=int, default=0)
 
 
@@ -2459,18 +2460,19 @@ def main(args):
         if args.resume:
             logger.info('Trying to resume from previous run')
             output_name = args.output_name + '_gen_*'
-            output_glob_path = get_data_path(args.output_folder, output_name, args.relative_path)
-            relevant_files = glob.glob(output_glob_path)
+            relevant_files = []
             load_path = None
             latest_generation = None
 
-            if len(relevant_files) == 0:
-                logger.info('No relevant files found today, trying yesterday')
-                output_glob_path = get_data_path(args.output_folder, output_name, args.relative_path, delta=timedelta(days=1))
+            for days_back in range(args.resume_max_days_back + 1):
+                output_glob_path = get_data_path(args.output_folder, output_name, args.relative_path, delta=timedelta(days=days_back))
                 relevant_files = glob.glob(output_glob_path)
+                if len(relevant_files) > 0:
+                    logger.info(f'Found {len(relevant_files)} relevant files {days_back} days back from {output_glob_path}')
+                    break
 
             if len(relevant_files) == 0:
-                logger.info('No relevant files found today or yesterday, starting from scratch')
+                logger.info(f'No relevant files found up to {args.resume_max_days_back} days back, starting from scratch')
                 args.resume = False
 
             else:

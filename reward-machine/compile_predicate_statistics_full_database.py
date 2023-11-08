@@ -29,7 +29,7 @@ import typing
 from viztracer import VizTracer
 
 
-from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING, BLOCK
+from config import ROOMS, META_TYPES, TYPES_TO_META_TYPE, OBJECTS_BY_ROOM_AND_TYPE, ORIENTATIONS, SIDES, UNITY_PSEUDO_OBJECTS, NAMED_WALLS, SPECIFIC_NAMED_OBJECTS_BY_ROOM, OBJECT_ID_TO_SPECIFIC_NAME_BY_ROOM, GAME_OBJECT, GAME_OBJECT_EXCLUDED_TYPES, BUILDING, BLOCK, ALL_NON_OBJECT_TYPES
 from utils import (extract_predicate_function_name,
                    extract_variables,
                    extract_variable_type_mapping,
@@ -396,7 +396,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
 
-            result_query, relevant_variables = self._inner_filter(predicate, mapping, **kwargs)
+            result_query, relevant_variables, is_refactored_implementation = self._inner_filter(predicate, mapping, **kwargs)
             if self.log_queries:
                 key = self._predicate_and_mapping_cache_key(predicate, mapping, **kwargs)
                 self.logger.info(f'{key}:\n{result_query}\n{"=" * 100}')
@@ -423,11 +423,17 @@ class CommonSensePredicateStatisticsFullDatabase():
                     output_query = f"SELECT DISTINCT ON(trace_id, domain, {select_variables}) trace_id, domain, (bit_position('1'::BIT, intervals) - 1) AS 'first_state_index', {select_variables} FROM ({result_query});"
                     return self.con.execute(output_query).fetchdf()
                 elif 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-                    output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query});"
+                    if is_refactored_implementation:
+                        output_query = result_query
+                    else:
+                        output_query = f"SELECT DISTINCT(trace_id) FROM ({result_query});"
                     return tuple(chain.from_iterable(self.con.execute(output_query).fetchall()))
                 else:
+                    # if is_refactored_implementation:
+                    #     output_query = result_query
+                    # else:
                     output_query = f"SELECT COUNT(*) FROM ({result_query} LIMIT 1);"
-                    # output_query = f"SELECT COUNT(*) FROM ({result_query});"
+
                     query_result = self.con.execute(output_query)
                     return query_result.fetchall()[0][0]  # type: ignore
 
@@ -542,9 +548,9 @@ class CommonSensePredicateStatisticsFullDatabase():
 
         return f"SELECT {', '.join(select_items)} FROM data {table_name[:-1]} WHERE {' AND '.join(where_items)}"
 
-    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_predicate(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         select_items, select_dict, where_items, used_variables = self._build_predicate_select_where_items(predicate, mapping, **kwargs)
-        return self._build_simple_predicate_query(select_items, where_items), used_variables
+        return self._build_simple_predicate_query(select_items, where_items), used_variables, False
 
     # def _build_query_from_predicate_items(self, predicate_items: typing.List[typing.Tuple[typing.List[str], typing.Dict[str, str], typing.List[str], typing.Set[str], str]],
     #                                       conjunction: bool = True) -> typing.Tuple[str, typing.Set[str]]:
@@ -674,6 +680,7 @@ ON predicates.trace_id = tld.trace_id
         all_used_variables = predicate_used_variables | negated_used_variables
         join_clauses = []
         negated_predicate_where_clauses = [f'{predicate_table_name}.trace_id = {negated_predicate_table_name}.trace_id']
+        negated_predicate_full_trace_where_clauses = []
 
         select_items = [f'{predicate_table_name}.trace_id as trace_id']
 
@@ -684,15 +691,19 @@ ON predicates.trace_id = tld.trace_id
             join_items.append(self._build_missing_object_assignment_where(var_type_list, table_name=table_name))
 
             # Only anchor on object satisfying the predicate in case of a conjunction
-            if var in predicate_used_variables and conjunction:
+            in_predicate_and_conjunction = var in predicate_used_variables and conjunction
+            if in_predicate_and_conjunction:
                 join_items.append(f'{table_name}.object_id = {predicate_table_name}."{var}"')
 
             if var in negated_used_variables:
-                if conjunction:
+                if in_predicate_and_conjunction:
                     negated_predicate_where_clauses.append(f'({table_name}.object_id = {negated_predicate_table_name}."{var}" OR {negated_predicate_table_name}."{var}" IS NULL)')
 
                 else:
                     negated_predicate_where_clauses.append(f'{table_name}.object_id = {negated_predicate_table_name}."{var}"')
+
+                if conjunction and not any(arg_type in ALL_NON_OBJECT_TYPES for arg_type in var_type_list):
+                    negated_predicate_full_trace_where_clauses.append(f'{table_name}.object_id = {negated_predicate_table_name}."{var}"')
 
             if DEBUG_MISSING_PREDICATE_QUERY:
                 select_items.append(f'{table_name}.object_id AS "{var}"')
@@ -701,8 +712,17 @@ ON predicates.trace_id = tld.trace_id
 
         inner_where_clause = f'WHERE {" AND ".join(negated_predicate_where_clauses)}'
         where_clause = f'WHERE NOT EXISTS (SELECT 1 FROM negated_predicate {inner_where_clause})'
+
+        # Check for any negated predicates covering the full trace, and exclude them
         if conjunction:
-            where_clause += f'AND NOT EXISTS (SELECT 1 FROM negated_predicate WHERE {predicate_table_name}.trace_id = negated_predicate.trace_id AND bit_count(~negated_predicate.intervals) = 0)'
+            # Make sure at least one object doesn't match existing negated predicates, from object types
+            full_cover_check_where_clauses = [f'{predicate_table_name}.trace_id = {negated_predicate_table_name}.trace_id',
+                                              'bit_count(~negated_predicate.intervals) = 0']
+
+            if negated_predicate_full_trace_where_clauses:
+                full_cover_check_where_clauses.insert(1, f'({" OR ".join(negated_predicate_full_trace_where_clauses)})')
+
+            where_clause += f'AND NOT EXISTS (SELECT 1 FROM negated_predicate WHERE {" AND ".join(full_cover_check_where_clauses)})'
 
         full_select_clause = ', '.join(select_items)
         full_join_clause = '\n'.join(join_clauses)
@@ -712,7 +732,8 @@ ON predicates.trace_id = tld.trace_id
                                predicate_table_name: str = PREDICATE_TABLE_NAME,
                                negated_predicate_table_name: str = NEGATED_PREDICATE_TABLE_NAME,
                                missing_negated_predicate_table_name: str = MISSING_NEGATED_PREDICATE_TABLE_NAME,
-                               **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+                               return_trace_ids: bool = False,
+                               **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
             and_args = [and_args]
@@ -766,33 +787,42 @@ ON predicates.trace_id = tld.trace_id
         all_used_variables = predicate_used_variables | negated_used_variables
         shared_variables = predicate_used_variables & negated_used_variables
 
-        select_operator = 'SELECT COUNT(*)'
-        if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-            select_operator = 'SELECT DISTINCT(trace_id)'
+        select_operator = f'SELECT {predicate_table_name}.trace_id'
+        limit_statement = 'LIMIT 1' if not return_trace_ids else ''
+
+        if return_trace_ids:
+            select_operator = f'SELECT DISTINCT({predicate_table_name}.trace_id)'
 
         if negated_query is None:
-            return f"{select_operator} FROM ({predicate_query}) WHERE bit_count(intervals) > 0", all_used_variables
+            return f"{select_operator} FROM ({predicate_query}) {predicate_table_name} WHERE bit_count(intervals) > 0", all_used_variables, True
+
+        negated_predicate_variable_clauses = [f'({predicate_table_name}."{v}" = {negated_predicate_table_name}."{v}" OR {negated_predicate_table_name}."{v}" IS NULL)' for v in shared_variables]
+        for negated_only_variable in negated_used_variables - predicate_used_variables:
+            negated_predicate_variable_clauses.append(f'{negated_predicate_table_name}."{negated_only_variable}" IS NOT NULL')
+        negated_predicate_variable_clauses_where = ' AND '.join(negated_predicate_variable_clauses) + '\n'
 
         if predicate_query is None:
-            missing_negated_select = select_operator[:]
-            if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-                missing_negated_select = f'SELECT DISTINCT({missing_negated_predicate_table_name}.trace_id)'
-
-            negated_select = select_operator[:]
-            if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-                negated_select = f'SELECT DISTINCT({negated_predicate_table_name}.trace_id)'
+            negated_select = select_operator.replace(predicate_table_name, negated_predicate_table_name)
+            missing_negated_select = select_operator.replace(predicate_table_name, missing_negated_predicate_table_name)
 
             query = f"""WITH {negated_predicate_table_name} as ({negated_query}),
 {missing_negated_predicate_table_name} as ({missing_negative_query})
-({missing_negated_select} FROM {missing_negated_predicate_table_name}
-) UNION
-({negated_select} FROM {negated_predicate_table_name}
-JOIN trace_length_and_domains ON trace_length_and_domains.trace_id = {negated_predicate_table_name}.trace_id
-WHERE bit_count({negated_predicate_table_name}.intervals) < trace_length_and_domains.length
-)"""
-            return query, all_used_variables
+(
+    {missing_negated_select} FROM {missing_negated_predicate_table_name}
+    {limit_statement}
+) UNION (
+    {negated_select} FROM {negated_predicate_table_name}
+    WHERE bit_count(~{negated_predicate_table_name}.intervals) > 0
+    {'AND' if len(negated_predicate_variable_clauses) > 0 else ''} {negated_predicate_variable_clauses_where}
+    {limit_statement}
+)
+""".strip()
 
-        shared_variables_where = ' AND '.join([f'({predicate_table_name}."{v}" = {negated_predicate_table_name}."{v}" OR {negated_predicate_table_name}."{v}" IS NULL)' for v in shared_variables]) + '\n'
+    # JOIN trace_length_and_domains ON trace_length_and_domains.trace_id = {negated_predicate_table_name}.trace_id
+    # WHERE bit_count({negated_predicate_table_name}.intervals) < trace_length_and_domains.length
+
+            return query, all_used_variables, True
+
 
         query = f"""WITH {predicate_table_name} as ({predicate_query}),
 {negated_predicate_table_name} as ({negated_query}),
@@ -803,20 +833,24 @@ EXISTS (
     SELECT * FROM {negated_predicate_table_name}
     WHERE
         {predicate_table_name}.trace_id = {negated_predicate_table_name}.trace_id
-        {'AND' if len(shared_variables) > 0 else ''} {shared_variables_where} AND bit_count({predicate_table_name}.intervals) > bit_count({predicate_table_name}.intervals & {negated_predicate_table_name}.intervals)
+        {'AND' if len(negated_predicate_variable_clauses) > 0 else ''} {negated_predicate_variable_clauses_where} AND bit_count({predicate_table_name}.intervals & ~{negated_predicate_table_name}.intervals) > 0
 ) OR EXISTS (
     SELECT * FROM {missing_negated_predicate_table_name}
     WHERE {predicate_table_name}.trace_id = {missing_negated_predicate_table_name}.trace_id
 )
-)"""
-        return query, all_used_variables
+)
+""".strip()
+
+        # bit_count({predicate_table_name}.intervals) > bit_count({predicate_table_name}.intervals & {negated_predicate_table_name}.intervals)
+        return query, all_used_variables, True
 
 
     def _handle_or_refactored(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]],
                                predicate_table_name: str = PREDICATE_TABLE_NAME,
                                negated_predicate_table_name: str = NEGATED_PREDICATE_TABLE_NAME,
                                missing_negated_predicate_table_name: str = MISSING_NEGATED_PREDICATE_TABLE_NAME,
-                               **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+                               return_trace_ids: bool = False,
+                               **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
             or_args = [or_args]
@@ -865,54 +899,88 @@ EXISTS (
             missing_negative_query = None
 
         all_used_variables = predicate_used_variables | negated_used_variables
-        shared_variables = predicate_used_variables & negated_used_variables
+        # shared_variables = predicate_used_variables & negated_used_variables
 
-        select_operator = 'SELECT COUNT(*)'
-        if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-            select_operator = 'SELECT DISTINCT(trace_id)'
+        select_operator = f'SELECT {predicate_table_name}.trace_id'
+        if return_trace_ids:
+            select_operator = f'SELECT DISTINCT({predicate_table_name}.trace_id)'
+
+        limit_statement = 'LIMIT 1' if not return_trace_ids else ''
+        negated_select = select_operator.replace(predicate_table_name, negated_predicate_table_name)
+        missing_negated_select = select_operator.replace(predicate_table_name, missing_negated_predicate_table_name)
+
 
         if negated_query is None:
-            return f"{select_operator} FROM ({predicate_query}) WHERE bit_count(intervals) > 0", all_used_variables
+            return f"{select_operator} FROM ({predicate_query}) {predicate_table_name} WHERE bit_count(intervals) > 0", all_used_variables, True
 
-        missing_negated_select = select_operator[:]
-        if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-            missing_negated_select = f'SELECT DISTINCT({missing_negated_predicate_table_name}.trace_id)'
+        negated_only_variables = negated_used_variables - predicate_used_variables
+        negated_predicate_variable_clauses = [
+            f'{negated_predicate_table_name}."{negated_only_variable}" IS NOT NULL'
+            for negated_only_variable in negated_only_variables
+        ]
 
-        negated_select = select_operator[:]
-        if 'return_trace_ids' in kwargs and kwargs['return_trace_ids']:
-            negated_select = f'SELECT DISTINCT({negated_predicate_table_name}.trace_id)'
-
+        negated_predicate_variable_clauses_where = ' AND '.join(negated_predicate_variable_clauses)
 
         if predicate_query is None:
             query = f"""WITH {negated_predicate_table_name} as ({negated_query}),
 {missing_negated_predicate_table_name} as ({missing_negative_query})
-({missing_negated_select} FROM {missing_negated_predicate_table_name}
-) UNION
-({negated_select} FROM {negated_predicate_table_name}
-JOIN trace_length_and_domains ON trace_length_and_domains.trace_id = {negated_predicate_table_name}.trace_id
-WHERE bit_count({negated_predicate_table_name}.intervals) < trace_length_and_domains.length
-)"""
-            return query, all_used_variables
+(
+    {missing_negated_select} FROM {missing_negated_predicate_table_name}
+    {limit_statement}
+) UNION (
+    {negated_select} FROM {negated_predicate_table_name}
+    WHERE bit_count(~{negated_predicate_table_name}.intervals) > 0
+    {'AND' if len(negated_predicate_variable_clauses) > 0 else ''} {negated_predicate_variable_clauses_where}
+    {limit_statement}
+)
+""".strip()
+            # JOIN trace_length_and_domains ON trace_length_and_domains.trace_id = {negated_predicate_table_name}.trace_id
+            # WHERE bit_count({negated_predicate_table_name}.intervals) < trace_length_and_domains.length
+
+            return query, all_used_variables, True
 
         # shared_variables_where = ' AND '.join([f'({predicate_table_name}."{v}" = {negated_predicate_table_name}."{v}" OR {negated_predicate_table_name}."{v}" IS NULL)' for v in shared_variables])
+        find_negated_only_variable_assignments = ''
+        if negated_only_variables:
+            find_negated_only_variable_assignments = f"""
+AND (
+EXISTS (
+    SELECT 1 FROM {negated_predicate_table_name}
+    WHERE {predicate_table_name}.trace_id = {negated_predicate_table_name}.trace_id
+    AND {negated_predicate_variable_clauses_where}
+    )
+OR EXISTS (
+    SELECT 1 FROM {missing_negated_predicate_table_name}
+    WHERE {predicate_table_name}.trace_id = {missing_negated_predicate_table_name}.trace_id
+    AND {negated_predicate_variable_clauses_where.replace(negated_predicate_table_name, missing_negated_predicate_table_name)}
+    )
+)
+""".strip()
 
-        query = f"""WITH {predicate_table_name} as ({predicate_query}),
+        query = f"""
+WITH {predicate_table_name} as ({predicate_query}),
 {negated_predicate_table_name} as ({negated_query}),
 {missing_negated_predicate_table_name} as ({missing_negative_query})
-({missing_negated_select} FROM {missing_negated_predicate_table_name}
+(
+    {missing_negated_select} FROM {missing_negated_predicate_table_name}
+    {limit_statement}
 ) UNION  (
-{select_operator} FROM {predicate_table_name}
-WHERE bit_count({predicate_table_name}.intervals) > 0
+    {select_operator} FROM {predicate_table_name}
+    WHERE bit_count({predicate_table_name}.intervals) > 0
+    {find_negated_only_variable_assignments}
+    {limit_statement}
 ) UNION (
-{negated_select} FROM {negated_predicate_table_name}
-WHERE bit_count({negated_predicate_table_name}.intervals) > 0
+    {negated_select} FROM {negated_predicate_table_name}
+    WHERE bit_count({negated_predicate_table_name}.intervals) > 0
+    {'AND' if len(negated_predicate_variable_clauses) > 0 else ''} {negated_predicate_variable_clauses_where}
+    {limit_statement}
 )
-"""
-        return query, all_used_variables
+""".strip()
+        return query, all_used_variables, True
 
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
             and_args = [and_args]
@@ -926,7 +994,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
 
         for and_arg in and_args:  # type: ignore
             try:
-                sub_query, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
+                sub_query, sub_used_variables, _ = self._inner_filter(typing.cast(tatsu.ast.AST, and_arg), mapping, **kwargs)
                 sub_queries.append(sub_query)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -938,7 +1006,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
             raise PredicateNotImplementedException("All sub-predicates of the and were not implemented")
 
         if len(sub_queries) == 1:
-            return sub_queries[0], used_variables_by_child[0]
+            return sub_queries[0], used_variables_by_child[0], False
 
         subquery_table_names = [self._next_temp_table_name() for _ in range(len(sub_queries))]
         with_items = [f"{table_name} AS ({subquery})" for table_name, subquery in zip(subquery_table_names, sub_queries)]
@@ -975,10 +1043,10 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
         table_name = self._next_temp_table_name()
         query = f"WITH {table_name} AS ({inner_query}) SELECT * FROM {table_name} WHERE bit_count(intervals) != 0"
         if DEBUG: print(query)
-        return query, all_used_variables
+        return query, all_used_variables, False
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_and_de_morgans(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_and_de_morgans(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         and_args = predicate["and_args"]
         if not isinstance(and_args, list):
             and_args = [and_args]
@@ -992,7 +1060,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
 
         for and_arg in and_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(and_arg, mapping, **kwargs)  # type: ignore
+                subquery, sub_used_variables, _ = self._inner_filter(typing.cast(tatsu.ast.AST, and_arg), mapping, **kwargs)
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -1004,7 +1072,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
             raise PredicateNotImplementedException("All sub-predicates of the or were not implemented")
 
         if len(sub_queries) == 1:
-            return sub_queries[0], used_variables_by_child[0]
+            return sub_queries[0], used_variables_by_child[0], False
 
         sub_queries.insert(0, self._build_potential_missing_values_query(mapping, list(all_used_variables)))
         used_variables_by_child.insert(0, all_used_variables)
@@ -1042,11 +1110,11 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
         table_name = self._next_temp_table_name()
         query = f"WITH {table_name} AS ({inner_query}) SELECT * FROM {table_name} WHERE intervals IS NOT NULL AND (bit_count(intervals) != 0)"
         if DEBUG: print(query)
-        return query, all_used_variables
+        return query, all_used_variables, False
 
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         or_args = predicate["or_args"]
         if not isinstance(or_args, list):
             or_args = [or_args]
@@ -1060,7 +1128,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
 
         for or_arg in or_args:  # type: ignore
             try:
-                subquery, sub_used_variables = self._inner_filter(or_arg, mapping, or_argument=True, **kwargs)  # type: ignore
+                subquery, sub_used_variables, _ = self._inner_filter(typing.cast(tatsu.ast.AST, or_arg), mapping, or_argument=True, **kwargs)
                 sub_queries.append(subquery)
                 used_variables_by_child.append(sub_used_variables)
                 all_used_variables |= sub_used_variables
@@ -1074,7 +1142,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
         if len(sub_queries) == 1:
             table_name = self._next_temp_table_name()
             query = f"WITH {table_name} AS ({sub_queries[0]}) SELECT * FROM {table_name} WHERE bit_count(intervals) != 0"
-            return query, used_variables_by_child[0]
+            return query, used_variables_by_child[0], False
 
         # Trying to remove this since I only handle one OR/AND at a time
         # sub_queries.insert(0, self._build_potential_missing_values_query(mapping, list(all_used_variables)))
@@ -1123,7 +1191,7 @@ WHERE bit_count({negated_predicate_table_name}.intervals) > 0
         table_name = self._next_temp_table_name()
         query = f"WITH {table_name} AS ({inner_query}) SELECT * FROM {table_name} WHERE bit_count(intervals) != 0"
         if DEBUG: print(query)
-        return query, all_used_variables
+        return query, all_used_variables, False
 
     def _types_to_arg_casts(self, types: typing.Collection[str]):
         return '(' + ', '.join(f"'{t}'::arg_type" for t in types) + ')'
@@ -1231,9 +1299,9 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         return query
 
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
-    def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _handle_not(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         try:
-            inner_query, used_variables = self._inner_filter(predicate["not_args"], mapping, **kwargs)  # type: ignore
+            inner_query, used_variables, _ = self._inner_filter(typing.cast(tatsu.ast.AST, predicate["not_args"]), mapping, **kwargs)
         except PredicateNotImplementedException as e:
             raise PredicateNotImplementedException(f"Sub-predicate of the not ({e.args}) was not implemented")
 
@@ -1257,14 +1325,14 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
         """
 
         if 'or_argument' in kwargs and kwargs['or_argument']:
-            return not_query, used_variables
+            return not_query, used_variables, False
 
         table_name = self._next_temp_table_name()
         query = f"WITH {table_name} AS ({not_query}) SELECT * FROM {table_name} WHERE bit_count(intervals) != 0"
         if DEBUG: print(query)
-        return query, used_variables
+        return query, used_variables, False
 
-    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str]]:
+    def _inner_filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         '''
         Filters the data by the given predicate and mapping, returning a list of intervals in which the predicate is true
         for each processed trace
@@ -1282,12 +1350,18 @@ SELECT {table_names[0]}.domain, {', '.join(object_id_selects)} FROM {table_names
             return self._inner_filter(predicate["pred"], mapping, **kwargs)  # type: ignore
 
         elif predicate_rule == "super_predicate_and":
+            if 'use_refactored_impl' in kwargs and kwargs['use_refactored_impl']:
+                return self._handle_and_refactored(predicate, mapping, **kwargs)
+
             if 'use_de_morgans' in kwargs and kwargs['use_de_morgans']:
                 return self._handle_and_de_morgans(predicate, mapping, **kwargs)
 
             return self._handle_and(predicate, mapping, **kwargs)
 
         elif predicate_rule == "super_predicate_or":
+            if 'use_refactored_impl' in kwargs and kwargs['use_refactored_impl']:
+                return self._handle_or_refactored(predicate, mapping, **kwargs)
+
             return self._handle_or(predicate, mapping, **kwargs)
 
         elif predicate_rule == "super_predicate_not":

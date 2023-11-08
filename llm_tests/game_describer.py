@@ -1,7 +1,7 @@
 import argparse
 from itertools import groupby
 import os
-import re
+import sys
 import typing
 
 import logging
@@ -17,15 +17,17 @@ import tatsu, tatsu.ast, tatsu.grammars
 from tqdm import tqdm
 
 # For some reason utils needs to be imported first?
+sys.path.append(os.path.abspath('../reward-machine'))
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
-from describer_lm_prompts import *
+from describer_lm_prompts import compile_prompts_from_data
 from preference_handler import PredicateType
 
 from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
 from ast_printer import ast_section_to_string
 from ast_utils import cached_load_and_parse_games_from_file
 
-DEFAULT_GRAMMAR_PATH = "./dsl/dsl.ebnf"
+DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
+DEFAULT_GAMES_PATH = "../dsl/interactive-beta.pddl"
 
 PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
@@ -927,23 +929,29 @@ class GameDescriber():
         else:
             setup_stage_1, preferences_stage_1, terminal_stage_1, scoring_stage_1 = stage_1_descriptions
 
+
+        # Generate prompts
+        all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
+                                                translations_path="./selected_human_and_map_elites_translations.csv")
+        setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt = all_prompts
+
         if setup_stage_1 != "":
-            setup_description = self._query_openai(SETUP_STAGE_1_TO_STAGE_2_PROMPT.format(setup_stage_1))
+            setup_description = self._query_openai(setup_prompt.format(setup_stage_1))
         else:
             setup_description = ""
 
         if preferences_stage_1 != "":
-            preferences_description = self._query_openai(PREFERENCES_STAGE_1_TO_STAGE_2_PROMPT.format(preferences_stage_1))
+            preferences_description = self._query_openai(preferences_prompt.format(preferences_stage_1))
         else:
             preferences_description = ""
 
         if terminal_stage_1 != "":
-            terminal_description = self._query_openai(TERMINAL_STAGE_1_TO_STAGE_2_PROMPT.format(terminal_stage_1))
+            terminal_description = self._query_openai(terminal_prompt.format(terminal_stage_1))
         else:
             terminal_description = ""
 
         if scoring_stage_1 != "":
-            scoring_description = self._query_openai(SCORING_STAGE_1_TO_STAGE_2_PROMPT.format(scoring_stage_1))
+            scoring_description = self._query_openai(scoring_prompt.format(scoring_stage_1))
         else:
             scoring_description = ""
 
@@ -973,6 +981,7 @@ class GameDescriber():
         {scoring_stage_2}
         """
 
+        # TODO: adjust to use new prompt format
         stage_3_description = self._query_openai(STAGE_2_TO_STAGE_3_PROMPT.format(prompt_format))
 
         return stage_3_description
@@ -1004,13 +1013,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--description_stage", type=int, default=1, help="The maximum 'stage' of description to generate for each game")
     parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4-8k"])
-    parser.add_argument("--output_path", type=str, default="./reward-machine")
+    parser.add_argument("--output_path", type=str, default=".")
 
     args = parser.parse_args()
 
-    grammar = open('./dsl/dsl.ebnf').read()
+    grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = tatsu.compile(grammar)
-    game_asts = list(cached_load_and_parse_games_from_file('./dsl/interactive-beta.pddl', grammar_parser, False, relative_path='.'))
+    game_asts = list(cached_load_and_parse_games_from_file(DEFAULT_GAMES_PATH, grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber(openai_model_str=args.gpt_model)
 
     game_table_htmls = []

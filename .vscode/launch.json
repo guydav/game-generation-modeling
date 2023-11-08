@@ -67,6 +67,7 @@
             "args": [
                 "--from-asts",
                 "-n", "5",
+                "--fit-shuffle-list-elements",
                 // "-g", "./dsl/dsl.ebnf",
                 // "-t", "./dsl/interactive-beta.pddl",
                 // "./dsl/interactive-beta.pddl",

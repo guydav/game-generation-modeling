@@ -869,7 +869,7 @@ class PredicateFoundInData(FitnessTerm):
     def _query_predicate_data_estimator(self, pred: tatsu.ast.AST,
                                         mapping: typing.Dict[str, typing.Union[str, typing.List[str]]],
                                         context: ContextDict) -> typing.Optional[int]:
-        return self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=False, use_refactored_impl=True)
+        return self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=False)
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):

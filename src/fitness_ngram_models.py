@@ -535,9 +535,9 @@ class NGramASTParser(ast_parser.ASTParser):
         self._default_kwarg(kwargs, 'update_model_counts', False)
         self._default_kwarg(kwargs, 'skip_game_and_domain', self.skip_game_and_domain)
         self._default_kwarg(kwargs, 'shuffle_list_elements', False)
-        initial_call = kwargs.get('inner_call', False)
+        initial_call = kwargs.get('initial_call', True)
         if initial_call:
-            kwargs['inner_call'] = True
+            kwargs['initial_call'] = False
             self.preorder_ast_tokens = []
             self.preorder_ast_tokens_by_section = {section: [] for section in ast_parser.SECTION_KEYS}
 

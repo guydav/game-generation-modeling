@@ -2,12 +2,14 @@ from argparse import Namespace
 import io
 import gc
 import os
+import numpy as np
 import pstats
 import tatsu
 import time
 import tracemalloc
 import tqdm
 import sys
+
 
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('./src'))
@@ -22,6 +24,7 @@ from src.fitness_features import *
 
 PROFILE = False
 MEMORY_TRACE = False
+N_REPEATS = 10
 
 
 if __name__ == '__main__':
@@ -55,31 +58,35 @@ if __name__ == '__main__':
         print(f'After creating featurizer | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
         tracemalloc.reset_peak()
 
-    start = time.perf_counter()
-    for i in range(0, len(game_asts)):
-    # for i in range(53, 54):
-    # for i in tqdm(range(0, len(game_asts))):
-        # first_snapshot = tracemalloc.take_snapshot()
+    timings = []
+    for _ in range(N_REPEATS):
+        start = time.perf_counter()
+        for i in range(0, len(game_asts)):
+        # for i in range(53, 54):
+        # for i in tqdm(range(0, len(game_asts))):
+            # first_snapshot = tracemalloc.take_snapshot()
 
-        # print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
-        featurizer.parse(game_asts[i], 'interactive-beta.pddl')
+            # print(f'Parsing game #{i}: {game_asts[i][1].game_name}')
+            featurizer.parse(game_asts[i], 'interactive-beta.pddl')
 
-        # if MEMORY_TRACE:
-        #     # gc.collect()
-        #     size, peak = tracemalloc.get_traced_memory()
-        #     print(f'After current game | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
-        #     tracemalloc.reset_peak()
-        #     print()
+            # if MEMORY_TRACE:
+            #     # gc.collect()
+            #     size, peak = tracemalloc.get_traced_memory()
+            #     print(f'After current game | Memory usage is {size / 10**6}MB | Peak was {peak / 10**6}MB')
+            #     tracemalloc.reset_peak()
+            #     print()
 
-        # second_snapshot = tracemalloc.take_snapshot()
-        # top_stats = second_snapshot.compare_to(first_snapshot, 'lineno')
-        # print("[ Top 10 differences ]")
-        # for stat in top_stats[:10]:
-        #     print(stat)
+            # second_snapshot = tracemalloc.take_snapshot()
+            # top_stats = second_snapshot.compare_to(first_snapshot, 'lineno')
+            # print("[ Top 10 differences ]")
+            # for stat in top_stats[:10]:
+            #     print(stat)
 
 
-    end = time.perf_counter()
-    print(f'\nParsing took {end - start:.4f} seconds\n')
+        end = time.perf_counter()
+        timings.append(end - start)
+
+    print(f'\nParsing took an average of {np.mean(timings):.4f} +/- {np.std(timings):.4f} seconds (n={N_REPEATS}))')
 
     if MEMORY_TRACE:
         size, peak = tracemalloc.get_traced_memory()

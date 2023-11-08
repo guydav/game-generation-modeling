@@ -359,7 +359,7 @@ SPECIFIC_NAMED_OBJECTS_BY_ROOM = {
         TRIANGLE_BLOCK_GREEN: ['TriangleBlock|-02.95|+01.23|-02.69'],
         TRIANGLE_BLOCK_TAN: ['TriangleBlock|-02.94|+01.23|-02.46'],
         TRIANGULAR_RAMP_GREEN: ['SmallSlide|-00.81|+00.14|-03.10'],
-        TRIANGLE_BLOCK_TAN: ['SmallSlide|-01.31|+00.14|-03.10'],
+        TRIANGULAR_RAMP_TAN: ['SmallSlide|-01.31|+00.14|-03.10'],
     }
 }
 
@@ -401,6 +401,7 @@ if SIDE in SIDES: SIDES.remove(SIDE)
 
 
 NON_OBJECT_TYPES = [COLOR, ORIENTATION, SIDE]
+ALL_NON_OBJECT_TYPES = set(COLORS + ORIENTATIONS + SIDES + NON_OBJECT_TYPES)
 
 # Meta types compile objects from many other types (e.g. both beachballs and dodgeballs are balls)
 META_TYPES = {BALL: [BEACHBALL, BASKETBALL, DODGEBALL, GOLFBALL],

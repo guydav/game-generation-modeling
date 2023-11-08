@@ -463,12 +463,18 @@ IGNORE_RULES = [
     'comparison_arg_number_value', 'time_number_value', 'score_number_value', 'scoring_number_value',
 ]
 
+# avoid shuffling: then.then_funcs, while_hold.while_preds, pref_name_and_types.object_types
+SHUFFLE_LIST_ELEMENTS_IGNORE_RULES = [
+    'then', 'while_hold', 'pref_name_and_types',
+]
+
 
 class NGramASTParser(ast_parser.ASTParser):
     def __init__(self, n: int, ignore_rules: typing.Sequence[str] = IGNORE_RULES,
                  use_specific_objects: bool = False,
                  preorder_traversal: bool = True, pad: int = 0,
                  skip_game_and_domain: bool = True,
+                 shuffle_list_elements_ignore_rules: typing.Sequence[str] = SHUFFLE_LIST_ELEMENTS_IGNORE_RULES,
                  random_seed: int = DEFAULT_RANDOM_SEED):
         self.n = n
         self.ignore_rules = set(ignore_rules)
@@ -476,6 +482,7 @@ class NGramASTParser(ast_parser.ASTParser):
         self.preorder_traversal = preorder_traversal
         self.pad = pad
         self.skip_game_and_domain = skip_game_and_domain
+        self.shuffle_list_elements_ignore_rules = shuffle_list_elements_ignore_rules
         self.random_seed = random_seed
         self.rng = np.random.default_rng(self.random_seed)
 
@@ -528,7 +535,7 @@ class NGramASTParser(ast_parser.ASTParser):
         self._default_kwarg(kwargs, 'update_model_counts', False)
         self._default_kwarg(kwargs, 'skip_game_and_domain', self.skip_game_and_domain)
         self._default_kwarg(kwargs, 'shuffle_list_elements', False)
-        initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
+        initial_call = kwargs.get('inner_call', False)
         if initial_call:
             kwargs['inner_call'] = True
             self.preorder_ast_tokens = []
@@ -719,12 +726,15 @@ class NGramASTParser(ast_parser.ASTParser):
             else:
                 self._add_token(token, **kwargs)
 
+        if rule in self.shuffle_list_elements_ignore_rules:
+            kwargs['skip_shuffle'] = True
+
         for child_key in ast:
             if child_key != 'parseinfo':
                 self(ast[child_key], **kwargs)
 
     def _handle_list(self, ast: list, **kwargs):
-        if kwargs['shuffle_list_elements']:
+        if kwargs['shuffle_list_elements'] and not kwargs.pop('skip_shuffle', False):
             self.rng.shuffle(ast)
 
         return super()._handle_list(ast, **kwargs)

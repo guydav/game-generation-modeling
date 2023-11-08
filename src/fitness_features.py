@@ -866,6 +866,11 @@ class PredicateFoundInData(FitnessTerm):
         else:
             self.predicates_found = []
 
+    def _query_predicate_data_estimator(self, pred: tatsu.ast.AST,
+                                        mapping: typing.Dict[str, typing.Union[str, typing.List[str]]],
+                                        context: ContextDict) -> typing.Optional[int]:
+        return self.predicate_data_estimator.filter(pred, mapping, use_de_morgans=False)
+
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
         if isinstance(ast, tatsu.ast.AST):
             if self.use_full_databse:
@@ -905,7 +910,7 @@ class PredicateFoundInData(FitnessTerm):
                 if predicate_found is None:
                     # n_traces, n_intervals, total_interval_states = self.predicate_data_estimator.filter(pred, mapping)
                     # predicate_found = (n_traces >= self.min_trace_count) and (n_intervals >= self.min_interval_count) and (total_interval_states >= self.min_total_interval_state_count)
-                    n_traces = self.predicate_data_estimator.filter(pred, full_mapping, use_de_morgans=False)
+                    n_traces = self._query_predicate_data_estimator(pred, relevant_mapping, context)  # type: ignore
 
                     if n_traces is None:  # query timed out
                         return

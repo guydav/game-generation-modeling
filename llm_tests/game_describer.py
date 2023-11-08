@@ -141,6 +141,7 @@ class GameDescriber():
         that the API key has already been set. Retries with exponentially-increasing delays in
         case of rate limit errors
         '''
+
         response = openai.ChatCompletion.create(
             model=self.openai_model_str,
             max_tokens=self.max_openai_tokens,
@@ -933,7 +934,7 @@ class GameDescriber():
         # Generate prompts
         all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
                                                 translations_path="./selected_human_and_map_elites_translations.csv")
-        setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt = all_prompts
+        setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt, _ = all_prompts
 
         if setup_stage_1 != "":
             setup_description = self._query_openai(setup_prompt.format(setup_stage_1))
@@ -971,18 +972,16 @@ class GameDescriber():
         else:
             setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = stage_2_descriptions
 
-        prompt_format = f"""Setup:
-        {setup_stage_2}
-        Preferences:
-        {preferences_stage_2}
-        Terminal Conditions:
-        {terminal_stage_2}
-        Scoring:
-        {scoring_stage_2}
-        """
 
-        # TODO: adjust to use new prompt format
-        stage_3_description = self._query_openai(STAGE_2_TO_STAGE_3_PROMPT.format(prompt_format))
+        _, _, _, _, overall_prompt = compile_prompts_from_data(initial_stage=2, final_stage=3,
+                                                               translations_path="./selected_human_and_map_elites_translations.csv")
+
+        setup_prefix = "" if setup_stage_2 == "" else "\n\n"
+        terminal_prefix = "" if terminal_stage_2 == "" else "\n\n"
+
+        game_description = f"{setup_prefix}{setup_stage_2}\n\n{preferences_stage_2}{terminal_prefix}{terminal_stage_2}\n\n{scoring_stage_2}"
+
+        stage_3_description = self._query_openai(overall_prompt.format(game_description))
 
         return stage_3_description
 
@@ -1012,14 +1011,15 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--description_stage", type=int, default=1, help="The maximum 'stage' of description to generate for each game")
-    parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4-8k"])
+    parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4"])
+    parser.add_argument("--games_path", type=str, default=DEFAULT_GAMES_PATH)
     parser.add_argument("--output_path", type=str, default=".")
 
     args = parser.parse_args()
 
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = tatsu.compile(grammar)
-    game_asts = list(cached_load_and_parse_games_from_file(DEFAULT_GAMES_PATH, grammar_parser, False, relative_path='.'))
+    game_asts = list(cached_load_and_parse_games_from_file(args.games_path, grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber(openai_model_str=args.gpt_model)
 
     game_table_htmls = []

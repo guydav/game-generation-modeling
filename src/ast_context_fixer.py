@@ -280,7 +280,6 @@ class ASTContextFixer(ASTParentMapper):
                 new_pref_name = self.sampler.rules[rule]['pref_name']['samplers']['preference_name'](global_context, local_context)
                 replace_child(ast, ['pref_name'], new_pref_name)
                 global_context[PREFERENCE_NAMES_TO_ADD_CONTEXT_KEY].add(new_pref_name)
-                print(f'Adding preference name {new_pref_name} to global context')
                 preference_names[ast.pref_name] -= 1
 
         elif rule in ('predicate', 'function_eval'):

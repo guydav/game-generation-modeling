@@ -31,7 +31,7 @@ from ast_parser import VariableDefinition, extract_variables_from_ast, update_co
     VARIABLES_CONTEXT_KEY, SECTION_CONTEXT_KEY, QUANTIFICATIONS_CONTEXT_KEY, MODAL_CONTEXT_KEY, PREFERENCE_CONTEXT_KEY
 import ast_parser
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy
+from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy, deepcopy_ast, ASTCopyType, replace_child
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures, NGRAM_SCORE_PATTERN
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser, DEFAULT_N_BY_SECTION
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
@@ -1005,19 +1005,27 @@ class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
                 return
 
             children = typing.cast(typing.List[tatsu.ast.AST], children)
-
-            if len(children) > self.max_logical_arguments:
-                return
+            trimmed_children = []
+            changed_children = False
 
             for child in children:
                 child_pred_rule = child.pred.parseinfo.rule  # type: ignore
-                if child_pred_rule in ('predicate', 'function_comparison'):
-                    continue
+                if child_pred_rule in ('predicate', 'function_comparison') or (child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule in ('predicate', 'function_comparison')):
+                    trimmed_children.append(child)
 
-                if child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule in ('predicate', 'function_comparison'):  # type: ignore
-                    continue
+                # Skip children that are not a predicate or a negation of a predicate
+                else:
+                    changed_children = True
 
-                return
+            # If we have more than four, trim them
+            if len(trimmed_children) > self.max_logical_arguments:
+                trimmed_children = trimmed_children[:self.max_logical_arguments]
+                changed_children = True
+
+            if changed_children:
+                ast_copy = deepcopy_ast(ast, ASTCopyType.NODE)
+                replace_child(ast_copy, RULE_TO_CHILD_KEY[rule], trimmed_children)
+                ast = ast_copy
 
             super().update(ast, rule, context)
 
@@ -2859,32 +2867,44 @@ class SectionNodeCount(SectionCountTerm):
         return self.node_count
 
 
-# class SectionMaxWidth(SectionCountTerm):
-#     max_width: int = 0
+class SectionMaxWidth(SectionCountTerm):
+    max_width: int = 0
 
-#     def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
-#         super().__init__(section, f'max_width_{section}', thresholds)
-#         self.max_width = 0
+    def __init__(self, section: str, thresholds: typing.Optional[typing.Sequence[float]] = None):
+        super().__init__(section, f'max_width_{section}', thresholds)
+        self.max_width = 0
 
-#     def game_start(self) -> None:
-#         self.max_width = 0
+    def game_start(self) -> None:
+        self.max_width = 0
 
-#     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-#         if isinstance(ast, tatsu.ast.AST):
-#             for child_key in ast:
-#                 if isinstance(ast[child_key], list):
-#                     self.max_width = max(self.max_width, len(ast[child_key]))  # type: ignore
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if isinstance(ast, tatsu.ast.AST):
+            for child_key in ast:
+                if isinstance(ast[child_key], list):
+                    self.max_width = max(self.max_width, len(ast[child_key]))  # type: ignore
 
-#     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-#         return self.max_width
+    def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.max_width
+
+# max depth:
+# setup: [0, 11, 13, 18]  #
+# constraints: [15, 17, 19, 21]
+# terminal: [0, 5, 7, 11]
+# scoring: [3, 9, 11, 15]
+
+# node count:
+# setup: [0, 20, 50, 100]
+# constraints: [60, 90, 120, 250]
+# terminal: [0, 4, 9, 22]
+# scoring: [4, 21, 35, 80]
 
 
 SECTION_COUNT_THRESHOLDS = {
     SectionMaxDepth: {
-        ast_parser.SETUP: [0.0, 12.0, 13.0, 26.0],
-        ast_parser.PREFERENCES: [9.0, 15.0, 17.0, 23.0],
-        ast_parser.TERMINAL: [0.0, 0.6, 9.0, 12.0],  # [0.0, 0.0, 7.0, 12.0]
-        ast_parser.SCORING: [3.0, 7.5, 10.0, 17.0],  # [3.0, 3.0, 10.0, 17.0]
+        ast_parser.SETUP: [0, 11, 13, 18],  # [0.0, 12.0, 13.0, 26.0],
+        ast_parser.PREFERENCES: [15, 17, 19, 21],  # [9.0, 15.0, 17.0, 23.0],
+        ast_parser.TERMINAL: [0, 5, 7, 11],  # [0.0, 0.6, 9.0, 12.0],  #
+        ast_parser.SCORING: [3, 9, 11, 15],  # [3.0, 7.5, 10.0, 17.0],  #
     },
     # SectionMeanDepth: {
     #     ast_parser.SETUP: [0.0, 6.3, 7.5, 14.7],
@@ -2893,17 +2913,17 @@ SECTION_COUNT_THRESHOLDS = {
     #     ast_parser.SCORING: [1.5, 4.9, 5.6, 8.4],  # [1.5, 1.5, 5.2, 8.4]
     # },
     SectionNodeCount: {
-        ast_parser.SETUP: [0.0, 19.0, 36.5, 131.0],
-        ast_parser.PREFERENCES: [14.0, 64.0, 110.0, 565.0],
-        ast_parser.TERMINAL: [0.0, 9.0, 11.0, 50.0],  # [0.0, 0.0, 10.0, 50.0]
-        ast_parser.SCORING: [4.0, 16.0, 32.0, 134.0],  # [4.0, 4.0, 28.0, 134.0]
+        ast_parser.SETUP: [0, 20, 50, 100],  # [0.0, 19.0, 36.5, 131.0],
+        ast_parser.PREFERENCES: [60, 90, 120, 250],  # [14.0, 64.0, 110.0, 565.0],
+        ast_parser.TERMINAL: [0, 4, 9, 22],  # [0.0, 9.0, 11.0, 50.0],  # [0.0, 0.0, 10.0, 50.0]
+        ast_parser.SCORING: [4, 21, 35, 80],  # [4.0, 16.0, 32.0, 134.0],  # [4.0, 4.0, 28.0, 134.0]
     },
-    # SectionMaxWidth: {
-    #     ast_parser.SETUP: [0.0, 1.0, 3.0, 10.0],
-    #     ast_parser.PREFERENCES: [1.0, 3.0, 4.0, 10], # TODO: change to [2.0, 3.0, 4.0, 10],  # [1.0, 3.0, 3.0, 10.0]
-    #     ast_parser.TERMINAL: [0.0, 2.0, 3.0, 4.0],  # [0.0, 0.0, 0.0, 4.0]
-    #     ast_parser.SCORING: [0.0, 2.0, 3.0, 12.0],
-    # }
+    SectionMaxWidth: {
+        ast_parser.SETUP: [0.0, 1.0, 2.0, 4.0],
+        ast_parser.PREFERENCES: [2.0, 3.0, 4.0, 6.0], # [1.0, 3.0, 3.0, 10.0]
+        ast_parser.TERMINAL: [0.0, 1.0, 2.0, 3.0],  # [0.0, 0.0, 0.0, 4.0]
+        ast_parser.SCORING: [0.0, 2.0, 4.0, 6.0],
+    }
 }
 
 

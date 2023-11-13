@@ -500,6 +500,9 @@ class NGramASTParser(ast_parser.ASTParser):
         if not hasattr(self, 'use_specific_objects'):
             self.use_specific_objects = False
 
+        if not hasattr(self, 'shuffle_list_elements_ignore_rules'):
+            self.shuffle_list_elements_ignore_rules = SHUFFLE_LIST_ELEMENTS_IGNORE_RULES
+
     def _add_token(self, token: str, at_start: bool = False, **kwargs):
         if at_start:
             self.preorder_ast_tokens.insert(0, token)

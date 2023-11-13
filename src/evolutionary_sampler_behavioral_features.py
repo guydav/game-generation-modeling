@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
-from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm
+from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm, AtEndFound
 import room_and_object_types
 
 logger = logging.getLogger(__name__)
@@ -324,6 +324,7 @@ PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
 PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
 PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
+LATEST_WITH_AT_END = 'latest_at_end'
 LATEST_WITH_SETUP = 'latest_setup'
 LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
 LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
@@ -346,6 +347,7 @@ FEATURE_SETS = [
     PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT,
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN,
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT,
+    LATEST_WITH_AT_END,
     LATEST_WITH_SETUP,
     LATEST_WITH_SETUP_AND_TERMINAL,
     LATEST_SETUP_EXPECTED_VALUES,
@@ -734,8 +736,11 @@ class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeatu
         return self.current_ast_preference_strings
 
 
-BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 1, 2: 2}
-BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (8, 2), (44, 1), (59, 0), (90, 2)]
+# BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 1, 2: 2}
+# BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (8, 2), (44, 1), (59, 0), (90, 2)]
+# Trying a new set where I go for distance 1 or below
+BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 1}
+BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (11, 0), (17, 2), (44, 1), (48, 5), (49, 0), (51, 0), (67, 0), (69, 0)]
 
 
 def dict_distance(d1, d2):
@@ -946,6 +951,11 @@ def build_behavioral_features_featurizer(
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
 
+        elif feature_set == LATEST_WITH_AT_END:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            featurizer.register(AtEndFound())
+
         elif feature_set == LATEST_WITH_SETUP:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
@@ -991,6 +1001,7 @@ def build_behavioral_features_featurizer(
             preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
             preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,

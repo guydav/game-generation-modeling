@@ -1010,14 +1010,19 @@ class PredicateFoundInDataSmallLogicals(PredicateFoundInData):
 
             for child in children:
                 child_pred_rule = child.pred.parseinfo.rule  # type: ignore
-                if child_pred_rule in ('predicate', 'function_comparison') or (child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule in ('predicate', 'function_comparison')):
+                if child_pred_rule == 'predicate' or \
+                    (child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule == 'predicate'):  # type: ignore
                     trimmed_children.append(child)
 
-                # Skip children that are not a predicate or a negation of a predicate
+                # Skip children that are not a predicate or a negation of a predicate, and mark that at least one child was removed
                 else:
                     changed_children = True
 
-            # If we have more than four, trim them
+            # If we have no children, skip
+            if len(trimmed_children) == 0:
+                return
+
+            # If we have more than the max length, drop down to the max length
             if len(trimmed_children) > self.max_logical_arguments:
                 trimmed_children = trimmed_children[:self.max_logical_arguments]
                 changed_children = True
@@ -3058,6 +3063,14 @@ class ASTNGramTerm(FitnessTerm):
         if len(path_digits) == 0:
             raise ValueError(f'Could not find model_n in {self.n_gram_model_path}')
         self.model_n = int(path_digits[0])
+
+        if self.top_k_min_n is not None:
+            self.top_k_min_n = min(self.top_k_min_n, self.model_n)
+        if self.top_k_max_n is not None:
+            self.top_k_max_n = self.model_n
+
+        if not self.score_all:
+            self.top_k_max_n = self.top_k_max_n = self.model_n
 
     def game_start(self) -> None:
         self.game_output = None

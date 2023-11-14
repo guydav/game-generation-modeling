@@ -49,9 +49,9 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     re.compile(r'max_quantification_count_[\w\d_]+'),
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     # Man and max depth and node count -- keep max depth and node count
-    # 2023-11-13 -- trying with the max width, too
-    # re.compile(r'max_depth_[\w\d_]+'),
+    # 2023-11-13 -- trying with the max width, too, so only mean depth removed
     re.compile(r'mean_depth_[\w\d_]+'),
+    # re.compile(r'max_depth_[\w\d_]+'),
     # re.compile(r'node_count_[\w\d_]+'),
     # re.compile(r'max_width_[\w\d_]+'),
 ]

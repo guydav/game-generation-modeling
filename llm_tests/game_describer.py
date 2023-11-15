@@ -668,12 +668,12 @@ class GameDescriber():
         '''
         if external_object_types is None:
             return ""
-        
+
         # Issue: it's possible for regrown games to apply the external scoring syntax to games without and
         # external forall. In this case, I suppose we'll just ignore it? (Other options are adding an error message)
         if preference_name not in self.external_forall_preference_mappings:
             return ""
-        
+
 
         specified_variables = list(self.external_forall_preference_mappings[preference_name].keys())[:len(external_object_types)] # type: ignore
         mapping_description = self.engine.join([f"{var} is bound to an object of type {var_type}" for var, var_type in zip(specified_variables, external_object_types)])
@@ -1022,6 +1022,8 @@ if __name__ == '__main__':
     game_asts = list(cached_load_and_parse_games_from_file(args.games_path, grammar_parser, False, relative_path='.'))
     game_describer = GameDescriber(openai_model_str=args.gpt_model)
 
+    input_file_name = os.path.splitext(os.path.basename(args.games_path))[0]
+
     game_table_htmls = []
     for game in tqdm(game_asts, desc="Generating game descriptions"):
         descriptions_by_stage = []
@@ -1050,6 +1052,6 @@ if __name__ == '__main__':
         # The ultimate html to be saved / displayed
         full_html = TABLE_HTML_TEMPLATE.format(STYLE_HTML, joined_html)
 
-        output_filename = os.path.join(args.output_path, f"game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
+        output_filename = os.path.join(args.output_path, f"{input_file_name}_game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
         with open(output_filename, "w") as file:
             file.write(full_html)

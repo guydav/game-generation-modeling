@@ -481,7 +481,7 @@ def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, 
 DEFAULT_MAX_TAUTOLOGY_EVAL_LENGTH = 16
 OPPOSITEֹֹֹ_CONTRADICTS_PREDICATES = ['above', 'in', 'on']
 OPPOSITE_REDUNDANT_PREDICATE = ['adjacent', 'opposite', 'touch', 'same_color', 'same_object', 'same_type']
-DOUBLE_UNDERSCORE_NUMBER_PATTERN = re.compile(r'__\d+')
+DOUBLE_UNDERSCORE_NUMBER_PATTERN = re.compile(r'__-?\d+')
 NUMBER_SUB = '__NUMBER'
 
 

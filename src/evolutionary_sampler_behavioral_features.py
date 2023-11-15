@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
-from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm, AtEndFound
+from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm, AtEndFound, NumPreferencesDefined
 import room_and_object_types
 
 logger = logging.getLogger(__name__)
@@ -196,6 +196,23 @@ class ObjectCategoryUsed(SetupObjectsUsed):
                 for cat_or_list in self.categories]
 
 
+MAX_NUM_PREFERENCES_COUNT = 4
+
+
+class NumPreferencesDefinedAsInteger(NumPreferencesDefined):
+    def __init__(self, max_count: int = MAX_NUM_PREFERENCES_COUNT, min_count: int = 1):
+        super().__init__(max_count=max_count, min_count=min_count)
+
+    def game_end(self) -> Number:
+        return self._get_clipped_preference_count()
+
+    def _get_all_inner_keys(self):
+        return None
+
+    def get_n_values(self):
+        return self.max_count - self.min_count + 1
+
+
 class FullFeaturesFitnessTerm(FitnessTerm):
     @abc.abstractmethod
     def parse_full_features(self, features: typing.Dict[str, float]) -> None:
@@ -332,6 +349,8 @@ EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
 EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
 EXEMPLAR_PREFERENCES_BC_SETUP = 'exemplar_preferences_bc_setup'
 EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES = 'exemplar_preferences_bc_expected_values'
+EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP = 'exemplar_preferences_bc_max_prefs_setup'
+EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_max_prefs_expected_values'
 
 FEATURE_SETS = [
     BASIC_BINNED,
@@ -355,6 +374,8 @@ FEATURE_SETS = [
     EXEMPLAR_PREFERENCES_EXPECTED_VALUES,
     EXEMPLAR_PREFERENCES_BC_SETUP,
     EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES,
+    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP,
+    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES
 ]
 
 
@@ -410,7 +431,10 @@ class FitnessFeaturesBehavioralFeaturizer(ASTFitnessFeaturizer, BehavioralFeatur
                 continue
 
             feature_term = feature_to_term_mapping[feature_name]
-            if hasattr(feature_term, 'bins'):
+            if hasattr(feature_term, 'get_n_values'):
+                n_values = feature_term.get_n_values()  # type: ignore
+
+            elif hasattr(feature_term, 'bins'):
                 n_values = (len(feature_term.bins) + 1)  # type: ignore
 
             else:
@@ -1029,6 +1053,44 @@ def build_behavioral_features_featurizer(
             )
 
             featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(NumPreferencesDefinedAsInteger())
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES:
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(NumPreferencesDefinedAsInteger())
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer
+            )
+
+            featurizer = exemplar_preferences_featurizer
+
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

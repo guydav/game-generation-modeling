@@ -680,8 +680,11 @@ class NumPreferencesDefined(FitnessTerm):
         self.defined_preferences.add(ast.pref_name)  # type: ignore
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        num_preferences = np.clip(len(self.defined_preferences), self.min_count, self.max_count)
+        num_preferences = self._get_clipped_preference_count()
         return {str(d): d == num_preferences for d in range(self.min_count, self.max_count + 1)}
+
+    def _get_clipped_preference_count(self):
+        return np.clip(len(self.defined_preferences), self.min_count, self.max_count)
 
     def _get_all_inner_keys(self):
         return [str(d) for d in range(self.min_count, self.max_count + 1)]

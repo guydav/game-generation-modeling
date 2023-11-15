@@ -759,6 +759,7 @@ PREDICATE_DESCRIPTIONS = {
     'in': 'Is the second argument inside the first argument? [a containment check of some sort, for balls in bins, for example]',
     'in_motion': 'Is the object in motion?',
     'is_setup_object': 'Is this the object of the same type referenced in the setup?',
+    'near': 'Is the second object near the first object? [implemented as distance below some threshold]',
     'object_orientation': 'Is the first argument, an object, in the orientation specified by the second argument? Used to check if an object is upright or upside down',
     'on': 'Is the second object on the first one?',
     'open': 'Is the object open? Only valid for objects that can be opened, such as drawers.',

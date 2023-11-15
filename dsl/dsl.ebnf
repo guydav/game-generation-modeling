@@ -108,6 +108,7 @@ predicate = pred:(predicate_above |
     predicate_in |
     predicate_in_motion |
     predicate_is_setup_object |
+    predicate_near |
     predicate_object_orientation |
     predicate_on |
     predicate_open |
@@ -137,6 +138,7 @@ predicate_game_start = '(game_start' no_args:{} ')';  # hack to make sure it par
 predicate_in = '(in' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_in_motion = '(in_motion' arg_1:predicate_or_function_term ')';
 predicate_is_setup_object = '(is_setup_object' arg_1:predicate_or_function_term ')';
+predicate_near = '(near' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_object_orientation = '(object_orientation' arg_1:predicate_or_function_term arg_2:predicate_or_function_orientation_term ')';
 predicate_on = '(on' arg_1:predicate_or_function_term arg_2:predicate_or_function_term ')';
 predicate_open = '(open' arg_1:predicate_or_function_term ')';

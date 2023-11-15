@@ -2,7 +2,7 @@
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)  ; 0
 (:setup
     (exists (?h - hexagonal_bin ?r - triangular_ramp)
-        (game-conserved (< (distance ?h ?r) 1))
+        (game-conserved (near ?h ?r))
     )
 )
 (:constraints (and
@@ -304,7 +304,7 @@
 (define (game 613bb29f16252362f4dc11a3-12) (:domain medium-objects-room-v1)  ; 12
 (:setup
     (exists (?h - hexagonal_bin)
-        (game-conserved (< (distance room_center ?h) 1))
+        (game-conserved (near room_center ?h))
     )
 )
 (:constraints (and
@@ -331,8 +331,8 @@
 (:setup
     (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved
         (and
-            (< (distance ?h ?r) 1)
-            (< (distance room_center ?r) 0.5)
+            (= (distance ?h ?r) 1)
+            (near room_center ?r)
         )
     ))
 )
@@ -493,14 +493,14 @@
 (define (game 60e93f64ec69ecdac3107555-19) (:domain medium-objects-room-v1)  ; 19
 (:setup
     (forall (?b - ball)
-        (game-optional (< (distance door ?b) 1))
+        (game-optional (near door ?b))
     )
 )
 (:constraints (and
     (forall (?b - ball ?t - (either doggie_bed hexagonal_bin))
         (preference ballThrownIntoTarget
             (then
-                (once (and (agent_holds ?b) (< (distance door agent) 1)))
+                (once (and (agent_holds ?b) (near door agent)))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (in ?t ?b) (not (in_motion ?b))))
             )
@@ -510,7 +510,7 @@
         (preference ballThrownOntoTarget
             (exists (?t - doggie_bed)
                 (then
-                    (once (and (agent_holds ?b) (< (distance door agent) 1)))
+                    (once (and (agent_holds ?b) (near door agent)))
                     (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                     (once (and (on ?t ?b) (not (in_motion ?b))))
                 )
@@ -597,7 +597,7 @@
 (define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)  ; 21
 (:setup
     (exists (?c - chair) (game-conserved (and
-        (< (distance room_center ?c) 1)
+        (near room_center ?c)
         (not (faces ?c desk))
         (not (faces ?c bed))
     )))
@@ -1251,7 +1251,7 @@
     (exists (?h - hexagonal_bin) (and
         (forall (?g - game_object) (game-optional (or
             (same_object ?h ?g)
-            (> (distance ?h ?g) 1)
+            (not (near ?h ?g))
         )))
         (forall (?d - dodgeball) (game-optional (and
             (> (distance ?h ?d) 2)
@@ -1289,7 +1289,7 @@
 
 (define (game 617378aeffbba11d8971051c-43) (:domain medium-objects-room-v1)  ; 43
 (:setup
-    (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 1)))
+    (exists (?d - doggie_bed) (game-conserved (near room_center ?d)))
 )
 (:constraints (and
     (forall (?b - ball) (and
@@ -1377,7 +1377,7 @@
 (define (game 5d5b0dd7c032a2001ad7cf5d-46) (:domain few-objects-room-v1)  ; 46
 (:setup
     (exists (?c - curved_wooden_ramp) (game-conserved
-        (< (distance room_center ?c) 3)
+        (near room_center ?c)
     ))
 )
 (:constraints (and
@@ -1441,7 +1441,7 @@
         (in ?b ?h)
         (>= (building_size ?b) 4) ; TODO: could also quantify out additional objects
         (not (exists (?g - game_object) (and (in ?b ?g) (on ?h ?g))))
-        (< (distance room_center ?b) 1)
+        (near room_center ?b)
     )))
 )
 (:constraints (and
@@ -1497,8 +1497,8 @@
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)  ; 49
 (:setup
     (exists (?g - golfball_green) (and
-        (game-conserved (< (distance door ?g) 0.5))
-        (forall (?d - dodgeball) (game-optional (< (distance ?d ?g) 1)))
+        (game-conserved (near door ?g))
+        (forall (?d - dodgeball) (game-optional (near ?d ?g)))
     ))
 )
 (:constraints (and
@@ -1537,7 +1537,7 @@
 
 (define (game 5f3aee04e30eac7cb73b416e-50) (:domain medium-objects-room-v1)  ; 50
 (:setup
-    (exists (?h - hexagonal_bin) (game-conserved (< (distance room_center ?h) 1)))
+    (exists (?h - hexagonal_bin) (game-conserved (near room_center ?h)))
 )
 (:constraints (and
     (preference gameObjectToBin (exists (?g - game_object ?h - hexagonal_bin)
@@ -1659,7 +1659,7 @@
 (define (game 5f7654f879a4420e6d20971b-55) (:domain few-objects-room-v1)  ; 55
 (:setup
     (exists (?h - hexagonal_bin)
-        (game-conserved (< (distance room_center ?h) 1))
+        (game-conserved (near room_center ?h))
     )
 )
 (:constraints (and
@@ -1812,7 +1812,7 @@
 
 (define (game 602a1735bf92e79a5e7cb632-59) (:domain many-objects-room-v1)  ; 59
 (:setup
-    (exists (?h - hexagonal_bin) (game-conserved (< (distance door ?h) 1)))
+    (exists (?h - hexagonal_bin) (game-conserved (near door ?h)))
 )
 (:constraints (and
     (forall (?b - (either golfball dodgeball beachball))
@@ -1997,13 +1997,16 @@
 (define (game 5f806f22e8159d0913945e35-66) (:domain medium-objects-room-v1)  ; 66
 (:setup (and
     (forall (?b - (either bridge_block cube_block))
-        (game-conserved (< (distance door ?b) 1))
+        (game-conserved (near door ?b))
     )
     (forall (?b - (either cylindrical_block tall_cylindrical_block))
         (game-optional (on bottom_shelf ?b))
     )
     (forall (?b - (either flat_block pyramid_block))
         (game-conserved (not (exists (?s - shelf) (on ?s ?b))))
+    )
+    (exists (?d - doggie_bed ?r - triangular_ramp)
+        (game-conserved (adjacent ?d ?r))
     )
 ))
 (:constraints (and
@@ -2012,7 +2015,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on ?o agent)  ; TODO: this is impossible -- consider revising to adjacent?
+                    (adjacent ?o agent)  ; TODO: was originally on, which is impossible
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2033,7 +2036,7 @@
             (then
                 (once (and
                     (agent_holds ?d)
-                    (on ?o agent)  ; TODO: this is impossible -- consider revising to adjacent?
+                    (adjacent ?o agent)  ; TODO: was originally on, which is impossible
                     (on top_shelf ?b)
                     (not (exists (?ob - block)
                         (and
@@ -2139,7 +2142,7 @@
         ))
     )
     (forall (?o - (either golfball dodgeball triangle_block pyramid_block))
-        (game-optional (< (distance side_table ?o) 1))
+        (game-optional (near side_table ?o))
     )
 ))
 (:constraints (and
@@ -2183,12 +2186,12 @@
 (:setup (and
     (forall (?p - pillow) (game-conserved (on bed ?p)))
     (forall (?b - bridge_block) (game-conserved (on floor ?b)))
-    (forall (?c - cylindrical_block) (game-conserved (exists (?o - (either pillow bridge_block)) (< (distance ?c ?o) 1))) )
+    (forall (?c - cylindrical_block) (game-conserved (exists (?o - (either pillow bridge_block)) (near ?c ?o))) )
 ))
 (:constraints (and
     (preference dodgeballHitsPillowWithoutTouchingBlock (exists (?d - dodgeball ?p - pillow ?r - triangular_ramp)
         (then
-            (once (and (adjacent ?r agent) (< (distance desk ?r) 1) (agent_holds ?d)))
+            (once (and (adjacent ?r agent) (near desk ?r) (agent_holds ?d)))
             (hold-while
                 (and (in_motion ?d) (not (agent_holds ?d)) (not (exists (?c - cylindrical_block) (touch ?c ?d) )) )
                 (touch ?d ?p)
@@ -2198,7 +2201,7 @@
     ))
     (preference golfballUnderBridgeWithoutTouchingBlock (exists (?g - golfball ?b - bridge_block ?r - triangular_ramp)
         (then
-            (once (and (adjacent ?r agent) (< (distance desk ?r) 1) (agent_holds ?g)))
+            (once (and (adjacent ?r agent) (near desk ?r) (agent_holds ?g)))
             (hold-while
                 (and (in_motion ?g) (not (agent_holds ?g)) (not (exists (?c - cylindrical_block) (touch ?c ?g) )) )
                 (above ?g ?b)
@@ -2215,13 +2218,13 @@
 (define (game 5fa23c9b64b18a4067cc842e-72) (:domain many-objects-room-v1)  ; 72
 (:setup (and
     (exists (?t - teddy_bear) (game-optional (and (on bed ?t) (object_orientation ?t upright))))
-    (forall (?b - ball) (game-optional (< (distance desk ?b) 1)))
+    (forall (?b - ball) (game-optional (near desk ?b)))
 ))
 (:constraints (and
     (preference ballKnocksTeddy (exists (?b - ball ?t - teddy_bear ?c - chair)
         (then
             (once (and
-                (on ?c agent)  ; TODO: this is impossible -- consider revising to adjacent?
+                (adjacent ?c agent)  ; TODO: was originally on, which is impossible
                 (adjacent ?c desk)
                 (agent_holds ?b)
                 (object_orientation ?t upright)
@@ -2243,7 +2246,7 @@
 
 (define (game 60ef5b1cf52939a80af77543-73) (:domain many-objects-room-v1)  ; 73
 (:setup (and
-    (exists (?h - hexagonal_bin) (game-conserved (< (distance room_center ?h) 1)))
+    (exists (?h - hexagonal_bin) (game-conserved (near room_center ?h)))
     (forall (?d - dodgeball) (game-optional (on desk ?d)))
 ))
 (:constraints (and
@@ -2261,7 +2264,7 @@
 
 (define (game 613bd3a683a2ac56a4119aa6-74) (:domain many-objects-room-v1)  ; 74
 (:setup
-    (game-conserved (exists (?h - hexagonal_bin ?p - pillow) (< (distance ?h ?p) 3)))
+    (game-conserved (exists (?p - pillow) (near room_center ?p)))
 )
 (:constraints (and
     (preference golfballInBinFromPillow (exists (?g - golfball ?h - hexagonal_bin ?p - pillow)
@@ -2405,13 +2408,13 @@
         (on floor ?b)
     )))
     (forall (?o - (either hexagonal_bin basketball))
-        (game-conserved (< (distance side_table ?o) 1))
+        (game-conserved (near side_table ?o))
     )
 ))
 (:constraints (and
     (preference throwMovesBeachballWithoutKnockingTeddy (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggie_bed)
         (then
-            (once (and (agent_holds ?d) (< (distance ?db agent) 1) (object_orientation ?t upright)))
+            (once (and (agent_holds ?d) (near ?db agent) (object_orientation ?t upright)))
             (hold-while
                 (and (in_motion ?d) (not (agent_holds ?d)) (not (agent_holds ?t)))
                 (touch ?d ?b)
@@ -2422,7 +2425,7 @@
     ))
     (preference throwKnocksOverBear (exists (?d - dodgeball ?b - beachball ?t - teddy_bear ?db - doggie_bed)
         (then
-            (once (and (agent_holds ?d) (< (distance ?db agent) 1) (object_orientation ?t upright)))
+            (once (and (agent_holds ?d) (near ?db agent) (object_orientation ?t upright)))
             (hold (and (in_motion ?d) (not (agent_holds ?d)) (not (agent_holds ?t))))
             (once (and (not (in_motion ?d)) (not (in_motion ?b)) (not (object_orientation ?t upright))))
         )
@@ -2454,16 +2457,16 @@
         (then
             (once (and (agent_holds ?o) (same_color ?o pink)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)))
+            (once (and (not (in_motion ?o)) (near room_center ?o)))
         )
     ))
     (preference blueObjectMovedToRoomCenter (exists (?o - game_object)
         (then
             (once (and (agent_holds ?o) (same_color ?o blue)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+            (once (and (not (in_motion ?o)) (near room_center ?o)
                 (exists (?o1 - game_object) (and
-                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)
+                    (same_color ?o1 pink) (near room_center ?o1)
                 ))
             ))
         )
@@ -2472,10 +2475,10 @@
         (then
             (once (and (agent_holds ?o) (same_color ?o brown)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+            (once (and (not (in_motion ?o)) (near room_center ?o)
                 (exists (?o1 ?o2 - game_object) (and
-                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)
-                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)
+                    (same_color ?o1 pink) (near room_center ?o1)
+                    (same_color ?o2 blue) (near room_center ?o2)
                 ))
             ))
         )
@@ -2484,11 +2487,11 @@
         (then
             (once (and (agent_holds ?o)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+            (once (and (not (in_motion ?o)) (near room_center ?o)
                 (exists (?o1 ?o2 ?o3 - game_object) (and
-                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)
-                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)
-                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)
+                    (same_color ?o1 pink) (near room_center ?o1)
+                    (same_color ?o2 blue) (near room_center ?o2)
+                    (same_color ?o3 brown) (near room_center ?o3)
                 ))
             ))
         )
@@ -2497,12 +2500,12 @@
         (then
             (once (and (agent_holds ?o) (same_color ?o green)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+            (once (and (not (in_motion ?o)) (near room_center ?o)
                 (exists (?o1 ?o2 ?o3 ?o4 - game_object) (and
-                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)
-                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)
-                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)
-                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)
+                    (same_color ?o1 pink) (near room_center ?o1)
+                    (same_color ?o2 blue) (near room_center ?o2)
+                    (same_color ?o3 brown) (near room_center ?o3)
+                    (same_type ?o4 pillow) (near room_center ?o4)
                 ))
             ))
         )
@@ -2511,13 +2514,13 @@
         (then
             (once (and (agent_holds ?o) (same_color ?o tan)))
             (hold (and (in_motion ?o) (not (agent_holds ?o))))
-            (once (and (not (in_motion ?o)) (< (distance room_center ?o) 1)
+            (once (and (not (in_motion ?o)) (near room_center ?o)
                 (exists (?o1 ?o2 ?o3 ?o4 ?o5 - game_object) (and
-                    (same_color ?o1 pink) (< (distance room_center ?o1) 1)
-                    (same_color ?o2 blue) (< (distance room_center ?o2) 1)
-                    (same_color ?o3 brown) (< (distance room_center ?o3) 1)
-                    (same_type ?o4 pillow) (< (distance room_center ?o4) 1)
-                    (same_color ?o5 green) (< (distance room_center ?o5) 1)
+                    (same_color ?o1 pink) (near room_center ?o1)
+                    (same_color ?o2 blue) (near room_center ?o2)
+                    (same_color ?o3 brown) (near room_center ?o3)
+                    (same_type ?o4 pillow) (near room_center ?o4)
+                    (same_color ?o5 green) (near room_center ?o5)
                 ))
             ))
         )
@@ -2537,8 +2540,8 @@
     (exists (?h - hexagonal_bin ?r1 ?r2 - (either triangular_ramp curved_wooden_ramp))
         (game-conserved (and
             (adjacent ?h desk)
-            (< (distance ?h ?r1) 1)
-            (< (distance ?h ?r2) 1)
+            (near ?h ?r1)
+            (near ?h ?r2)
             (not (exists (?o - game_object) (adjacent_side ?h front ?o)))
         ))
     )
@@ -3064,16 +3067,16 @@
                 (on rug ?c)
                 (agent_holds ?c)
                 (in_motion ?c)
-                (< (distance desk ?c) 1)
+                (near desk ?c)
                 (exists (?c2 - (either cube_block_blue cube_block_yellow)) (and
                     (not (same_object ?c ?c2))
-                    (< (distance ?c ?c2) 0.5)
+                    (adjacent ?c ?c2)
                     (on floor ?c)
                     (on floor ?c2)
                 ))
             )))
             (hold (forall (?c - (either cube_block_blue cube_block_yellow))
-                (< (distance desk ?c) 1)
+                (near desk ?c)
             ))
             (once (above ?b desk))
         )
@@ -3133,23 +3136,23 @@
     )
     (exists (?d - doggie_bed) (forall (?b - ball) (game-optional (or
         (on ?d ?b)
-        (< (distance ?d ?b) 0.5)
+        (near ?d ?b)
     ))))
 ))
 (:constraints (and
     (preference agentLeavesDogbedOrNoMoreBalls (exists (?d - doggie_bed)
         (then
-            (once (> (distance ?d agent) 1))
+            (once (not (near ?d agent)))
             (hold-while
-                (<= (distance ?d agent) 1)
+                (near ?d agent)
                 (exists (?b - ball) (agent_holds ?b))
             )
             (once (or
-                (> (distance ?d agent) 1)
+                (not (near ?d agent))
                 (forall (?b - ball) (and
                     (not (in_motion ?b))
-                    (> (distance ?b agent) 1))
-                )
+                    (not (near ?b agent))
+                ))
             ))
         )
     ))
@@ -3159,7 +3162,7 @@
                 (once (and
                     (is_setup_object ?c)
                     (agent_holds ?b)
-                    (<= (distance ?d agent) 1)
+                    (near ?d agent)
                 ))
                 (hold-while
                     (and (in_motion ?b) (not (agent_holds ?b)))
@@ -3175,7 +3178,7 @@
             (then
                 (once (and
                     (agent_holds ?b)
-                    (<= (distance ?d agent) 1)
+                    (near ?d agent)
                 ))
                 (hold (and (not (agent_holds ?b)) (in_motion ?b)))
                 (once (and (not (in_motion ?b)) (or (in ?h ?b) (on ?h ?b))))
@@ -3307,7 +3310,7 @@
 
 (define (game 61087e4fc006ee7d6be38641-114) (:domain medium-objects-room-v1)  ; 114
 (:setup
-    (exists (?d - doggie_bed) (game-conserved (< (distance room_center ?d) 0.5)))
+    (exists (?d - doggie_bed) (game-conserved (near room_center ?d)))
 )
 (:constraints (and
     (preference objectInBuilding (exists (?o - game_object ?d - doggie_bed ?b - building)
@@ -3329,10 +3332,10 @@
 (:setup (and
     (exists (?c - chair ?r - triangular_ramp ?t - teddy_bear ?h - hexagonal_bin) (and
         (game-conserved (and
-            (< (distance room_center ?r) 0.5)
+            (near room_center ?r)
             (adjacent_side ?r front ?c)
             (between ?h ?c ?r)
-            (forall (?b - ball) (< (distance ?b ?h) 1))
+            (forall (?b - ball) (near ?b ?h))
         ))
         (game-optional (and
             (on ?c ?t)
@@ -3394,7 +3397,10 @@
 
 (define (game 613e18e92e4ed15176362aa2-117) (:domain medium-objects-room-v1)  ; 117
 (:setup
-    (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved (< (distance ?h ?r) 2)))
+    (exists (?h - hexagonal_bin ?r - triangular_ramp) (game-conserved (and
+        (near ?h ?r)
+        (not (adjacent ?h ?r))
+    )))
 )
 (:constraints (and
     (preference redDodgeballThrownToBinWithoutTouchingFloor (exists (?h - hexagonal_bin ?r - dodgeball_red)

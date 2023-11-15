@@ -2331,7 +2331,7 @@ PREDICATE_FUNCTION_ARITY_MAP = {
     'agent_crouches': 0, 'agent_holds': 1, 'between': 3, 'broken': 1,
     'building_size': 1, 'distance': 2, 'distance_side_3': 3, 'distance_side_4': 4,
     'equal_x_position': 2, 'equal_z_position': 2, 'faces': 2,
-    'game_over': 0, 'game_start': 0, 'in': 2, 'in_motion': 1, 'is_setup_object': 1,
+    'game_over': 0, 'game_start': 0, 'in': 2, 'in_motion': 1, 'is_setup_object': 1, 'near': 2,
     'object_orientation': 2, 'on': 2, 'open': 1, 'opposite': 2, 'rug_color_under': 2,
     'same_color': 2, 'same_object': 2, 'same_type': 2, 'toggled_on': 1, 'touch': 2,
     'x_position': 1,
@@ -2540,7 +2540,7 @@ class PredicateOrFunctionWithoutVariablesOrAgent(FitnessTerm):
 
 
 # COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'agent_holds', 'distance', 'in', 'in_motion', 'on', 'touch')
-COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'adjacent_side_3', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'object_orientation', 'on', 'touch')
+COMMON_SENSE_PREDICATES_FUNCTIONS = ('adjacent', 'adjacent_side_3', 'agent_holds', 'between', 'distance', 'in', 'in_motion', 'near', 'object_orientation', 'on', 'touch')
 COMMON_SENSE_TYPE_CATEGORIES = list(room_and_object_types.CATEGORIES_TO_TYPES.keys())
 COMMON_SENSE_TYPE_CATEGORIES.remove(room_and_object_types.EMPTY_OBJECT)
 KNOWN_MISSING_TYPES = []

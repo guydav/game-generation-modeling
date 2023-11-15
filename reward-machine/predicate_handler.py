@@ -913,6 +913,14 @@ def _pred_on(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectStat
 
     return False
 
+NEAR_DISTANCE_THRESHOLD = 0.75
+
+
+def _pred_near(agent: AgentState, objects: typing.Sequence[typing.Union[ObjectState, PseudoObject]]):
+    assert len(objects) == 2
+    return _func_distance(agent, objects) <= NEAR_DISTANCE_THRESHOLD
+
+
 ADJACENT_DISTANCE_THRESHOLD = 0.2
 OVERLAP_GRACE = 0.01
 OBJECT_SIZE_SCALING = 1.2

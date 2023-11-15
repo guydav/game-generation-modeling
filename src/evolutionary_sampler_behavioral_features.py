@@ -1,6 +1,6 @@
 import abc
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import enum
 import itertools
 from Levenshtein import distance as edit_distance
@@ -777,8 +777,8 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
                  grammar_parser: tatsu.grammars.Grammar,  # type: ignore
                  additional_features_featurizer: BehavioralFeaturizer,
                  thresholds: typing.Dict[int, int] = BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS,
-                 exemplar_preference_ids: typing.List[typing.Tuple[int, int]] = BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS
-
+                 exemplar_preference_ids: typing.List[typing.Tuple[int, int]] = BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS,
+                 count_total_matches: bool = False, max_match_count: int = MAX_NUM_PREFERENCES_COUNT,
                  ):
         self.preference_behavioral_featurizer = preference_behavioral_featurizer
 
@@ -788,6 +788,8 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         self.thresholds = thresholds
         self.max_threshold = max(self.thresholds.values())
         self.exemplar_preference_ids = exemplar_preference_ids
+        self.count_total_matches = count_total_matches
+        self.max_match_count = max_match_count
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
 
@@ -827,7 +829,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         all_distance_tuples.sort()
         exemplar_feature_values = {exemplar_idx: 0 for exemplar_idx in self.exemplar_preference_indices}
         used_preferences = set()
-        used_exemplars = set()
+        count_by_exemplar = defaultdict(int)
 
         while all_distance_tuples:
             d, idx, exemplar_idx = all_distance_tuples.pop(0)
@@ -835,18 +837,21 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
             if d > self.max_threshold:
                 break
 
-            if idx in used_preferences or exemplar_idx in used_exemplars:
+            if idx in used_preferences or (not self.count_total_matches and exemplar_idx in count_by_exemplar):
                 continue
 
             used_preferences.add(idx)
-            used_exemplars.add(exemplar_idx)
+            count_by_exemplar[exemplar_idx] += 1
             for feature_value, threshold in self.thresholds.items():
                 if d <= threshold:
                     exemplar_feature_values[exemplar_idx] = feature_value
                     break
 
         for exemplar_idx in self.exemplar_preference_indices:
-            game_features[f'exemplar_preference_{exemplar_idx}'] = exemplar_feature_values[exemplar_idx]
+            if self.count_total_matches:
+                game_features[f'exemplar_preference_{exemplar_idx}'] = min(self.max_match_count, count_by_exemplar[exemplar_idx])
+            else:
+                game_features[f'exemplar_preference_{exemplar_idx}'] = exemplar_feature_values[exemplar_idx]
 
         return game_features
 
@@ -859,8 +864,10 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
 
     def get_feature_value_counts(self) -> typing.Dict[str, int]:
         feature_value_counts = self.additional_features_featurizer.get_feature_value_counts()
+        count_per_exemplar =  self.max_match_count + 1 if self.count_total_matches else len(self.thresholds) + 1
+
         for exemplar_idx in self.exemplar_preference_indices:
-            feature_value_counts[f'exemplar_preference_{exemplar_idx}'] = len(self.thresholds) + 1
+            feature_value_counts[f'exemplar_preference_{exemplar_idx}'] = count_per_exemplar
 
         return feature_value_counts
 
@@ -1067,7 +1074,8 @@ def build_behavioral_features_featurizer(
                 preference_bc_featurizer,
                 args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
-                featurizer
+                featurizer,
+                count_total_matches=True,
             )
 
             featurizer = exemplar_preferences_featurizer
@@ -1086,7 +1094,8 @@ def build_behavioral_features_featurizer(
                 preference_bc_featurizer,
                 args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
-                featurizer
+                featurizer,
+                count_total_matches=True,
             )
 
             featurizer = exemplar_preferences_featurizer

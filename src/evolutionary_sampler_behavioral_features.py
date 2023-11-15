@@ -1019,6 +1019,7 @@ def build_behavioral_features_featurizer(
             preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
             preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,

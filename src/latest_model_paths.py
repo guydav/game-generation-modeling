@@ -62,19 +62,19 @@ MAP_ELITES_MODELS = {
 
 
     'objects_and_predicates': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_uniform_seed_42_gen_4096_2023_11_12',
+        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_uniform_seed_42_gen_4096_2023_11_14',
         'No "Goodness" BC | Uniform archive sampling | L2 regularization'
     ),
     'object_and_predicates_with_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_gen_4096_2023_11_12',
+        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_gen_4096_2023_11_14',
         'Using New "Goodness" BC | Uniform archive sampling | L2 regularization'
     ),
     'exemplar_preferences_by_bcs': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_setup_uniform_seed_42_gen_4096_2023_11_13',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_setup_uniform_seed_42_gen_4096_2023_11_14',
         'Exemplar Preferenecs BCs | No "Goodness" BC | Uniform archive sampling | L2 regularization',
     ),
     'exemplar_preferences_by_bcs_with_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_expected_values_uniform_seed_42_gen_4096_2023_11_13',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_expected_values_uniform_seed_42_gen_4096_2023_11_14',
         'Exemplar Preferenecs BCs | Using New "Goodness" BC | Uniform archive sampling | L2 regularization',
     )
 }

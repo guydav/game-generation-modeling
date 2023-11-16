@@ -18,6 +18,7 @@ import ast_parser
 import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file
 from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm, AtEndFound, NumPreferencesDefined
+from ast_counter_sampler import SamplingException
 import room_and_object_types
 
 logger = logging.getLogger(__name__)
@@ -328,55 +329,32 @@ PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL = [
 ]
 
 
-BASIC_BINNED = 'basic_binned'
-BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
-NODE_COUNT_OBJECTS = 'node_count_objects'
-NODE_COUNT_PREDICATES = 'node_count_predicates'
-NODE_COUNT_OBJECTS_SETUP = 'node_count_objects_setup'
-NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
-SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
-SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
-NODE_COUNT_SPECIFIC_PREDICATES = 'node_count_specific_predicates'
-PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
-PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
-PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
-PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
-LATEST_WITH_AT_END = 'latest_at_end'
-LATEST_WITH_SETUP = 'latest_setup'
-LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
-LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
-EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
-EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
-EXEMPLAR_PREFERENCES_BC_SETUP = 'exemplar_preferences_bc_setup'
-EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES = 'exemplar_preferences_bc_expected_values'
-EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP = 'exemplar_preferences_bc_max_prefs_setup'
-EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_max_prefs_expected_values'
-
-FEATURE_SETS = [
-    BASIC_BINNED,
-    BASIC_WITH_NODE_DEPTH,
-    NODE_COUNT_OBJECTS,
-    NODE_COUNT_PREDICATES,
-    NODE_COUNT_OBJECTS_SETUP,
-    NODE_COUNT_PREDICATES_SETUP,
-    SPECIFIC_PREDICATES_SETUP,
-    SPECIFIC_CATEGORIES_SETUP,
-    NODE_COUNT_SPECIFIC_PREDICATES,
-    PREDICATE_AND_OBJECT_GROUPS,
-    PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT,
-    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN,
-    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT,
-    LATEST_WITH_AT_END,
-    LATEST_WITH_SETUP,
-    LATEST_WITH_SETUP_AND_TERMINAL,
-    LATEST_SETUP_EXPECTED_VALUES,
-    EXEMPLAR_PREFERENCES_SETUP,
-    EXEMPLAR_PREFERENCES_EXPECTED_VALUES,
-    EXEMPLAR_PREFERENCES_BC_SETUP,
-    EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES,
-    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP,
-    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES
-]
+class BehavioralFeatureSet(enum.Enum):
+    BASIC_BINNED = 'basic_binned'
+    BASIC_WITH_NODE_DEPTH = 'basic_with_node_depth'
+    NODE_COUNT_OBJECTS = 'node_count_objects'
+    NODE_COUNT_PREDICATES = 'node_count_predicates'
+    NODE_COUNT_OBJECTS_SETUP = 'node_count_objects_setup'
+    NODE_COUNT_PREDICATES_SETUP = 'node_count_predicates_setup'
+    SPECIFIC_PREDICATES_SETUP = 'specific_predicates_setup'
+    SPECIFIC_CATEGORIES_SETUP = 'specific_categories_setup'
+    NODE_COUNT_SPECIFIC_PREDICATES = 'node_count_specific_predicates'
+    PREDICATE_AND_OBJECT_GROUPS = 'predicate_and_object_groups'
+    PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
+    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
+    PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
+    LATEST_WITH_AT_END = 'latest_at_end'
+    LATEST_WITH_SETUP = 'latest_setup'
+    LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
+    LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
+    EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
+    EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
+    EXEMPLAR_PREFERENCES_BC_SETUP = 'exemplar_preferences_bc_setup'
+    EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES = 'exemplar_preferences_bc_expected_values'
+    EXEMPLAR_PREFERENCES_BC_NUM_PREFS_SETUP = 'exemplar_preferences_bc_num_prefs_setup'
+    EXEMPLAR_PREFERENCES_BC_NUM_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_num_prefs_expected_values'
+    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP = 'exemplar_preferences_bc_max_prefs_setup'
+    EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_max_prefs_expected_values'
 
 
 class BehavioralFeaturizer(abc.ABC):
@@ -523,7 +501,7 @@ class PCABehavioralFeaturizer(BehavioralFeaturizer):
                 counts = Counter(digits)
                 logger.debug(f'On feature #{feature_index}, the real games have counts: {counts}')
 
-            all_game_features = [self.get_game_features(game) for game in game_asts]
+            all_game_features = [self.get_game_features(game, None) for game in game_asts]
             all_game_feature_tuples = [tuple(game_features[name] for name in self.output_feature_names) for game_features in all_game_features]
             all_game_feature_tuples = set(all_game_feature_tuples)
             logger.debug(f'The real games have {len(all_game_feature_tuples)} unique feature tuples')
@@ -779,6 +757,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
                  thresholds: typing.Dict[int, int] = BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS,
                  exemplar_preference_ids: typing.List[typing.Tuple[int, int]] = BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS,
                  count_total_matches: bool = False, max_match_count: int = MAX_NUM_PREFERENCES_COUNT,
+                 reject_above_max_preference_count: bool = False, max_preference_count: int = MAX_NUM_PREFERENCES_COUNT
                  ):
         self.preference_behavioral_featurizer = preference_behavioral_featurizer
 
@@ -790,6 +769,8 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         self.exemplar_preference_ids = exemplar_preference_ids
         self.count_total_matches = count_total_matches
         self.max_match_count = max_match_count
+        self.reject_above_max_preference_count = reject_above_max_preference_count
+        self.max_preference_count = max_preference_count
 
         self.postprocessor = ast_parser.ASTSamplePostprocessor()
 
@@ -799,6 +780,20 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         self.current_ast_preference_features = []
 
         self._init_exemplars()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if not hasattr(self, 'count_total_matches'):
+            self.count_total_matches = False
+
+        if not hasattr(self, 'max_match_count'):
+            self.max_match_count = MAX_NUM_PREFERENCES_COUNT
+
+        if not hasattr(self, 'reject_above_max_preference_count'):
+            self.reject_above_max_preference_count = False
+
+        if not hasattr(self, 'max_preference_count'):
+            self.max_preference_count = MAX_NUM_PREFERENCES_COUNT
 
     def _init_exemplars(self):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
@@ -817,9 +812,13 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
             self.exemplar_features[exemplar_index] = all_preference_features[exemplar_index]
 
     def get_game_features(self, game, features, partial_game: bool = False, should_postprocess=False):
+        game_preference_features = self(game, should_postprocess=should_postprocess)
+
+        if self.reject_above_max_preference_count and len(game_preference_features) > self.max_preference_count:
+            raise SamplingException(f'Game has too many preferences: {len(game_preference_features)}')
+
         game_features = self.additional_features_featurizer.get_game_features(game, features)
 
-        game_preference_features = self(game, should_postprocess=should_postprocess)
         all_distance_tuples = []
         for idx, pref_features in enumerate(game_preference_features):
             for exemplar_idx in self.exemplar_preference_indices:
@@ -920,90 +919,92 @@ def build_behavioral_features_featurizer(
     feature_set = args.map_elites_custom_behavioral_features_key
 
     if feature_set is not None:
-        if feature_set not in FEATURE_SETS:
+        try:
+            feature_set = BehavioralFeatureSet(feature_set)
+        except ValueError:
             raise ValueError(f'Invalid feature set: {feature_set}')
 
         featurizer = FitnessFeaturesBehavioralFeaturizer(args)
 
-        if feature_set == BASIC_BINNED:
+        if feature_set == BehavioralFeatureSet.BASIC_BINNED:
             featurizer.register(NodeCount())
             featurizer.register(UniqueObjectsReferenced())
             featurizer.register(UniquePredicatesReferenced())
 
-        elif feature_set == BASIC_WITH_NODE_DEPTH:
+        elif feature_set == BehavioralFeatureSet.BASIC_WITH_NODE_DEPTH:
             featurizer.register(NodeCount())
             featurizer.register(UniqueObjectsReferenced())
             featurizer.register(UniquePredicatesReferenced())
             featurizer.register(MeanNodeDepth())
 
-        elif feature_set == NODE_COUNT_OBJECTS:
+        elif feature_set == BehavioralFeatureSet.NODE_COUNT_OBJECTS:
             featurizer.register(NodeCount())
             featurizer.register(UniqueObjectsReferenced())
 
-        elif feature_set == NODE_COUNT_PREDICATES:
+        elif feature_set == BehavioralFeatureSet.NODE_COUNT_PREDICATES:
             featurizer.register(NodeCount())
             featurizer.register(UniquePredicatesReferenced())
 
-        elif feature_set == NODE_COUNT_OBJECTS_SETUP:
+        elif feature_set == BehavioralFeatureSet.NODE_COUNT_OBJECTS_SETUP:
             featurizer.register(NodeCount())
             featurizer.register(UniqueObjectsReferenced())
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == NODE_COUNT_PREDICATES_SETUP:
+        elif feature_set == BehavioralFeatureSet.NODE_COUNT_PREDICATES_SETUP:
             featurizer.register(NodeCount())
             featurizer.register(UniquePredicatesReferenced())
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == SPECIFIC_PREDICATES_SETUP:
+        elif feature_set == BehavioralFeatureSet.SPECIFIC_PREDICATES_SETUP:
             featurizer.register(PredicateUsed())
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == SPECIFIC_CATEGORIES_SETUP:
+        elif feature_set == BehavioralFeatureSet.SPECIFIC_CATEGORIES_SETUP:
             featurizer.register(ObjectCategoryUsed())
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == NODE_COUNT_SPECIFIC_PREDICATES:
+        elif feature_set == BehavioralFeatureSet.NODE_COUNT_SPECIFIC_PREDICATES:
             featurizer.register(NodeCount(NODE_COUNT_BINS_8))
             featurizer.register(PredicateUsed())
 
-        elif feature_set == PREDICATE_AND_OBJECT_GROUPS:
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS))
 
-        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT:
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_GAME_OBJECT))
 
-        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN:
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN))
 
-        elif feature_set == PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT:
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
 
-        elif feature_set == LATEST_WITH_AT_END:
+        elif feature_set == BehavioralFeatureSet.LATEST_WITH_AT_END:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
             featurizer.register(AtEndFound())
 
-        elif feature_set == LATEST_WITH_SETUP:
+        elif feature_set == BehavioralFeatureSet.LATEST_WITH_SETUP:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-        elif feature_set == LATEST_WITH_SETUP_AND_TERMINAL:
+        elif feature_set == BehavioralFeatureSet.LATEST_WITH_SETUP_AND_TERMINAL:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_SMALLER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP, ast_parser.TERMINAL]), section_rule=True)
 
-        elif feature_set == LATEST_SETUP_EXPECTED_VALUES:
+        elif feature_set == BehavioralFeatureSet.LATEST_SETUP_EXPECTED_VALUES:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
-        elif feature_set == EXEMPLAR_PREFERENCES_SETUP:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_SETUP:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
             exemplar_preferences_featurizer = ExemplarPreferenceDistanceFeaturizer(
@@ -1014,7 +1015,7 @@ def build_behavioral_features_featurizer(
 
             featurizer = exemplar_preferences_featurizer
 
-        elif feature_set == EXEMPLAR_PREFERENCES_EXPECTED_VALUES:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_EXPECTED_VALUES:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
@@ -1026,7 +1027,7 @@ def build_behavioral_features_featurizer(
 
             featurizer = exemplar_preferences_featurizer
 
-        elif feature_set == EXEMPLAR_PREFERENCES_BC_SETUP:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_SETUP:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
             preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
@@ -1043,7 +1044,7 @@ def build_behavioral_features_featurizer(
 
             featurizer = exemplar_preferences_featurizer
 
-        elif feature_set == EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_EXPECTED_VALUES:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
@@ -1061,7 +1062,46 @@ def build_behavioral_features_featurizer(
 
             featurizer = exemplar_preferences_featurizer
 
-        elif feature_set == EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_NUM_PREFS_SETUP:
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(NumPreferencesDefinedAsInteger())
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer,
+                # count_total_matches=True,
+            )
+
+            featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_NUM_PREFS_EXPECTED_VALUES:
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(NumPreferencesDefinedAsInteger())
+
+            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
+            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
+            preference_bc_featurizer.register(AtEndFound())
+
+            exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
+                preference_bc_featurizer,
+                args.map_elites_pca_behavioral_features_ast_file_path,
+                grammar_parser,
+                featurizer,
+                # count_total_matches=True,
+            )
+
+            featurizer = exemplar_preferences_featurizer
+
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
 
@@ -1076,11 +1116,12 @@ def build_behavioral_features_featurizer(
                 grammar_parser,
                 featurizer,
                 count_total_matches=True,
+                reject_above_max_preference_count=True,
             )
 
             featurizer = exemplar_preferences_featurizer
 
-        elif feature_set == EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES:
+        elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES:
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
@@ -1096,6 +1137,7 @@ def build_behavioral_features_featurizer(
                 grammar_parser,
                 featurizer,
                 count_total_matches=True,
+                reject_above_max_preference_count=True,
             )
 
             featurizer = exemplar_preferences_featurizer

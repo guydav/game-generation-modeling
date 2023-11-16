@@ -41,7 +41,7 @@ from ast_counter_sampler import *
 from ast_counter_sampler import parse_or_load_counter, ASTSampler, RegrowthSampler, SamplingException, MCMC_REGRWOTH, PRIOR_COUNT, LENGTH_PRIOR
 from ast_mcmc_regrowth import _load_pickle_gzip, InitialProposalSamplerType, create_initial_proposal_sampler
 from ast_utils import *
-from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, FEATURE_SETS, BehavioralFeaturizer, DEFAULT_N_COMPONENTS
+from evolutionary_sampler_behavioral_features import build_behavioral_features_featurizer, BehavioralFeatureSet, BehavioralFeaturizer, DEFAULT_N_COMPONENTS
 from evolutionary_sampler_diversity import *
 from evolutionary_sampler_utils import Selector, UCBSelector, ThompsonSamplingSelector
 from fitness_energy_utils import load_model_and_feature_columns, load_data_from_path, save_data, get_data_path, DEFAULT_SAVE_MODEL_NAME, evaluate_single_game_energy_contributions
@@ -158,7 +158,8 @@ parser.add_argument('--map-elites-use-cognitive-operators', action='store_true')
 
 features_group = parser.add_mutually_exclusive_group(required=True)
 features_group.add_argument('--map-elites-behavioral-features-key', type=str, default=None)
-features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None, choices=FEATURE_SETS)
+features_group.add_argument('--map-elites-custom-behavioral-features-key', type=str, default=None,
+                            choices=[feature_set_enum.value for feature_set_enum in BehavioralFeatureSet])
 features_group.add_argument('--map-elites-pca-behavioral-features-indices', nargs='+', type=int, default=None)
 
 parser.add_argument('--map-elites-pca-behavioral-features-ast-file-path', type=str, default=LATEST_REAL_GAMES_PATH)
@@ -740,7 +741,7 @@ class PopulationBasedSampler():
                     valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
 
                 elif not insert:
-                    min_length = self.samplers[self.first_sampler_key].rules[parent.parseinfo.rule][selector[0]][MIN_LENGTH]
+                    min_length = self.samplers[self.first_sampler_key].rules[parent.parseinfo.rule][selector[0]][MIN_LENGTH]  # type: ignore
                     if parent_length >= min_length + 1:
                         valid_nodes.append((node, parent, selector[0], section, global_context, local_context))
 
@@ -1532,7 +1533,6 @@ class PopulationBasedSampler():
 
         self._end_single_evolutionary_step()
 
-
     def _handle_single_operator_results(self, results: SingleStepResults):
         self.candidates.accumulate(results)
 
@@ -2030,25 +2030,29 @@ class MAPElitesSampler(PopulationBasedSampler):
         feature_value_mesage = '\n'.join(['With the following feature-value occupancy:'] + [f'\t{feature_name}: {feature_value_counters[feature_name]}' for feature_name in self.map_elites_feature_names])
         logger.info(feature_value_mesage)
 
-    def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[int, typing.Tuple[int]]:
-        if self.custom_featurizer is not None:
-            features = self.custom_featurizer.get_game_features(game, features)
+    def _features_to_key(self, game: ASTType, features: typing.Dict[str, float], return_features: bool = False) -> typing.Union[None, int, typing.Tuple[int]]:
+        try:
+            if self.custom_featurizer is not None:
+                features = self.custom_featurizer.get_game_features(game, features)
 
-        if self.key_type.name == MAPElitesKeyType.INT.name:
-            key =  sum([(2 ** i) * int(features[feature_name])
-                for i, feature_name in enumerate(self.map_elites_feature_names)
-            ])
+            if self.key_type.name == MAPElitesKeyType.INT.name:
+                key =  sum([(2 ** i) * int(features[feature_name])
+                    for i, feature_name in enumerate(self.map_elites_feature_names)
+                ])
 
-        elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
-            key = tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
+            elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
+                key = tuple([int(features[feature_name]) for feature_name in self.map_elites_feature_names])
 
-        else:
-            raise ValueError(f'Unknown key type {self.key_type}')
+            else:
+                raise ValueError(f'Unknown key type {self.key_type}')
 
-        if return_features:
-            return key, features  # type: ignore
+            if return_features:
+                return key, features  # type: ignore
 
-        return key
+            return key  # type: ignore
+
+        except SamplingException:
+            return None
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Union[ASTType, typing.List[ASTType]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
@@ -2079,7 +2083,7 @@ class MAPElitesSampler(PopulationBasedSampler):
         for sample, fitness, key in zip(population, fitness_values, keys):  # type: ignore
             self._add_to_archive(sample, fitness, key)
 
-    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: KeyTypeAnnotation, parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    def _add_to_archive(self, candidate: ASTType, fitness_value: float, key: typing.Optional[KeyTypeAnnotation], parent_info: typing.Optional[typing.Dict[str, typing.Any]] = None,
                         generation_index: typing.Optional[int] = None, operator: typing.Optional[str] = None):
         '''
         Determines whether a provided candidate should be added to the archive. By default, this happens if the candidate is in a previously unoccupied
@@ -2087,6 +2091,9 @@ class MAPElitesSampler(PopulationBasedSampler):
         of each cell is updated. If a selector is provided, the selector is also updated with the parent information (i.e. the cell that produced the candidate)
         '''
         successful = False
+
+        if key is None:
+            return
 
         if key not in self.population:
             successful = True

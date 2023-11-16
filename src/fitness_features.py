@@ -684,7 +684,7 @@ class NumPreferencesDefined(FitnessTerm):
         return {str(d): d == num_preferences for d in range(self.min_count, self.max_count + 1)}
 
     def _get_clipped_preference_count(self):
-        return np.clip(len(self.defined_preferences), self.min_count, self.max_count)
+        return int(np.clip(len(self.defined_preferences), self.min_count, self.max_count))
 
     def _get_all_inner_keys(self):
         return [str(d) for d in range(self.min_count, self.max_count + 1)]

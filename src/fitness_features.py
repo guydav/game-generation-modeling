@@ -1066,7 +1066,7 @@ class NoAdjacentOnce(FitnessTerm):
         return 1 if self.prefs_with_adjacent_once > 0 else 0
 
 
-class NoAdjacentSameModal(FitnessTerm):
+class AdjacentSameModalFound(FitnessTerm):
     then_found: bool = False
     adjacent_identical_modals_found: bool = False
 
@@ -3178,7 +3178,7 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_adjacent_once = NoAdjacentOnce()
     fitness.register(no_adjacent_once)
 
-    no_adjacent_same_modal = NoAdjacentSameModal()
+    no_adjacent_same_modal = AdjacentSameModalFound()
     fitness.register(no_adjacent_same_modal)
 
     pref_starts_and_ends_with_once = PrefStartsAndEndsWithOnce()

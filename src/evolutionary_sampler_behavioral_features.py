@@ -1076,7 +1076,6 @@ def build_behavioral_features_featurizer(
                 args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
                 featurizer,
-                # count_total_matches=True,
             )
 
             featurizer = exemplar_preferences_featurizer
@@ -1096,7 +1095,6 @@ def build_behavioral_features_featurizer(
                 args.map_elites_pca_behavioral_features_ast_file_path,
                 grammar_parser,
                 featurizer,
-                # count_total_matches=True,
             )
 
             featurizer = exemplar_preferences_featurizer

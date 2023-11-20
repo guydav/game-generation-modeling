@@ -216,11 +216,11 @@ BINARY_OPERATORS = ['-', '/']
 MULTI_OPERATORS = ['+', '*']
 COMPARISON_OPERATORS = ['<=', '<', '=', '>=', '>']
 
-COMPARISON_ARG_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 11)) + list(np.round(np.arange(0, 1, 0.1), 1)))
+COMPARISON_ARG_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 11))) # + list(np.round(np.arange(0, 1, 0.1), 1)))
 TIME_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(30, 360, 30)))
 SCORE_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-10, 11)) + list(range(-50, 110, 10)))
-PREF_COUNT_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 26)))
-SCORING_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-25, 26)) + list(range(-50, 110, 10)) + list(np.round(np.arange(0, 1, 0.1), 1)))
+PREF_COUNT_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(1, 21)))
+SCORING_NUMBER_VALUE_DEFAULTS = _number_prior(list(range(-10, 21)) + list(range(30, 110, 10)) + list(np.round(np.arange(0, 1, 0.1), 1)))
 
 TYPE_NAMES = []
 FUNCTION_NAMES = []

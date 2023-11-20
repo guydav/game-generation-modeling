@@ -50,10 +50,11 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
     # Man and max depth and node count -- keep max depth and node count
     # 2023-11-13 -- trying with the max width, too, so only mean depth removed
-    re.compile(r'mean_depth_[\w\d_]+'),
-    # re.compile(r'max_depth_[\w\d_]+'),
+    # 2023-22-20 -- actually, max width seems to induce weird behavior
+    # re.compile(r'mean_depth_[\w\d_]+'),
     # re.compile(r'node_count_[\w\d_]+'),
-    # re.compile(r'max_width_[\w\d_]+'),
+    re.compile(r'max_depth_[\w\d_]+'),
+    re.compile(r'max_width_[\w\d_]+'),
 ]
 
 COUNTING_FEATURES_PATTERN_DICT = {
@@ -110,7 +111,7 @@ GRAMMAR_USE_FEATURES = [
     'setup_quantified_objects_used',
     'any_setup_objects_used',
     'adjacent_once_found',
-    'no_adjacent_same_modal',
+    'adjacent_same_modal_found',
     'starts_and_ends_once',
     'once_in_middle_of_pref_found',
     'pref_without_hold_found',
@@ -147,15 +148,16 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     'variables_defined_prop',
 
     # 'setup_objects_used',
-    # 2023-09:21: trying without the specific feature to the quantified objects
+    # 2023-09-21: trying without the specific feature to the quantified objects
     'setup_quantified_objects_used',
     # 'any_setup_objects_used,
     'adjacent_once_found',
     # 'adjacent_same_modal_found',
     'starts_and_ends_once',
-    'once_in_middle_of_pref_found',
+    # 2023-11-20: trying with this feature
+    # 'once_in_middle_of_pref_found',
     'pref_without_hold_found',
-    # 2023-09:21: trying without an explicit marking of at_end
+    # 2023-09-21: trying without an explicit marking of at_end
     'at_end_found',
 
     'nested_logicals_found',

@@ -51,9 +51,9 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     # Man and max depth and node count -- keep max depth and node count
     # 2023-11-13 -- trying with the max width, too, so only mean depth removed
     # 2023-22-20 -- actually, max width seems to induce weird behavior
-    # re.compile(r'mean_depth_[\w\d_]+'),
     # re.compile(r'node_count_[\w\d_]+'),
-    re.compile(r'max_depth_[\w\d_]+'),
+    # re.compile(r'max_depth_[\w\d_]+'),
+    re.compile(r'mean_depth_[\w\d_]+'),
     re.compile(r'max_width_[\w\d_]+'),
 ]
 
@@ -151,7 +151,7 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 2023-09-21: trying without the specific feature to the quantified objects
     'setup_quantified_objects_used',
     # 'any_setup_objects_used,
-    'adjacent_once_found',
+    # 'adjacent_once_found',
     # 'adjacent_same_modal_found',
     'starts_and_ends_once',
     # 2023-11-20: trying with this feature

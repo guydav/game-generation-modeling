@@ -3310,11 +3310,11 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     no_single_argument_multi_operations = NoSingleArgumentMultiOperations()
     fitness.register(no_single_argument_multi_operations)
 
-    no_count_in_terminal = SectionWithoutPrefOrTotalCounts(ast_parser.TERMINAL)
-    fitness.register(no_count_in_terminal, section_rule=True)
+    # no_count_in_terminal = SectionWithoutPrefOrTotalCounts(ast_parser.TERMINAL)
+    # fitness.register(no_count_in_terminal, section_rule=True)
 
-    no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
-    fitness.register(no_count_in_scoring, section_rule=True)
+    # no_count_in_scoring = SectionWithoutPrefOrTotalCounts(ast_parser.SCORING)
+    # fitness.register(no_count_in_scoring, section_rule=True)
 
     if args.include_predicate_under_modal_terms:
         predicate_under_modal = PredicateUnderModal(MODALS, COMMON_SENSE_PREDICATES_FUNCTIONS)

@@ -13,8 +13,6 @@ GRAMMAR_CONTEXT_FEATURES = [
     'repeated_variables_found',
     'repeated_variable_type_in_either',
 
-    'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring',  # CONSIDER-REMOVING
     'section_doesnt_exist_setup',
     'section_doesnt_exist_terminal',
 ]
@@ -51,10 +49,11 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     # Man and max depth and node count -- keep max depth and node count
     # 2023-11-13 -- trying with the max width, too, so only mean depth removed
     # 2023-22-20 -- actually, max width seems to induce weird behavior
+    # 2023-22-23 -- trying with max width one more time after some more recent results
     # re.compile(r'node_count_[\w\d_]+'),
     # re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
-    re.compile(r'max_width_[\w\d_]+'),
+    # re.compile(r'max_width_[\w\d_]+'),  # CONSIDER-RESTORING
 ]
 
 COUNTING_FEATURES_PATTERN_DICT = {
@@ -69,7 +68,7 @@ COUNTING_FEATURES_PATTERN_DICT = {
     'max depth by section': re.compile(r'max_depth_[\w\d_]+'),
     'mean depth by section': re.compile(r'mean_depth_[\w\d_]+'),
     'node count by section': re.compile(r'node_count_[\w\d_]+'),
-    'max width by section': re.compile(r'max_width_[\w\d_]+'),  # CONSIDER-RESTORING
+    'max width by section': re.compile(r'max_width_[\w\d_]+'),
 }
 
 FORALL_FEATURES = [
@@ -140,6 +139,9 @@ GRAMMAR_USE_FEATURES = [
 
     'two_number_operation_found',
     'single_argument_multi_operation_found',
+
+    'section_without_pref_or_total_count_terminal',
+    'section_without_pref_or_total_count_scoring',
 ]
 
 # The ones that are kept are the ones commented out
@@ -175,16 +177,19 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'disjoint_preferences_found',
     'disjoint_preferences_prop',   #  CONSIDER-REMOVING
     # 'disjoint_preferences_scoring_terminal_types',
-    'disjoint_preferences_scoring_terminal_predicates', # CONSIDER-REMOVING
+    # 'disjoint_preferences_scoring_terminal_predicates', # CONSIDER-REMOVING
     'disjoint_preferences_same_predicates_only',  # CONSIDER-REMOVING
     # 'disjoint_seq_funcs_found',
     # 'disjoint_at_end_found',
-    'disjoint_modal_predicates_found',  # CONSIDER-REMOVING
+    # 'disjoint_modal_predicates_found',  # CONSIDER-REMOVING
     # 'disjoint_modal_predicates_prop',
     # 'predicate_without_variables_or_agent',
 
     # 'two_number_operation_found',
     'single_argument_multi_operation_found',
+
+    'section_without_pref_or_total_count_terminal', # CONSIDER-REMOVING
+    'section_without_pref_or_total_count_scoring',  # CONSIDER-REMOVING
 ]
 
 FEATURE_CATEGORIES = {

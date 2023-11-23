@@ -14,7 +14,7 @@ GRAMMAR_CONTEXT_FEATURES = [
     'repeated_variable_type_in_either',
 
     'section_without_pref_or_total_count_terminal',
-    'section_without_pref_or_total_count_scoring',
+    'section_without_pref_or_total_count_scoring',  # CONSIDER-REMOVING
     'section_doesnt_exist_setup',
     'section_doesnt_exist_terminal',
 ]
@@ -47,7 +47,7 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     # Various features related to variable quantifications
     re.compile(r'max_quantification_count_[\w\d_]+'),
-    re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),
+    re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),  # CONSIDER-RESTORING
     # Man and max depth and node count -- keep max depth and node count
     # 2023-11-13 -- trying with the max width, too, so only mean depth removed
     # 2023-22-20 -- actually, max width seems to induce weird behavior
@@ -69,7 +69,7 @@ COUNTING_FEATURES_PATTERN_DICT = {
     'max depth by section': re.compile(r'max_depth_[\w\d_]+'),
     'mean depth by section': re.compile(r'mean_depth_[\w\d_]+'),
     'node count by section': re.compile(r'node_count_[\w\d_]+'),
-    'max width by section': re.compile(r'max_width_[\w\d_]+'),
+    'max width by section': re.compile(r'max_width_[\w\d_]+'),  # CONSIDER-RESTORING
 }
 
 FORALL_FEATURES = [
@@ -150,20 +150,21 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
 
     # 'setup_objects_used',
     # 2023-09-21: trying without the specific feature to the quantified objects
-    'setup_quantified_objects_used',
+    # 2023-11-22: trying with it again
+    # 'setup_quantified_objects_used',
     # 'any_setup_objects_used,
     # 'adjacent_once_found',
     # 'adjacent_same_modal_found',
     'starts_and_ends_once',
     # 2023-11-20: trying with this feature
     # 'once_in_middle_of_pref_found',
-    'pref_without_hold_found',
+    # 'pref_without_hold_found',  # CONSIDER-RESTORING
     # 2023-09-21: trying without an explicit marking of at_end
     'at_end_found',
 
-    'nested_logicals_found',
-    'identical_logical_children_found',
-    'identical_scoring_children_found',
+    # 'nested_logicals_found',  # CONSIDER-RESTORING
+    # 'identical_logical_children_found',  # CONSIDER-RESTORING
+    # 'identical_scoring_children_found',  # CONSIDER-RESTORING
     'scoring_count_expression_repetitions_exist',
     'tautological_expression_found',
     # 'redundant_expression_found',
@@ -172,13 +173,13 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'unnecessary_scoring_terminal_expression_found',
     # 'identical_consecutive_seq_func_predicates_found',
     # 'disjoint_preferences_found',
-    # 'disjoint_preferences_prop',
+    'disjoint_preferences_prop',   #  CONSIDER-REMOVING
     # 'disjoint_preferences_scoring_terminal_types',
-    # 'disjoint_preferences_scoring_terminal_predicates',
-    # 'disjoint_preferences_same_predicates_only',
+    'disjoint_preferences_scoring_terminal_predicates', # CONSIDER-REMOVING
+    'disjoint_preferences_same_predicates_only',  # CONSIDER-REMOVING
     # 'disjoint_seq_funcs_found',
     # 'disjoint_at_end_found',
-    # 'disjoint_modal_predicates_found',
+    'disjoint_modal_predicates_found',  # CONSIDER-REMOVING
     # 'disjoint_modal_predicates_prop',
     # 'predicate_without_variables_or_agent',
 

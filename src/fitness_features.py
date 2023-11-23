@@ -1174,7 +1174,7 @@ class PrefWithoutHold(FitnessTerm):
         return self.prefs_without_hold > 0
 
 
-DEFAULT_LENGTH_OF_THEN_MIN_LENGTH = 1
+DEFAULT_LENGTH_OF_THEN_MIN_LENGTH = 3
 DEFAULT_LENGTH_OF_THEN_MAX_LENGTH = 7
 
 

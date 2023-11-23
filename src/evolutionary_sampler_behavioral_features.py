@@ -1,6 +1,7 @@
 import abc
 import argparse
 from collections import Counter, defaultdict
+import copy
 import enum
 import itertools
 from Levenshtein import distance as edit_distance
@@ -315,6 +316,14 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER = [
     room_and_object_types.ANY_OBJECT,
 ]
 
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES = [
+    room_and_object_types.BALLS,
+    room_and_object_types.RECEPTACLES,
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+]
+
 PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
     ['agent_holds', 'in_motion'],
     'in',
@@ -325,7 +334,14 @@ PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
 PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL = [
     ['agent_holds', 'in_motion'],
     ['in', 'on'],
-    ['adjacent', 'touch'],
+    ['adjacent', 'near', 'touch'],
+]
+
+PREDICATE_AND_OBJECT_GROUP_PREDICATES_FOR_EXEMPLAR_PREFERENCES = [
+    ['agent_holds', 'in_motion',],
+    'in',
+    'on',
+    ['adjacent', 'near', 'touch'],
 ]
 
 
@@ -343,6 +359,7 @@ class BehavioralFeatureSet(enum.Enum):
     PREDICATE_AND_OBJECT_GROUPS_GAME_OBJECT = 'predicate_and_object_groups_go'
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN = 'predicate_and_object_groups_bb'
     PREDICATE_AND_OBJECT_GROUPS_SPLIT_BALL_BIN_GAME_OBJECT = 'predicate_and_object_groups_bb_go'
+    PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES = 'predicate_and_object_groups_exemplar_preferences'
     LATEST_WITH_AT_END = 'latest_at_end'
     LATEST_WITH_SETUP = 'latest_setup'
     LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
@@ -742,7 +759,8 @@ class ExemplarPreferenceDistanceFeaturizer(ast_parser.ASTParser, BehavioralFeatu
 # BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (8, 2), (44, 1), (59, 0), (90, 2)]
 # Trying a new set where I go for distance 1 or below
 BC_DISTANCE_EXEMPLAR_PREFERENCE_THRESHOLDS = {1: 1}
-BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (11, 0), (17, 2), (44, 1), (48, 5), (49, 0), (51, 0), (67, 0), (69, 0)]
+# BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (11, 0), (17, 2), (44, 1), (48, 5), (49, 0), (51, 0), (67, 0), (69, 0)]
+BC_DISTANCE_EXEMPLAR_PREFERENCE_IDS = [(5, 1), (11, 0), (17, 1), (26, 0), (48, 5), (49, 0), (49, 2), (64, 0), (69, 3)]
 
 
 def dict_distance(d1, d2):
@@ -983,6 +1001,11 @@ def build_behavioral_features_featurizer(
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_BALL_BIN_GAME_OBJECT))
 
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_FOR_EXEMPLAR_PREFERENCES))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES))
+            featurizer.register(AtEndFound())
+
         elif feature_set == BehavioralFeatureSet.LATEST_WITH_AT_END:
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
@@ -1030,10 +1053,9 @@ def build_behavioral_features_featurizer(
         elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_BC_SETUP:
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,
@@ -1048,10 +1070,9 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,
@@ -1066,10 +1087,9 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,
@@ -1085,10 +1105,9 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,
@@ -1103,10 +1122,9 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,
@@ -1124,10 +1142,9 @@ def build_behavioral_features_featurizer(
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
             featurizer.register(NumPreferencesDefinedAsInteger())
 
-            preference_bc_featurizer = FitnessFeaturesBehavioralFeaturizer(args)
-            preference_bc_featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
-            preference_bc_featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
-            preference_bc_featurizer.register(AtEndFound())
+            bc_featurizer_args = copy.deepcopy(args)
+            bc_featurizer_args.map_elites_custom_behavioral_features_key = BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_FOR_EXEMPLAR_PREFERENCES.value
+            preference_bc_featurizer = build_behavioral_features_featurizer(bc_featurizer_args, grammar_parser, fitness_featurizer, feature_names)
 
             exemplar_preferences_featurizer = ExemplarPreferenceBCDistanceFeaturizer(
                 preference_bc_featurizer,

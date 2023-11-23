@@ -488,6 +488,7 @@ NUMBER_SUB = '__NUMBER'
 class ASTBooleanParser(ASTParser):
     # node_to_symbol_mapping: typing.Dict[str, boolean.Symbol]
     algebra: boolean.BooleanAlgebra
+    next_arithmetic_operator_as_and: bool
     str_to_expression_mapping: typing.Dict[str, boolean.Expression]
     # valid_symbol_names: typing.List[str]
     whitespace_pattern: re.Pattern
@@ -498,6 +499,7 @@ class ASTBooleanParser(ASTParser):
         self.opposite_contrdicts_predicates = opposite_contradicts_predicates
         self.opposite_redundant_predicates = opposite_redundant_predicates
         self.opposite_unnecesary_predicates = opposite_contradicts_predicates + opposite_redundant_predicates
+        self.next_arithmetic_operator_as_and = True
 
         self.algebra = boolean.BooleanAlgebra()
         self.true = self.algebra.parse('TRUE')
@@ -705,6 +707,38 @@ class ASTBooleanParser(ASTParser):
             else:
                 symbol_name = self._key_to_symbol_str(key)
                 expr = boolean.Symbol(DOUBLE_UNDERSCORE_NUMBER_PATTERN.sub(NUMBER_SUB, symbol_name))
+
+        # treat arithmetic operations as logicals for the purpose of finding redundancies
+        elif rule in ('scoring_multi_expr', 'scoring_binary_expr'):
+            if rule == 'scoring_multi_expr':
+                args = ast.expr
+                if not isinstance(args, list):
+                    args = [args]
+            else:
+                args = [ast.expr_1, ast.expr_2]
+
+            arg_mappings = [self(arg, **kwargs) for arg in args]  # type: ignore
+
+            if isinstance(arg_mappings, list) and len(arg_mappings) == 1:
+                arg_mappings = arg_mappings[0]
+
+            if isinstance(arg_mappings, boolean.Expression):
+                expr = arg_mappings
+
+            else:
+                expr_type = boolean.AND if self.next_arithmetic_operator_as_and else boolean.OR
+                expr = expr_type(*arg_mappings)
+                self.next_arithmetic_operator_as_and = not self.next_arithmetic_operator_as_and
+
+        elif rule == 'scoring_neg_expr':
+            arg_mapping = self(ast.expr, **kwargs)  # type: ignore
+            expr = boolean.NOT(arg_mapping)
+
+        elif rule.startswith('count'):
+            expr = boolean.Symbol(key[1:-1].replace(' ', '__'))
+
+        elif rule == 'scoring_number_value':
+            expr = boolean.Symbol('NUMBER')
 
         else:
             keys = set(ast.keys())

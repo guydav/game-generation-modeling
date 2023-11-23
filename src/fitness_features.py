@@ -699,7 +699,7 @@ class SetupObjectsUsed(FitnessTerm):
     used_objects: typing.Set[str] = set()
 
     def __init__(self, skip_objects: typing.Set[str] = SETUP_OBJECTS_SKIP_OBJECTS, rules: typing.Optional[typing.Sequence[typing.Union[str, re.Pattern]]] = None,
-                 header: str = 'setup_objects_used', parse_variables: bool = False):
+                 header: str = 'setup_objects_used', parse_variables: bool = False, check_subtypes: bool = True):
         if rules is None:
             rules = list(TYPE_RULES.keys())
         else:
@@ -711,6 +711,7 @@ class SetupObjectsUsed(FitnessTerm):
         super().__init__(rules, header)
         self.skip_objects = skip_objects
         self.parse_variables = parse_variables
+        self.check_subtypes = check_subtypes
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
@@ -750,6 +751,32 @@ class SetupObjectsUsed(FitnessTerm):
         if len(self.setup_objects) == 0:
             return 0
 
+        if self.check_subtypes:
+            matches_found = 0
+            for setup_object in self.setup_objects:
+                if setup_object in self.used_objects:
+                    matches_found += 1
+                    continue
+
+                # if it's a subtype, check if the supertype is used
+                if setup_object in room_and_object_types.SUBTYPES_TO_TYPES:
+                    super_type = room_and_object_types.SUBTYPES_TO_TYPES[setup_object]
+                    if super_type in self.used_objects:
+                        matches_found += 1
+                        continue
+
+                    # also check one more level up the hierarchy, e.g., from red_dodgeball to dodgeball to ball
+                    elif room_and_object_types.SUBTYPES_TO_TYPES.get(super_type, 'NO_MATCH') in self.used_objects:
+                        matches_found += 1
+                        continue
+
+                # if it's a supertype, check if any of the subtypes are used
+                if room_and_object_types.TYPES_TO_SUB_TYPES.get(setup_object, set()).intersection(self.used_objects):
+                    matches_found += 1
+                    continue
+
+            return matches_found / len(self.setup_objects)
+
         return len(self.setup_objects.intersection(self.used_objects)) / len(self.setup_objects)
 
 
@@ -768,17 +795,7 @@ class AnySetupObjectsUsed(SetupObjectsUsed):
         super().__init__(skip_objects, header='any_setup_objects_used')
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if len(self.setup_objects) == 0:
-            return 0
-
-        for object_set in (self.setup_objects, self.used_objects):
-            if room_and_object_types.BALL in object_set:
-                object_set.update(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.BALLS])
-
-            if room_and_object_types.BLOCK in object_set:
-                object_set.update(room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.BLOCKS])
-
-        return int(len(self.setup_objects.intersection(self.used_objects)) > 0)
+        return int(super().game_end() > 0)  # type: ignore
 
 
 PREDICATE_IN_DATA_RULE_TO_CHILD = {
@@ -1587,7 +1604,7 @@ class RedundantBooleanExpression(BooleanLogicTerm):
 
 class RedundantBooleanScoringTerminalExpression(BooleanLogicTerm):
     def __init__(self):
-        super().__init__('redundant_scoring_terminal_expression_found', rules_or_pattern=('terminal_and', 'terminal_or', 'terminal_comp', 'scoring_comparison'),
+        super().__init__('redundant_scoring_terminal_expression_found', rules_or_pattern=('terminal', 'scoring_expr'),
                          ignore_prefixes=[])
         self.redundancy_found = False
 
@@ -1606,6 +1623,24 @@ class RedundantBooleanScoringTerminalExpression(BooleanLogicTerm):
 class UnnecessaryBooleanExpression(BooleanLogicTerm):
     def __init__(self):
         super().__init__('unnecessary_expression_found')
+        self.unnecessary_found = False
+
+    def game_start(self) -> None:
+        super().game_start()
+        self.unnecessary_found = False
+
+    def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
+        if not self.unnecessary_found and self.boolean_parser.evaluate_unnecessary(expr):
+            self.unnecessary_found = True
+
+    def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
+        return self.unnecessary_found
+
+
+class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
+    def __init__(self):
+        super().__init__('unnecessary_scoring_terminal_expression_found', rules_or_pattern=('terminal', 'scoring_expr'),
+                         ignore_prefixes=[])
         self.unnecessary_found = False
 
     def game_start(self) -> None:
@@ -3231,6 +3266,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     unnecessary_boolean_expression = UnnecessaryBooleanExpression()
     fitness.register(unnecessary_boolean_expression)
+
+    unnecessary_boolean_scoring_terminal_expression = UnnecessaryBooleanScoringTerminalExpression()
+    fitness.register(unnecessary_boolean_scoring_terminal_expression)
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)

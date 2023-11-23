@@ -294,8 +294,8 @@
     (count-once pyramidBlockAtopTowerAtEnd)
     (count-once baseBlockInTowerAtEnd)
     (+
-        (count-once baseBlockInTowerAtEnd)
         (count-once-per-objects blockOnBlockInTowerAtEnd)
+        1
     )
 ))))
 

@@ -39,8 +39,9 @@ COUNTING_FEATURES = [
 
 # A Smaller set of counting features to exclude
 COUNTING_LESS_IMPORTANT_FEATURES = [
+    # 2023-11-23: trying without the feature for how many preferences are defined, appears to not be great
     # How many preferences are defined
-    # re.compile(r'num_preferences_defined_[\d_]+'),
+    re.compile(r'num_preferences_defined_[\d_]+'),
     # How many modals are under a then
     re.compile(r'length_of_then_modals_[\w\d_]+'),
     # Various features related to variable quantifications
@@ -70,6 +71,7 @@ COUNTING_FEATURES_PATTERN_DICT = {
     'node count by section': re.compile(r'node_count_[\w\d_]+'),
     'max width by section': re.compile(r'max_width_[\w\d_]+'),
 }
+
 
 FORALL_FEATURES = [
     re.compile(r'pref_forall_[\w\d_]+_correct$'),
@@ -150,7 +152,8 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     'variables_defined_all',
     'variables_defined_prop',
 
-    # 'setup_objects_used',
+    # 2023-11-23: trying without the feature for any setup objects used
+    'setup_objects_used',
     # 2023-09-21: trying without the specific feature to the quantified objects
     # 2023-11-22: trying with it again
     # 'setup_quantified_objects_used',
@@ -168,7 +171,7 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
     # 'identical_logical_children_found',  # CONSIDER-RESTORING
     # 'identical_scoring_children_found',  # CONSIDER-RESTORING
     'scoring_count_expression_repetitions_exist',
-    'tautological_expression_found',
+    'tautological_expression_found',  # CONSIDER-RESTORING
     # 'redundant_expression_found',
     # 'redundant_scoring_terminal_expression_found',
     # 'unnecessary_expression_found',

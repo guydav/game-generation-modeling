@@ -364,6 +364,8 @@ class BehavioralFeatureSet(enum.Enum):
     LATEST_WITH_SETUP = 'latest_setup'
     LATEST_WITH_SETUP_AND_TERMINAL = 'latest_setup_terminal'
     LATEST_SETUP_EXPECTED_VALUES = 'latest_setup_expected_values'
+    LATEST_AT_END_NO_GAME_OBJECT_SETUP = 'latest_at_end_no_game_object_setup'
+    LATEST_AT_END_NO_GAME_OBJECT_EXPECTED_VALUES = 'latest_at_end_no_game_object_expected_values'
     EXEMPLAR_PREFERENCES_SETUP = 'exemplar_preferences_setup'
     EXEMPLAR_PREFERENCES_EXPECTED_VALUES = 'exemplar_preferences_expected_values'
     EXEMPLAR_PREFERENCES_BC_SETUP = 'exemplar_preferences_bc_setup'
@@ -820,7 +822,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         exemplar_index = 0
         for i, game_ast in enumerate(game_asts):
             game_preference_features = self(game_ast, should_postprocess=True)
-            if exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
+            while exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
                 self.exemplar_preference_indices.append(len(all_preference_features) + self.exemplar_preference_ids[exemplar_index][1])
                 exemplar_index += 1
 
@@ -1025,6 +1027,19 @@ def build_behavioral_features_featurizer(
             featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
             featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_EXPERIMENTAL_LARGER))
             featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
+
+        elif feature_set == BehavioralFeatureSet.LATEST_AT_END_NO_GAME_OBJECT_SETUP:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES))
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(AtEndFound())
+
+        elif feature_set == BehavioralFeatureSet.LATEST_AT_END_NO_GAME_OBJECT_EXPECTED_VALUES:
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_EXPERIMENTAL))
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES))
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)
+            featurizer.register(AtEndFound())
             featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())
 
         elif feature_set == BehavioralFeatureSet.EXEMPLAR_PREFERENCES_SETUP:

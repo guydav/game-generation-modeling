@@ -321,7 +321,7 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES = [
     room_and_object_types.RECEPTACLES,
     [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
     [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
-    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS, room_and_object_types.ANY_OBJECT,],
 ]
 
 PREDICATE_AND_OBJECT_GROUP_PREDICATES = [

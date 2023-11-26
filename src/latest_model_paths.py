@@ -65,12 +65,12 @@ MAP_ELITES_MODELS = {
     #     'No "Goodness" BC | Uniform archive sampling | L2 regularization'
     # ),
     'object_and_predicates_with_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_gen_3072_2023_11_23',
+        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_gen_5120_2023_11_24',
         'Object and Predicate Group BCS | Using "Goodness" BC'
     ),
 
     'object_and_predicates_with_at_end_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_latest_at_end_no_game_object_expected_values_uniform_seed_42_gen_3072_2023_11_24',
+        'map_elites_minimal_counting_grammar_use_forall_L2_latest_at_end_no_game_object_expected_values_uniform_seed_42_gen_5120_2023_11_24',
         'Object and Predicate Group BCS | No game_object, with at_end | Using "Goodness" BC'
     ),
     # 'num_exemplar_preferences_by_bcs': MapElitesModelSpec(
@@ -78,7 +78,7 @@ MAP_ELITES_MODELS = {
         # 'Exemplar Preferenecs BCs | Binary BCs, no max preference count | No "Goodness" BC',
     # ),
     'num_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_gen_3072_2023_11_24',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_final_2023_11_25',
         'Exemplar Preferenecs BCs | Binary BCs, no max preference count | Using "Goodness" BC',
     ),
     # 'max_exemplar_preferences_by_bcs': MapElitesModelSpec(
@@ -88,7 +88,7 @@ MAP_ELITES_MODELS = {
     # ),
     'max_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
         # also has a final
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_3072_2023_11_24',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_final_2023_11_24',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC',
     ),
 }

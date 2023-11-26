@@ -1545,12 +1545,32 @@ BOOLEAN_LOGIC_IGNORE_PREFIXES = ('terminal_', 'scoring_')
 
 
 class BooleanLogicTerm(FitnessTerm):
+    additional_rules: typing.Set[str]
     boolean_parser: ast_parser.ASTBooleanParser
+    ignore_prefixes: typing.Sequence[str]
+
     def __init__(self, name: str, ignore_prefixes: typing.Sequence[str] = BOOLEAN_LOGIC_IGNORE_PREFIXES,
-                 rules_or_pattern: typing.Union[typing.Sequence[str], typing.Pattern] = MULTI_BOOLEAN_RULE_PATTERN):
+                 rules_or_pattern: typing.Union[typing.Sequence[str], typing.Pattern] = MULTI_BOOLEAN_RULE_PATTERN,
+                 additional_rules: typing.Optional[typing.Sequence[str]] = None):
+
+        if additional_rules is not None:
+            if isinstance(rules_or_pattern, tuple):
+                rules_or_pattern = list(rules_or_pattern)
+
+            elif not isinstance(rules_or_pattern, list):
+                rules_or_pattern = [rules_or_pattern]  # type: ignore
+
+            rules_or_pattern = rules_or_pattern + additional_rules  # type: ignore
+
         super().__init__(rules_or_pattern, name)
         self.boolean_parser = BOOLEAN_PARSER
         self.ignore_prefixes = ignore_prefixes
+        self.additional_rules = set(additional_rules) if additional_rules is not None else set()
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        if not hasattr(self, 'additional_rules'):
+            self.additional_rules = set()
 
     def game_start(self) -> None:
         self.boolean_parser.game_start()
@@ -1560,12 +1580,19 @@ class BooleanLogicTerm(FitnessTerm):
             return
 
         if isinstance(ast, tatsu.ast.AST):
-            expr = self.boolean_parser(ast, **simplified_context_deepcopy(context))
-            self._inner_update(expr, rule, context)  # type: ignore
+            if rule in self.additional_rules:
+                self._update_additional_rules(ast, rule, context)
+
+            else:
+                expr = self.boolean_parser(ast, **simplified_context_deepcopy(context))
+                self._inner_update(expr, rule, context)  # type: ignore
 
     @abstractmethod
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
         pass
+
+    def _update_additional_rules(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        raise ValueError(f'Must implment `_update_additional_rules` if `additional_rules` is not None')
 
 
 class TautologicalBooleanExpression(BooleanLogicTerm):
@@ -1638,21 +1665,61 @@ class UnnecessaryBooleanExpression(BooleanLogicTerm):
 
 
 class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
+    at_end_preferences: typing.Set[str]
+    terminal_count_preferences: typing.Set[str]
+    total_score_can_be_negative: bool
+    total_score_negative_comparison_found: bool
+    unnecessary_found: bool
+
     def __init__(self):
-        super().__init__('unnecessary_scoring_terminal_expression_found', rules_or_pattern=('terminal', 'scoring_expr'),
-                         ignore_prefixes=[])
+        super().__init__('unnecessary_scoring_terminal_expression_found',
+                         rules_or_pattern=('terminal', 'scoring_expr'),
+                         ignore_prefixes=[],
+                         additional_rules=['preference', 'pref_name_and_types',
+                                            'terminal_score_comp', 'scoring_binary_expr',
+                                            'scoring_neg_expr', 'scoring_number_value']
+                         )
         self.unnecessary_found = False
+
+        self.at_end_preferences = set()
+        self.terminal_count_preferences = set()
+        self.total_score_can_be_negative = False
+        self.total_score_negative_comparison_found = False
 
     def game_start(self) -> None:
         super().game_start()
         self.unnecessary_found = False
 
+        self.at_end_preferences = set()
+        self.terminal_count_preferences = set()
+        self.total_score_can_be_negative = False
+        self.total_score_negative_comparison_found = False
+
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
         if not self.unnecessary_found and self.boolean_parser.evaluate_unnecessary(expr):
             self.unnecessary_found = True
 
+    def _update_additional_rules(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if rule == 'preference':
+            pref_body = ast.pref_body.body  # type: ignore
+            if pref_body.parseinfo.rule == 'pref_body_exists':
+                pref_body = pref_body.exists_args
+
+            if pref_body.parseinfo.rule == 'at_end':
+                self.at_end_preferences.add(ast.pref_name)  # type: ignore
+
+        elif context[SECTION_CONTEXT_KEY] == ast_parser.TERMINAL and rule == 'pref_name_and_types':
+            self.terminal_count_preferences.add(ast.pref_name)
+
+        elif rule == 'terminal_score_comp' and float(ast.expr_2.terminal) < 0:  # type: ignore
+            self.total_score_negative_comparison_found = True
+
+        elif (rule == 'scoring_binary_expr' and ast.op == '-') or (rule == 'scoring_neg_expr') or (rule == 'scoring_number_value' and float(ast.terminal) < 0):  # type: ignore
+            self.total_score_can_be_negative = True
+
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        return self.unnecessary_found
+        return self.unnecessary_found or (len(self.at_end_preferences.intersection(self.terminal_count_preferences)) > 0) or \
+            (self.total_score_negative_comparison_found and not self.total_score_can_be_negative)
 
 
 class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
@@ -2187,7 +2254,7 @@ class PrefForallUsed(PrefForallTerm):
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
-        if object_types is not None or EXTERNAL_FORALL_CONTEXT_KEY in context or rule == 'count_once_per_external_objects':
+        if (object_types is not None and len(object_types) > 0) or EXTERNAL_FORALL_CONTEXT_KEY in context or rule == 'count_once_per_external_objects':
             self.prefs_used_as_pref_forall_prefs[pref_name] += 1
 
     def _inner_game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
@@ -2223,7 +2290,7 @@ class PrefForallCorrectArity(PrefForallTerm):
     pref_forall_prefs_to_counts: typing.Dict[str, int] = dict()
 
     def __init__(self):
-        super().__init__('pref_forall_correct_arity', return_incorrect_count=True)
+        super().__init__('correct_arity', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_counts = dict()
@@ -2275,7 +2342,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
     n_incorrect_types_per_pref: typing.List[float] = list()
 
     def __init__(self):
-        super().__init__('pref_forall_correct_types', return_incorrect_count=True)
+        super().__init__('correct_types', return_incorrect_count=True)
 
     def _inner_game_start(self) -> None:
         self.pref_forall_prefs_to_types = defaultdict(dict)
@@ -2294,7 +2361,7 @@ class PrefForallCorrectTypes(PrefForallTerm):
 
     def _update_count(self, pref_name: str, object_types: typing.Optional[typing.List[tatsu.ast.AST]],
         rule: str, context: ContextDict):
-        if object_types is None:
+        if object_types is None or len(object_types) == 0:
             return
 
         if pref_name not in self.pref_forall_prefs_to_types:

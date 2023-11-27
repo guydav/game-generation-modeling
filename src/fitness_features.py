@@ -1112,28 +1112,29 @@ class AdjacentSameModalFound(FitnessTerm):
 
 
 class PrefStartsAndEndsWithOnce(FitnessTerm):
-    total_prefs: int = 0
-    prefs_start_and_end_with_once: int = 0
+    num_then_prefs: int = 0
+    num_then_prefs_start_and_end_with_once: int = 0
 
     def __init__(self):
         super().__init__('then', 'starts_and_ends_once')
 
     def game_start(self) -> None:
-        self.total_prefs = 0
-        self.prefs_start_and_end_with_once = 0
+        self.num_then_prefs = 0
+        self.num_then_prefs_start_and_end_with_once = 0
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        self.total_prefs += 1
+        self.num_then_prefs += 1
         if isinstance(ast.then_funcs, list):  # type: ignore
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
             if len(func_rules) >= 2 and func_rules[0] == func_rules[-1] == 'once':
-                self.prefs_start_and_end_with_once += 1
+                self.num_then_prefs_start_and_end_with_once += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
-        if self.total_prefs == 0:
-            return 0
+        # to avoid punishing only at-end preferences
+        if self.num_then_prefs == 0:
+            return 1
 
-        return self.prefs_start_and_end_with_once / self.total_prefs
+        return self.num_then_prefs_start_and_end_with_once / self.num_then_prefs
 
 
 class OnceInMiddleOfPref(FitnessTerm):

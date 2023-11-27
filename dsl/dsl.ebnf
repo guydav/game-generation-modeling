@@ -61,7 +61,7 @@ scoring_number_value = terminal:number_pattern;
 
 
 function_comparison = comp:(two_arg_comparison | multiple_args_equal_comparison);
-two_arg_comparison = '(' comp_op:binary_comp arg_1:comparison_arg arg_2:comparison_arg ')';
+two_arg_comparison = '(' comp_op:binary_comp_no_equal arg_1:comparison_arg arg_2:comparison_arg ')';
 multiple_args_equal_comparison = '(=' {equal_comp_args+:comparison_arg}+ ')';
 
 predicate_or_function_term = term:(object_name | variable);
@@ -74,6 +74,7 @@ predicate_or_function_type_term = term:(object_type | variable);
 
 comparison_arg = arg:(function_eval | comparison_arg_number_value);
 binary_comp = '<=' | '<' | '=' | '>=' | '>';
+binary_comp_no_equal = '<=' | '<' | '>=' | '>';
 function_eval = func:(function_building_size |
     function_distance |
     function_distance_side_3 |
@@ -320,7 +321,7 @@ scoring_comparison = comp:(
     scoring_comp |
     scoring_equals_comp);
 
-scoring_comp = '(' op:binary_comp expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
+scoring_comp = '(' op:binary_comp_no_equal expr_1:scoring_expr_or_number expr_2:scoring_expr_or_number ')';
 scoring_equals_comp = '(=' {expr+:scoring_expr_or_number}+ ')';
 
 

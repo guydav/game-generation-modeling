@@ -49,8 +49,8 @@ from fitness_features import *
 from fitness_ngram_models import *
 from fitness_ngram_models import VARIABLE_PATTERN
 from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_FITNESS_FEATURIZER_PATH,\
-    LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH,\
-    LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
+    LATEST_FITNESS_FUNCTION_DATE_ID, LATEST_REAL_GAMES_PATH
+        #LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH, LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
@@ -2193,10 +2193,10 @@ class MAPElitesSampler(PopulationBasedSampler):
 
     def _key_to_feature_dict(self, key: KeyTypeAnnotation):
         if self.key_type.name == MAPElitesKeyType.INT.name:
-            return {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}
+            return {f: (key >> i) % 2 for i, f in enumerate(self.map_elites_feature_names)}  # type: ignore
 
         elif self.key_type.name == MAPElitesKeyType.TUPLE.name:
-            return {f: key[i] for i, f in enumerate(self.map_elites_feature_names)}
+            return {f: key[i] for i, f in enumerate(self.map_elites_feature_names)}  # type: ignore
 
         else:
             raise ValueError(f'Unknown key type {self.key_type}')
@@ -2408,17 +2408,18 @@ def main(args):
     os.makedirs(DUCKDB_QUERY_LOG_FOLDER, exist_ok=True)
 
     if args.use_specific_objects_models:
-        if args.fitness_function_date_id == DEFAULT_FITNESS_FUNCTION_DATE_ID:
-            logger.info(f'Using specific objects fitness function date id LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID="{LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID}"')
-            args.fitness_function_date_id = LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
+        raise ValueError('Specific objects models are not currently supported')
+        # if args.fitness_function_date_id == DEFAULT_FITNESS_FUNCTION_DATE_ID:
+        #     logger.info(f'Using specific objects fitness function date id LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID="{LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID}"')
+        #     args.fitness_function_date_id = LATEST_SPECIFIC_OBJECTS_FITNESS_FUNCTION_DATE_ID
 
-        if args.fitness_featurizer_path == DEFAULT_FITNESS_FEATURIZER_PATH:
-            logger.info(f'Using specific objects fitness featurizer path LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH="{LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH}"')
-            args.fitness_featurizer_path = LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH
+        # if args.fitness_featurizer_path == DEFAULT_FITNESS_FEATURIZER_PATH:
+        #     logger.info(f'Using specific objects fitness featurizer path LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH="{LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH}"')
+        #     args.fitness_featurizer_path = LATEST_SPECIFIC_OBJECTS_FITNESS_FEATURIZER_PATH
 
-        if args.ngram_model_path == LATEST_AST_N_GRAM_MODEL_PATH:
-            logger.info(f'Using specific objects ngram model path LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH="{LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH}"')
-            args.ngram_model_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+        # if args.ngram_model_path == LATEST_AST_N_GRAM_MODEL_PATH:
+        #     logger.info(f'Using specific objects ngram model path LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH="{LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH}"')
+        #     args.ngram_model_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
 
 
     sampler_kwargs = dict(

@@ -228,13 +228,21 @@ EXPECTED_VALUE_1_FEATURES =  (
 )
 
 EXPECTED_VALUE_0_FEATURES = (
+    'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
     'repeated_variables_found', 'repeated_variable_type_in_either',
-    'redundant_expression_found', 'redundant_scoring_terminal_expression_found',
+    'nested_logicals_found', 'identical_logical_children_found', 'identical_scoring_children_found',
+    'tautological_expression_found', 'redundant_expression_found',
+    'redundant_scoring_terminal_expression_found',
+
+
     'identical_consecutive_seq_func_predicates_found',
-    'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_same_predicates_only', 'disjoint_seq_funcs_found',
-    'pref_forall_count_once_per_external_objects_used_incorrect', 'pref_forall_external_forall_used_incorrect', 'pref_forall_used_incorrect',
-    'pref_forall_pref_forall_correct_arity_incorrect', 'pref_forall_pref_forall_correct_types_incorrect',
-    'two_number_operation_found', 'section_without_pref_or_total_count_scoring',
+    'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_same_predicates_only',
+    'disjoint_seq_funcs_found',
+    'pref_forall_count_once_per_external_objects_used_incorrect',
+    'pref_forall_external_forall_used_incorrect', 'pref_forall_used_incorrect',
+    'pref_forall_correct_arity_incorrect', 'pref_forall_correct_types_incorrect',
+    'two_number_operation_found',
+    # 'section_without_pref_or_total_count_scoring',
 )
 
 EXPECTED_FEATURE_VALUES = {

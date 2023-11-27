@@ -34,7 +34,7 @@ import ast_printer
 from ast_utils import cached_load_and_parse_games_from_file, simplified_context_deepcopy, deepcopy_ast, ASTCopyType, replace_child
 from fitness_features_preprocessing import FitnessFeaturesPreprocessor, DEFAULT_MERGE_THRESHOLD_PROPORTION, BinarizeFitnessFeatures, MergeFitnessFeatures, NGRAM_SCORE_PATTERN
 from fitness_ngram_models import NGramTrieNode, NGramTrieModel, ASTNGramTrieModel, NGramASTParser, DEFAULT_N_BY_SECTION
-from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH, LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+from latest_model_paths import LATEST_AST_N_GRAM_MODEL_PATH
 import room_and_object_types
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reward-machine')))
@@ -3405,7 +3405,8 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
     # fitness.register(text_ngram_term, full_text_rule=True)
 
     if args.use_specific_objects_ngram_model:
-        ngram_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+        # ngram_path = LATEST_SPECIFIC_OBJECTS_AST_N_GRAM_MODEL_PATH
+        raise ValueError('Specific objects ngram model not currently supported')
     else:
         ngram_path = LATEST_AST_N_GRAM_MODEL_PATH
 

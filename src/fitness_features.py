@@ -1126,7 +1126,7 @@ class PrefStartsAndEndsWithOnce(FitnessTerm):
         self.num_then_prefs += 1
         if isinstance(ast.then_funcs, list):  # type: ignore
             func_rules = [sf.seq_func.parseinfo.rule if isinstance(sf.seq_func, tatsu.ast.AST) else sf.seq_func for sf in ast.then_funcs]  # type: ignore
-            if len(func_rules) >= 2 and func_rules[0] == func_rules[-1] == 'once':
+            if func_rules[0].startswith('once') and func_rules[-1].startswith('once') :
                 self.num_then_prefs_start_and_end_with_once += 1
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:

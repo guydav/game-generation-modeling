@@ -706,7 +706,11 @@ class ASTBooleanParser(ASTParser):
 
             else:
                 symbol_name = self._key_to_symbol_str(key)
-                expr = boolean.Symbol(DOUBLE_UNDERSCORE_NUMBER_PATTERN.sub(NUMBER_SUB, symbol_name))
+                # In the case of equality, the number matters (in other cases, two comparisons with different numbers make one redundant)
+                if rule != 'scoring_equals_comp':
+                    symbol_name = DOUBLE_UNDERSCORE_NUMBER_PATTERN.sub(NUMBER_SUB, symbol_name)
+
+                expr = boolean.Symbol(symbol_name)
 
         # treat arithmetic operations as logicals for the purpose of finding redundancies
         elif rule in ('scoring_multi_expr', 'scoring_binary_expr'):
@@ -719,16 +723,35 @@ class ASTBooleanParser(ASTParser):
 
             arg_mappings = [self(arg, **kwargs) for arg in args]  # type: ignore
 
-            if isinstance(arg_mappings, list) and len(arg_mappings) == 1:
-                arg_mappings = arg_mappings[0]
+            non_preference_eval_or_number_found = False
+            for arg in args:
+                while arg.parseinfo.rule in ('scoring_expr_or_number', 'scoring_expr'):  # type: ignore
+                    arg = arg.expr  # type: ignore
 
-            if isinstance(arg_mappings, boolean.Expression):
-                expr = arg_mappings
+                inner_rule = arg.parseinfo.rule  # type: ignore
+                if inner_rule not in ('scoring_number_value', 'preference_eval', 'scoring_comparison'):
+                    non_preference_eval_or_number_found = True
+                    break
 
+            # If anything other than a preference eval or number is found, treat this as a logical
+            if non_preference_eval_or_number_found:
+                if isinstance(arg_mappings, list) and len(arg_mappings) == 1:
+                    arg_mappings = arg_mappings[0]
+
+                if isinstance(arg_mappings, boolean.Expression):
+                    expr = arg_mappings
+
+                else:
+                    expr_type = boolean.AND if self.next_arithmetic_operator_as_and else boolean.OR
+                    expr = expr_type(*arg_mappings)
+                    self.next_arithmetic_operator_as_and = not self.next_arithmetic_operator_as_and
+
+            # If only counts and numbers, treat this as a discrete symbol
             else:
-                expr_type = boolean.AND if self.next_arithmetic_operator_as_and else boolean.OR
-                expr = expr_type(*arg_mappings)
-                self.next_arithmetic_operator_as_and = not self.next_arithmetic_operator_as_and
+                if any(not isinstance(arg, boolean.Symbol) for arg in arg_mappings):
+                    raise ValueError(f'Non-symbol found in {arg_mappings}')
+
+                expr = boolean.Symbol('__'.join(symbol.obj for symbol in arg_mappings))  # type: ignore
 
         elif rule == 'scoring_neg_expr':
             arg_mapping = self(ast.expr, **kwargs)  # type: ignore

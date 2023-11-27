@@ -1641,6 +1641,7 @@ class RedundantBooleanScoringTerminalExpression(BooleanLogicTerm):
 
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
         if not self.redundancy_found and self.boolean_parser.evaluate_redundancy(expr):  # type: ignore
+            print(expr)
             self.redundancy_found = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:

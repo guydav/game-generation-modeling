@@ -499,7 +499,7 @@ class ASTBooleanParser(ASTParser):
         self.opposite_contrdicts_predicates = opposite_contradicts_predicates
         self.opposite_redundant_predicates = opposite_redundant_predicates
         self.opposite_unnecesary_predicates = opposite_contradicts_predicates + opposite_redundant_predicates
-        self.next_arithmetic_operator_as_and = True
+        # self.next_arithmetic_operator_as_and = True
 
         self.algebra = boolean.BooleanAlgebra()
         self.true = self.algebra.parse('TRUE')
@@ -513,6 +513,7 @@ class ASTBooleanParser(ASTParser):
     def game_start(self):
         self.str_to_expression_mapping = {}
         self.next_symbol_name_index = 0
+        # self.next_arithmetic_operator_as_and = True
 
     def _all_equal(self, iterable: typing.Iterable):
         # Returns True if all the elements are equal to each other -- from Python itertools recipes
@@ -742,16 +743,33 @@ class ASTBooleanParser(ASTParser):
                     expr = arg_mappings
 
                 else:
-                    expr_type = boolean.AND if self.next_arithmetic_operator_as_and else boolean.OR
+                    expr_type = boolean.AND  # if self.next_arithmetic_operator_as_and else boolean.OR
                     expr = expr_type(*arg_mappings)
-                    self.next_arithmetic_operator_as_and = not self.next_arithmetic_operator_as_and
+                    # self.next_arithmetic_operator_as_and = not self.next_arithmetic_operator_as_and
 
-            # If only counts and numbers, treat this as a discrete symbol
+            # If only counts and numbers, treat this as a discrete symbol, after filtering out trues/falses
             else:
-                if any(not isinstance(arg, boolean.Symbol) for arg in arg_mappings):
-                    raise ValueError(f'Non-symbol found in {arg_mappings}')
+                filtered_args = []
 
-                expr = boolean.Symbol('__'.join(symbol.obj for symbol in arg_mappings))  # type: ignore
+                for arg in arg_mappings:
+                    if arg == self.true:
+                        continue
+
+                    if arg == self.false:
+                        expr = self.false
+                        break
+
+                    if isinstance(arg, boolean.Symbol):
+                        filtered_args.append(arg)
+
+                    else:
+                        raise ValueError(f'Unexpected argument in scoring expression: {arg} ({type(arg)})')
+
+                if expr is None:
+                    if len(filtered_args) > 0:
+                        expr = boolean.Symbol('__'.join(symbol.obj for symbol in filtered_args))  # type: ignore
+                    else:
+                        expr = self.true
 
         elif rule == 'scoring_neg_expr':
             arg_mapping = self(ast.expr, **kwargs)  # type: ignore

@@ -1518,13 +1518,13 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
     scoring_expression_to_count: typing.Dict[str, int] = {}
 
     def __init__(self):
-        super().__init__(COUNT_RULE_PATTERN, 'scoring_count_expression_repetitions')
+        super().__init__('preference_eval', 'scoring_count_expression_repetitions')
 
     def game_start(self) -> None:
         self.scoring_expression_to_count = defaultdict(int)
 
     def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
-        if isinstance(ast, tatsu.ast.AST):
+        if isinstance(ast, tatsu.ast.AST) and context[SECTION_CONTEXT_KEY] == ast_parser.SCORING:
             key = typing.cast(str, ast_printer.ast_section_to_string(ast, ast_parser.SCORING))
             self.scoring_expression_to_count[key] += 1
 
@@ -1532,8 +1532,8 @@ class ScoringCountExpressionRepetitions(FitnessTerm):
         if len(self.scoring_expression_to_count) == 0:
             return dict(exist=0)  # max=0,
 
-        values = [v - 1 for v in self.scoring_expression_to_count.values()]
-        return dict(exist=int(any(v > 0 for v in values)))  # max=max(values),
+        # values = [v - 1 for v in self.scoring_expression_to_count.values()]
+        return dict(exist=int(any(v > 1 for v in self.scoring_expression_to_count.values())))  # max=max(values),
 
     def _get_all_inner_keys(self) -> typing.List[str]:
         return ['exist']  # ['max', 'exist']
@@ -1751,6 +1751,7 @@ class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
 
 
 PREDICATE_OR_FUNCTION_IMPLICIT_TERMS = {
+    'agent_holds': 'agent',  # 2023-11-27: trying with this again
     'predicate_rug_color_under': 'rug',
 }
 

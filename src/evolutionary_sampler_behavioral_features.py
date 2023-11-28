@@ -224,25 +224,25 @@ class FullFeaturesFitnessTerm(FitnessTerm):
 EXPECTED_VALUE_1_FEATURES =  (
     'variables_defined_all', 'variables_defined_prop',
     'variables_used_all', 'variables_used_prop',
-    'preferences_used_all', 'preferences_used_prop'
+    'preferences_used_all', 'preferences_used_prop',
+    'starts_and_ends_once',  # TODO: if I recode this as 0 for no then-preference games, remove this from this list
 )
-
+# TODO: verify the below list is complete after rerunning featurizer
 EXPECTED_VALUE_0_FEATURES = (
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
     'repeated_variables_found', 'repeated_variable_type_in_either',
     'nested_logicals_found', 'identical_logical_children_found', 'identical_scoring_children_found',
-    'tautological_expression_found', 'redundant_expression_found',
-    'redundant_scoring_terminal_expression_found',
-
-
+    'tautological_expression_found',
+    'redundant_expression_found', 'redundant_scoring_terminal_expression_found',
+    'unnecessary_expression_found', 'unnecessary_scoring_terminal_expression_found',
     'identical_consecutive_seq_func_predicates_found',
     'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_same_predicates_only',
-    'disjoint_seq_funcs_found',
+    'disjoint_seq_funcs_found', 'predicate_without_variables_or_agent',
     'pref_forall_count_once_per_external_objects_used_incorrect',
     'pref_forall_external_forall_used_incorrect', 'pref_forall_used_incorrect',
     'pref_forall_correct_arity_incorrect', 'pref_forall_correct_types_incorrect',
-    'two_number_operation_found',
-    # 'section_without_pref_or_total_count_scoring',
+    'two_number_operation_found', 'single_argument_multi_operation_found',
+    # 'section_without_pref_or_total_count_scoring',  # removed this feature
 )
 
 EXPECTED_FEATURE_VALUES = {

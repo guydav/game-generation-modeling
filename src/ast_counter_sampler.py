@@ -462,6 +462,9 @@ SIDES = room_and_object_types.CATEGORIES_TO_TYPES[room_and_object_types.SIDES]
 def _comparison_operators():
     return COMPARISON_OPERATORS
 
+def _comparison_operators_no_equal():
+    return [c for c in COMPARISON_OPERATORS if c != '=']
+
 def _binary_operators():
     return BINARY_OPERATORS
 
@@ -551,6 +554,7 @@ def _all_object_types():
 
 DEFAULT_PATTERN_RULE_OPTIONS_BY_RULE = dict(
     binary_comp=defaultdict(_comparison_operators),
+    binary_comp_no_equal=defaultdict(_comparison_operators_no_equal),
     binary_op=defaultdict(_binary_operators),
     multi_op=defaultdict(_multi_operators),
     func_name=defaultdict(_function_names),

@@ -246,7 +246,6 @@ def main(args: argparse.Namespace):
     utils.save_data(output_data, folder=args.output_folder, name=args.output_name, relative_path=args.output_relative_path)
 
     if not args.no_save_full_model:
-        logger.debug('Saving full model')
         extra_data = {}
 
         if not args.full_model_without_test:
@@ -299,8 +298,7 @@ def main(args: argparse.Namespace):
 
             print('\n'.join(feature_lines))
 
-
-
+        logger.debug('Saving full model')
         utils.save_model_and_feature_columns(cv, feature_columns, name=model_name, relative_path=args.output_relative_path, extra_data=extra_data)
 
 

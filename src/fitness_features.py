@@ -1670,6 +1670,7 @@ class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
     terminal_count_preferences: typing.Set[str]
     total_score_can_be_negative: bool
     total_score_negative_comparison_found: bool
+    total_score_smaller_than_positive_number_found = False
     unnecessary_found: bool
 
     def __init__(self):
@@ -1686,6 +1687,7 @@ class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
         self.terminal_count_preferences = set()
         self.total_score_can_be_negative = False
         self.total_score_negative_comparison_found = False
+        self.total_score_smaller_than_positive_number_found = False
 
     def game_start(self) -> None:
         super().game_start()
@@ -1695,6 +1697,7 @@ class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
         self.terminal_count_preferences = set()
         self.total_score_can_be_negative = False
         self.total_score_negative_comparison_found = False
+        self.total_score_smaller_than_positive_number_found = False
 
     def _inner_update(self, expr: boolean.Expression, rule: str, context: ContextDict):
         if not self.unnecessary_found and self.boolean_parser.evaluate_unnecessary(expr):
@@ -1712,15 +1715,20 @@ class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
         elif context[SECTION_CONTEXT_KEY] == ast_parser.TERMINAL and rule == 'pref_name_and_types':
             self.terminal_count_preferences.add(ast.pref_name)
 
-        elif rule == 'terminal_score_comp' and float(ast.expr_2.terminal) < 0:  # type: ignore
-            self.total_score_negative_comparison_found = True
+        elif rule == 'terminal_score_comp':
+            if float(ast.expr_2.terminal) < 0:  # type: ignore
+                self.total_score_negative_comparison_found = True
+
+            elif '<' in ast.op:  # type: ignore
+                self.total_score_smaller_than_positive_number_found = True
 
         elif (rule == 'scoring_binary_expr' and ast.op == '-') or (rule == 'scoring_neg_expr') or (rule == 'scoring_number_value' and float(ast.terminal) < 0):  # type: ignore
             self.total_score_can_be_negative = True
 
     def game_end(self) -> typing.Union[Number, typing.Sequence[Number], typing.Dict[typing.Any, Number]]:
         return self.unnecessary_found or (len(self.at_end_preferences.intersection(self.terminal_count_preferences)) > 0) or \
-            (self.total_score_negative_comparison_found and not self.total_score_can_be_negative)
+            (self.total_score_negative_comparison_found and not self.total_score_can_be_negative) or \
+            (self.total_score_smaller_than_positive_number_found and not self.total_score_can_be_negative)
 
 
 class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):

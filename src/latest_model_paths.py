@@ -65,7 +65,7 @@ MAP_ELITES_MODELS = {
     #     'No "Goodness" BC | Uniform archive sampling | L2 regularization'
     # ),
     'object_and_predicates_with_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_final_2023_11_2=8',
+        'map_elites_minimal_counting_grammar_use_forall_L2_latest_setup_expected_values_uniform_seed_42_final_2023_11_28',
         'Object and Predicate Group BCS | Using "Goodness" BC'
     ),
 

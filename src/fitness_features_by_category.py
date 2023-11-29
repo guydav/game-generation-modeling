@@ -49,12 +49,13 @@ COUNTING_LESS_IMPORTANT_FEATURES = [
     re.compile(r'max_number_variables_types_quantified_[\w\d_]+'),  # CONSIDER-RESTORING
     # Man and max depth and node count -- keep max depth and node count
     # 2023-11-13 -- trying with the max width, too, so only mean depth removed
-    # 2023-22-20 -- actually, max width seems to induce weird behavior
-    # 2023-22-23 -- trying with max width one more time after some more recent results
+    # 2023-11-20 -- actually, max width seems to induce weird behavior
+    # 2023-11-23 -- trying with max width one more time after some more recent results
+    # 2023-11-28 -- and without, as it's still a little questionable if it helps or hurts more
     # re.compile(r'node_count_[\w\d_]+'),
     # re.compile(r'max_depth_[\w\d_]+'),
     re.compile(r'mean_depth_[\w\d_]+'),
-    # re.compile(r'max_width_[\w\d_]+'),  # CONSIDER-RESTORING
+    re.compile(r'max_width_[\w\d_]+'),  # CONSIDER-RESTORING  # CONSIDER-REMOVING
 ]
 
 COUNTING_FEATURES_PATTERN_DICT = {

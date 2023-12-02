@@ -2589,7 +2589,7 @@ def main(args):
         exception_caught = False
 
     finally:
-        evosampler.save(suffix='final' if not exception_caught else 'error')
+        evosampler.save(suffix=f'gen_{evosampler.generation_index}_final' if not exception_caught else 'error')
         if os.path.exists(host_duckdb_tmp_folder):
             shutil.rmtree(host_duckdb_tmp_folder)
 

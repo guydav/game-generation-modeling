@@ -36,9 +36,15 @@ class GameHandler():
     building_handler: BuildingHandler
 
     def __init__(self, game: typing.Union[str, tatsu.ast.AST], grammar_path: str = DEFAULT_GRAMMAR_PATH, verbose: bool = False,
-                 force_domain: str = ''):
-        self.game_name = ''
+                 force_domain: str = '', ignore_preference_names: typing.Optional[typing.List[str]] = None, ignore_setup: bool = False):
+        self.verbose = verbose
         self.domain_name = force_domain
+        if ignore_preference_names is None:
+            ignore_preference_names = []
+        self.ignore_preference_names = ignore_preference_names
+        self.ignore_setup = ignore_setup
+
+        self.game_name = ''
         self.setup = None
         self.setup_met = False
         self.game_optional_cache = set()
@@ -46,7 +52,7 @@ class GameHandler():
         self.preferences = []
         self.terminal = None
         self.scoring = None
-        self.verbose = verbose
+
 
         if isinstance(game, str):
             grammar = open(grammar_path).read()
@@ -130,15 +136,16 @@ class GameHandler():
                     if self.domain_name not in OBJECTS_BY_ROOM_AND_TYPE:
                         raise ValueError(f"Error: Domain '{self.domain_name}' not supported (not found in the keys of OBJECTS_BY_ROOM_AND_TYPE: {list(OBJECTS_BY_ROOM_AND_TYPE.keys())}")
 
-            elif rule == "setup":
+            elif rule == "setup" and not self.ignore_setup:
                 self.setup = ast["setup"]
 
             elif rule == "preferences":
+                prefs = ast["preferences"] # type: ignore
                 # Handle games with single preference
-                if isinstance(ast["preferences"], tatsu.ast.AST):
-                    self.preferences = [ast["preferences"]]  # type: ignore
-                else:
-                    self.preferences = ast["preferences"] # type: ignore
+                if isinstance(prefs, tatsu.ast.AST):
+                    prefs = [prefs]
+
+                self.preferences = [pref for pref in prefs if pref["pref_name"] not in self.ignore_preference_names]  # type: ignore
 
             elif rule == "terminal":
                 self.terminal = ast["terminal"]

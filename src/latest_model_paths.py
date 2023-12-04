@@ -48,10 +48,10 @@ class MapElitesModelSpec:
         return f'{self.save_path[:gen_index]}_{gen}_{date}'
 
     def load(self, gen: typing.Optional[typing.Union[str, int]] = None, date: typing.Optional[str] = None,
-             date_and_id: str = '', folder: str = 'samples'):
+             date_and_id: str = '', folder: str = 'samples', relative_path: str = '..'):
         load_path = self.save_path if gen is None else self.get_different_gen(gen, date)
         from fitness_energy_utils import load_data
-        return load_data(date_and_id, folder, load_path)
+        return load_data(date_and_id, folder, load_path, relative_path=relative_path)
 
 
 MAP_ELITES_MODELS = {

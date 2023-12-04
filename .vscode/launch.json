@@ -266,14 +266,15 @@
             }
         },
         {
-            "name": "Python: reward filter",
+            "name": "Python: reward machine trace filter",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "args": [
-                "--run-from-real-games",
-                "--max-traces-per-game", "10",
-                "--n-workers", "1",
+                "--map-elites-model-name", "map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_final_2023_11_29",
+                "--tqdm",
+                "--chunksize", "1",
+                "--n-workers", "4",
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

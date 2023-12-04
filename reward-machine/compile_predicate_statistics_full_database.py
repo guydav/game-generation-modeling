@@ -389,11 +389,11 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
 
-    @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
+    # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
         result_query = None
         try:
-            if self.temp_table_index > 2 ** 31:
+            if self.temp_table_index > 2 ** 16:
                 self.temp_table_index = -1
 
             result_query, relevant_variables, is_refactored_implementation = self._inner_filter(predicate, mapping, **kwargs)
@@ -467,6 +467,11 @@ class CommonSensePredicateStatisticsFullDatabase():
     def _build_predicate_select_where_items(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]],
                                             table_name: typing.Optional[str] = None, **kwargs) -> typing.Tuple[typing.List[str], typing.Dict[str, str], typing.List[str], typing.Set[str]]:
         predicate_name = extract_predicate_function_name(predicate)  # type: ignore
+        # Temporary hack: we don't have `near` implemented yet, but (adjacent ?a ?b) implies (near ?a ?b)
+        # So for the time being, we use it as a proxy
+        if predicate_name == 'near':
+            predicate_name = 'adjacent'
+
         if table_name is not None:
             table_name = f"{table_name}."
         else:
@@ -823,7 +828,6 @@ ON predicates.trace_id = tld.trace_id
 
             return query, all_used_variables, True
 
-
         query = f"""WITH {predicate_table_name} as ({predicate_query}),
 {negated_predicate_table_name} as ({negated_query}),
 {missing_negated_predicate_table_name} as ({missing_negative_query})
@@ -843,7 +847,6 @@ EXISTS (
 
         # bit_count({predicate_table_name}.intervals) > bit_count({predicate_table_name}.intervals & {negated_predicate_table_name}.intervals)
         return query, all_used_variables, True
-
 
     def _handle_or_refactored(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]],
                                predicate_table_name: str = PREDICATE_TABLE_NAME,
@@ -978,7 +981,6 @@ WITH {predicate_table_name} as ({predicate_query}),
 """.strip()
         return query, all_used_variables, True
 
-
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_and(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         and_args = predicate["and_args"]
@@ -1112,7 +1114,6 @@ WITH {predicate_table_name} as ({predicate_query}),
         if DEBUG: print(query)
         return query, all_used_variables, False
 
-
     # @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def _handle_or(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs) -> typing.Tuple[str, typing.Set[str], bool]:
         or_args = predicate["or_args"]
@@ -1145,6 +1146,7 @@ WITH {predicate_table_name} as ({predicate_query}),
             return query, used_variables_by_child[0], False
 
         # Trying to remove this since I only handle one OR/AND at a time
+        # Can't actually remove it -- it causes some queries to fail
         # sub_queries.insert(0, self._build_potential_missing_values_query(mapping, list(all_used_variables)))
         # used_variables_by_child.insert(0, all_used_variables)
 
@@ -1159,22 +1161,23 @@ WITH {predicate_table_name} as ({predicate_query}),
         first_table_name_by_variable = {}
 
         for i, (sub_table_name, sub_used_variables) in enumerate(zip(subquery_table_names, used_variables_by_child)):
-            intervals.append(f"{sub_table_name}.intervals")
+            sub_table_intervals = f"{sub_table_name}_intervals"
+            select_items.append(f"{sub_table_name}.intervals AS {sub_table_intervals}")
+            intervals.append(sub_table_intervals)
 
-            for variable in sub_used_variables:
-                if variable not in selected_variables:
-                    select_items.append(f'{sub_table_name}."{variable}"')
-                    selected_variables.add(variable)
+            for var in sub_used_variables:
+                if var not in selected_variables:
+                    select_items.append(f'{sub_table_name}."{var}"')
+                    selected_variables.add(var)
+                    first_table_name_by_variable[var] = sub_table_name
 
             if i > 0:
-                join_parts = [f"LEFT JOIN {sub_table_name} ON ({subquery_table_names[0]}.trace_id={sub_table_name}.trace_id)"]
+                # join_parts = [f"LEFT JOIN {sub_table_name} ON ({subquery_table_names[0]}.trace_id={sub_table_name}.trace_id)"]
+                join_parts = [f"FULL JOIN {sub_table_name} ON ({subquery_table_names[0]}.trace_id={sub_table_name}.trace_id)"]
 
                 for var in sub_used_variables:
-                    if var in first_table_name_by_variable:
+                    if first_table_name_by_variable[var] != sub_table_name:
                         join_parts.append(f'({first_table_name_by_variable[var]}."{var}"={sub_table_name}."{var}")')
-
-                    else:
-                        first_table_name_by_variable[var] = sub_table_name
 
                 # I think the below is an empty statement since all_used_variables is a conjunction of all sub_used_variables
                 # shared_variables = sub_used_variables & all_used_variables
@@ -1184,12 +1187,23 @@ WITH {predicate_table_name} as ({predicate_query}),
 
         # intervals_coalesce = [f"COALESCE({intervals_select}, {intervals[0]})" if i > 0 else intervals_select for i, intervals_select in enumerate(intervals)]
         # select_items.append(f'({" | ".join(intervals_coalesce)}) AS intervals')
-        select_items.append(f'({" | ".join(intervals)}) AS intervals')
+        # select_items.append(f'({" | ".join(intervals)}) AS intervals')
 
         inner_query = f"WITH {', '.join(with_items)} SELECT {', '.join(select_items)} FROM {subquery_table_names[0]} {' '.join(join_clauses)}"
-
         table_name = self._next_temp_table_name()
-        query = f"WITH {table_name} AS ({inner_query}) SELECT * FROM {table_name} WHERE bit_count(intervals) != 0"
+
+        select_items_without_intervals = [f'{table_name}.{item.split(".")[1]}' for item in select_items if not item.endswith('intervals')]
+        intervals_coalesce = [f"COALESCE({intervals_column}, tld.intervals)" for intervals_column in intervals]
+        intervals_select = f'({" | ".join(intervals_coalesce)}) AS intervals'
+        select_items_without_intervals.append(intervals_select)
+
+        query = f"""
+WITH {table_name} AS ({inner_query})
+SELECT {', '.join(select_items_without_intervals)} FROM {table_name}
+JOIN trace_length_and_domains tld
+ON {table_name}.trace_id = tld.trace_id
+"""
+        # WHERE bit_count({intervals_select}) != 0
         if DEBUG: print(query)
         return query, all_used_variables, False
 

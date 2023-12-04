@@ -6,6 +6,7 @@ import duckdb
 import json
 import logging
 import multiprocessing
+import multiprocessing.pool
 import operator
 import os
 import shutil
@@ -18,6 +19,7 @@ import polars as pl
 
 
 import compile_predicate_statistics_full_database
+from config import OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 from game_handler import GameHandler
 from manual_run import _load_trace
 from utils import FullState
@@ -30,6 +32,8 @@ from ast_utils import simplified_context_deepcopy
 from fitness_energy_utils import load_data, save_data
 from ast_parser import SECTION_CONTEXT_KEY, VARIABLES_CONTEXT_KEY
 from evolutionary_sampler import *
+from fitness_features import PREDICATE_IN_DATA_RULE_TO_CHILD, BOOLEAN_PARSER
+from latest_model_paths import MAP_ELITES_MODELS
 
 
 logger = logging.getLogger(__name__)
@@ -67,22 +71,192 @@ parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')
 parser.add_argument('-v', '--verbose', action='store_true')
 parser.add_argument('--force-trace-ids', type=str, nargs='*', default=[], required=False)
+parser.add_argument('--dont-sort-keys-by-traces', action='store_true')
 
 FULL_DATASET_TRACES_HASH = '028b3733'
+WILDCARD = '*'
+EMPTY_SET = '∅'
+# TODO: consuder adding support to `while_hold`
+FULL_PREDICATE_STATE_MACHINE_SUPPORTED_MODALS = set(('once', 'once_measure', 'hold'))
+MERGE_IGNORE_COLUMNS = set(['domain', 'intervals'])
+
+
+class PreferenceStateMachineLogicEvaluator:
+    trace_id_to_length: typing.Dict[str, int]
+    def __init__(self, trace_id_to_length: typing.Dict[str, int]):
+        self.trace_id_to_length = trace_id_to_length
+
+    def _intervals_to_strings_apply(self, row: pd.Series):
+        length = self.trace_id_to_length[row.trace_id]
+        bin_str = bin(int.from_bytes(row.intervals, 'big'))
+        # If it's at least the right length, truncate the leading garbage bits, otherwise, truncate only the leading 0b
+        start_index = -length if len(bin_str) >= length + 2 else 2
+        # Add any missing leading zeros
+        return bin_str[start_index:].zfill(length)
+
+    def _intervals_to_integers_apply(self, row: pd.Series):
+        # Casting to a string to make sure I truncate the the leading garbage bits
+        return int(self._intervals_to_strings_apply(row), 2)
+
+    def _preprocess_results(self, result: typing.Union[pd.DataFrame, typing.Literal['WILDCARD']], to_strings: bool = True):
+        if isinstance(result, pd.DataFrame):
+            result = result.drop(columns=['domain'])
+
+            if to_strings:
+                out = result.apply(self._intervals_to_strings_apply, axis=1)
+                if out.size != result.intervals.size:
+                    print(f'Expected {result.intervals.size} results, got {out.size}')
+                result.intervals = out
+
+            # With df.apply, this ends up trying to infer the dtype as ints and overflowing, so we do this instead:
+            else:
+                result.intervals = pd.Series((self._intervals_to_integers_apply(row) for row in result.itertuples()), dtype='object')
+
+        return result
+
+    def _create_wildcard_intervals(self, trace_id: str):
+        return '1' * self.trace_id_to_length[trace_id]
+
+    def _state_machine_logic_apply(
+            self, row: pd.Series, modals: typing.List[str], trace_ids_found: typing.Set[str],
+            check_all_unique_objects_per_trace: bool = False):
+
+        if row.trace_id in trace_ids_found and not check_all_unique_objects_per_trace:
+            return True
+
+        index = 0
+        state = 0
+        interval_keys = sorted([key for key in row.keys() if key.startswith('intervals')])
+        final_state = len(interval_keys)
+        intervals = [row[key] for key in interval_keys]
+
+        try:
+            while index < self.trace_id_to_length[row.trace_id] and state < final_state:
+                next_valid = intervals[state][index] == '1'
+                if next_valid:
+                    state += 1
+
+                elif state > 0 and (state == 1 or modals[state - 1] == 'hold'):
+                    current_valid = intervals[state - 1][index] == '1'
+                    if not current_valid:
+                        state = 0
+
+                index += 1
+
+        except IndexError:
+            print(f'Trace id {row.trace_id} has length {self.trace_id_to_length[row.trace_id]}, but intervals {[len(i) for i in intervals]} for keys {interval_keys} are too short')
+            raise
+
+        result = state == final_state
+        if result and not check_all_unique_objects_per_trace:
+            trace_ids_found.add(row.trace_id)
+
+        return result
+
+    def evaluate_then(self, predicate_results: typing.List[typing.Union[pd.DataFrame, typing.Literal['WILDCARD']]],
+                 predicate_modals: typing.List[str]):
+
+        if any((isinstance(result, str) and result == EMPTY_SET) or (isinstance(result, pd.DataFrame) and result.empty)
+               for result in predicate_results):
+            return []
+
+        preprocessed_results = [self._preprocess_results(result) for result in predicate_results]
+        merged_df = None
+        wildcard_indices = []
+        merged_indices = []
+
+        initial_intervals_index = None
+        for i, result in enumerate(preprocessed_results):
+            if isinstance(result, pd.DataFrame):
+                if merged_df is None:
+                    merged_df = result
+                    initial_intervals_index = i
+                else:
+                    merge_columns = ['trace_id']
+                    merge_columns.extend(set(merged_df.columns) & set(result.columns) - MERGE_IGNORE_COLUMNS)
+                    merged_df = merged_df.merge(result, on=merge_columns, how='inner', suffixes=('', f'_{i + 1}'))
+                    merged_indices.append(i)
+            else:
+                wildcard_indices.append(i)
+
+        if merged_df is None:
+            raise ValueError('No non-wildcard results found in then evaluation')
+
+        if initial_intervals_index is None:
+            raise ValueError('No initial intervals index found in then evaluation')
+
+        merged_df.rename(columns={'intervals': f'intervals_{initial_intervals_index + 1}'}, inplace=True)
+
+        for i in wildcard_indices:
+            merged_df[f'intervals_{i + 1}'] = merged_df.trace_id.apply(self._create_wildcard_intervals)
+
+        state_machine_results = merged_df.apply(self._state_machine_logic_apply, axis=1, result_type='reduce',
+                                                modals=predicate_modals, trace_ids_found=set())
+
+        if isinstance(state_machine_results, pd.DataFrame):
+            print(f'Expected state machine results to be a series, got a dataframe with columns: {state_machine_results.columns}')
+
+        return merged_df.trace_id[state_machine_results].unique().tolist()
+
+    def evaluate_setup_partial_results(self, predicate_results: typing.List[pd.DataFrame]):
+        preprocessed_results = typing.cast(typing.List[pd.DataFrame], [self._preprocess_results(result, to_strings=False) for result in predicate_results])
+        merged_df = None
+
+        for i, result in enumerate(preprocessed_results):
+            if merged_df is None:
+                merged_df = result.rename(columns={'intervals': f'intervals_{i + 1}'})
+            else:
+                merge_columns = list(set(merged_df.columns) & set(result.columns) - MERGE_IGNORE_COLUMNS)
+                merged_df = merged_df.merge(result, on=merge_columns, how='inner', suffixes=('', f'_{i + 1}'))
+
+        if merged_df is None:
+            raise ValueError('No results found in at-end evaluation')
+
+        intervals_columns = [col for col in merged_df.columns if col.startswith('intervals')]
+        filter_col = merged_df[intervals_columns[0]]
+        for col in intervals_columns[1:]:
+            filter_col = filter_col & merged_df[col]
+
+        return merged_df.trace_id[filter_col != 0].unique().tolist()
+
+def _query_trace_id_to_length(connection):
+    results = connection.execute('SELECT trace_id, length FROM trace_length_and_domains;').fetchall()
+    return {trace_id: length for trace_id, length in results}
+
+
+def _query_domain_to_trace_ids(connection):
+    results = connection.execute('SELECT domain, trace_id FROM trace_length_and_domains;').fetchall()
+    domain_to_trace_ids = defaultdict(list)
+    for domain, trace_id in results:
+        domain_to_trace_ids[domain].append(trace_id)
+
+    return domain_to_trace_ids
+
+
+def _make_defaultdict_int():
+    return defaultdict(int)
 
 
 class TraceFinderASTParser(ast_parser.ASTParser):
+    boolean_parser: ast_parser.ASTBooleanParser
+    domain_to_trace_ids: typing.Dict[str, typing.List[str]]
     expected_keys: typing.Set[str]
-    not_implemented_predicate_counts: typing.DefaultDict[str, int]
+    not_implemented_predicate_counts_by_preference_or_section: typing.DefaultDict[str, typing.DefaultDict[str, int]]
     predicate_data_estimator: compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase
+    preferences_or_sections_with_implemented_predicates: typing.Set[str]
+    setup_partial_results: typing.List[typing.Union[typing.Set[str], str, None]]
+    preference_logic_evaluator: PreferenceStateMachineLogicEvaluator
     trace_names_hash: str
     traces_by_preference_or_section: typing.Dict[str, typing.Set[str]]
-    preferences_or_sections_with_implemented_predicates: typing.Set[str]
+
 
     def __init__(self, trace_names_hash: str = FULL_DATASET_TRACES_HASH):
-        self.not_implemented_predicate_counts = defaultdict(int)
+        self.not_implemented_predicate_counts_by_preference_or_section = defaultdict(_make_defaultdict_int)
         self.trace_names_hash = trace_names_hash
         self._init_predicate_data_estimator()
+        self.boolean_parser = BOOLEAN_PARSER
+        self.preference_logic_evaluator = PreferenceStateMachineLogicEvaluator(_query_trace_id_to_length(self.predicate_data_estimator.con))
+        self.domain_to_trace_ids = _query_domain_to_trace_ids(self.predicate_data_estimator.con)
 
     def _init_predicate_data_estimator(self):
         self.predicate_data_estimator = compile_predicate_statistics_full_database.CommonSensePredicateStatisticsFullDatabase.get_instance(
@@ -97,16 +271,6 @@ class TraceFinderASTParser(ast_parser.ASTParser):
 
     def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
         self.__dict__.update(state)
-        # if not hasattr(self, 'trace_names_hash'):
-        #     self.trace_names_hash = FULL_DATASET_TRACES_HASH
-        # if not hasattr(self, 'use_full_databse'):
-        #     self.use_full_databse = False
-        # if not hasattr(self, 'split_by_section'):
-        #     self.split_by_section = True
-        # if not hasattr(self, 'log_queries'):
-        #     self.log_queries = True
-        # if not hasattr(self, 'boolean_parser'):
-        #     self.boolean_parser = BOOLEAN_PARSER
         self._init_predicate_data_estimator()
 
     def __call__(self, ast, **kwargs):
@@ -117,14 +281,63 @@ class TraceFinderASTParser(ast_parser.ASTParser):
             kwargs['global_context'] = {}
             self.expected_keys = set()
             self.traces_by_preference_or_section = {}
+            self.databse_confirmed_traces_by_preference_or_section = {}
             self.preferences_or_sections_with_implemented_predicates = set()
-            self.predicate_strings_by_preference_or_section = defaultdict(set)
-            self.not_implemented_predicate_counts = defaultdict(int)
+            self.not_implemented_predicate_counts_by_preference_or_section = defaultdict(_make_defaultdict_int)
+            self.setup_partial_results = []
 
         retval = super().__call__(ast, **kwargs)
 
         if initial_call:
-            return self.traces_by_preference_or_section, self.expected_keys
+            any_setup_conditions_missed = None
+            if len(self.setup_partial_results) > 0:
+                # Setup
+                if any(isinstance(result, str) and result == EMPTY_SET for result in self.setup_partial_results):
+                    print(f'Found unsatisfiable setup conditions in {ast[1].game_id}')  # type: ignore
+                    return EMPTY_SET
+
+                any_setup_conditions_missed = any(result is None for result in self.setup_partial_results)
+                filtered_setup_partial_results = [result for result in self.setup_partial_results if isinstance(result, pd.DataFrame)]
+                if len(filtered_setup_partial_results) > 0:
+                    setup_partial_results = self.preference_logic_evaluator.evaluate_setup_partial_results(filtered_setup_partial_results)  # type: ignore
+
+                    if len(setup_partial_results) > 0:
+                        self.databse_confirmed_traces_by_preference_or_section[ast_parser.SETUP] = setup_partial_results
+
+            # If we missed any setup conditions, check if we can filter by remaining ones we did evaluate, since it's a conjunction
+            if any_setup_conditions_missed:
+                setup_traces = self.traces_by_preference_or_section.get(ast_parser.SETUP, None)
+                if setup_traces is None:
+                    if len(self.not_implemented_predicate_counts_by_preference_or_section[ast_parser.SETUP]) > 0:
+                        print(f'Found unimplemnted setup conditions in {ast[1].game_id}')
+                        setup_traces = set(self.predicate_data_estimator.all_trace_ids)
+
+                    else:
+                        raise ValueError('Setup conditions missed, but no traces found for setup')
+
+                if ast_parser.SETUP in self.databse_confirmed_traces_by_preference_or_section:
+                    setup_traces.intersection_update(self.databse_confirmed_traces_by_preference_or_section[ast_parser.SETUP])
+
+                if len(setup_traces) == 0:
+                    return EMPTY_SET
+
+                del self.databse_confirmed_traces_by_preference_or_section[ast_parser.SETUP]
+
+            # Handle wildcards returned by the predicate data estimator
+            for key, trace_ids in self.traces_by_preference_or_section.items():
+                if WILDCARD in trace_ids:
+                    trace_ids.remove(WILDCARD)
+                    # If the only thing we had is a wildcard, we accept all traces
+                    if len(trace_ids) == 0:
+                        trace_ids.update(self.predicate_data_estimator.all_trace_ids)
+
+                    # Otherwise, we're constrained by the other predicates, so we do nothing with the wildcard
+
+                if EMPTY_SET in trace_ids:
+                    logger.info(f'Found unsatisfiable preference {key} in {ast[1].game_id}')  # type: ignore
+                    return EMPTY_SET
+
+            return self.traces_by_preference_or_section, self.expected_keys, self.databse_confirmed_traces_by_preference_or_section
         else:
             return retval
 
@@ -134,37 +347,236 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         if rule == 'preference':
             kwargs['local_context']['current_preference_name'] = ast.pref_name
 
+    def _query_predicate_data(
+            self, ast: tatsu.ast.AST,
+            return_trace_ids: bool = True, return_intervals: bool = False,
+            check_all_predicate_args_game_objects: bool = True,
+            **kwargs):
+
+        if return_trace_ids == return_intervals:
+            raise ValueError(f'Must return either trace ids or intervals, not neither or both, received {return_trace_ids} for both')
+
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+        if rule == 'super_predicate':
+            ast = typing.cast(tatsu.ast.AST, ast.pred)
+            rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+
+        context_variables = kwargs['local_context']['mapping'][VARIABLES_CONTEXT_KEY]
+        full_mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
+        relevant_variables = ast_parser.extract_variables(ast)
+        relevant_mapping = {k: v for k, v in full_mapping.items() if k in relevant_variables}
+
+        # Check for a single predicate with a mapping of only the generic `game_object`
+        if check_all_predicate_args_game_objects and rule == 'predicate' and len(relevant_mapping) > 0 and all(room_and_object_types.GAME_OBJECT in var_types for var_types in relevant_mapping.values()):
+            return WILDCARD
+
+        if rule in PREDICATE_CONJUNCTION_DISJUNCTION_RULES:
+            # Check that this is the type of expression we choose to support currently
+            children = ast[RULE_TO_CHILD_KEY[rule]]
+            if isinstance(children, list):
+                children = typing.cast(typing.List[tatsu.ast.AST], children)
+
+                for child in children:
+                    child_pred_rule = child.pred.parseinfo.rule  # type: ignore
+                    if child_pred_rule == 'predicate' or \
+                        (child_pred_rule == 'super_predicate_not' and child.pred.not_args.pred.parseinfo.rule == 'predicate'):  # type: ignore
+                        continue
+
+                    # Found a child that is not a predicate or a negation of a predicate, so we can't handle this
+                    else:
+                        return
+
+            context = {VARIABLES_CONTEXT_KEY: context_variables, SECTION_CONTEXT_KEY: kwargs[SECTION_CONTEXT_KEY]}
+            logical_expr = self.boolean_parser(ast, **simplified_context_deepcopy(context))
+            logical_evaluation = self.boolean_parser.evaluate_unnecessary_detailed_return_value(logical_expr)  # type: ignore
+
+            # This expression is tautologically true, so we don't need to check it for specific objects/traces
+            if logical_evaluation == 1:
+                return WILDCARD
+
+            # This expression is tautologically false, so we don't need to check it for specific objects/traces
+            elif logical_evaluation == 2:
+                return EMPTY_SET
+
+            # Skipping this block for now because in this case we probably do want specific intervals
+            # else:
+            #     # If we haven't hit on either of the above cases, and all arguments can be game objects, assume it can be true
+            #     if len(relevant_mapping) > 0 and all(room_and_object_types.GAME_OBJECT in var_types for var_types in relevant_mapping.values()):
+            #         predicate_found = 1
+
+        try:
+            return self.predicate_data_estimator.filter(ast, relevant_mapping, return_trace_ids=return_trace_ids, return_full_result=return_intervals)
+
+        except compile_predicate_statistics_full_database.PredicateNotImplementedException:
+            # TODO: check if there are other errors to catch, or specific cases I want to handle differently
+            pass
+
+        # If we reached here, manually check a few predicates not implemented in the predicate cache for performance reasons
+        if rule == 'predicate':
+            pred = typing.cast(tatsu.ast.AST, ast.pred)
+            inner_predicate_rule = pred.parseinfo.rule  # type: ignore
+            # Used to handle `near` as well, but that's temporarily handled by the cache
+            if inner_predicate_rule in ('predicate_equal_x_position', 'predicate_equal_z_position'):
+                # If at most one argument is a furniture or room feature, we can assume it's true
+                arguments = [pred.arg_1, pred.arg_2]
+                argument_categories = [ast_parser.predicate_function_term_to_type_categories(arg, context_variables, []) for arg in arguments]  # type: ignore
+                if any(cat is None for cat in argument_categories):
+                    raise ValueError(f'Argument categories not found for predicate {ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY])}  with mapping {mapping}')  # type: ignore
+
+                argument_immobile = [any(cat in (room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES)
+                                         for cat in categories)  # type: ignore
+                                     for categories in argument_categories]
+
+                if sum(argument_immobile) <= 1:
+                    return WILDCARD
+
+                else:
+                    logger.info(f'Found unsatisfiable predicate {ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY])} with mapping {mapping}')  # type: ignore
+                    return EMPTY_SET
+
+            if inner_predicate_rule in ('same_object', 'same_type'):
+                arguments = [pred.arg_1, pred.arg_2]
+                argument_types = typing.cast(typing.List[typing.List[str]], [ast_parser.predicate_function_term_to_types(arg, context_variables) for arg in arguments])  # type: ignore
+
+                if inner_predicate_rule == 'same_object':
+                    valid_domains = []
+                    for domain, domain_types_to_objects in OBJECTS_BY_ROOM_AND_TYPE.items():
+                        argument_objects = [set(sum((domain_types_to_objects.get(arg_type, []) + SPECIFIC_NAMED_OBJECTS_BY_ROOM[domain].get(arg_type, [])
+                                                 for arg_type in arg_types), []))
+                                            for arg_types in argument_types]
+
+                        if argument_objects[0] & argument_objects[1]:
+                            valid_domains.append(domain)
+
+                    if len(valid_domains) == 0:
+                        return EMPTY_SET
+
+                    elif len(valid_domains) == 3:
+                        return WILDCARD
+
+                    else:
+                        trace_ids = []
+                        for domain in valid_domains:
+                            trace_ids.extend(self.domain_to_trace_ids[domain])
+
+                        return trace_ids
+
+                elif inner_predicate_rule == 'same_type':
+                    first_argument_types = set()
+                    for arg_type in argument_types[0]:
+                        first_argument_types.add(arg_type)
+                        while arg_type in room_and_object_types.SUBTYPES_TO_TYPES:
+                            arg_type = room_and_object_types.SUBTYPES_TO_TYPES[arg_type]
+                            first_argument_types.add(arg_type)
+
+                    second_argument_types = set(argument_types[1])
+
+                    return WILDCARD if any(first_type in second_argument_types for first_type in first_argument_types) else EMPTY_SET
+
+
+
+
+        return None
+
+    def _handle_then(self, ast: tatsu.ast.AST, **kwargs):
+        modals = [modal.seq_func for modal in ast.then_funcs]  # type: ignore
+        modal_rules = [modal.parseinfo.rule for modal in modals]
+        if any(modal_rule not in FULL_PREDICATE_STATE_MACHINE_SUPPORTED_MODALS for modal_rule in modal_rules):
+            return
+
+        modal_predicates = [modal[PREDICATE_IN_DATA_RULE_TO_CHILD[modal.parseinfo.rule]] for modal in modals]  # type: ignore
+        modal_results = []
+        for pred in modal_predicates:
+            pred_results = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
+            if pred_results is None:
+                return
+
+            if isinstance(pred_results, str) and pred_results == EMPTY_SET:
+                return EMPTY_SET
+
+            modal_results.append(pred_results)
+
+        if all(isinstance(modal_result, str) and modal_result == WILDCARD for modal_result in modal_results):
+            return WILDCARD
+
+        return set(self.preference_logic_evaluator.evaluate_then(modal_results, modal_rules))
+
+    def _handle_predicate_or_logical(self, ast: tatsu.ast.AST, section_or_preference_key: str, **kwargs):
+        trace_ids = self._query_predicate_data(ast, return_trace_ids=True, **kwargs)
+
+        if trace_ids is not None:
+            if isinstance(trace_ids, str):
+                trace_ids = {trace_ids}
+
+            if section_or_preference_key not in self.traces_by_preference_or_section:
+                self.traces_by_preference_or_section[section_or_preference_key] = set(trace_ids)
+            else:
+                self.traces_by_preference_or_section[section_or_preference_key].intersection_update(trace_ids)
+
+            self.preferences_or_sections_with_implemented_predicates.add(section_or_preference_key)
+
+            return True
+
+        elif ast.parseinfo.rule == 'predicate':  # type: ignore
+            missing_predicate = ast.pred.parseinfo.rule.replace('predicate_', '')   # type: ignore
+            self.not_implemented_predicate_counts_by_preference_or_section[section_or_preference_key][missing_predicate] += 1
+
+        return False
+
     def _handle_ast(self, ast: tatsu.ast.AST, **kwargs):
         self._current_ast_to_contexts(ast, **kwargs)
         kwargs['local_context']['mapping'] = ast_parser.update_context_variables(ast, kwargs['local_context']['mapping'])
+        section_or_preference_key = kwargs['local_context']['current_preference_name'] if 'current_preference_name' in kwargs['local_context'] else (kwargs[SECTION_CONTEXT_KEY] if SECTION_CONTEXT_KEY in kwargs and kwargs[SECTION_CONTEXT_KEY] == ast_parser.SETUP else None)
 
-        if SECTION_CONTEXT_KEY in kwargs and kwargs[SECTION_CONTEXT_KEY] == ast_parser.SETUP:
-            self.expected_keys.add(kwargs[SECTION_CONTEXT_KEY])
-        elif 'current_preference_name' in kwargs['local_context']:
-            self.expected_keys.add(kwargs['local_context']['current_preference_name'])
+        if section_or_preference_key is not None:
+            self.expected_keys.add(section_or_preference_key)
 
-        if ast.parseinfo.rule == 'predicate':  # type: ignore
-            context_variables = kwargs['local_context']['mapping'][VARIABLES_CONTEXT_KEY]
-            secion_or_preference_key = kwargs['local_context']['current_preference_name'] if 'current_preference_name' in kwargs['local_context'] else kwargs[SECTION_CONTEXT_KEY]
-            predicate_string = ast_printer.ast_section_to_string(ast, kwargs[SECTION_CONTEXT_KEY])
-            self.predicate_strings_by_preference_or_section[secion_or_preference_key].add(predicate_string)
+        node_parsed_ignore_children = False
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
 
-            try:
-                mapping = {k: v.var_types for k, v in context_variables.items()} if context_variables is not None else {}  # type: ignore
-                trace_ids = self.predicate_data_estimator.filter(ast, mapping, return_trace_ids=True)
+        if rule in ('setup_game_conserved', 'setup_game_optional'):
+            if None not in self.setup_partial_results and EMPTY_SET not in self.setup_partial_results:
+                pred = typing.cast(tatsu.ast.AST, ast[PREDICATE_IN_DATA_RULE_TO_CHILD[rule]])
+                result = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
+                if result is not None:
+                    self.setup_partial_results.append(result)
+                    node_parsed_ignore_children = True
 
-                if secion_or_preference_key not in self.traces_by_preference_or_section:
-                    self.traces_by_preference_or_section[secion_or_preference_key] = set(trace_ids)
-                else:
-                    self.traces_by_preference_or_section[secion_or_preference_key].intersection_update(trace_ids)
+        if rule == 'then':
+            if section_or_preference_key is None:
+                raise ValueError('Then node found without a section or preference key')
 
-                self.preferences_or_sections_with_implemented_predicates.add(secion_or_preference_key)
+            result = self._handle_then(ast, **kwargs)
+            if result is not None:
+                self.databse_confirmed_traces_by_preference_or_section[section_or_preference_key] = result
+                node_parsed_ignore_children = True
 
-            except compile_predicate_statistics_full_database.PredicateNotImplementedException:
-                self.not_implemented_predicate_counts[ast.pred.parseinfo.rule.replace('predicate_', '')] += 1
-                # pass
+        if rule == 'at_end':
+            if section_or_preference_key is None:
+                raise ValueError('At-end node found without a section or preference key')
 
-        else:
+            result = self._query_predicate_data(ast.at_end_pred.pred, return_trace_ids=True, **kwargs)  # type: ignore
+            if result is not None:
+                self.databse_confirmed_traces_by_preference_or_section[section_or_preference_key] = result
+                node_parsed_ignore_children = True
+
+        if rule in PREDICATE_CONJUNCTION_DISJUNCTION_RULES:
+            if section_or_preference_key is None:
+                raise ValueError('Conjunction/disjunction node found without a section or preference key')
+
+            parsed = self._handle_predicate_or_logical(ast, section_or_preference_key, **kwargs)
+            if parsed:
+                node_parsed_ignore_children = True
+
+        if rule == 'predicate':  # type: ignore
+            if section_or_preference_key is None:
+                raise ValueError('Predicate node found without a section or preference key')
+
+            # No need to check the return value here, since we don't need to parse children either way
+            self._handle_predicate_or_logical(ast, section_or_preference_key, **kwargs)
+            node_parsed_ignore_children = True
+
+        if not node_parsed_ignore_children:
             for key in ast:
                 if key != 'parseinfo':
                     child_kwargs = simplified_context_deepcopy(kwargs)
@@ -183,22 +595,24 @@ class TraceGameEvaluator:
     n_workers: int
     population: typing.Dict[typing.Union[KeyTypeAnnotation, int], ASTType]
     stop_after_count: int
-    traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.List[str], typing.Set[str]]]
+    traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]]
     trace_finder: TraceFinderASTParser
+    trace_names_hash: str
     use_trace_intersection: bool
     verbose: bool
 
-    def __init__(self, trace_finder: TraceFinderASTParser, population: typing.Union[typing.Dict[KeyTypeAnnotation, ASTType], typing.List[ASTType]],
+    def __init__(self, trace_names_hash: str, population: typing.Union[typing.Dict[KeyTypeAnnotation, ASTType], typing.List[ASTType]],
                  use_trace_intersection: bool = False, stop_after_count: int = DEFAULT_STOP_AFTER_COUNT,
                  max_traces_per_game: typing.Optional[int] = None, force_trace_ids: typing.Optional[typing.List[str]] = None,
                  base_trace_path: str = compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH,
                  max_cache_size: int = MAX_TRACE_CACHE_SIZE, tqdm: bool = False,
                  n_workers: int = 1, chunksize: int = 1,
                  maxtasksperchild: typing.Optional[int] = None, verbose: bool = False):
-        self.trace_finder = trace_finder
+
         if isinstance(population, list):
             population = {idx: sample for idx, sample in enumerate(population)}
 
+        self.trace_names_hash = trace_names_hash
         self.population = population
         self.stop_after_count = stop_after_count
         self.use_trace_intersection = use_trace_intersection
@@ -214,6 +628,17 @@ class TraceGameEvaluator:
         self.traces_by_population_key = {}
 
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
+        self.trace_finder = TraceFinderASTParser(self.trace_names_hash)
+
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+        if 'trace_finder' in state:
+            del state['trace_finder']
+        return state
+
+    def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
+        self.__dict__.update(state)
+        self.trace_finder = TraceFinderASTParser(self.trace_names_hash)
 
     @cachetools.cachedmethod(operator.attrgetter('cache'))
     def _load_trace(self, trace_id: str):
@@ -234,43 +659,64 @@ class TraceGameEvaluator:
         for idx, event in enumerate(trace):
             yield (event, idx == len(trace) - 1)
 
-    def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.List[str], typing.Set[str]]:
+    def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]:
         if key not in self.traces_by_population_key:
             sample = self.population[key]
+            retval = typing.cast(typing.Tuple[typing.Dict[str, typing.Set[str]], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]], self.trace_finder(sample))
+            if isinstance(retval, str):
+                if retval == EMPTY_SET:
+                    self.traces_by_population_key[key] = [], set(), {}
 
-            traces_by_key, expected_keys = self.trace_finder(sample)  # type: ignore
-
-            all_traces = set()
-            traces = []
-            initial_traces = True
-
-            if self.use_trace_intersection:
-                for trace_set in traces_by_key.values():
-                    if initial_traces:
-                        all_traces.update(trace_set)
-                        initial_traces = False
-                    else:
-                        all_traces.intersection_update(trace_set)
-
-                traces = list(all_traces)
+                else:
+                    raise ValueError(f'Unexpected return value from trace finder: {retval}')
 
             else:
-                trace_sets_by_length = sorted(traces_by_key.values(), key=len)
-                for trace_set in trace_sets_by_length:
-                    new_traces = trace_set - all_traces
-                    traces.extend(new_traces)
-                    all_traces.update(new_traces)
+                traces_by_key, expected_keys, database_confirmed_traces_by_key = retval
 
-            self.traces_by_population_key[key] = traces, expected_keys
+                all_traces = set()
+                traces = []
+                initial_traces = True
 
-        return self.traces_by_population_key[key]
+                if self.use_trace_intersection:
+                    for trace_set in traces_by_key.values():
+                        if initial_traces:
+                            all_traces.update(trace_set)
+                            initial_traces = False
+                        else:
+                            all_traces.intersection_update(trace_set)
 
-    def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
-        all_traces, expected_keys = self._find_key_traces(key)
+                    for trace_set in database_confirmed_traces_by_key.values():
+                        if initial_traces:
+                            all_traces.update(trace_set)
+                            initial_traces = False
+                        else:
+                            all_traces.intersection_update(trace_set)
+
+                    traces = list(all_traces)
+
+                else:
+                    trace_sets_by_length = sorted(traces_by_key.values(), key=len)
+                    for trace_set in trace_sets_by_length:
+                        new_traces = trace_set - all_traces
+                        traces.extend(new_traces)
+                        all_traces.update(new_traces)
+
+                self.traces_by_population_key[key] = traces, expected_keys, database_confirmed_traces_by_key
+
+        return (key, *self.traces_by_population_key[key])
+
+    def  handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False, return_key: bool = True):
+        _, all_traces, expected_keys, ignore_keys_to_traces = self._find_key_traces(key)
         if self.force_trace_ids:
             all_traces = self.force_trace_ids
 
-        if print_results: logger.info(f'For key {key} found {len(all_traces)} traces')
+        if print_results:
+            remaining_keys = set(expected_keys) - set(ignore_keys_to_traces.keys())
+            n_remaining_keys = len(remaining_keys)
+            logger.info(f'For key {key} found {len(all_traces)} traces | {len(expected_keys)} expected keys | {len(ignore_keys_to_traces)} ignore keys | {n_remaining_keys} remaining keys')
+
+        return key, -1, {}
+
         if len(all_traces) == 0:
             if print_results: logger.info('No traces found')
             return key, -1, {}
@@ -278,10 +724,21 @@ class TraceGameEvaluator:
         if self.max_traces_per_game is not None:
             all_traces = list(all_traces)[:self.max_traces_per_game]
 
-        counts_by_trace_and_key = {key: {} for key in expected_keys}
+        all_keys = set(expected_keys)
+        all_keys.update(ignore_keys_to_traces.keys())
+
+        counts_by_trace_and_key = {key: {} for key in all_keys}
         scores_by_trace = {}
-        stop_count_by_key = {key: 0 for key in expected_keys}
-        total_count_by_key = {key: 0 for key in expected_keys}
+        stop_count_by_key = {key: 0 for key in all_keys}
+        total_count_by_key = {key: 0 for key in all_keys}
+
+        for pref_key, trace_list in ignore_keys_to_traces.items():  #
+            for trace in trace_list:
+                counts_by_trace_and_key[pref_key][trace] = 1
+
+            n_traces = len(trace_list)
+            stop_count_by_key[pref_key] = self.stop_after_count if n_traces > 0 else 0
+            total_count_by_key[pref_key] = n_traces
 
         trace_iter = all_traces
         if self.tqdm and self.n_workers <= 1:
@@ -300,8 +757,8 @@ class TraceGameEvaluator:
                         raise ValueError(f'No domain found for trace {trace}')
                 else:
                     domain = self.trace_finder.predicate_data_estimator.trace_lengths_and_domains_df.filter(pl.col('trace_id') == trace).select('domain').item()
-                # TODO: figure out what needs to be reset between games to instantiate a game handler only once
-                game_handler = GameHandler(sample, force_domain=domain)  # type: ignore
+                # TODO: pass any ignore keys (setup/preferences if exist)
+                game_handler = GameHandler(sample, force_domain=domain, ignore_preference_names=ignore_keys_to_traces, ignore_setup=ast_parser.SETUP in ignore_keys_to_traces)  # type: ignore
 
                 for state, is_final in self._iterate_trace(trace):
                     state = FullState.from_state_dict(state)
@@ -365,31 +822,24 @@ class TraceGameEvaluator:
             result_summary_by_key = {}
             full_result_by_key = {}
 
-            if sort_keys_by_traces:
-                key_iter = sorted(self.population.keys(), key=lambda key: len(self._find_key_traces(key)[0]), reverse=True)
-                print([len(self._find_key_traces(key)[0]) for key in key_iter])
-
-            else:
-                key_iter = self.population.keys()
-
-            if max_keys is not None:
-                key_iter = list(key_iter)[:max_keys]
-
-            if self.tqdm and self.n_workers <= 1:
-                key_iter = tqdm(key_iter)
-
             if self.n_workers > 1:
-                with multiprocessing.Pool(self.n_workers, maxtasksperchild=self.maxtasksperchild) as p:
+                with multiprocessing.Pool(self.n_workers, maxtasksperchild=self.maxtasksperchild) as pool:
                     logger.info('Pool started')
-                    pbar = tqdm(desc='MAP-Elites Population', total=len(self.population))
+                    key_iter, population_size = self._build_key_iter(max_keys, sort_keys_by_traces, pool)
+                    print()
+                    print(len(self.traces_by_population_key))
+                    print()
 
-                    for key, min_count, counts_by_trace_and_key in p.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize):
+                    pbar = tqdm(desc='MAP-Elites Population', total=population_size)
+
+                    for key, min_count, counts_by_trace_and_key in pool.imap_unordered(self.handle_single_game, key_iter, chunksize=self.chunksize):
                         result_summary_by_key[key] = min_count
                         full_result_by_key[key] = counts_by_trace_and_key
                         pbar.update(1)
                         pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
             else:
+                key_iter, _ = self._build_key_iter(max_keys, sort_keys_by_traces)
                 for key in key_iter:
                     key, min_count, counts_by_trace_and_key = self.handle_single_game(key)
                     result_summary_by_key[key] = min_count
@@ -405,6 +855,81 @@ class TraceGameEvaluator:
                 print(f'    - {count}: {result_counts[count]}')
 
             return result_summary_by_key, full_result_by_key
+
+    def _build_key_iter(
+            self, max_keys: typing.Optional[int] = None, sort_keys_by_traces: bool = True,
+            pool: typing.Optional[multiprocessing.pool.Pool] = None # type: ignore
+            ):
+
+        population_size = len(self.population)
+
+        if sort_keys_by_traces:
+            initial_key_iter = tqdm(self.population.keys(), desc='Initial key trace finding')
+
+            if pool is not None:
+                n_all_traces_list = []
+                n_expected_keys_list = []
+                n_ignore_keys_list = []
+                n_missing_keys_list = []
+                key_to_missing_pref_keys = {}
+                for retval in pool.imap_unordered(self._find_key_traces, initial_key_iter, chunksize=20):
+                    key, all_traces, expected_keys, ignore_keys_to_traces = retval
+                    self.traces_by_population_key[key] = (all_traces, expected_keys, ignore_keys_to_traces)
+                    # TODO: Temporary, remove
+
+                    remaining_keys = set(expected_keys) - set(ignore_keys_to_traces.keys())
+                    n_remaining_keys = len(remaining_keys)
+                    n_ignore_keys = len(ignore_keys_to_traces)
+
+                    min_ignore_key_traces = 100
+                    ignore_keys_with_zero = []
+
+                    for pref_key, traces in ignore_keys_to_traces.items():
+                        n_traces = 0 if EMPTY_SET in traces else len(traces)
+                        min_ignore_key_traces = min(min_ignore_key_traces, n_traces)
+                        if n_traces == 0:
+                            ignore_keys_with_zero.append(pref_key)
+
+                    if min_ignore_key_traces == 0 or n_remaining_keys > 0:
+                        print(f'For key {key} | found {len(all_traces)} traces | {len(expected_keys)} expected keys | {n_ignore_keys} ignore keys > {min_ignore_key_traces} | ignore keys with zero: {", ".join(ignore_keys_with_zero)} | {n_remaining_keys} remaining keys: {", ".join(remaining_keys)}')
+
+                    if n_remaining_keys > 0 or len(ignore_keys_with_zero) > 0:
+                        key_to_missing_pref_keys[key] = dict(remaining=list(remaining_keys), ignore_with_zero=ignore_keys_with_zero)
+
+                    n_all_traces_list.append(len(all_traces))
+                    n_expected_keys_list.append(len(expected_keys))
+                    n_ignore_keys_list.append(len(ignore_keys_to_traces))
+                    n_missing_keys_list.append(n_remaining_keys)
+
+                print()
+                print(f'All traces:     mean {np.mean(n_all_traces_list):.3f} +/- {np.std(n_all_traces_list):.3f}')
+                print(f'Expected keys:  mean {np.mean(n_expected_keys_list):.3f} +/- {np.std(n_expected_keys_list):.3f}')
+                print(f'Ignore keys:    mean {np.mean(n_ignore_keys_list):.3f} +/- {np.std(n_ignore_keys_list):.3f}')
+                print(f'Remaining keys: mean {np.mean(n_missing_keys_list):.3f} +/- {np.std(n_missing_keys_list):.3f}')
+                print()
+                print(key_to_missing_pref_keys)
+                print()
+
+            else:
+                for key in initial_key_iter:
+                    self._find_key_traces(key)
+
+            keys_with_traces = [key for key in self.population.keys() if len(self._find_key_traces(key)[1]) > 0]
+            population_size = len(keys_with_traces)
+            key_iter = sorted(keys_with_traces, key=lambda key: len(self._find_key_traces(key)[1]), reverse=True)
+            print([len(self._find_key_traces(key)[1]) for key in key_iter])
+
+        else:
+            key_iter = self.population.keys()
+
+        if max_keys is not None:
+            key_iter = list(key_iter)[:max_keys]
+            population_size = max_keys
+
+        if self.tqdm and self.n_workers <= 1:
+            key_iter = tqdm(key_iter)
+
+        return key_iter, population_size
 
 
 def main(args: argparse.Namespace):
@@ -435,13 +960,18 @@ def main(args: argparse.Namespace):
                 args.map_elites_model_date_id = args.map_elites_model_name[model_name_year_index:]
                 args.map_elites_model_name = args.map_elites_model_name[:model_name_year_index - 1]
 
-            logger.info(f'Running from MAP-Elites model | {args.map_elites_model_date_id} | {args.map_elites_model_name}')
-            model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
+            if args.map_elites_model_date_id in MAP_ELITES_MODELS:
+                spec = MAP_ELITES_MODELS[args.map_elites_model_date_id]
+                logger.info(f'Running from MAP-Elites model spec | {args.map_elites_model_date_id} | {spec.save_path}')
+                model = spec.load(relative_path=args.relative_path)
+
+            else:
+                logger.info(f'Running from MAP-Elites model | {args.map_elites_model_date_id} | {args.map_elites_model_name}')
+                model = typing.cast(MAPElitesSampler, load_data(args.map_elites_model_date_id, args.map_elites_model_folder, args.map_elites_model_name, relative_path=args.relative_path))
+
             population = model.population
 
-        trace_finder = TraceFinderASTParser(args.trace_names_hash)
-
-        trace_evaluator = TraceGameEvaluator(trace_finder, population, # type: ignore
+        trace_evaluator = TraceGameEvaluator(args.trace_names_hash, population, # type: ignore
                                              use_trace_intersection=args.use_trace_intersection,
                                             stop_after_count=args.stop_after_count, max_traces_per_game=args.max_traces_per_game,
                                             force_trace_ids=args.force_trace_ids,
@@ -453,7 +983,7 @@ def main(args: argparse.Namespace):
         if args.single_key is not None:
             key = tuple(map(int, args.single_key.replace('(', '').replace(')', '').split(',')))
 
-        results = trace_evaluator(key, args.max_keys)
+        results = trace_evaluator(key, args.max_keys, not args.dont_sort_keys_by_traces)
 
         if results is not None:
             result_summary_by_key, full_result_by_key = results

@@ -118,9 +118,17 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
         filename = filename + f'_{i}'
         output_path = os.path.join(folder, filename + period + extensions)
 
+    save_data_to_path(data, output_path, log_message=log_message)
+
+
+def save_data_to_path(data: typing.Any, path: str, log_message: bool = True, overwrite: bool = False):
     if log_message:
-        logger.info(f'Saving data to {output_path} ...')
-    with gzip.open(output_path, 'wb') as f:
+        logger.info(f'Saving data to {path} ...')
+
+    if not overwrite and os.path.exists(path):
+        raise FileExistsError(f'File {path} already exists.')
+
+    with gzip.open(path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 

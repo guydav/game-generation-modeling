@@ -83,12 +83,13 @@ EMPTY_SET = '∅'
 # TODO: consuder adding support to `while_hold`
 FULL_PREDICATE_STATE_MACHINE_SUPPORTED_MODALS = set(('once', 'once_measure', 'hold'))
 MERGE_IGNORE_COLUMNS = set(['domain', 'intervals'])
-
+LOGIC_EVALUATOR_MAX_MARGIN_STEPS = 1
 
 class PreferenceStateMachineLogicEvaluator:
     trace_id_to_length: typing.Dict[str, int]
-    def __init__(self, trace_id_to_length: typing.Dict[str, int]):
+    def __init__(self, trace_id_to_length: typing.Dict[str, int], max_margin_steps: int = LOGIC_EVALUATOR_MAX_MARGIN_STEPS):
         self.trace_id_to_length = trace_id_to_length
+        self.max_margin_steps = max_margin_steps
 
     def _intervals_to_strings_apply(self, row: pd.Series):
         length = self.trace_id_to_length[row.trace_id]
@@ -130,6 +131,7 @@ class PreferenceStateMachineLogicEvaluator:
 
         index = 0
         state = 0
+        margin_steps = 0
         interval_keys = sorted([key for key in row.keys() if key.startswith('intervals')])
         final_state = len(interval_keys)
         intervals = [row[key] for key in interval_keys]
@@ -143,7 +145,11 @@ class PreferenceStateMachineLogicEvaluator:
                 elif state > 0 and (state == 1 or modals[state - 1] == 'hold'):
                     current_valid = intervals[state - 1][index] == '1'
                     if not current_valid:
-                        state = 0
+                        margin_steps += 1
+
+                        if margin_steps > self.max_margin_steps:
+                            state = 0
+                            margin_steps = 0
 
                 index += 1
 

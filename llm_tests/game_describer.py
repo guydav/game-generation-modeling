@@ -11,12 +11,14 @@ logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 import backoff
 import inflect
-import openai, openai.error
+import openai
+
 import tabulate
 import tatsu, tatsu.ast, tatsu.grammars
 from tqdm import tqdm
 
 # For some reason utils needs to be imported first?
+sys.path.append(os.path.abspath('./reward-machine'))
 sys.path.append(os.path.abspath('../reward-machine'))
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
 from describer_lm_prompts import compile_prompts_from_data
@@ -47,6 +49,7 @@ PREDICATE_DESCRIPTIONS = {
     "in": "{1} is inside of {0}",
     "in_motion": "{0} is in motion",
     "is_setup_object": "{0} is used in the setup",
+    "near": "{0} is near {1}",
     "object_orientation": "{0} is oriented {1}",
     "on": "{1} is on {0}",
     "open": "{0} is open",
@@ -129,12 +132,11 @@ class GameDescriber():
                 if openai_key is None:
                     raise ValueError("Error: OPENAI_TOKEN/OPENAI_API_KEY environment variable is not set")
 
-            openai.api_key = openai_key
-
+        self.openai_client = openai.OpenAI(api_key=openai_key)
         self.max_openai_tokens = max_openai_tokens
         self.openai_temperature = openai_temperature
 
-    @backoff.on_exception(backoff.expo, openai.error.RateLimitError)
+    @backoff.on_exception(backoff.expo, openai.RateLimitError)
     def _query_openai(self, prompt: str):
         '''
         Query the specified openai model with the given prompt, and return the response. Assumes
@@ -142,14 +144,14 @@ class GameDescriber():
         case of rate limit errors
         '''
 
-        response = openai.ChatCompletion.create(
+        response = self.openai_client.chat.completions.create(
             model=self.openai_model_str,
             max_tokens=self.max_openai_tokens,
             temperature=self.openai_temperature,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": prompt}]
         )
 
-        reponse_content = response["choices"][0]["message"]["content"]
+        reponse_content = response.choices[0].message.content
 
         return reponse_content
 

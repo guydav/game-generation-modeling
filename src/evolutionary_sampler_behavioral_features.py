@@ -332,6 +332,14 @@ PREDICATE_AND_OBJECT_GROUP_OBJECTS_FOR_EXEMPLAR_PREFERENCES = [
     [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS, room_and_object_types.ANY_OBJECT,],
 ]
 
+PREDICATE_AND_OBJECT_GROUP_OBJECTS_WITH_PREF_COUNT = [
+    [room_and_object_types.BALLS, room_and_object_types.RECEPTACLES],
+    [room_and_object_types.BLOCKS, room_and_object_types.BUILDING],
+    [room_and_object_types.FURNITURE, room_and_object_types.ROOM_FEATURES],
+    [room_and_object_types.SMALL_OBJECTS, room_and_object_types.LARGE_OBJECTS, room_and_object_types.ANY_OBJECT,],
+]
+
+
 PREDICATE_AND_OBJECT_GROUP_PREDICATES = [
     ['agent_holds', 'in_motion'],
     'in',
@@ -351,6 +359,13 @@ PREDICATE_AND_OBJECT_GROUP_PREDICATES_FOR_EXEMPLAR_PREFERENCES = [
     'on',
     ['adjacent', 'near', 'touch'],
 ]
+
+PREDICATE_AND_OBJECT_GROUP_PREDICATES_WITH_PREF_COUNT = [
+    ['agent_holds', 'in_motion',],
+    ['in', 'on',],
+    ['adjacent', 'near', 'touch'],
+]
+
 
 
 class BehavioralFeatureSet(enum.Enum):
@@ -382,6 +397,7 @@ class BehavioralFeatureSet(enum.Enum):
     EXEMPLAR_PREFERENCES_BC_NUM_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_num_prefs_expected_values'
     EXEMPLAR_PREFERENCES_BC_MAX_PREFS_SETUP = 'exemplar_preferences_bc_max_prefs_setup'
     EXEMPLAR_PREFERENCES_BC_MAX_PREFS_EXPECTED_VALUES = 'exemplar_preferences_bc_max_prefs_expected_values'
+    PREDICATE_AND_OBJECT_GROUPS_SETUP_AT_END_PREF_COUNT_EXPECTED_VALUES = 'predicate_and_object_groups_setup_at_end_pref_count_expected_values'
 
 
 class BehavioralFeaturizer(abc.ABC):
@@ -1180,6 +1196,13 @@ def build_behavioral_features_featurizer(
 
             featurizer = exemplar_preferences_featurizer
 
+        elif feature_set == BehavioralFeatureSet.PREDICATE_AND_OBJECT_GROUPS_SETUP_AT_END_PREF_COUNT_EXPECTED_VALUES:
+            featurizer.register_full_features_term(ExpectedFeatureValuesBehavioralFeature())  # 1 bit
+            featurizer.register(SectionExistsFitnessTerm([ast_parser.SETUP]), section_rule=True)  # 1 bit
+            featurizer.register(NumPreferencesDefinedAsInteger())   # 2 bits
+            featurizer.register(PredicateUsed(PREDICATE_AND_OBJECT_GROUP_PREDICATES_WITH_PREF_COUNT))  # 3 bits
+            featurizer.register(ObjectCategoryUsed(PREDICATE_AND_OBJECT_GROUP_OBJECTS_WITH_PREF_COUNT))  # 4 bits
+            featurizer.register(AtEndFound()) # 1 bit
 
         else:
             raise ValueError(f'Unimplemented feature set: {feature_set}')

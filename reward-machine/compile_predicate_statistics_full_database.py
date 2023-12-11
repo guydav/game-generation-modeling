@@ -387,13 +387,13 @@ class CommonSensePredicateStatisticsFullDatabase():
         '''
         Returns a string that uniquely identifies the predicate and mapping
         '''
-        return ast_section_to_string(predicate, PREFERENCES) + "_" + str(mapping)
+        return f'{ast_section_to_string(predicate, PREFERENCES)}_{str(mapping)}_{str(kwargs)}'
 
     @cachetools.cachedmethod(operator.attrgetter('cache'), key=_predicate_and_mapping_cache_key)
     def filter(self, predicate: tatsu.ast.AST, mapping: typing.Dict[str, typing.Union[str, typing.List[str]]], **kwargs):
         result_query = None
         try:
-            if self.temp_table_index > 2 ** 16:
+            if self.temp_table_index > 2 ** 31:
                 self.temp_table_index = -1
 
             result_query, relevant_variables, is_refactored_implementation = self._inner_filter(predicate, mapping, **kwargs)

@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import tatsu.ast
+import traceback
 from tqdm import tqdm
 import typing
 import pathlib
@@ -19,6 +20,7 @@ import polars as pl
 
 
 import compile_predicate_statistics_full_database
+from compile_predicate_statistics_full_database import MissingVariableException, PredicateNotImplementedException
 from config import OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 from game_handler import GameHandler
 from manual_run import _load_trace
@@ -422,7 +424,7 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         try:
             return self.predicate_data_estimator.filter(ast, relevant_mapping, return_trace_ids=return_trace_ids, return_full_result=return_intervals)
 
-        except compile_predicate_statistics_full_database.PredicateNotImplementedException:
+        except (PredicateNotImplementedException, MissingVariableException):
             # TODO: check if there are other errors to catch, or specific cases I want to handle differently
             pass
 
@@ -487,9 +489,6 @@ class TraceFinderASTParser(ast_parser.ASTParser):
                     second_argument_types = set(argument_types[1])
 
                     return WILDCARD if any(first_type in second_argument_types for first_type in first_argument_types) else EMPTY_SET
-
-
-
 
         return None
 
@@ -694,7 +693,7 @@ class TraceGameEvaluator:
 
     def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]:
         if key not in self.traces_by_population_key:
-            logger.debug(f'Finding traces for key {key} since not in cache')
+            # logger.debug(f'Finding traces for key {key} since not in cache')
 
             sample = self.population[key]
             retval = typing.cast(typing.Tuple[typing.Dict[str, typing.Set[str]], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]], self.trace_finder(sample))
@@ -707,6 +706,10 @@ class TraceGameEvaluator:
 
             else:
                 traces_by_key, expected_keys, database_confirmed_traces_by_key = retval
+
+                for sub_key, sub_key_traces in traces_by_key.items():
+                    if 'domain' in sub_key_traces:
+                        logger.debug(f'Found domain in traces for key {key} for sub-key {sub_key} with {len(sub_key_traces)}| {sub_key_traces}')
 
                 all_traces = set()
                 traces = []

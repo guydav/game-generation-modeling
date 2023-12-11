@@ -73,6 +73,12 @@ MAP_ELITES_MODELS = {
         'map_elites_minimal_counting_grammar_use_forall_L2_latest_at_end_no_game_object_expected_values_uniform_seed_42_final_2023_11_29',
         'Object and Predicate Group BCs | No game_object, with at_end | Using "Goodness" BC'
     ),
+
+    'predicate_and_object_groups_setup_at_end_pref_count_expected_values_bc': MapElitesModelSpec(
+        'map_elites_minimal_counting_grammar_use_forall_L2_predicate_and_object_groups_setup_at_end_pref_count_expected_values_uniform_seed_42_gen_8192_final_2023_12_08',
+        'Latest Object and Predicate Group BCs | With at_end, setup, num preferences | Using "Goodness" BC'
+    ),
+
     # 'num_exemplar_preferences_by_bcs': MapElitesModelSpec(
     #     'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_setup_uniform_seed_42_gen_4096_2023_11_17',
         # 'Exemplar Preferenecs BCs | Binary BCs, no max preference count | No "Goodness" BC',
@@ -86,7 +92,8 @@ MAP_ELITES_MODELS = {
     #     'Exemplar Preferenecs BCs | Count BCs, with max preference count | No "Goodness" BC',
     # ),
     'max_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_11_29',
+        # 'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_11_29',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_09',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC',
     ),
 }

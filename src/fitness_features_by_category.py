@@ -145,6 +145,9 @@ GRAMMAR_USE_FEATURES = [
 
     'section_without_pref_or_total_count_terminal',
     'section_without_pref_or_total_count_scoring',
+
+    'total_score_non_positive',
+    'scoring_preferences_used_identically'
 ]
 
 # The ones that are kept are the ones commented out
@@ -194,6 +197,9 @@ GRAMMAR_USE_LESS_IMPORTANT_FEATURES = [
 
     'section_without_pref_or_total_count_terminal', # CONSIDER-REMOVING
     'section_without_pref_or_total_count_scoring',  # CONSIDER-REMOVING
+
+    # 'total_score_non_positive',
+    # 'scoring_preferences_used_identically'
 ]
 
 FEATURE_CATEGORIES = {

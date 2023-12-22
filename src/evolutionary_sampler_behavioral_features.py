@@ -242,6 +242,7 @@ EXPECTED_VALUE_0_FEATURES = (
     'pref_forall_external_forall_used_incorrect', 'pref_forall_used_incorrect',
     'pref_forall_correct_arity_incorrect', 'pref_forall_correct_types_incorrect',
     'two_number_operation_found', 'single_argument_multi_operation_found',
+    'total_score_non_positive', 'scoring_preferences_used_identically',
     # 'section_without_pref_or_total_count_scoring',  # removed this feature
 )
 

@@ -1731,6 +1731,69 @@ class UnnecessaryBooleanScoringTerminalExpression(BooleanLogicTerm):
             (self.total_score_smaller_than_positive_number_found and not self.total_score_can_be_negative)
 
 
+class TotalScoreNonPositive(FitnessTerm):
+    scoring_parsed: bool
+    total_score_non_positive: bool
+
+    def __init__(self):
+        super().__init__(ast_parser.SCORING, 'total_score_non_positive')
+        self.scoring_parsed = False
+        self.total_score_non_positive = False
+
+    def game_start(self) -> None:
+        self.scoring_parsed = False
+        self.total_score_non_positive = False
+
+    def _check_expression_non_positive(self, ast: tatsu.ast.AST) -> bool:
+        rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
+
+        if rule == 'scoring_expr':
+            return self._check_expression_non_positive(ast.expr)  # type: ignore
+
+        if rule == 'scoring_expr_or_number':
+            return self._check_expression_non_positive(ast.expr)  # type: ignore
+
+        if rule == 'scoring_number_value':
+            return float(ast.terminal) < 0  # type: ignore
+
+        if rule in ('scoring_comparison', 'preference_eval'):
+            return False
+
+        if rule == 'scoring_binary_expr':
+            op = typing.cast(str, ast.op)
+            left_neg = self._check_expression_non_positive(op.expr_1)  # type: ignore
+            right_neg = self._check_expression_non_positive(op.expr_2)  # type: ignore
+            if op == '-':
+                return left_neg or not right_neg
+
+            else:  # op == '/'
+                return left_neg or right_neg
+
+        if rule == 'scoring_multi_expr':
+            op = typing.cast(str, ast.op)
+            if op == '+':
+                return all(self._check_expression_non_positive(expr) for expr in ast.expr)  # type: ignore
+
+            else:  # op == '*'
+                return any(self._check_expression_non_positive(expr) for expr in ast.expr)  # type: ignore
+
+        if rule == 'scoring_neg_expr':
+            return not self._check_expression_non_positive(ast.expr)  # type: ignore
+
+        if rule in ('scoring_external_maximize', 'scoring_external_minimize'):
+            return self._check_expression_non_positive(ast.scoring_expr)  # type: ignore
+
+        raise ValueError(f'Unexpected rule in scoring-nonpositive: {rule}')
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        if not self.scoring_parsed:
+            self.total_score_non_positive = self._check_expression_non_positive(ast)  # type: ignore
+            self.scoring_parsed = True
+
+    def game_end(self):
+        return int(self.total_score_non_positive)
+
+
 class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
     def __init__(self):
         super().__init__(('then',), 'identical_consecutive_seq_func_predicates_found')
@@ -1788,10 +1851,10 @@ class ASTPredicateTermTracker(ast_parser.ASTParser):
         rule = ast.parseinfo.rule  # type: ignore
         if rule in ('predicate', 'function_eval'):
             if rule == 'predicate':
-                kwargs['predicates'].add(ast.pred.parseinfo.rule.replace('predicate_', ''))
+                kwargs['predicates'].add(ast.pred.parseinfo.rule.replace('predicate_', ''))  # type: ignore
 
             else:  # rule == 'function_eval:
-                kwargs['predicates'].add(ast.func.parseinfo.rule.replace('function_', ''))
+                kwargs['predicates'].add(ast.func.parseinfo.rule.replace('function_', ''))  # type: ignore
 
             kwargs['terms'].update(extract_predicate_function_args(ast))
 
@@ -3346,6 +3409,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     unnecessary_boolean_scoring_terminal_expression = UnnecessaryBooleanScoringTerminalExpression()
     fitness.register(unnecessary_boolean_scoring_terminal_expression)
+
+    total_score_non_positive = TotalScoreNonPositive()
+    fitness.register(total_score_non_positive, section_rule=True)
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)

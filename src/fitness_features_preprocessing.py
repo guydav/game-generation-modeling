@@ -43,7 +43,7 @@ BINARIZE_IGNORE_FEATURES = set([
     'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_scoring_terminal_predicates',
     'disjoint_seq_funcs_found', 'disjoint_at_end_found',
     'disjoint_modal_predicates_found', 'disjoint_modal_predicates_prop', 'predicate_without_variables_or_agent',
-    'num_preferences_defined',
+    'num_preferences_defined', 'total_score_non_positive', 'scoring_preferences_used_identically',
 ])
 
 BINARIZE_IGNORE_PATTERNS = [

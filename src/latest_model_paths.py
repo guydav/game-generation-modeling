@@ -84,7 +84,7 @@ MAP_ELITES_MODELS = {
         # 'Exemplar Preferenecs BCs | Binary BCs, no max preference count | No "Goodness" BC',
     # ),
     'num_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_11_29',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_12_24',
         'Exemplar Preferenecs BCs | Binary BCs, no max preference count | Using "Goodness" BC',
     ),
     # 'max_exemplar_preferences_by_bcs': MapElitesModelSpec(
@@ -93,7 +93,7 @@ MAP_ELITES_MODELS = {
     # ),
     'max_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
         # 'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_11_29',
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_09',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_24',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC',
     ),
 }

@@ -227,7 +227,7 @@ EXPECTED_VALUE_1_FEATURES =  (
     'preferences_used_all', 'preferences_used_prop',
     'starts_and_ends_once',  # TODO: if I recode this as 0 for no then-preference games, remove this from this list
 )
-# TODO: verify the below list is complete after rerunning featurizer
+
 EXPECTED_VALUE_0_FEATURES = (
     'adjacent_once_found', 'once_in_middle_of_pref_found', 'pref_without_hold_found',
     'repeated_variables_found', 'repeated_variable_type_in_either',
@@ -235,6 +235,7 @@ EXPECTED_VALUE_0_FEATURES = (
     'tautological_expression_found',
     'redundant_expression_found', 'redundant_scoring_terminal_expression_found',
     'unnecessary_expression_found', 'unnecessary_scoring_terminal_expression_found',
+    'total_score_non_positive', 'scoring_preferences_used_identically',
     'identical_consecutive_seq_func_predicates_found',
     'disjoint_preferences_scoring_terminal_types', 'disjoint_preferences_same_predicates_only',
     'disjoint_seq_funcs_found', 'predicate_without_variables_or_agent',

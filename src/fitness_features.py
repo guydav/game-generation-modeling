@@ -1761,8 +1761,8 @@ class TotalScoreNonPositive(FitnessTerm):
 
         if rule == 'scoring_binary_expr':
             op = typing.cast(str, ast.op)
-            left_neg = self._check_expression_non_positive(op.expr_1)  # type: ignore
-            right_neg = self._check_expression_non_positive(op.expr_2)  # type: ignore
+            left_neg = self._check_expression_non_positive(ast.expr_1)  # type: ignore
+            right_neg = self._check_expression_non_positive(ast.expr_2)  # type: ignore
             if op == '-':
                 return left_neg or not right_neg
 
@@ -1792,6 +1792,57 @@ class TotalScoreNonPositive(FitnessTerm):
 
     def game_end(self):
         return int(self.total_score_non_positive)
+
+
+class ScoringPreferencesUsedIdentically(FitnessTerm):
+    ignore_positions: typing.Set[int]
+    position_and_op_to_preference: typing.Dict[typing.Tuple[int, str], typing.Set[str]]
+
+    def __init__(self):
+        super().__init__(('scoring_neg_expr', 'scoring_binary_expr', 'scoring_multi_expr'), 'scoring_preferences_used_identically')
+        self.ignore_positions = set()
+        self.position_and_op_to_preference = defaultdict(set)
+
+    def game_start(self) -> None:
+        self.ignore_positions.clear()
+        self.position_and_op_to_preference = defaultdict(set)
+
+    def _handle_multi_expr(self, ast: tatsu.ast.AST, op: str, pos: int):
+        for expr in ast.expr:  # type: ignore
+            expr = expr.expr
+            if expr.parseinfo.rule == 'scoring_expr':
+                if expr.expr.parseinfo.rule == 'preference_eval':
+                    self.position_and_op_to_preference[(pos, op)].add(expr.expr.count_method.name_and_types.pref_name)
+
+                # a product of a products is still a product; same with a sum
+                if expr.expr.parseinfo.rule == 'scoring_multi_expr' and expr.expr.op == op:
+                    self.ignore_positions.add(expr.expr.parseinfo.pos)
+                    self._handle_multi_expr(expr.expr, op, pos)
+
+    def update(self, ast: typing.Union[typing.Sequence, tatsu.ast.AST], rule: str, context: ContextDict):
+        op = '-' if rule == 'scoring_neg_expr' else typing.cast(str, ast.op)  # type: ignore
+        pos = typing.cast(int, ast.parseinfo.pos)  # type: ignore
+
+        if rule == 'scoring_neg_expr':
+            expr = ast.expr.expr  # type: ignore
+            if expr.parseinfo.rule == 'scoring_expr' and expr.expr.parseinfo.rule == 'preference_eval':
+                self.position_and_op_to_preference[(pos, op)].add(expr.expr.count_method.name_and_types.pref_name)
+
+        if rule == 'scoring_binary_expr':
+            for expr in (ast.expr_1.expr, ast.expr_2.expr):  # type: ignore
+                if expr.parseinfo.rule == 'scoring_expr' and expr.expr.parseinfo.rule == 'preference_eval':
+                    self.position_and_op_to_preference[(pos, op)].add(expr.expr.count_method.name_and_types.pref_name)  # type: ignore
+
+        if rule == 'scoring_multi_expr':
+            self._handle_multi_expr(ast, op, pos)  # type: ignore
+
+    def game_end(self):
+        # We flag when there's only one expression, that's a product, with multiple preferences
+        if len(self.position_and_op_to_preference) == 1:
+            key = next(iter(self.position_and_op_to_preference.keys()))
+            return len(self.position_and_op_to_preference[key]) != 1 and key[1] == '*'
+
+        return False
 
 
 class IdenticalConsecutiveSeqFuncPredicates(FitnessTerm):
@@ -3412,6 +3463,9 @@ def build_fitness_featurizer(args) -> ASTFitnessFeaturizer:
 
     total_score_non_positive = TotalScoreNonPositive()
     fitness.register(total_score_non_positive, section_rule=True)
+
+    scoring_preferences_used_identically = ScoringPreferencesUsedIdentically()
+    fitness.register(scoring_preferences_used_identically)
 
     identical_consecutive_predicates = IdenticalConsecutiveSeqFuncPredicates()
     fitness.register(identical_consecutive_predicates)

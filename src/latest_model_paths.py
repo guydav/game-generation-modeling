@@ -75,7 +75,7 @@ MAP_ELITES_MODELS = {
     ),
 
     'predicate_and_object_groups_setup_at_end_pref_count_expected_values_bc': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_predicate_and_object_groups_setup_at_end_pref_count_expected_values_uniform_seed_42_gen_8192_final_2023_12_08',
+        'map_elites_minimal_counting_grammar_use_forall_L2_predicate_and_object_groups_setup_at_end_pref_count_expected_values_uniform_seed_42_gen_8192_final_2024_01_02',
         'Latest Object and Predicate Group BCs | With at_end, setup, num preferences | Using "Goodness" BC'
     ),
 

@@ -1839,7 +1839,7 @@ class ScoringPreferencesUsedIdentically(FitnessTerm):
     def game_end(self):
         # We flag when there's only one expression, that's a product, with multiple preferences
         if len(self.position_and_op_to_preference) == 1:
-            key = next(iter(self.position_and_op_to_preference.keys()))
+            key = list(self.position_and_op_to_preference.keys())[0]
             return len(self.position_and_op_to_preference[key]) != 1 and key[1] == '*'
 
         return False

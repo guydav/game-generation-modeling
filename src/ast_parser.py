@@ -447,7 +447,7 @@ def predicate_function_term_to_types(term_or_terms: typing.Union[str, typing.Lis
     if any(not isinstance(term_type, str) for term_type in term_type_list):
         print(f'Non-string type found in {term_type_list}')
 
-    term_types = OrderedDict()
+    term_types = dict()  # OrderedDict()
     for type in term_type_list:
         if type not in term_types:
             term_types[type] = 0
@@ -464,7 +464,7 @@ def predicate_function_term_to_type_categories(term_or_terms: typing.Union[str, 
     if not term_types:
         return None
 
-    term_categories = OrderedDict()
+    term_categories = dict()  # OrderedDict()
     for term_type in term_types:
         if term_type not in room_and_object_types.TYPES_TO_CATEGORIES:
             if term_type not in known_missing_types and not term_type.isnumeric():

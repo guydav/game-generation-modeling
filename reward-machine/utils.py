@@ -358,7 +358,7 @@ def extract_variable_type_mapping(variable_list: typing.Union[typing.Sequence[ta
     if isinstance(variable_list, tatsu.ast.AST):
         variable_list = [variable_list]
 
-    variables = OrderedDict({})
+    variables = dict()  # OrderedDict({})
     for var_info in variable_list:
         var_type = typing.cast(tatsu.ast.AST, var_info["var_type"]["type"])  # type: ignore
 

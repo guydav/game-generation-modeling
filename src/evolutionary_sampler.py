@@ -574,10 +574,14 @@ class PopulationBasedSampler():
         # all our instance attributes. Always use the dict.copy()
         # method to avoid modifying the original state.
         state = self.__dict__.copy()
-        # Remove the unpicklable entries.
+        # Remove the unpicklable entries when spawning a new process, rather than saving
         if not self.saving:
-            del state['population']
-            del state['fitness_values']
+            state['population'] = {}
+            state['fitness_values'] = {}
+            state['archive_cell_first_occupied'] = {}
+
+        # Make sure we're not marking the saved model as being saved
+        state['saving'] = False
         return state
 
     def __setstate__(self, state):
@@ -585,6 +589,7 @@ class PopulationBasedSampler():
         # Set unique random seed per process X generation index
         self.random_seed = self.args.random_seed + (self._process_index() * (self.generation_index + 1))
         self.rng = np.random.default_rng(self.random_seed)
+        self.saving = False
 
         for sampler_key in self.samplers:
             self.samplers[sampler_key].rng = np.random.default_rng(self.random_seed + self.samplers[sampler_key].prior_rule_count)
@@ -592,6 +597,12 @@ class PopulationBasedSampler():
         self.regrowth_sampler.seed = self.random_seed
         self.regrowth_sampler.rng = np.random.default_rng(self.random_seed)
         self.context_fixer.rng = np.random.default_rng(self.random_seed)
+
+        # trying to hard-code these as dicts to see which might be changing during iteration?!
+        # self.population = dict(self.population)
+        # self.fitness_values = dict(self.fitness_values)
+        # self.archive_cell_first_occupied = dict(self.archive_cell_first_occupied)
+        # print(f'Set state, population type: {type(self.population)} | fitness_values type: {type(self.fitness_values)} | archive_cell_first_occupied type: {type(self.archive_cell_first_occupied)}')
 
     def save(self, suffix: typing.Optional[str] = None, log_message: bool = True):
         self.saving = True
@@ -1484,6 +1495,10 @@ class PopulationBasedSampler():
             except RuntimeError as e:
                 logging.error(traceback.format_exc())
                 raise e
+            except Exception as e:
+                logging.error(f'Unexpected error in _sample_and_apply_operator: {e}')
+                logging.error(traceback.format_exc())
+                raise e
 
 
         # Parent is already in the population, so returning nothing
@@ -1495,7 +1510,12 @@ class PopulationBasedSampler():
         Here to enable adding other arguments to the parent iterator and param iterator, and
         to not have ot rely on implementations of starmap existing
         """
-        return self._sample_and_apply_operator(*args[0], *args[1:])
+        try:
+            return self._sample_and_apply_operator(*args[0], *args[1:])
+        except Exception as e:
+            logger.error(f'Exception caught in _sample_and_apply_operator_map_wrapper: {e}')
+            logger.error(traceback.format_exc())
+            raise e
 
     def _build_evolutionary_step_param_iterator(self, parent_iterator: typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], typing.Optional[typing.Dict[str, typing.Any]]]]) -> typing.Iterable[typing.Tuple[typing.Union[ASTType, typing.List[ASTType]], int, int]]:
         '''
@@ -1528,8 +1548,13 @@ class PopulationBasedSampler():
         if should_tqdm:
             children_iter = tqdm(children_iter)  # type: ignore
 
-        for step_results in children_iter:
-            self._handle_single_operator_results(step_results)
+        try:
+            for step_results in children_iter:
+                self._handle_single_operator_results(step_results)
+        except Exception as e:
+            logger.error(f'Exception caught in evolutionary_step: {e}')
+            logger.error(traceback.format_exc())
+            raise e
 
         self._end_single_evolutionary_step()
 
@@ -1831,9 +1856,9 @@ class MAPElitesSampler(PopulationBasedSampler):
 
         logger.info(f'Using the following features for MAP-Elites: {self.map_elites_feature_names}')
 
-        self.population = OrderedDict()
-        self.fitness_values = OrderedDict()
-        self.archive_cell_first_occupied = OrderedDict()
+        self.population = dict()  #  OrderedDict()
+        self.fitness_values = dict()  #  OrderedDict()
+        self.archive_cell_first_occupied = dict()  #  OrderedDict()
 
     def _inner_initialize_population(self):
         '''
@@ -2114,9 +2139,14 @@ class MAPElitesSampler(PopulationBasedSampler):
             self.selector.update(parent_info[PARENT_KEY], int(successful))
 
     def _handle_single_operator_results(self, results: SingleStepResults):
-        for candidate, fitness_value, features, parent_info, operator in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos, results.operators):
-            key = self._features_to_key(candidate, features)
-            self._add_to_archive(candidate, fitness_value, key, parent_info, operator=operator)   # type: ignore
+        try:
+            for candidate, fitness_value, features, parent_info, operator in zip(results.samples, results.fitness_scores, results.sample_features, results.parent_infos, results.operators):
+                key = self._features_to_key(candidate, features)
+                self._add_to_archive(candidate, fitness_value, key, parent_info, operator=operator)   # type: ignore
+        except Exception as e:
+            logger.error(f'Exception caught in _handle_single_operator_results: {e}')
+            logger.error(traceback.format_exc())
+            raise e
 
     def _end_single_evolutionary_step(self, samples: typing.Optional[SingleStepResults] = None):
         self._update_population_statistics()
@@ -2132,31 +2162,42 @@ class MAPElitesSampler(PopulationBasedSampler):
         return metrics
 
     def _get_parent_iterator(self, n_parents_per_sample: int = 1, n_times_each_parent: int = 1):
-        keys = list(self.population.keys())
+        try:
+            keys = list(self.population.keys())
 
-        weights = None
-        if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
-            pass
+            weights = None
+            if self.weight_strategy == MAPElitesWeightStrategy.UNIFORM:
+                pass
 
-        elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
-            if self.update_fitness_rank_weights or len(keys) != len(self.fitness_rank_weights):
-                fitness_values = np.array(list(self.fitness_values.values()))
-                n = len(fitness_values)
-                ranks = n - np.argsort(fitness_values)
-                self.fitness_rank_weights = 0.5 + (ranks / n)
-                self.fitness_rank_weights /= self.fitness_rank_weights.sum()  # type: ignore
-                self.update_fitness_rank_weights = False
+            elif self.weight_strategy == MAPElitesWeightStrategy.FITNESS_RANK:
+                if self.update_fitness_rank_weights or len(keys) != len(self.fitness_rank_weights):
+                    fitness_values = np.array(list(self.fitness_values.values()))
+                    n = len(fitness_values)
+                    ranks = n - np.argsort(fitness_values)
+                    self.fitness_rank_weights = 0.5 + (ranks / n)
+                    self.fitness_rank_weights /= self.fitness_rank_weights.sum()  # type: ignore
+                    self.update_fitness_rank_weights = False
 
-            weights = self.fitness_rank_weights
+                weights = self.fitness_rank_weights
 
-        for _ in range(self.generation_size):
-            if self.use_crossover:
-                next_keys = self._get_next_key(keys, weights, n=2)  # type: ignore
-                yield ([self.population[next_keys[0]], self.population[next_keys[1]]], [{PARENT_KEY: next_keys[0]}, {PARENT_KEY: next_keys[1]}])  # type: ignore
+            for _ in range(self.generation_size):
+                if self.use_crossover:
+                    next_keys = self._get_next_key(keys, weights, n=2)  # type: ignore
+                    yield ([self.population[next_keys[0]], self.population[next_keys[1]]], [{PARENT_KEY: next_keys[0]}, {PARENT_KEY: next_keys[1]}])  # type: ignore
 
-            else:
-                key = self._get_next_key(keys, weights)  # type: ignore
-                yield (self.population[key], {PARENT_KEY: key})
+                else:
+                    key = self._get_next_key(keys, weights)  # type: ignore
+                    yield (self.population[key], {PARENT_KEY: key})
+
+        except RuntimeError as e:
+            logger.error(f'RuntimeError caught in _get_parent_iterator: {e}')
+            logger.error(traceback.format_exc())
+            raise e
+
+        except Exception as e:
+            logger.error(f'Exception caught in _get_parent_iterator: {e}')
+            logger.error(traceback.format_exc())
+            raise e
 
     def _get_next_key(self, keys: typing.List[KeyTypeAnnotation], weights: np.ndarray, n: int = 1) -> KeyTypeAnnotation:
         if self.selector is None:
@@ -2493,6 +2534,8 @@ def main(args):
             if load_path is not None:
                 logger.info(f'Loading sampler with latest generation {latest_generation} from {load_path}')
                 evosampler = typing.cast(MAPElitesSampler, load_data_from_path(load_path))
+                logger.info(f'Loaded sample with saving set to {evosampler.saving}')
+                evosampler.saving = False
                 args.start_step = int(latest_generation)  # type: ignore
 
         if evosampler is None:
@@ -2579,7 +2622,8 @@ def main(args):
 
     except Exception as e:
         exception_caught = True
-        logger.exception(e)
+        logger.error(f'Exception caught in main while trying to sample: {e}')
+        logger.error(traceback.format_exc())
 
     except:
         exception_caught = True

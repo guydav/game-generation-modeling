@@ -23,6 +23,7 @@ LATEST_FITNESS_FUNCTION_DATE_ID = 'cv_fitness_model_in_data_prop_L2_categories_m
 class MapElitesModelSpec:
     save_path: str
     name: str
+    trace_filter_suffix: typing.Optional[str] = None
 
     def get_different_gen(self, gen: typing.Union[str, int], date: typing.Optional[str] = None):
         gen_index = self.save_path.find('gen')
@@ -52,6 +53,13 @@ class MapElitesModelSpec:
         load_path = self.save_path if gen is None else self.get_different_gen(gen, date)
         from fitness_energy_utils import load_data
         return load_data(date_and_id, folder, load_path, relative_path=relative_path)
+
+    def load_trace_filter_data(self):
+        if self.trace_filter_suffix is None:
+            return None
+
+        from fitness_energy_utils import load_data
+        return load_data('', 'samples', f'trace_filter_results_{self.save_path}_{self.trace_filter_suffix}', relative_path='..')
 
 
 MAP_ELITES_MODELS = {
@@ -84,8 +92,9 @@ MAP_ELITES_MODELS = {
         # 'Exemplar Preferenecs BCs | Binary BCs, no max preference count | No "Goodness" BC',
     # ),
     'num_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_12_24',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_num_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_24',
         'Exemplar Preferenecs BCs | Binary BCs, no max preference count | Using "Goodness" BC',
+        '2023_12_24',
     ),
     # 'max_exemplar_preferences_by_bcs': MapElitesModelSpec(
     #     'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_setup_uniform_seed_42_gen_4096_2023_11_21',
@@ -93,7 +102,8 @@ MAP_ELITES_MODELS = {
     # ),
     'max_exemplar_preferences_by_bcs_with_expected_values': MapElitesModelSpec(
         # 'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_4096_final_2023_11_29',
-        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_24',
+        'map_elites_minimal_counting_grammar_use_forall_L2_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2023_12_23',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC',
+        '2023_12_24',
     ),
 }

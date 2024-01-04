@@ -1,4 +1,4 @@
-; Index #0 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #0 with key (1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 6172feb1665491d1efbce164-0) (:domain medium-objects-room-v1)
 (:setup
   (exists (?h - hexagonal_bin ?r - triangular_ramp)
@@ -37,7 +37,7 @@
 )
 )
 
-; Index #4 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #4 with key (1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0)
 (define (game 614dec67f6eb129c3a77defd-6) (:domain medium-objects-room-v1)
 (:setup
   (and
@@ -90,7 +90,7 @@
 )
 )
 
-; Index #6 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #6 with key (1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0)
 (define (game 615452aaabb932ada88ef3ca-9) (:domain many-objects-room-v1)
 (:setup
   (exists (?h - hexagonal_bin)
@@ -132,7 +132,7 @@
 )
 )
 
-; Index #7 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #7 with key (1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 (define (game 57aa430b4cda6e00018420e9-10) (:domain medium-objects-room-v1)
 (:constraints
   (and
@@ -196,7 +196,7 @@
 )
 )
 
-; Index #14 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #14 with key (1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0)
 (define (game 613e4bf960ca68f8de00e5e7-17) (:domain medium-objects-room-v1)
 (:constraints
   (and
@@ -219,7 +219,7 @@
 )
 )
 
-; Index #17 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #17 with key (1, 0, 4, 0, 0, 2, 0, 0, 0, 0, 1, 0)
 (define (game 5c79bc94d454af00160e2eee-21) (:domain few-objects-room-v1)
 (:setup
   (exists (?c - chair)
@@ -288,7 +288,7 @@
 )
 )
 
-; Index #23 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #23 with key (1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0)
 (define (game 5bb511c6689fc5000149c703-29) (:domain few-objects-room-v1)
 (:constraints
   (and
@@ -311,7 +311,7 @@
 )
 )
 
-; Index #26 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #26 with key (1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0)
 (define (game 614e1599db14d8f3a5c1486a-33) (:domain many-objects-room-v1)
 (:setup
   (forall (?g - game_object)
@@ -343,7 +343,7 @@
 )
 )
 
-; Index #28 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #28 with key (1, 0, 2, 1, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 5ef4c07dc8437809ba661613-36) (:domain few-objects-room-v1)
 (:setup
   (and
@@ -389,7 +389,7 @@
 )
 )
 
-; Index #31 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #31 with key (1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0)
 (define (game 614fb15adc48d3f9ffcadd41-39) (:domain many-objects-room-v1)
 (:constraints
   (and
@@ -409,7 +409,7 @@
 )
 )
 
-; Index #32 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #32 with key (1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0)
 (define (game 5c71bdec87f8cd0001b458f5-40) (:domain many-objects-room-v1)
 (:setup
   (exists (?r - curved_wooden_ramp)
@@ -445,7 +445,7 @@
 )
 )
 
-; Index #35 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #35 with key (1, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0)
 (define (game 617378aeffbba11d8971051c-43) (:domain medium-objects-room-v1)
 (:setup
   (exists (?d - doggie_bed)
@@ -490,7 +490,7 @@
 )
 )
 
-; Index #37 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #37 with key (1, 0, 2, 1, 0, 1, 0, 0, 0, 0, 0, 0)
 (define (game 5d5b0dd7c032a2001ad7cf5d-46) (:domain few-objects-room-v1)
 (:setup
   (exists (?c - curved_wooden_ramp)
@@ -527,7 +527,7 @@
 )
 )
 
-; Index #40 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #40 with key (1, 0, 2, 0, 0, 1, 0, 0, 0, 0, 1, 0)
 (define (game 60ddfb3db6a71ad9ba75e387-49) (:domain many-objects-room-v1)
 (:setup
   (exists (?g - golfball_green)
@@ -580,7 +580,7 @@
 )
 )
 
-; Index #41 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #41 with key (1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 (define (game 5f3aee04e30eac7cb73b416e-50) (:domain medium-objects-room-v1)
 (:setup
   (exists (?h - hexagonal_bin)
@@ -607,7 +607,7 @@
 )
 )
 
-; Index #42 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #42 with key (1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 5ff4a242cbe069bc27d9278b-51) (:domain few-objects-room-v1)
 (:constraints
   (and
@@ -627,7 +627,7 @@
 )
 )
 
-; Index #45 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #45 with key (1, 1, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0)
 (define (game 61541833a06877a656163b10-54) (:domain few-objects-room-v1)
 (:constraints
   (and
@@ -668,7 +668,7 @@
 )
 )
 
-; Index #49 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #49 with key (1, 0, 3, 0, 0, 0, 0, 0, 2, 1, 0, 0)
 (define (game 5f0a5a99dbbf721316f118e2-58) (:domain medium-objects-room-v1)
 (:setup
   (and
@@ -767,7 +767,7 @@
 )
 )
 
-; Index #51 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #51 with key (1, 0, 2, 0, 0, 0, 0, 0, 0, 1, 1, 0)
 (define (game 6086efbd71dc51bb8d6a1a5e-61) (:domain many-objects-room-v1)
 (:setup
   (game-conserved
@@ -828,7 +828,7 @@
 )
 )
 
-; Index #52 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #52 with key (1, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 1)
 (define (game 601c84e07ab4907ded068d0d-62) (:domain medium-objects-room-v1)
 (:constraints
   (and
@@ -868,7 +868,7 @@
 )
 )
 
-; Index #55 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #55 with key (1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 (define (game 56cf6e8d31a5bc0006e1cdf5-65) (:domain many-objects-room-v1)
 (:constraints
   (and
@@ -886,7 +886,7 @@
 )
 )
 
-; Index #58 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #58 with key (1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 61262b36d0426eaefdb70725-69) (:domain many-objects-room-v1)
 (:setup
   (exists (?c - curved_wooden_ramp ?h - hexagonal_bin)
@@ -913,7 +913,7 @@
 )
 )
 
-; Index #59 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #59 with key (1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 5fbbf3f438be4c025df6cdd4-70) (:domain many-objects-room-v1)
 (:setup
   (and
@@ -984,7 +984,7 @@
 )
 )
 
-; Index #64 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #64 with key (1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0)
 (define (game 612fc78547802a3f177e0d53-75) (:domain few-objects-room-v1)
 (:constraints
   (and
@@ -1019,7 +1019,7 @@
 )
 )
 
-; Index #74 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #74 with key (1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0)
 (define (game 6158d01f302cf46b673dd597-87) (:domain few-objects-room-v1)
 (:setup
   (exists (?h - hexagonal_bin ?w - wall)
@@ -1054,7 +1054,7 @@
 )
 )
 
-; Index #88 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #88 with key (1, 1, 2, 1, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 5d67b6d92b7448000173d95a-106) (:domain few-objects-room-v1)
 (:constraints
   (and
@@ -1089,7 +1089,7 @@
 )
 )
 
-; Index #90 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #90 with key (1, 1, 3, 0, 0, 0, 0, 0, 0, 0, 1, 0)
 (define (game 5f9aba6600cdf11f1c9b915c-109) (:domain many-objects-room-v1)
 (:constraints
   (and
@@ -1127,7 +1127,7 @@
 )
 )
 
-; Index #94 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #94 with key (1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 (define (game 5e606b1eaf84e83c728748d7-115) (:domain medium-objects-room-v1)
 (:setup
   (and
@@ -1183,7 +1183,7 @@
 )
 )
 
-; Index #96 with key (1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0)
+; Index #96 with key (1, 0, 3, 1, 0, 0, 0, 0, 0, 0, 2, 0)
 (define (game 613e18e92e4ed15176362aa2-117) (:domain medium-objects-room-v1)
 (:setup
   (exists (?h - hexagonal_bin ?r - triangular_ramp)

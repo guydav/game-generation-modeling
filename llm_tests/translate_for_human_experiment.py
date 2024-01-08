@@ -31,10 +31,11 @@ DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
 
 CURRENT_DATE = datetime.today().strftime("%Y-%m-%d").replace("-", "_")
 OPENAI_MODEL = "gpt-4-1106-preview"
+SPLIT_PROMPT_TO_SYSTEM = True
 
 grammar = open(DEFAULT_GRAMMAR_PATH).read()
 grammar_parser = tatsu.compile(grammar)
-game_describer = GameDescriber(openai_model_str=OPENAI_MODEL)
+game_describer = GameDescriber(openai_model_str=OPENAI_MODEL, split_prompt_to_system=SPLIT_PROMPT_TO_SYSTEM)
 
 for filepath in FILES_TO_TRANSLATE:
     name = filepath.split("/")[-1].split(".")[0]
@@ -54,7 +55,7 @@ for filepath in FILES_TO_TRANSLATE:
             else:
                 game_texts[-1] += line
 
-    data = []
+    data = {}
     per_game_htmls = []
     for key, game in tqdm(zip(keys, game_texts), total=len(game_texts), desc=f"Translating {name}"):
         descriptions_by_stage = []
@@ -73,11 +74,12 @@ for filepath in FILES_TO_TRANSLATE:
         stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions, translations_path=translations_path)
         descriptions_by_stage.append((stage_3_description, "", "", ""))
 
-        data.append({'key': key, 'text': stage_3_description})
+        key = tuple(key)
+        data[key] = stage_3_description
 
-        table_html = game_describer._prepare_data_for_html_display(descriptions_by_stage)
+        table_html = game_describer._prepare_data_for_html_display(descriptions_by_stage, key=str(key))
         per_game_htmls.append(table_html)
-    
+
         # Save as json
         with open(f"./translations/{name}_translations_{'split_' if SPLIT_BY_SECTION else ''}{CURRENT_DATE}.json", "w") as file:
             json.dump(data, file, indent=4)

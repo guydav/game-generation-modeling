@@ -119,7 +119,8 @@ class GameDescriber():
                  grammar_path: str = DEFAULT_GRAMMAR_PATH,
                  openai_model_str: typing.Optional[str] = None,
                  max_openai_tokens: int = 512,
-                 openai_temperature: float = 0.0):
+                 openai_temperature: float = 0.0,
+                 split_prompt_to_system: bool = False,):
 
         grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
@@ -139,20 +140,30 @@ class GameDescriber():
         self.openai_client = openai.OpenAI(api_key=openai_key)
         self.max_openai_tokens = max_openai_tokens
         self.openai_temperature = openai_temperature
+        self.split_prompt_to_system = split_prompt_to_system
 
     @backoff.on_exception(backoff.expo, openai.RateLimitError)
-    def _query_openai(self, prompt: str):
+    def _query_openai(self, prompt: str, user_message_start: str = 'Now, convert the following description'):
         '''
         Query the specified openai model with the given prompt, and return the response. Assumes
         that the API key has already been set. Retries with exponentially-increasing delays in
         case of rate limit errors
         '''
+        messages = [{"role": "user", "content": prompt}]
+
+        if self.split_prompt_to_system:
+            split_index = prompt.find(user_message_start)
+            if split_index != -1:
+                messages = [
+                    {"role": "system", "content": prompt[:split_index].strip()},
+                    {"role": "user", "content": prompt[split_index:]}
+                ]
 
         response = self.openai_client.chat.completions.create(
             model=self.openai_model_str,
             max_tokens=self.max_openai_tokens,
             temperature=self.openai_temperature,
-            messages=[{"role": "user", "content": prompt}]
+            messages=messages,
         )
 
         reponse_content = response.choices[0].message.content
@@ -911,7 +922,7 @@ class GameDescriber():
             # game-conserved / game-optional information
             descendant_rules = set()
             self._extract_descendant_rules(game_info["setup"], descendant_rules)
-            
+
             if "setup_and" not in descendant_rules and "setup_or" not in descendant_rules:
                 if condition_type == "optional":
                     setup_description = f"the following must all be true for at least one time step:\n- {setup_description}"
@@ -969,7 +980,7 @@ class GameDescriber():
         # Generate prompts
         all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
                                                 translations_path=translations_path)
-        
+
         setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt, _ = all_prompts
 
         if setup_stage_1 != "":
@@ -1022,13 +1033,15 @@ class GameDescriber():
 
         return stage_3_description
 
-    def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]]):
+    def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]], key: typing.Optional[str] = None):
         '''
         Helper function for formatting the descriptions for display in an HTML page
         '''
         grouped_descriptions = list(zip(*descriptions_by_stage))
 
         columns = [f"Stage {i}" for i in range(len(descriptions_by_stage))]
+        if key is not None:
+            columns[-1] = f'{columns[-1]} [key: {key}]'
 
         # The content of the table in HTML (for just the current game)
         table_html = tabulate.tabulate(grouped_descriptions, headers=columns, tablefmt="unsafehtml")
@@ -1051,13 +1064,14 @@ if __name__ == '__main__':
     parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4"])
     parser.add_argument("--games_path", type=str, default=DEFAULT_GAMES_PATH)
     parser.add_argument("--output_path", type=str, default=".")
+    parser.add_argument("--split_prompt_to_system", action="store_true", help="Whether to split the prompt into system and user parts")
 
     args = parser.parse_args()
 
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file(args.games_path, grammar_parser, False, relative_path='.'))
-    game_describer = GameDescriber(openai_model_str=args.gpt_model)
+    game_describer = GameDescriber(openai_model_str=args.gpt_model, split_prompt_to_system=args.split_prompt_to_system)
 
     input_file_name = os.path.splitext(os.path.basename(args.games_path))[0]
 

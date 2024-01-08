@@ -32,6 +32,9 @@ from ast_utils import cached_load_and_parse_games_from_file
 DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
 DEFAULT_GAMES_PATH = "../dsl/interactive-beta.pddl"
 
+TRANSLATIONS_PATH = "./selected_human_and_map_elites_translations.csv"
+TRANSLATIONS_PATH_SPLIT_BY_SECTION = "./selected_human_and_map_elites_translations_split_by_section.csv"
+
 PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
     "adjacent": "{0} is adjacent to {1}",
@@ -948,7 +951,8 @@ class GameDescriber():
 
         return setup_description, preferences_description, terminal_description, scoring_description
 
-    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None):
+    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None,
+                         translations_path: str = TRANSLATIONS_PATH):
         '''
         Generate a "stage 2" description of the provided game text or AST. A stage 2 description uses
         an LLM to convert a stage 1 description into more naturalistic language
@@ -964,7 +968,8 @@ class GameDescriber():
 
         # Generate prompts
         all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
-                                                translations_path="./selected_human_and_map_elites_translations.csv")
+                                                translations_path=translations_path)
+        
         setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt, _ = all_prompts
 
         if setup_stage_1 != "":
@@ -989,7 +994,8 @@ class GameDescriber():
 
         return setup_description, preferences_description, terminal_description, scoring_description
 
-    def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None):
+    def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None,
+                         translations_path: str = TRANSLATIONS_PATH):
         '''
         Generate a "stage 3" description of the provided game text or AST. A stage 3 description uses an LLM
         to convert a stage 2 description (consisting of independent section descriptions) into a single, short
@@ -1005,7 +1011,7 @@ class GameDescriber():
 
 
         _, _, _, _, overall_prompt = compile_prompts_from_data(initial_stage=2, final_stage=3,
-                                                               translations_path="./selected_human_and_map_elites_translations.csv")
+                                                               translations_path=translations_path)
 
         setup_prefix = "" if setup_stage_2 == "" else "\n\n"
         terminal_prefix = "" if terminal_stage_2 == "" else "\n\n"

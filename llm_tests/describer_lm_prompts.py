@@ -32,7 +32,7 @@ SCORING_PROMPT= """Your task is to convert a templated description of a game's s
 Use the following examples as a guide:
 {0}"""
 
-COMPLETE_GAME_PROMPT = """Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it.
+COMPLETE_GAME_PROMPT = """Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Do not include explicit references to the game's preferences (e.g. "your score is the number of times Preference 1 was satisfied"), instead refer to the actual conditions that are being described (e.g. "your score is the number of times you successfully threw a ball to the bin"). Make sure to explicitly include descriptions of any setup and terminal conditions.
 Use the following examples as a guide:
 {0}"""
 

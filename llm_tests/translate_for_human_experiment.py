@@ -78,12 +78,12 @@ for filepath in FILES_TO_TRANSLATE:
         table_html = game_describer._prepare_data_for_html_display(descriptions_by_stage)
         per_game_htmls.append(table_html)
     
-    # Save as json
-    with open(f"./translations/{name}_translations_{'split_' if SPLIT_BY_SECTION else ''}{CURRENT_DATE}.json", "w") as file:
-        json.dump(data, file, indent=4)
+        # Save as json
+        with open(f"./translations/{name}_translations_{'split_' if SPLIT_BY_SECTION else ''}{CURRENT_DATE}.json", "w") as file:
+            json.dump(data, file, indent=4)
 
-    # Save as html
-    full_html = TABLE_HTML_TEMPLATE.format(STYLE_HTML, "\n".join(per_game_htmls))
-    output_filename = f"./translations/{name}_translations_{'split_' if SPLIT_BY_SECTION else ''}{CURRENT_DATE}.html"
-    with open(output_filename, "w") as file:
-        file.write(full_html)
+        # Save as html
+        full_html = TABLE_HTML_TEMPLATE.format(STYLE_HTML, "\n".join(per_game_htmls))
+        output_filename = f"./translations/{name}_translations_{'split_' if SPLIT_BY_SECTION else ''}{CURRENT_DATE}.html"
+        with open(output_filename, "w") as file:
+            file.write(full_html)

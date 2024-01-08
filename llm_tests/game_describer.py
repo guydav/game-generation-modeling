@@ -1,4 +1,5 @@
 import argparse
+import csv
 from itertools import groupby
 import os
 import sys
@@ -214,6 +215,22 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: predicate does not have a temporal logic type: {predicate.keys()}")
+
+    def _extract_descendant_rules(self, ast: typing.Union[list, tuple, tatsu.ast.AST], rules: typing.Set[str]):
+        '''
+        Recursively extract all of the descendant rules of the given AST
+        '''
+        if isinstance(ast, tuple) or isinstance(ast, list):
+            for item in ast:
+                self._extract_descendant_rules(item, rules)
+
+        elif isinstance(ast, tatsu.ast.AST):
+            rule = ast["parseinfo"].rule  # type: ignore
+            rules.add(rule)
+
+            for key in ast.keys():
+                if key != "parseinfo":
+                    self._extract_descendant_rules(ast[key], rules) # type: ignore
 
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
         '''
@@ -885,7 +902,19 @@ class GameDescriber():
         self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
-            setup_description, _ = self._describe_setup(game_info["setup"])
+            setup_description, condition_type = self._describe_setup(game_info["setup"])
+
+            # Handle the edge case where the setup doesn't include setup_and or setup_or by manually adding the
+            # game-conserved / game-optional information
+            descendant_rules = set()
+            self._extract_descendant_rules(game_info["setup"], descendant_rules)
+            
+            if "setup_and" not in descendant_rules and "setup_or" not in descendant_rules:
+                if condition_type == "optional":
+                    setup_description = f"the following must all be true for at least one time step:\n- {setup_description}"
+                elif condition_type == "conserved":
+                    setup_description = f"the following must all be true for every time step:\n- {setup_description}"
+
             setup_description = SETUP_HEADER + setup_description
         else:
             setup_description = ""
@@ -1057,3 +1086,10 @@ if __name__ == '__main__':
         output_filename = os.path.join(args.output_path, f"{input_file_name}_game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
         with open(output_filename, "w") as file:
             file.write(full_html)
+
+    # csv_output_filename = os.path.join(args.output_path, f"{input_file_name}_stage_{args.description_stage}_model_{args.gpt_model}_translations.csv")
+    # with open(csv_output_filename, "w") as file:
+    #     writer = csv.writer(file)
+
+    #     writer.writerow([f"Stage {idx}" for idx in range(args.description_stage + 1)])
+    #     for stage

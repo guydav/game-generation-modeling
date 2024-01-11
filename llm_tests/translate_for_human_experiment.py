@@ -26,7 +26,6 @@ FILES_TO_TRANSLATE = [
 
 # Whether to split the final translation output into sections
 SPLIT_BY_SECTION = True
-
 DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
 
 CURRENT_DATE = datetime.today().strftime("%Y-%m-%d").replace("-", "_")
@@ -74,7 +73,7 @@ for filepath in FILES_TO_TRANSLATE:
         stage_3_description = game_describer.describe_stage_3(game, stage_2_descriptions, translations_path=translations_path)
         descriptions_by_stage.append((stage_3_description, "", "", ""))
 
-        key = tuple(key)
+        key = str(tuple(key))
         data[key] = stage_3_description
 
         table_html = game_describer._prepare_data_for_html_display(descriptions_by_stage, key=str(key))

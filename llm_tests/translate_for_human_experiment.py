@@ -21,7 +21,7 @@ from game_describer import GameDescriber, TABLE_HTML_TEMPLATE, STYLE_HTML, TRANS
 FILES_TO_TRANSLATE = [
     # "../notebooks/games_for_human_experiment/human_games.pddl",
     "../notebooks/games_for_human_experiment/human_cell_archive_games.pddl",
-    "../notebooks/games_for_human_experiment/novel_archive_cell_games.pddl",
+    # "../notebooks/games_for_human_experiment/novel_archive_cell_games.pddl",
 ]
 
 # Whether to split the final translation output into sections

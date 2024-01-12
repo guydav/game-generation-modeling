@@ -16,25 +16,29 @@ Now, convert the following description:
 
 ### CONVERTED DESCRIPTION:"""
 
-SETUP_PROMPT = """Your task is to convert a templated description of a game's setup into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before.
-Use the following examples as a guide:
-{0}"""
 
-PREFERENCES_PROMPT = """Your task is to convert a templated description of a game's rules (expressed as "preferences") into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before.
-Use the following examples as a guide:
-{0}"""
+SHARED_PROMPT = "but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before."
 
-TERMINAL_PROMPT = """Your task is to convert a templated description of a game's terminal conditions into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before.
-Use the following examples as a guide:
-{0}"""
 
-SCORING_PROMPT= """Your task is to convert a templated description of a game's scoring conditions into a natural language description. Do not change the content of the template, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before.
+SETUP_PROMPT = f"""Your task is to convert a templated description of a game's setup into a natural language description. Do not change the content of the template, {SHARED_PROMPT}
 Use the following examples as a guide:
-{0}"""
+{{0}}"""
 
-COMPLETE_GAME_PROMPT = """Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, but you may rewrite and reorder the information in any way you think is necessary in order for a human to understand it. Use simple language and verbs that would be familiar to a human who has never played this game before. DO NOT include explicit references to a game's preferences (i.e. "Preference 1" or "Preference 2"). DO NOT include descriptions of setup or terminal conditions if they do not appear in the game.
+PREFERENCES_PROMPT = f"""Your task is to convert a templated description of a game's rules (expressed as "preferences") into a natural language description. Do not change the content of the template, {SHARED_PROMPT}
 Use the following examples as a guide:
-{0}"""
+{{0}}"""
+
+TERMINAL_PROMPT = f"""Your task is to convert a templated description of a game's terminal conditions into a natural language description. Do not change the content of the template, {SHARED_PROMPT}
+Use the following examples as a guide:
+{{0}}"""
+
+SCORING_PROMPT= f"""Your task is to convert a templated description of a game's scoring conditions into a natural language description. Do not change the content of the template, {SHARED_PROMPT}
+Use the following examples as a guide:
+{{0}}"""
+
+COMPLETE_GAME_PROMPT = f"""Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, {SHARED_PROMPT} DO NOT include explicit references to a game's preferences (i.e. "Preference 1" or "Preference 2"). DO NOT include descriptions of setup or terminal conditions if they do not appear in the game.
+Use the following examples as a guide:
+{{0}}"""
 
 
 def compile_prompts_from_data(initial_stage: int,

@@ -22,7 +22,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath('./reward-machine'))
 sys.path.append(os.path.abspath('../reward-machine'))
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
-from describer_lm_prompts import compile_prompts_from_data
+from describer_lm_prompts import compile_prompts_from_data, COMPLETE_GAME_VALIDATION_PROMPT
 from preference_handler import PredicateType
 
 from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
@@ -1006,17 +1006,17 @@ class GameDescriber():
         return setup_description, preferences_description, terminal_description, scoring_description
 
     def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None,
-                         translations_path: str = TRANSLATIONS_PATH):
+                         translations_path: str = TRANSLATIONS_PATH, validate_output: bool = True, validate_tries: int = 3):
         '''
         Generate a "stage 3" description of the provided game text or AST. A stage 3 description uses an LLM
         to convert a stage 2 description (consisting of independent section descriptions) into a single, short
         natural language description of the game
         '''
 
-        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 2 description"
+        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 3 description"
 
         if stage_2_descriptions is None:
-            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = self.describe_stage_1(game_text_or_ast)
+            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = self.describe_stage_2(game_text_or_ast)
         else:
             setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = stage_2_descriptions
 
@@ -1030,8 +1030,26 @@ class GameDescriber():
         game_description = f"{setup_prefix}{setup_stage_2}\n\n{preferences_stage_2}{terminal_prefix}{terminal_stage_2}\n\n{scoring_stage_2}"
 
         stage_3_description = self._query_openai(overall_prompt.format(game_description))
+        if validate_output:
+            stage_3_description = self._validate_stage_3_output(stage_3_description, game_description, tries=validate_tries)
 
         return stage_3_description
+
+    def _validate_stage_3_output(self, output: str, game_description: str, tries: int = 3):
+        '''
+        Check whether the Stage 3 output from the LLM is valid. Currently, this checks to make sure that
+        preferences are not referred to explicitly (e.g. "your score is the number of times  Preference 1 is satisfied")
+        '''
+
+        cur_try = 0
+        contains_preference = "preference" in output.lower()
+
+        while contains_preference and cur_try < tries:
+            output = self._query_openai(COMPLETE_GAME_VALIDATION_PROMPT.format(game_description, output)) # type: ignore
+            contains_preference = "preference" in output.lower()
+            cur_try += 1
+
+        return output
 
     def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]], key: typing.Optional[str] = None):
         '''

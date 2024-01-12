@@ -40,6 +40,14 @@ COMPLETE_GAME_PROMPT = f"""Your task is to combine and simplify the description 
 Use the following examples as a guide:
 {{0}}"""
 
+COMPLETE_GAME_VALIDATION_PROMPT = """Please edit the following game description to remove all explicit references to a game's preferences (i.e. "Preference 1" or "Preference 2") and replace them with their corresponding natural language descriptions. DO NOT change any other content of the game description.
+Here is the game's information:
+{0}
+
+And here is the game description to re-write:
+{1}
+"""
+
 
 def compile_prompts_from_data(initial_stage: int,
                               final_stage: int,

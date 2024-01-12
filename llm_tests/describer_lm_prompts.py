@@ -36,7 +36,7 @@ SCORING_PROMPT= f"""Your task is to convert a templated description of a game's 
 Use the following examples as a guide:
 {{0}}"""
 
-COMPLETE_GAME_PROMPT = f"""Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, {SHARED_PROMPT} DO NOT include explicit references to a game's preferences (i.e. "Preference 1" or "Preference 2"). DO NOT include descriptions of setup or terminal conditions if they do not appear in the game.
+COMPLETE_GAME_PROMPT = f"""Your task is to combine and simplify the description of a game's rules. Do not change the content of the rules by either adding or removing information, {SHARED_PROMPT} DO describe preferences carefully, such that a player reading the description can easily play the game. DO NOT include explicit references to a game's preferences (i.e. "Preference 1" or "Preference 2"). DO NOT include descriptions of setup or terminal conditions if they do not appear in the game.
 Use the following examples as a guide:
 {{0}}"""
 
@@ -77,27 +77,27 @@ def compile_prompts_from_data(initial_stage: int,
             # Add overall description to complete description and reset the overall description
             complete_content += game_overall_prefix + game_overall_suffix
 
-            game_overall_prefix = "\n\n###INITIAL DESCRIPTION:"
-            game_overall_suffix = "\n\n###CONVERTED DESCRIPTION\n"
+            game_overall_prefix = "\n\n### INITIAL DESCRIPTION:"
+            game_overall_suffix = "\n\n### CONVERTED DESCRIPTION\n"
             continue
 
         # Setup (optional)
         elif idx%5 == 1:
             if stages[initial_stage] != "":
-                setup_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
+                setup_content += f"### INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n### CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         # Preferences (required)
         elif idx%5 == 2:
-            preferences_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
+            preferences_content += f"### INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n### CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         # Terminal (optional)
         elif idx%5 == 3:
             if stages[initial_stage] != "":
-                terminal_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
+                terminal_content += f"### INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n### CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         # Scoring (required)
         elif idx%5 == 4:
-            scoring_content += f"###INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n###CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
+            scoring_content += f"### INITIAL DESCRIPTION:\n{stages[initial_stage]}\n\n### CONVERTED DESCRIPTION:\n{stages[final_stage]}\n\n"
 
         if stages[initial_stage] != "":
             game_overall_prefix += f"\n\n{stages[initial_stage]}"
@@ -113,5 +113,5 @@ def compile_prompts_from_data(initial_stage: int,
     return setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt, complete_game_prompt
 
 if __name__ == '__main__':
-    a, b, c, d, e = compile_prompts_from_data(2, 3, "./selected_human_and_map_elites_translations.csv")
+    a, b, c, d, e = compile_prompts_from_data(2, 3, "./llm_tests/selected_human_and_map_elites_translations_split_by_section.csv")
     breakpoint()

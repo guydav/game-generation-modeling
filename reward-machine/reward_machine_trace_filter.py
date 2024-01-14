@@ -52,8 +52,10 @@ parser.add_argument('--map-elites-model-name', type=str, default=None)
 parser.add_argument('--map-elites-model-date-id', type=str, default=None)
 parser.add_argument('--map-elites-run-year', type=str, default=str(date.today().year))
 parser.add_argument('--run-from-real-games', action='store_true')
-parser.add_argument('--map-elites-model-folder', type=str, default='samples')
-parser.add_argument('--relative-path', type=str, default='.')
+DEFAULT_MODEL_FOLDER = 'samples'
+parser.add_argument('--map-elites-model-folder', type=str, default=DEFAULT_MODEL_FOLDER)
+DEFAULT_RELATIVE_PATH = '.'
+parser.add_argument('--relative-path', type=str, default=DEFAULT_RELATIVE_PATH)
 parser.add_argument('--base-trace-path', type=str, default=compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH)
 parser.add_argument('--single-key', type=str, default=None)
 DEFAULT_STOP_AFTER_COUNT = 5
@@ -605,10 +607,15 @@ class TraceGameEvaluator:
     base_trace_path: str
     chunksize: int
     force_trace_ids: typing.Optional[typing.List[str]]
+    full_result_by_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Dict[str, typing.Any]]
     map_elites_model_identifier: str
     max_traces_per_game: typing.Optional[int]
     n_workers: int
     population: typing.Dict[typing.Union[KeyTypeAnnotation, int], ASTType]
+    result_summary_by_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], int]
+    save_folder: str
+    save_interval: int
+    save_relative_path: str
     stop_after_count: int
     traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]]
     traces_by_population_key_cache_path: str
@@ -624,6 +631,7 @@ class TraceGameEvaluator:
                  max_traces_per_game: typing.Optional[int] = None, force_trace_ids: typing.Optional[typing.List[str]] = None,
                  base_trace_path: str = compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH,
                  traces_by_population_key_cache_path: str = TRACES_BY_POPULATION_KEY_CACHE_PATH,
+                 save_folder: str = DEFAULT_MODEL_FOLDER, save_relative_path: str = DEFAULT_RELATIVE_PATH, save_interval: int = 8,
                  max_cache_size: int = MAX_TRACE_CACHE_SIZE, tqdm: bool = False,
                  n_workers: int = 1, chunksize: int = 1,
                  maxtasksperchild: typing.Optional[int] = None,
@@ -641,6 +649,9 @@ class TraceGameEvaluator:
         self.force_trace_ids = force_trace_ids
         self.base_trace_path = base_trace_path
         self.traces_by_population_key_cache_path = traces_by_population_key_cache_path
+        self.save_folder = save_folder
+        self.save_relative_path = save_relative_path
+        self.save_interval = save_interval
         self.tqdm = tqdm
         self.n_workers = n_workers
         self.chunksize = chunksize
@@ -659,14 +670,27 @@ class TraceGameEvaluator:
         self.trace_finder = TraceFinderASTParser(self.trace_names_hash)
         self.trace_id_to_domain = _query_trace_id_to_domain(self.trace_finder.predicate_data_estimator.con)
 
+        self.result_summary_by_key = {}
+        self.full_result_by_key = {}
+        self.load_partial_outputs()
+
     def _build_traces_by_population_key_cache_key(self):
         return f'{self.trace_names_hash}-{self.map_elites_model_identifier}'
 
-    # def __getstate__(self) -> typing.Dict[str, typing.Any]:
-    #     state = self.__dict__.copy()
-    #     if 'trace_finder' in state:
-    #         del state['trace_finder']
-    #     return state
+    def __getstate__(self) -> typing.Dict[str, typing.Any]:
+        state = self.__dict__.copy()
+
+        # Avoid having these serialized since the worker processes don't need them
+        if 'trace_finder' in state:
+            del state['trace_finder']
+
+        if 'result_summary_by_key' in state:
+            del state['result_summary_by_key']
+
+        if 'full_result_by_key' in state:
+            del state['full_result_by_key']
+
+        return state
 
     # def __setstate__(self, state: typing.Dict[str, typing.Any]) -> None:
     #     self.__dict__.update(state)
@@ -867,8 +891,6 @@ class TraceGameEvaluator:
             logger.info(f'Filtering {key}')
             self.handle_single_game(key, print_results=True)
         else:
-            result_summary_by_key = {}
-            full_result_by_key = {}
 
             if self.n_workers > 1:
                 key_iter, population_size = self._build_key_iter(max_keys, sort_keys_by_traces)
@@ -876,48 +898,60 @@ class TraceGameEvaluator:
 
                 keys_with_traces = []
                 for key in key_iter:
+                    if key in self.result_summary_by_key:
+                        continue
+
                     no_traces_retval = self.handle_single_game_cache_no_traces(key)
                     if no_traces_retval[0]:
                         min_count, counts_by_trace_and_key = no_traces_retval[2:]  # type: ignore
-                        result_summary_by_key[key] = min_count
-                        full_result_by_key[key] = counts_by_trace_and_key
+                        self.result_summary_by_key[key] = min_count
+                        self.full_result_by_key[key] = counts_by_trace_and_key
 
                     else:
                         keys_with_traces.append(key)
 
-                logger.info(f'After fast processing, {len(keys_with_traces)} keys have traces for full processing')
-
                 population_size = len(keys_with_traces)
+                logger.info(f'After fast processing and filtering previously processed keys, {population_size} keys have traces for full processing')
+
+                if population_size == 0:
+                    return self.result_summary_by_key, self.full_result_by_key
+
                 # We shouldn't need it from here on out, and it will speed up creating subprocesses
                 del(self.trace_finder)
 
                 with multiprocessing.Pool(min(self.n_workers, population_size), maxtasksperchild=self.maxtasksperchild) as pool:
                     logger.info('Pool started')
                     pbar = tqdm(desc='MAP-Elites samples with traces', total=population_size)
+                    count_since_save = 0
 
                     for key, min_count, counts_by_trace_and_key in pool.imap_unordered(self.handle_single_game, keys_with_traces, chunksize=self.chunksize):
-                        result_summary_by_key[key] = min_count
-                        full_result_by_key[key] = counts_by_trace_and_key
+                        self.result_summary_by_key[key] = min_count
+                        self.full_result_by_key[key] = counts_by_trace_and_key
                         pbar.update(1)
                         pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+
+                        count_since_save += 1
+                        if count_since_save >= self.save_interval:
+                            self.save_outputs(overwrite=True)
+                            count_since_save = 0
 
             else:
                 key_iter, _ = self._build_key_iter(max_keys, sort_keys_by_traces)
                 for key in key_iter:
                     key, min_count, counts_by_trace_and_key = self.handle_single_game(key)
-                    result_summary_by_key[key] = min_count
-                    full_result_by_key[key] = counts_by_trace_and_key
+                    self.result_summary_by_key[key] = min_count
+                    self.full_result_by_key[key] = counts_by_trace_and_key
 
             print('=' * 80)
-            print(result_summary_by_key)
+            print(self.result_summary_by_key)
             print('=' * 80)
 
             print('Summary of results:')
-            result_counts = Counter(result_summary_by_key.values())
+            result_counts = Counter(self.result_summary_by_key.values())
             for count in sorted(result_counts.keys()):
                 print(f'    - {count}: {result_counts[count]}')
 
-            return result_summary_by_key, full_result_by_key
+            return self.result_summary_by_key, self.full_result_by_key
 
     def _precompute_traces_by_population_key(self):
         missing_keys = [key for key in self.population.keys() if key not in self.traces_by_population_key]
@@ -989,6 +1023,20 @@ class TraceGameEvaluator:
 
         return keys, population_size
 
+    def save_outputs(self, overwrite: bool = False):
+        output = dict(summary=self.result_summary_by_key, full=self.full_result_by_key)
+        save_data(data=output, folder=self.save_folder, name=f'trace_filter_results_{self.map_elites_model_identifier}', relative_path=self.save_relative_path, overwrite=overwrite)
+
+    def load_partial_outputs(self):
+        output_path = get_data_path(folder=self.save_folder, name=f'trace_filter_results_{self.map_elites_model_identifier}', relative_path=self.save_relative_path)
+        if os.path.exists(output_path):
+            logger.info(f'Loading partial outputs from {output_path}')
+            output = load_data_from_path(output_path)
+            self.result_summary_by_key = output['summary']
+            self.full_result_by_key = output['full']
+        else:
+            logger.info(f'No partial outputs found at {output_path}')
+
 
 def main(args: argparse.Namespace):
     multiprocessing.set_start_method(args.parallel_start_method, force=True)
@@ -1050,6 +1098,7 @@ def main(args: argparse.Namespace):
                                              force_trace_ids=args.force_trace_ids,
                                              base_trace_path=args.base_trace_path,
                                              traces_by_population_key_cache_path=args.traces_by_population_key_cache_path,
+                                             save_folder=args.map_elites_model_folder, save_relative_path=args.relative_path,
                                              tqdm=args.tqdm, n_workers=args.n_workers, chunksize=args.chunksize,
                                              maxtasksperchild=args.maxtasksperchild, verbose=args.verbose)
 
@@ -1060,10 +1109,7 @@ def main(args: argparse.Namespace):
         results = trace_evaluator(key, args.max_keys, not args.dont_sort_keys_by_traces)
 
         if results is not None:
-            result_summary_by_key, full_result_by_key = results
-            output = dict(summary=result_summary_by_key, full=full_result_by_key)
-            name = 'real_games' if args.run_from_real_games else f'{args.map_elites_model_name}_{args.map_elites_model_date_id}'
-            save_data(output, folder=args.map_elites_model_folder, name=f'trace_filter_results_{name}', relative_path=args.relative_path)
+            trace_evaluator.save_outputs(overwrite=True)
 
     finally:
         if args.copy_traces_to_tmp:

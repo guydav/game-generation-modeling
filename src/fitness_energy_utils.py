@@ -104,11 +104,11 @@ def get_data_path(folder: str, name: str, relative_path: str = '..', delta: typi
     return f'{relative_path}/{folder}/{name}_{date.strftime("%Y_%m_%d")}.pkl.gz'
 
 
-def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True):
+def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..', log_message: bool = True, overwrite: bool = False):
     output_path = get_data_path(folder, name, relative_path)
 
     i = 0
-    while os.path.exists(output_path):
+    while os.path.exists(output_path) and not overwrite:
         folder, filename = os.path.split(output_path)
         filename, period, extensions = filename.partition('.')
         if filename.endswith(f'_{i}'):
@@ -118,7 +118,7 @@ def save_data(data: typing.Any, folder: str, name: str, relative_path: str = '..
         filename = filename + f'_{i}'
         output_path = os.path.join(folder, filename + period + extensions)
 
-    save_data_to_path(data, output_path, log_message=log_message)
+    save_data_to_path(data, output_path, log_message=log_message, overwrite=overwrite)
 
 
 def save_data_to_path(data: typing.Any, path: str, log_message: bool = True, overwrite: bool = False):

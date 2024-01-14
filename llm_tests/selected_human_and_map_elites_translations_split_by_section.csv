@@ -5,7 +5,13 @@ SETUP,"(:setup (and
         (game-conserved (on floor ?c))
     )
 ))","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?c of type curved_wooden_ramp, such that ?c is on floor","In order to set up the game, put a curved wooden ramp on the floor and make sure it stays there for the duration of the game","In order to set up the game, put a curved wooden ramp on the floor and make sure it stays there for the duration of the game. Then, stand in front of the ramp and throw dodgeballs so they touch the ramp and then land behind it. The game ends after you successfully throw a dodgeball in this way. You get 3 points if you did so in one attempt, 2 points if you did so in two attempts, and 1 point if you did so in three or more attempts."
+- there exists an object ?c of type curved_wooden_ramp, such that ?c is on floor","In order to set up the game, put a curved wooden ramp on the floor and make sure it stays there for the duration of the game","Setup: put a curved wooden ramp on the floor and make sure it stays there for the duration of the game
+
+Gameplay: stand in front of the ramp and throw dodgeballs so that they touch the ramp and then land behind it
+
+Terminal: the game ends after you successfully throw a dodgeball in this way
+
+Scoring: you get 3 points if you made a successful throw in one attempt, 2 points if you did so in two attempts, and 1 point if you did so in three or more attempts"
 PREFERENCES,"(:constraints (and
     (preference throwOverRamp  ; TODO: does this quanitfy over reasonably?
         (exists (?d - dodgeball ?c - curved_wooden_ramp)
@@ -74,7 +80,9 @@ SCORING,"(:scoring (+
     (* (>= (count throwAttempt) 3) (count-once throwOverRamp))
 )","At the end of the game, the player's score is the sum of (the product of (3); (the number of times 'Preference 2' has been satisfied is equal to 1); and (min(1, the number of times 'Preference 1' has been satisfied))); (the product of (2); (the number of times 'Preference 2' has been satisfied is equal to 2); and (min(1, the number of times 'Preference 1' has been satisfied))); and (the product of (the number of times 'Preference 2' has been satisfied is greater than or equal to 3) and (min(1, the number of times 'Preference 1' has been satisfied)))","At the end of the game, the player's score is 3 if Preference 1 is satisfied once and Preference 2 is satisfied once; their score is 2 if Preference 1 is satisfied once and Preference 2 is satisfied twice; and their score is 1 if Preference 1 is satisfied once and Preference 2 is satisfied 3 or more times",
 614b603d4da88384282967a7-3,,,,
-SETUP,,,,"To play this game, make buildings out of blocks. At the end of the game, your score is equal to the largest number of different blocks used to make any of the current buildings."
+SETUP,,,,"Gameplay: make buildings out of blocks
+
+Scoring: you get 1 point for every different block used in the largest building at the end of the game"
 PREFERENCES,"(:constraints (and
     (forall (?b - building)
         (preference blockInTowerAtEnd (exists (?l - block)
@@ -109,7 +117,13 @@ SETUP,"(:setup (and
 - it's not the case that there exists an object ?g of type game_object, such that ?g is on desk
 
 and in addition, the following must all be true for every time step:
-- there exists an object ?h of type hexagonal_bin, such that bed is adjacent to ?h","In order to set up the game, put every ball on the rug and make sure that there are no objects on the desk. In addition, put a hexagonal bin next to the bed and make sure that it stays there throughout the game","In order to set up the game, put every ball on the rug and make sure that there are no objects on the desk. In addition, put a hexagonal bin next to the bed and make sure that it stays there throughout the game. Then, throw balls into the bin while standing on the either the red, yellow, or pink sections of the rug. The game ends after you've made at least 8 throw attempts. Your score at the end of the game depends on the number of successful throws into the bin made with different kinds of balls while standing on differently-colored sections of the rug. While standing on a red section, successful throws with a dodgeball are worth 2 points, throws with a basketball are worth 3 points, and throws with a beachball are worth 4 points. While standing on a pink section, dodgeball throws give 3 points, basketball throws give 4 points, and beachball throws give 5 points. Finally, while standing on a yellow section, dodgeball throws give 4 points, basketball throws give 5 points, and beachball throws give 6 points."
+- there exists an object ?h of type hexagonal_bin, such that bed is adjacent to ?h","In order to set up the game, put every ball on the rug and make sure that there are no objects on the desk. In addition, put a hexagonal bin next to the bed and make sure that it stays there throughout the game","Setup: put every ball on the rug and take every object off of the desk. In addition, put a hexagonal bin next to the bed and make sure that it stays there throughout the game
+
+Gameplay: throw balls into the bin while standing on either the red, yellow, or pink sections of the rug
+
+Terminal: the game ends after you've made at least 8 throw attempts
+
+Scoring: your score at the end of the game depends on the number of successful throws into the bin made with different kinds of balls while standing on differently-colored sections of the rug. While standing on a red section, successful throws with a dodgeball are worth 2 points, throws with a basketball are worth 3 points, and throws with a beachball are worth 4 points. While standing on a pink section, dodgeball throws give 3 points, basketball throws give 4 points, and beachball throws give 5 points. Finally, while standing on a yellow section, dodgeball throws give 4 points, basketball throws give 5 points, and beachball throws give 6 points"
 PREFERENCES,"(:constraints (and
     (forall (?b - ball ?x - (either red yellow pink))
         (preference throwBallToBin
@@ -179,7 +193,9 @@ SCORING,"(:scoring (+
     (* 6 (count throwBallToBin:beachball:yellow))
 ))","At the end of the game, the player's score is the sum of (the product of (2) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type dodgeball and ?x is bound to an object of type red)); (the product of (3) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type basketball and ?x is bound to an object of type red)); (the product of (4) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type beachball and ?x is bound to an object of type red)); (the product of (3) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type dodgeball and ?x is bound to an object of type pink)); (the product of (4) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type basketball and ?x is bound to an object of type pink)); (the product of (5) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type beachball and ?x is bound to an object of type pink)); (the product of (4) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type dodgeball and ?x is bound to an object of type yellow)); (the product of (5) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type basketball and ?x is bound to an object of type yellow)); and (the product of (6) and (the number of times 'Preference 1' has been satisfied, where ?b is bound to an object of type beachball and ?x is bound to an object of type yellow))","At the end of the game, the player gets 2 points for every successful throw with a dodgeball while standing on a red section, 3 points for every successful throw with a basketball while standing on a red section, and 4 points for every successful throw with a beachball while standing on a red section. The player also gets 3 points for every successful throw with a dodgeball while standing on a pink section, 4 points for every successful throw with a basketball while standing on a pink section, and 5 points for every successful throw with a beachball while standing on a pink section. Finally, the player gets 4 points for every successful throw with a dodgeball while standing on a yellow section, 5 points for every successful throw with a basketball while standing on a yellow section, and 6 points for every successful throw with a beachball while standing on a yellow section",
 5f0cc31363e0816c1b0db7e1-53,,,,
-SETUP,,,,"To play this game, clean up by putting balls in a bin in the corner of room, putting cube blocks on a shelf, and putting cellphones / keychains / mugs / credit cards / CDs / watches / alarm clocks in a drawer. You get 5 points for every object successfully put away at the end of the game."
+SETUP,,,,"Gameplay: put balls in a bin the corner of the room, put cube blocks on a shelf, and put cellphones / keychains / mugs / credit cards / CDs / watches / alarm blocks in a drawer
+
+Scoring: you get 5 points for each different object put in its designated location at the end of the game"
 PREFERENCES,"(:constraints (and
     (preference dodgeballsInPlace
         (exists (?d - dodgeball ?h - hexagonal_bin ?w1 ?w2 - wall)
@@ -261,7 +277,13 @@ SETUP,"(:setup (and
 
 and in addition, the following must all be true for every time step:
 - ?w1 is opposite ?w2
-- for any object ?b of type bridge_block, (?b is on floor) and (the distance between ?w1 and ?b is equal to the distance between ?w2 and ?b)","In order to set up the game, pick two walls opposite of one another. Put every bridge block on the floor so that they are equidistant from both walls and make sure that they stay there throughout the game. Then put every other object closer to one wall than to the other.","In order to set up the game, pick two walls opposite of one another. Put every bridge block on the floor so that they are equidistant from both walls and make sure that they stay there throughout the game. Then put every other object closer to one wall than to the other. To play the game, pick up objects that are closer to one wall than another and move them so that they're closer to the other wall. The game ends after 30 seconds, and your score is the number of different objects that you moved from one side to the other."
+- for any object ?b of type bridge_block, (?b is on floor) and (the distance between ?w1 and ?b is equal to the distance between ?w2 and ?b)","In order to set up the game, pick two walls opposite of one another. Put every bridge block on the floor so that they are equidistant from both walls and make sure that they stay there throughout the game. Then put every other object closer to one wall than to the other.","Setup: pick two walls opposite of one another and put every bridge block on the floor so that they are equidistant from both walls and make sure that they stay there throughout the game. Then put every other object on one side of the line of bridge blocks
+
+Gameplay: pick up objects that are closer to one wall than another and move them so that they're closer to the other wall
+
+Terminal: the game ends after 30 seconds
+
+Scoring: your score is the number of different objects that you moved from near one wall to another wall"
 PREFERENCES,"(:constraints (and
     (forall (?w1 ?w2 - wall)
         (preference objectMovedRoomSide (exists (?g - game_object)
@@ -307,7 +329,11 @@ SCORING,"(:scoring (external-forall-maximize
     (count-once-per-objects objectMovedRoomSide)
 ))","At the end of the game, the player's score is the maximum value of (the number of times 'Preference 1' has been satisfied with different objects) over all quantifications of ?w1 (of type wall) and ?w2 (of type wall)","At the end of the game, the player's score is equal to the number of times Preference 1 was satisfied with different objects, maximized over the different choices of wall",
 MAP-Elites Game 1,,,,
-SETUP,,,,"To play this game, place dodgeballs so that they're either in a hexagonal bin or touching a pillow. The game ends after at least one dodgeball is in a hexagonal bin, and your score is equal to the number of objects in the room that aren't cylindrical blocks for each pair of dodgeball and pillow that are touching. "
+SETUP,,,,"Gameplay: place dodgeballs so that they're either in a hexagonal bin or touching a pillow
+
+Terminal: the game ends after at least one dodgeball is in a hexagonal bin
+
+Scoring: your score is equal to the number of objects in the room that aren't cylindrical blocks for each pair of dodgeball and pillow that are touching"
 PREFERENCES,"(:constraints
   (and
     (preference preference0
@@ -376,7 +402,13 @@ SETUP,"(:setup
    )
  )
 )","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?v0 of type triangular_ramp, such that (?v0 is adjacent to agent)","In order to set up the game, stand next to a triangular ramp and stay there throughout the game","In order to set up the game, stand next to a triangular ramp and stay there throughout the game. To play the game adjust objects in the room so that they're not moving and the object is closer to the rug than to the north wall of the room. The game ends after at least one object is not moving and closer to the rug, and your score is equal to the number of different objects that meet the conditions."
+- there exists an object ?v0 of type triangular_ramp, such that (?v0 is adjacent to agent)","In order to set up the game, stand next to a triangular ramp and stay there throughout the game","Setup: stand next to a triangular ramp and stay there throughout the game
+
+Gameplay: make it so objects in the room aren't moving and are closer to the rug than the north wall of the room
+
+Terminal: the game ends after at least one object isn't moving and is closer to the rug than the north wall
+
+Scoring: you get 1 point for each different object that meets the conditions"
 PREFERENCES,"(:constraints
   (and
     (preference preference0
@@ -414,7 +446,11 @@ SCORING,"(:scoring
   (count preference0)
 )","At the end of the game, the player's score is the number of times 'Preference 1' has been satisfied","At the end of the game, the player's score is the number of times Preference 1 has been satisfied",
 MAP-Elites Game 3,,,,
-SETUP,,,,"To play the game, cause a book to move without picking it up. At the same time, a bottom shelf needs to be on a doggie bed. The game ends after a book has been made to move in this way at least 14 times, and your score is the number of times a book has been made to move in this way."
+SETUP,,,,"Gameplay: move a book without picking it up while a bottom shelf is on top of a doggie bed
+
+Terminal: the game ends after you have moved a book in this way at least 14 times
+
+Scoring: you get 1 point for each time you moved a book in this way"
 PREFERENCES,"(:constraints
   (and
     (preference preference0
@@ -463,7 +499,13 @@ SETUP,"(:setup
    )
  )
 )","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?v0 of type curved_wooden_ramp, such that (bed is adjacent to ?v0)","In order to set up the game, put a curved wooden ramp next to the bed and make sure that it stays there throughout the game","In order to set up the game, put a curved wooden ramp next to the bed and make sure it stays there throughout the game. To play the game, throw balls. The game ends when there at least two objects that are both moving and on the bed. Your score is equal to the number of times you threw a ball."
+- there exists an object ?v0 of type curved_wooden_ramp, such that (bed is adjacent to ?v0)","In order to set up the game, put a curved wooden ramp next to the bed and make sure that it stays there throughout the game","Setup: put a curved wooden ramp next to the bed and make sure that it stays there throughout the game
+
+Gameplay: throw balls around the room
+
+Terminal: the game ends when there are at least two objects that are moving and on the bed
+
+Scoring: you get 1 point for each time you threw a ball"
 PREFERENCES,"(:constraints
   (and
     (preference preference0
@@ -587,7 +629,9 @@ This preference is satisfied when:
 
 -----Preference 3-----
 This preference is satisfied when:
--at the end of the game, a key chain or CD is inside of a hexagonal bin","To the play the game, stack blocks and move objects around the room. At the end of the game, you get one point for every stack consisting of a block on top of a cube block which is on top of both another cube block and a flat gray block. You also get one point for every key chain or CD inside a hexagonal bin, and you lose 6 points for every dodgeball on the rug. "
+-at the end of the game, a key chain or CD is inside of a hexagonal bin","Gameplay: stack blocks and move objects around the room
+
+Scoring: you get one point for every stack consisting of a block on top of a cube block which is on top of both another cube block and a flat gray block. You also get one point for every key chain or CD inside a hexagonal bin, and you lose 6 points for every dodgeball on the rug"
 TERMINAL,,,,
 SCORING,"(:scoring
   (+ (* -6 (count preference1) (count preference0))
@@ -602,7 +646,11 @@ SETUP,"(:setup
    )
  )
 )","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?v0 of type hexagonal_bin, such that door is near ?v0","In order to set up the game, put a hexagonal bin near the door and make sure that it stays there throughout the game","In order to set up the game, put a hexagonal bin near the door and make sure that it stays there throughout the game. To play the game, move objects around the room. At the end of the game, you get 4 points for every object which isn't moving and is near the west sliding door and 1 point for every object which isn't moving and is near the main door."
+- there exists an object ?v0 of type hexagonal_bin, such that door is near ?v0","In order to set up the game, put a hexagonal bin near the door and make sure that it stays there throughout the game","Setup: put a hexagonal bin near the door and keep it there throughout the game
+
+Gameplay: move objects around the room
+
+Scoring: you get 4 points for every object that's not moving and is near the west sliding door, and 1 point for every object that isn't moving and is near the main door"
 PREFERENCES,"(:constraints
   (and
     (preference preference0
@@ -667,7 +715,11 @@ SETUP,"(:setup
    )
  )
 )","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?v0 of type hexagonal_bin, such that rug is near ?v0","In order to set up the game, put a hexagonal bin near the rug and make sure that it stays there throughout the game.","In order to set up the game, put a hexagonal bin near the rug and make sure that it stays there throughout the game. To play the game, move objects around and roll golfballs on the rug so they land on the hexagonal bin. At the end of the game, you get 1 point for every chair on a desk, 1 point for every time you dropped and picked up a cube block, and 1 point for every time you rolled a gofball on a rug and then onto a hexagonal bin."
+- there exists an object ?v0 of type hexagonal_bin, such that rug is near ?v0","In order to set up the game, put a hexagonal bin near the rug and make sure that it stays there throughout the game.","Setup: put a hexagonal bin near the rug and keep it there throughout the game
+
+Gameplay: move chairs around, pick up and drop cube blocks, and roll golfballs on the rug so they land on the hexagonal bin
+
+Scoring: you get 1 point for every chair on a desk, 1 point for every time you dropped and picked up a cube block, and 1 point for every time you rolled a gofball on a rug and then onto a hexagonal bin"
 PREFERENCES,"
 (:constraints
   (and
@@ -760,7 +812,11 @@ SETUP,"(:setup
    )
  )
 )","In order to set up the game, the following must all be true for every time step:
-- there exists an object ?v0 of type hexagonal_bin, such that rug is near ?v0","In order to set up the game, put a hexagonal bin near a rug and make sure that it stays there throughout the game","In order to set up the game, put a hexagonal bin near a rug and make sure that it stays there throughout the game. To play the game, throw dodgeballs and golfballs and try to throw dodgeballs so they land on a hexagonal bin. At the end of the game, you get 1 point for every time you threw a dodgeball or golfball, and you get another 1 point for every time you threw a dodgeball so it landed on a hexagonal bin. You lose 1 point for every time you threw a dodgeball so it landed on the rug. Finally, you also get 1 point for every object in the room that's not moving and is near the rug at the end of the game."
+- there exists an object ?v0 of type hexagonal_bin, such that rug is near ?v0","In order to set up the game, put a hexagonal bin near a rug and make sure that it stays there throughout the game","Setup: put a hexagonal bin near the rug and keep it there throughout the game
+
+Gameplay: throw dodgeballs and golfballs and try to throw dodgeballs so they land on a hexagonal bin
+
+Scoring: you get 1 point for every time you threw a dodgeball or golfball, and you get another 1 point for every time you threw a dodgeball so it landed on a hexagonal bin. You lose 1 point for every time you threw a dodgeball so it landed on the rug. Finally, you also get 1 point for every object in the room that's not moving and is near the rug at the end of the game"
 PREFERENCES,"(:constraints
   (and
     (preference preference0

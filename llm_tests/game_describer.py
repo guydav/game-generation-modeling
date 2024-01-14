@@ -1,4 +1,5 @@
 import argparse
+import csv
 from itertools import groupby
 import os
 import sys
@@ -21,7 +22,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath('./reward-machine'))
 sys.path.append(os.path.abspath('../reward-machine'))
 from utils import OBJECTS_BY_ROOM_AND_TYPE, extract_predicate_function_name, extract_variables, extract_variable_type_mapping
-from describer_lm_prompts import compile_prompts_from_data
+from describer_lm_prompts import compile_prompts_from_data, COMPLETE_GAME_VALIDATION_PROMPT
 from preference_handler import PredicateType
 
 from ast_parser import SETUP, PREFERENCES, TERMINAL, SCORING
@@ -30,6 +31,9 @@ from ast_utils import cached_load_and_parse_games_from_file
 
 DEFAULT_GRAMMAR_PATH = "../dsl/dsl.ebnf"
 DEFAULT_GAMES_PATH = "../dsl/interactive-beta.pddl"
+
+TRANSLATIONS_PATH = "./selected_human_and_map_elites_translations.csv"
+TRANSLATIONS_PATH_SPLIT_BY_SECTION = "./selected_human_and_map_elites_translations_split_by_section.csv"
 
 PREDICATE_DESCRIPTIONS = {
     "above": "{0} is above {1}",
@@ -115,7 +119,8 @@ class GameDescriber():
                  grammar_path: str = DEFAULT_GRAMMAR_PATH,
                  openai_model_str: typing.Optional[str] = None,
                  max_openai_tokens: int = 512,
-                 openai_temperature: float = 0.0):
+                 openai_temperature: float = 0.0,
+                 split_prompt_to_system: bool = False,):
 
         grammar = open(grammar_path).read()
         self.grammar_parser = typing.cast(tatsu.grammars.Grammar, tatsu.compile(grammar))
@@ -135,20 +140,30 @@ class GameDescriber():
         self.openai_client = openai.OpenAI(api_key=openai_key)
         self.max_openai_tokens = max_openai_tokens
         self.openai_temperature = openai_temperature
+        self.split_prompt_to_system = split_prompt_to_system
 
     @backoff.on_exception(backoff.expo, openai.RateLimitError)
-    def _query_openai(self, prompt: str):
+    def _query_openai(self, prompt: str, user_message_start: str = 'Now, convert the following description'):
         '''
         Query the specified openai model with the given prompt, and return the response. Assumes
         that the API key has already been set. Retries with exponentially-increasing delays in
         case of rate limit errors
         '''
+        messages = [{"role": "user", "content": prompt}]
+
+        if self.split_prompt_to_system:
+            split_index = prompt.find(user_message_start)
+            if split_index != -1:
+                messages = [
+                    {"role": "system", "content": prompt[:split_index].strip()},
+                    {"role": "user", "content": prompt[split_index:]}
+                ]
 
         response = self.openai_client.chat.completions.create(
             model=self.openai_model_str,
             max_tokens=self.max_openai_tokens,
             temperature=self.openai_temperature,
-            messages=[{"role": "user", "content": prompt}]
+            messages=messages,
         )
 
         reponse_content = response.choices[0].message.content
@@ -214,6 +229,22 @@ class GameDescriber():
 
         else:
             raise ValueError(f"Error: predicate does not have a temporal logic type: {predicate.keys()}")
+
+    def _extract_descendant_rules(self, ast: typing.Union[list, tuple, tatsu.ast.AST], rules: typing.Set[str]):
+        '''
+        Recursively extract all of the descendant rules of the given AST
+        '''
+        if isinstance(ast, tuple) or isinstance(ast, list):
+            for item in ast:
+                self._extract_descendant_rules(item, rules)
+
+        elif isinstance(ast, tatsu.ast.AST):
+            rule = ast["parseinfo"].rule  # type: ignore
+            rules.add(rule)
+
+            for key in ast.keys():
+                if key != "parseinfo":
+                    self._extract_descendant_rules(ast[key], rules) # type: ignore
 
     def _extract_name_and_types(self, scoring_expression: tatsu.ast.AST) -> typing.Tuple[str, typing.Optional[typing.Sequence[str]]]:
         '''
@@ -885,7 +916,19 @@ class GameDescriber():
         self.external_forall_preference_mappings = {}
 
         if game_info.get("setup") is not None:
-            setup_description, _ = self._describe_setup(game_info["setup"])
+            setup_description, condition_type = self._describe_setup(game_info["setup"])
+
+            # Handle the edge case where the setup doesn't include setup_and or setup_or by manually adding the
+            # game-conserved / game-optional information
+            descendant_rules = set()
+            self._extract_descendant_rules(game_info["setup"], descendant_rules)
+
+            if "setup_and" not in descendant_rules and "setup_or" not in descendant_rules:
+                if condition_type == "optional":
+                    setup_description = f"the following must all be true for at least one time step:\n- {setup_description}"
+                elif condition_type == "conserved":
+                    setup_description = f"the following must all be true for every time step:\n- {setup_description}"
+
             setup_description = SETUP_HEADER + setup_description
         else:
             setup_description = ""
@@ -919,7 +962,8 @@ class GameDescriber():
 
         return setup_description, preferences_description, terminal_description, scoring_description
 
-    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None):
+    def describe_stage_2(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_1_descriptions: typing.Optional[tuple] = None,
+                         translations_path: str = TRANSLATIONS_PATH):
         '''
         Generate a "stage 2" description of the provided game text or AST. A stage 2 description uses
         an LLM to convert a stage 1 description into more naturalistic language
@@ -935,7 +979,8 @@ class GameDescriber():
 
         # Generate prompts
         all_prompts = compile_prompts_from_data(initial_stage=1, final_stage=2,
-                                                translations_path="./selected_human_and_map_elites_translations.csv")
+                                                translations_path=translations_path)
+
         setup_prompt, preferences_prompt, terminal_prompt, scoring_prompt, _ = all_prompts
 
         if setup_stage_1 != "":
@@ -960,23 +1005,24 @@ class GameDescriber():
 
         return setup_description, preferences_description, terminal_description, scoring_description
 
-    def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None):
+    def describe_stage_3(self, game_text_or_ast: typing.Union[str, tatsu.ast.AST], stage_2_descriptions: typing.Optional[tuple] = None,
+                         translations_path: str = TRANSLATIONS_PATH, validate_output: bool = True, validate_tries: int = 3):
         '''
         Generate a "stage 3" description of the provided game text or AST. A stage 3 description uses an LLM
         to convert a stage 2 description (consisting of independent section descriptions) into a single, short
         natural language description of the game
         '''
 
-        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 2 description"
+        assert self.openai_model_str is not None, "Error: No OpenAI model specified provided for stage 3 description"
 
         if stage_2_descriptions is None:
-            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = self.describe_stage_1(game_text_or_ast)
+            setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = self.describe_stage_2(game_text_or_ast)
         else:
             setup_stage_2, preferences_stage_2, terminal_stage_2, scoring_stage_2 = stage_2_descriptions
 
 
         _, _, _, _, overall_prompt = compile_prompts_from_data(initial_stage=2, final_stage=3,
-                                                               translations_path="./selected_human_and_map_elites_translations.csv")
+                                                               translations_path=translations_path)
 
         setup_prefix = "" if setup_stage_2 == "" else "\n\n"
         terminal_prefix = "" if terminal_stage_2 == "" else "\n\n"
@@ -984,16 +1030,36 @@ class GameDescriber():
         game_description = f"{setup_prefix}{setup_stage_2}\n\n{preferences_stage_2}{terminal_prefix}{terminal_stage_2}\n\n{scoring_stage_2}"
 
         stage_3_description = self._query_openai(overall_prompt.format(game_description))
+        if validate_output:
+            stage_3_description = self._validate_stage_3_output(stage_3_description, game_description, tries=validate_tries)
 
         return stage_3_description
 
-    def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]]):
+    def _validate_stage_3_output(self, output: str, game_description: str, tries: int = 3):
+        '''
+        Check whether the Stage 3 output from the LLM is valid. Currently, this checks to make sure that
+        preferences are not referred to explicitly (e.g. "your score is the number of times  Preference 1 is satisfied")
+        '''
+
+        cur_try = 0
+        contains_preference = "preference" in output.lower()
+
+        while contains_preference and cur_try < tries:
+            output = self._query_openai(COMPLETE_GAME_VALIDATION_PROMPT.format(game_description, output)) # type: ignore
+            contains_preference = "preference" in output.lower()
+            cur_try += 1
+
+        return output
+
+    def _prepare_data_for_html_display(self, descriptions_by_stage: typing.List[typing.Tuple[str, str, str, str]], key: typing.Optional[str] = None):
         '''
         Helper function for formatting the descriptions for display in an HTML page
         '''
         grouped_descriptions = list(zip(*descriptions_by_stage))
 
         columns = [f"Stage {i}" for i in range(len(descriptions_by_stage))]
+        if key is not None:
+            columns[-1] = f'{columns[-1]} [key: {key}]'
 
         # The content of the table in HTML (for just the current game)
         table_html = tabulate.tabulate(grouped_descriptions, headers=columns, tablefmt="unsafehtml")
@@ -1016,13 +1082,14 @@ if __name__ == '__main__':
     parser.add_argument("--gpt_model", type=str, default="gpt-3.5-turbo", choices=["gpt-3.5-turbo", "gpt-4"])
     parser.add_argument("--games_path", type=str, default=DEFAULT_GAMES_PATH)
     parser.add_argument("--output_path", type=str, default=".")
+    parser.add_argument("--split_prompt_to_system", action="store_true", help="Whether to split the prompt into system and user parts")
 
     args = parser.parse_args()
 
     grammar = open(DEFAULT_GRAMMAR_PATH).read()
     grammar_parser = tatsu.compile(grammar)
     game_asts = list(cached_load_and_parse_games_from_file(args.games_path, grammar_parser, False, relative_path='.'))
-    game_describer = GameDescriber(openai_model_str=args.gpt_model)
+    game_describer = GameDescriber(openai_model_str=args.gpt_model, split_prompt_to_system=args.split_prompt_to_system)
 
     input_file_name = os.path.splitext(os.path.basename(args.games_path))[0]
 
@@ -1057,3 +1124,10 @@ if __name__ == '__main__':
         output_filename = os.path.join(args.output_path, f"{input_file_name}_game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
         with open(output_filename, "w") as file:
             file.write(full_html)
+
+    # csv_output_filename = os.path.join(args.output_path, f"{input_file_name}_stage_{args.description_stage}_model_{args.gpt_model}_translations.csv")
+    # with open(csv_output_filename, "w") as file:
+    #     writer = csv.writer(file)
+
+    #     writer.writerow([f"Stage {idx}" for idx in range(args.description_stage + 1)])
+    #     for stage

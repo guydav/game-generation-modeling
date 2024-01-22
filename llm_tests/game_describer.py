@@ -754,14 +754,13 @@ class GameDescriber():
             return f"negative {self._describe_scoring(scoring_ast['expr'])}" # type: ignore
 
         elif rule == "scoring_comparison":
-            comparison_operator = scoring_ast["comp"]["op"] # type: ignore
+            return self._describe_scoring(scoring_ast["comp"]) # type: ignore
 
-            # Issue: occasional syntax errors can cause the operator to be invalid / not appear
-            if comparison_operator is None:
-                return "[SYNTAX ERROR IN SCORING]"
+        elif rule == "scoring_comp":
+            comparison_operator = scoring_ast["op"] # type: ignore
 
-            expr_1 = self._describe_scoring(scoring_ast["comp"]["expr_1"]) # type: ignore
-            expr_2 = self._describe_scoring(scoring_ast["comp"]["expr_2"]) # type: ignore
+            expr_1 = self._describe_scoring(scoring_ast["expr_1"]) # type: ignore
+            expr_2 = self._describe_scoring(scoring_ast["expr_2"]) # type: ignore
 
             if comparison_operator == "=":
                 return f"{expr_1} is equal to {expr_2}" # type: ignore
@@ -773,6 +772,14 @@ class GameDescriber():
                 return f"{expr_1} is greater than {expr_2}" # type: ignore
             elif comparison_operator == ">=":
                 return f"{expr_1} is greater than or equal to {expr_2}" # type: ignore
+            
+        elif rule == "scoring_equals_comp":
+            expressions = scoring_ast["expr"] # type: ignore
+            if isinstance(expressions, tatsu.ast.AST):
+                raise ValueError("Error: scoring_equals_comp should have multiple expressions")
+            
+            elif isinstance(expressions, list):
+                return f"{self.engine.join(['(' + self._describe_scoring(expression) + ')' for expression in expressions])} are {'all ' if len(expressions) > 2 else ''}equal"
 
         elif rule == "preference_eval":
             return self._describe_scoring(scoring_ast["count_method"]) # type: ignore
@@ -1083,6 +1090,7 @@ if __name__ == '__main__':
     parser.add_argument("--games_path", type=str, default=DEFAULT_GAMES_PATH)
     parser.add_argument("--output_path", type=str, default=".")
     parser.add_argument("--split_prompt_to_system", action="store_true", help="Whether to split the prompt into system and user parts")
+    parser.add_argument("--ids", nargs="+", default=None, help="The ids of the games to describe (if not specified, all games will be described)")
 
     args = parser.parse_args()
 
@@ -1096,6 +1104,10 @@ if __name__ == '__main__':
     game_table_htmls = []
     for game in tqdm(game_asts, desc="Generating game descriptions"):
         descriptions_by_stage = []
+
+        game_id = game[1]["game_name"]
+        if args.ids is not None and game_id not in args.ids:
+            continue
 
         stage_0_descriptions = game_describer.describe_stage_0(game, format_for_html=True)
         descriptions_by_stage.append(stage_0_descriptions)
@@ -1121,7 +1133,7 @@ if __name__ == '__main__':
         # The ultimate html to be saved / displayed
         full_html = TABLE_HTML_TEMPLATE.format(STYLE_HTML, joined_html)
 
-        output_filename = os.path.join(args.output_path, f"{input_file_name}_game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}.html")
+        output_filename = os.path.join(args.output_path, f"{input_file_name}_game_descriptions_stage_{args.description_stage}_model_{args.gpt_model}_ids_{'all' if args.ids is None else '--'.join(args.ids)}.html")
         with open(output_filename, "w") as file:
             file.write(full_html)
 

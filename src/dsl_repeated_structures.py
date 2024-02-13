@@ -10,10 +10,11 @@ import numpy as np
 import os
 import re
 
-from parse_dsl import load_games_from_file
+from ast_utils import load_games_from_file
 from ast_parser import ASTParser
 from ast_utils import update_ast
 import ast_printer
+from ast_to_latex_doc import extract_predicate_function_args
 
 parser = argparse.ArgumentParser()
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
@@ -29,7 +30,7 @@ parser.add_argument('-q', '--dont-tqdm', action='store_true')
 DEFAULT_OUTPUT_PATH ='./data/dsl_repeated_structures_pref_body.csv'
 parser.add_argument('-o', '--output-path', default=DEFAULT_OUTPUT_PATH)
 parser.add_argument('-p', '--replace-predicate-names', action='store_true')
-parser.add_argument('-b', '--build-function', default='build_preference_body_level_extractor')
+parser.add_argument('-b', '--build-function', default='build_temporal_operator_level_extractor')
 
 
 PREFERENCE_BODY_STRUCTURE_STARTS = ('then', 'always', 'at-end')
@@ -180,46 +181,57 @@ def build_variables_and_objects_extractor(args, structure_starts, replace_predic
 
     extractor = RepeatedStructureExtractor(structure_starts)
 
+    def _handle_predicate_function_args(inner_ast):
+        arg_index = 1
+        while f'arg_{arg_index}' in inner_ast:
+            arg = inner_ast[f'arg_{arg_index}']
+            if isinstance(arg, tatsu.ast.AST):
+                if 'term' in arg and arg.term is not None:
+                    if isinstance(arg.term, str):
+                        if arg.term.startswith('?'):
+                            update_ast(arg, 'term', variable_replacement)
+                        else:
+                            update_ast(arg, 'term', non_variable_replacement)
+
+                    elif 'terminal' in arg.term:
+                        update_ast(arg.term, 'terminal', non_variable_replacement)
+
+
+            elif isinstance(arg, str):
+                if arg.startswith('?'):
+                    update_ast(inner_ast, f'arg_{arg_index}', variable_replacement)
+                else:
+                    update_ast(inner_ast, f'arg_{arg_index}', variable_replacement)
+            arg_index += 1
+
     def handle_predicate(ast, **kwargs):
         if replace_predicate_names and 'pred_name' in ast:
             update_ast(ast, 'pred_name', 'predicate')
 
-        if 'pred_args' in ast:
-            args = ast['pred_args']
-            for i, arg in enumerate(args):
-                if arg.startswith('?'):
-                    args[i] = variable_replacement
+        _handle_predicate_function_args(ast.pred)
 
-                elif replace_non_variable_args:
-                    args[i] = non_variable_replacement
 
     extractor.register('predicate', handle_predicate)
 
     def handle_function_comparison(ast, **kwargs):
-        if 'comp_arg' in ast and ast.comp_arg:
-            if ast.comp_arg.isnumeric() and replace_comparison_numbers:
-                update_ast(ast, 'comp_arg', number_replacement)
-            elif ast.comp_arg.startswith('?'):
-                update_ast(ast, 'comp_arg', variable_replacement)
-            elif replace_non_variable_args:
-                update_ast(ast, 'comp_arg', type_replacement)
+        inner_comp = ast.comp
+        if 'equal_comp_args' in inner_comp:
+            for arg_index in range(len(inner_comp.equal_comp_args)):
+                inner_arg = inner_comp.equal_comp_args[arg_index].arg
+                if isinstance(inner_arg, str) and inner_arg.isnumeric() and replace_comparison_numbers:
+                    update_ast(inner_comp.equal_comp_args[arg_index], 'arg', number_replacement)
 
+        else:
+            for arg_key in 'arg_1', 'arg_2':
+                inner_arg = inner_comp[arg_key].arg
+                if isinstance(inner_arg, str) and inner_arg.isnumeric() and replace_comparison_numbers:
+                    update_ast(inner_comp[arg_key], 'arg', number_replacement)
 
     extractor.register('function_comparison', handle_function_comparison)
 
     def handle_function_eval(ast, **kwargs):
-        if 'func_args' in ast:
-            args = ast['func_args']
-            for i, arg in enumerate(args):
-                if isinstance(arg, str):
-                    if arg.startswith('?'):
-                        args[i] = variable_replacement
-
-                    elif arg.isnumeric():
-                        args[i] = number_replacement
-
-                    elif replace_non_variable_args:
-                        args[i] = non_variable_replacement
+        inner_func = ast.func
+        _handle_predicate_function_args(inner_func)
 
     extractor.register('function_eval', handle_function_eval)
 

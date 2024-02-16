@@ -38,6 +38,21 @@
             }
         },
         {
+            "name": "Python: Repeated Structures Analysis",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "-t", "./dsl/interactive-beta.pddl",
+                "-b", "build_temporal_operator_level_extractor",
+                "-o", "./data/dsl_repeated_structures_temporal_operator.csv"
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                "GAME_GENERATION_CACHE": "/Users/guydavidson/tmp/game_generation_cache"
+            }
+        },
+        {
             "name": "Python: Fitness features",
             "type": "python",
             "request": "launch",

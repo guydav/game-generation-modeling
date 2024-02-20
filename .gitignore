@@ -37,3 +37,4 @@ run/test.py
 **/*.backup.gz
 notebooks/predicate_statistics_modified_bitstring_intervals_028b3733.pkl.gz
 output.html
+notebooks/build/**/*

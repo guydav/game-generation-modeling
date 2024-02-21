@@ -36,7 +36,9 @@ parameters {
 }
 
 transformed parameters {
-   vector[U] game_mu = game_type_mu[game_types_by_index] + game_type_sigma[game_types_by_index] .* game_z;
+  vector[U] game_mu = game_type_mu[game_types_by_index] + game_type_sigma[game_types_by_index] .* game_z;
+  vector[N] y = (beta_fitness * normalized_fitness) + participant_alpha[participants] + game_mu[game_indices];
+  vector[N_val] y_val = (beta_fitness * normalized_fitness_val) + participant_alpha[participants_val] + game_mu[game_indices_val];
 }
 
 model {
@@ -50,31 +52,26 @@ model {
   game_type_sigma ~ normal(0, 1);
   game_z ~ normal(0, 1);
 
-
-  attr ~ normal((beta_fitness * normalized_fitness) + participant_alpha[participants] + game_mu[game_indices], sigma);
-
+  attr ~ normal(y, sigma);
 }
 
-
-
 generated quantities {
-  // TODO: add some held-out data and simulate the held-out data separately
-  array[N] real attr_pred = normal_rng((beta_fitness * normalized_fitness) + participant_alpha[participants] + game_mu[game_indices], sigma);
-  array[N_val] real attr_val_pred = normal_rng((beta_fitness * normalized_fitness_val) + participant_alpha[participants_val] + game_mu[game_indices_val], sigma);
+  array[N] real attr_pred = normal_rng(y, sigma);
+  array[N_val] real attr_val_pred = normal_rng(y_val, sigma);
 
   vector[N] log_lik;
   vector[N] log_lik_pred;
 
   for (n in 1:N) {
-    log_lik[n] = normal_lpdf(attr[n] | (beta_fitness * normalized_fitness[n]) + participant_alpha[participants[n]] + game_mu[game_indices[n]], sigma);
-    log_lik_pred[n] = normal_lpdf(attr_pred[n] | (beta_fitness * normalized_fitness[n]) + participant_alpha[participants[n]]  + game_mu[game_indices[n]], sigma);
+    log_lik[n] = normal_lpdf(attr[n] | y[n], sigma);
+    log_lik_pred[n] = normal_lpdf(attr_pred[n] | y[n], sigma);
   }
 
   vector[N_val] log_lik_val;
   vector[N_val] log_lik_val_pred;
 
   for (n in 1:N_val) {
-    log_lik_val[n] = normal_lpdf(attr_val[n] | (beta_fitness * normalized_fitness_val[n]) + participant_alpha[participants_val[n]] + game_mu[game_indices_val[n]], sigma);
-    log_lik_val_pred[n] = normal_lpdf(attr_val_pred[n] | (beta_fitness * normalized_fitness_val[n]) + participant_alpha[participants_val[n]]  + game_mu[game_indices_val[n]], sigma);
+    log_lik_val[n] = normal_lpdf(attr_val[n] | y_val[n], sigma);
+    log_lik_val_pred[n] = normal_lpdf(attr_val_pred[n] | y_val[n], sigma);
   }
 }

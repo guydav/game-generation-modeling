@@ -36,8 +36,10 @@ transformed parameters {
   for (g in 2:G) {
     full_beta[g] = beta[g - 1];
   }
-}
 
+  vector[N] y = full_beta[game_types] + (beta_fitness * normalized_fitness) + participant_alpha[participants];
+  vector[N_val] y_val = full_beta[game_types_val] + (beta_fitness * normalized_fitness_val) + participant_alpha[participants_val];
+}
 
 model {
   // alpha ~ normal(0, 1);
@@ -49,26 +51,25 @@ model {
   participant_effect_sigma ~ normal(0, 1);
   participant_z ~ normal(0, 1);
 
-  attr ~ normal(full_beta[game_types] + (beta_fitness * normalized_fitness) + participant_alpha[participants], sigma);
+  attr ~ normal(y, sigma);
 }
 
-
 generated quantities {
-  array[N] real attr_pred = normal_rng(full_beta[game_types] + (beta_fitness * normalized_fitness) + participant_alpha[participants], sigma);
-  array[N_val] real attr_val_pred = normal_rng(full_beta[game_types_val] + (beta_fitness * normalized_fitness_val) + participant_alpha[participants_val], sigma);
+  array[N] real attr_pred = normal_rng(y, sigma);
+  array[N_val] real attr_val_pred = normal_rng(y_val, sigma);
 
   vector[N] log_lik;
   vector[N] log_lik_pred;
 
   for (n in 1:N) {
-    log_lik[n] = normal_lpdf(attr[n] | full_beta[game_types[n]] + (beta_fitness * normalized_fitness[n]) + participant_alpha[participants[n]], sigma);
-    log_lik_pred[n] = normal_lpdf(attr_pred[n] | full_beta[game_types[n]] + (beta_fitness * normalized_fitness[n]) + participant_alpha[participants[n]], sigma);
+    log_lik[n] = normal_lpdf(attr[n] | y[n], sigma);
+    log_lik_pred[n] = normal_lpdf(attr_pred[n] | y[n], sigma);
   }
 
   vector[N_val] log_lik_val;
   vector[N_val] log_lik_val_pred;
   for (n in 1:N_val) {
-    log_lik_val[n] = normal_lpdf(attr_val[n] | full_beta[game_types_val[n]] + (beta_fitness * normalized_fitness_val[n]) + participant_alpha[participants_val[n]], sigma);
-    log_lik_val_pred[n] = normal_lpdf(attr_val_pred[n] | full_beta[game_types_val[n]] + (beta_fitness * normalized_fitness_val[n]) + participant_alpha[participants_val[n]], sigma);
+    log_lik_val[n] = normal_lpdf(attr_val[n] | y_val[n], sigma);
+    log_lik_val_pred[n] = normal_lpdf(attr_val_pred[n] | y_val[n], sigma);
   }
 }

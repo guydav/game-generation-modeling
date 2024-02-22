@@ -51,19 +51,15 @@ data {
 }
 
 parameters {
-  // real alpha;
   real beta_fitness;
-  // vector[G] beta;
-  real<lower=0> sigma;
 
+  real<lower=0> participant_sigma;
   vector[P] participant_alpha;
 
 
   vector[G] game_type_mu;
   vector<lower=0>[G] game_type_sigma;
   vector[U] game_z;
-  // vector[U] game_mu;
-  // real<lower=0> game_sigma;
 
   ordered[K - 1] cutpoints;
 }
@@ -77,9 +73,9 @@ transformed parameters {
 model {
   beta_fitness ~ normal(0, 1);
 
+  participant_sigma ~ normal(0, 1);
   participant_alpha ~ normal(0, 1);
 
-  sigma ~ normal(0, 1);
   cutpoints ~ induced_dirichlet(rep_vector(1, K), 0);
 
   game_type_mu ~ normal(0, 1);

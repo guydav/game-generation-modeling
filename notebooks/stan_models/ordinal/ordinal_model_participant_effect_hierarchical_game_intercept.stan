@@ -51,19 +51,14 @@ data {
 }
 
 parameters {
-  // real alpha;
   real beta_fitness;
-  // vector[G] beta;
-  real<lower=0> sigma;
 
   vector[P] participant_alpha;
+  real<lower=0> participant_sigma;
 
   vector[G - 1] game_type_mu;
-  // vector[G] game_type_mu;
   vector<lower=0>[G] game_type_sigma;
   vector[U] game_z;
-  // vector[U] game_mu;
-  // real<lower=0> game_sigma;
 
   ordered[K - 1] cutpoints;
 }
@@ -76,21 +71,21 @@ transformed parameters {
   }
 
   vector[U] game_mu = full_game_type_mu[game_types_by_index] + game_type_sigma[game_types_by_index] .* game_z;
-  //  vector[U] game_mu = game_type_mu[game_types_by_index] + game_type_sigma[game_types_by_index] .* game_z;
   vector[N] y = (beta_fitness * normalized_fitness) + participant_alpha[participants] + game_mu[game_indices];
   vector[N_val] y_val = (beta_fitness * normalized_fitness_val) + participant_alpha[participants_val] + game_mu[game_indices_val];
 }
 
 model {
-  // alpha ~ normal(0, 1);
   beta_fitness ~ normal(0, 1);
-  participant_alpha ~ normal(0, 1);
-  sigma ~ normal(0, 1);
-  cutpoints ~ induced_dirichlet(rep_vector(1, K), 0);
+
+  participant_sigma ~ normal(0, 1);
+  participant_alpha ~ normal(0, participant_sigma);
 
   game_type_mu ~ normal(0, 1);
   game_type_sigma ~ normal(0, 1);
   game_z ~ normal(0, 1);
+
+  cutpoints ~ induced_dirichlet(rep_vector(1, K), 0);
 
   attr_ordinal ~ ordered_logistic(y, cutpoints);
 }

@@ -27,45 +27,63 @@ functions {
 }
 
 data {
-  int<lower=0> N;
-  int<lower=0> N_val;
-  int<lower=1> G;
-  int<lower=3> K;  // how many ordinal levels
+  int<lower=0> N; // how many observations
+  int<lower=0> N_val; // how many observations
+  int<lower=1> G; // how many game types
+  int<lower=1> P; // the number of participants
+  int<lower=1> U; // the number of unique games
+  int<lower=3> K; // how many ordinal levels
 
   vector[N] attr;
   array[N] int<lower=1, upper=K> attr_ordinal;
   vector[N] normalized_fitness;
+  vector[N] normalized_archive_distance;
+  vector[N] model_game;
   array[N] int<lower=1, upper=G> game_types;
+  array[N] int<lower=1, upper=P> participants;
+  array[N] int<lower=1, upper=U> game_indices;
+  array[U] int<lower=1, upper=G> game_types_by_index;
 
   vector[N_val] attr_val;
   array[N_val] int<lower=1, upper=K> attr_ordinal_val;
   vector[N_val] normalized_fitness_val;
+  vector[N_val] normalized_archive_distance_val;
+  vector[N] model_game_val;
   array[N_val] int<lower=1, upper=G> game_types_val;
+  array[N_val] int<lower=1, upper=P> participants_val;
+  array[N_val] int<lower=1, upper=U> game_indices_val;
 }
 
 parameters {
-  // real alpha;
   real beta_fitness;
-  vector[G - 1] beta;
+  real beta_archive_distance;
+  real beta_model_game;
+
+  vector[P] participant_alpha;
+  real<lower=0> participant_sigma;
+
+  vector[U] game_alpha;
+  real<lower=0> game_sigma;
 
   ordered[K - 1] cutpoints;
 }
 
 transformed parameters {
-  vector[G] full_beta;
-  full_beta[1] = 0;
-  for (g in 2:G) {
-    full_beta[g] = beta[g - 1];
-  }
-
-  vector[N] y = full_beta[game_types] + (beta_fitness * normalized_fitness);
-  vector[N_val] y_val = full_beta[game_types_val] + (beta_fitness * normalized_fitness_val);
+  vector[N] y = (beta_fitness * normalized_fitness) + participant_alpha[participants] + game_alpha[game_indices] + (beta_archive_distance * normalized_archive_distance) + (beta_model_game * model_game);
+  vector[N_val] y_val = (beta_fitness * normalized_fitness_val) + participant_alpha[participants_val] + game_alpha[game_indices_val] + (beta_archive_distance * normalized_archive_distance) + (beta_model_game * model_game);
 }
 
 model {
-  // alpha ~ normal(0, 1);
   beta_fitness ~ normal(0, 1);
-  beta ~ normal(0, 1);
+  beta_archive_distance ~ normal(0, 1);
+  beta_model_game ~ normal(0, 1);
+
+  participant_sigma ~ normal(0, 1);
+  participant_alpha ~ normal(0, participant_sigma);
+
+  game_sigma ~ normal(0, 1);
+  game_alpha ~ normal(0, game_sigma);
+
   cutpoints ~ induced_dirichlet(rep_vector(1, K), 0);
 
   attr_ordinal ~ ordered_logistic(y, cutpoints);

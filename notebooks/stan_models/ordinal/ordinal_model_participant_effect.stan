@@ -48,14 +48,12 @@ data {
 }
 
 parameters {
-  // real alpha;
   real beta_fitness;
   vector[G - 1] beta;
-  real<lower=0> sigma;
 
-  vector[P] participant_alpha;
-  // real participant_mean;
   real<lower=0> participant_sigma;
+  vector[P] participant_alpha;
+
   ordered[K - 1] cutpoints;
 }
 
@@ -71,12 +69,12 @@ transformed parameters {
 }
 
 model {
-  // alpha ~ normal(0, 1);
   beta_fitness ~ normal(0, 1);
   beta ~ normal(0, 1);
+
   participant_sigma ~ normal(0, 1);
   participant_alpha ~ normal(0, participant_sigma);
-  sigma ~ normal(0, 1);
+
   cutpoints ~ induced_dirichlet(rep_vector(1, K), 0);
 
   attr_ordinal ~ ordered_logistic(y, cutpoints);

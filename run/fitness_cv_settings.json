@@ -58,8 +58,7 @@
         "minimal_counting_grammar_use_forall": ["forall_less_important", "counting_less_important", "grammar_use_less_important", "predicate_under_modal", "predicate_role_filler", "compositionality"],
         "minimal_counting_grammar_use": ["counting_less_important", "grammar_use_less_important", "predicate_under_modal", "predicate_role_filler", "compositionality"],
         "minimal_counting": ["counting_less_important", "predicate_under_modal", "predicate_role_filler", "compositionality"],
-        "minimal": ["counting", "predicate_under_modal", "predicate_role_filler", "compositionality"],
-        "full": []
+        "minimal": ["counting", "predicate_under_modal", "predicate_role_filler", "compositionality"]
     },
 
     "param_grid_baseline": {

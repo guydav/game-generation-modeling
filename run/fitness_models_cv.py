@@ -20,7 +20,7 @@ import ast_printer  # for logging
 import ast_parser  # for logging
 from src import fitness_energy_utils as utils
 from src import latest_model_paths
-from src.fitness_features_by_category import FEATURE_CATEGORIES
+import fitness_features_by_category
 
 
 class LevelFilter(logging.Filter):
@@ -57,7 +57,7 @@ parser.add_argument('--ngram-scores-to-remove', type=str, nargs='+', default=[])
 parser.add_argument('--full-ngram-score-only', action='store_true')
 LOSS_FUNCTIONS = [x for x in dir(utils) if 'loss' in x]
 parser.add_argument('--ignore-features', type=str, nargs='+', default=[])
-parser.add_argument('--ignore-categories-key', type=str, default='full')
+parser.add_argument('--omit-feature-categories', type=str, nargs='+', default=[])
 parser.add_argument('--default-loss-function', type=str, choices=LOSS_FUNCTIONS, default='fitness_softmin_loss')
 parser.add_argument('--output-activation', type=str, default=None)
 parser.add_argument('--output-scaling', type=float, default=1.0)
@@ -77,7 +77,10 @@ parser.add_argument('--top-feature-min-magnitude', type=float, default=DEFAULT_T
 
 
 NGRAM_SCORE_TYPES = ('full', 'setup', 'constraints', 'terminal', 'scoring')
-
+DEFAULT_IGNORE_FEATURES = [
+    "predicate_found_in_data_all", "predicate_found_in_data_setup_all",
+    "predicate_found_in_data_constraints_all", "predicate_found_in_data_small_logicals_all"
+]
 
 def get_features_by_abs_diff_threshold(diffs: pd.Series, score_threshold: float,
                                        ngram_scores_to_remove: typing.Optional[typing.List[str]] = None,
@@ -112,7 +115,9 @@ def get_feature_columns(df: pd.DataFrame, score_threshold: float,
 
 
 def main(args: argparse.Namespace):
-    args.output_name = f'{args.output_name}_categories_{args.ignore_categories_key}'
+    omit_categories_str = '_'.join(args.omit_feature_categories)
+    if omit_categories_str:
+        args.output_name = f'{args.output_name}_omit_categories_{omit_categories_str}'
 
     if args.full_ngram_score_only:
         args.output_name += '_full_ngram_only'
@@ -144,36 +149,40 @@ def main(args: argparse.Namespace):
 
     logger.debug(f'CV settings:\n{pformat(cv_settings)}')
 
-    if args.ignore_features:
-        ignore_feature_set = set(args.ignore_features)
-        remove_features = [c for c in feature_columns if c in ignore_feature_set]
+    ignore_features = set(args.ignore_features)
+    ignore_features.update(DEFAULT_IGNORE_FEATURES)
+
+    if ignore_features:
+        remove_features = [c for c in feature_columns if c in ignore_features]
         if len(remove_features) == 0:
-            logger.warning(f'No features found in ignore_features: {args.ignore_features}')
+            logger.warning(f'No features found in ignore_features: {ignore_features}')
 
         else:
             logger.info(f'Ignoring features: {remove_features}')
             for feature in remove_features:
                 feature_columns.remove(feature)
 
-    if args.ignore_categories_key not in cv_settings['ignore_categories_mapping']:
-        raise ValueError(f'Unknown ignore categories key: {args.ignore_categories_key}, valid keys: {cv_settings["ignore_categories_mapping"].keys()}')
+    include_feature_categories = list(fitness_features_by_category.FEATURE_CATEGORIES.keys())
+    if args.omit_feature_categories:
+        for cat in args.omit_feature_categories:
+            if cat not in include_feature_categories:
+                raise ValueError(f'Unknown feature category: {cat}, valid categories: {include_feature_categories}')
 
-    ignore_categories = cv_settings['ignore_categories_mapping'][args.ignore_categories_key]
+            include_feature_categories.remove(cat)
 
-    if ignore_categories:
-        logger.info(f'Ignoring categories: {ignore_categories}')
-        all_ignore_features = set()
-        for category in ignore_categories:
-            for feature in FEATURE_CATEGORIES[category]:
-                if isinstance(feature, re.Pattern):
-                    all_ignore_features.update([f for f in feature_columns if feature.match(f)])
-                else:
-                    all_ignore_features.add(feature)
+    logger.info(f'Including feature categories: {include_feature_categories}')
 
-        feature_columns = [c for c in feature_columns if c not in all_ignore_features]
+    included_features = set()
+    for category in include_feature_categories:
+        for feature in fitness_features_by_category.FEATURE_CATEGORIES[category]:
+            if isinstance(feature, re.Pattern):
+                included_features.update([f for f in feature_columns if feature.match(f)])
+            else:
+                included_features.add(feature)
+
+    feature_columns = [c for c in feature_columns if c in included_features]
 
     logger.info(f'Fitting models with {len(feature_columns)} features')
-
 
     logger.info(f'Using param grid key "{args.param_grid_json_key}", train kwargs key "{args.train_kwargs_json_key}", cv kwargs key "{args.cv_kwargs_json_key}"')
     param_grid = cv_settings[args.param_grid_json_key]

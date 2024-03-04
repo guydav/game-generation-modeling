@@ -17,7 +17,7 @@ from sklearn.decomposition import PCA
 
 import ast_parser
 import ast_printer
-from ast_utils import cached_load_and_parse_games_from_file
+from ast_utils import cached_load_and_parse_games_from_file, deepcopy_ast, ASTCopyType
 from fitness_features import ASTFitnessFeaturizer, FitnessTerm, Number, SetupObjectsUsed, ContextDict, SETUP_OBJECTS_SKIP_OBJECTS, PREDICATE_AND_FUNCTION_RULES, DEPTH_CONTEXT_KEY, SectionExistsFitnessTerm, AtEndFound, NumPreferencesDefined
 from ast_counter_sampler import SamplingException
 import room_and_object_types
@@ -822,6 +822,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
 
         self.exemplar_preference_indices = []
         self.exemplar_features = {}
+        self.exemplar_preference_asts = {}
 
         self.current_ast_preference_features = []
 
@@ -841,21 +842,29 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         if not hasattr(self, 'max_preference_count'):
             self.max_preference_count = MAX_NUM_PREFERENCES_COUNT
 
+        if not hasattr(self, 'exemplar_preference_asts'):
+            self.exemplar_preference_asts = {}
+
     def _init_exemplars(self):
         game_asts = list(cached_load_and_parse_games_from_file(self.ast_file_path, self.grammar_parser, False))
         all_preference_features = []
+        all_preference_asts = []
 
         exemplar_index = 0
         for i, game_ast in enumerate(game_asts):
-            game_preference_features = self(game_ast, should_postprocess=True)
+            game_preference_features, game_preference_asts = self(game_ast, should_postprocess=True, return_asts=True)
+
             while exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
                 self.exemplar_preference_indices.append(len(all_preference_features) + self.exemplar_preference_ids[exemplar_index][1])
                 exemplar_index += 1
 
             all_preference_features.extend(game_preference_features)
+            all_preference_asts.extend(game_preference_asts)
 
         for exemplar_index in self.exemplar_preference_indices:
             self.exemplar_features[exemplar_index] = all_preference_features[exemplar_index]
+            self.exemplar_preference_asts[exemplar_index] = all_preference_asts[exemplar_index]
+
 
     def get_game_features(self, game, features, partial_game: bool = False, should_postprocess=False):
         game_preference_features = self(game, should_postprocess=should_postprocess)
@@ -918,8 +927,10 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
 
     def __call__(self, ast: typing.Any, **kwargs) -> typing.List[typing.Dict[str, float]]:
         initial_call = 'inner_call' not in kwargs or not kwargs['inner_call']
+        return_asts = initial_call and kwargs.get('return_asts', False)
         if initial_call:
             self.current_ast_preference_features = []
+            self.current_preference_asts = []
             self._default_kwarg(kwargs, 'inner_call', True)
 
         preference_node = False
@@ -944,6 +955,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
                 }  # type: ignore
             )
             self.current_ast_preference_features.append(pref_features)
+            self.current_preference_asts.append(deepcopy_ast(ast, ASTCopyType.NODE))
             inner_result = None
 
         else:
@@ -951,6 +963,9 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
 
         if not initial_call:
             return inner_result  # type: ignore
+
+        if return_asts:
+            return self.current_ast_preference_features, self.current_preference_asts  # type: ignore
 
         return self.current_ast_preference_features
 

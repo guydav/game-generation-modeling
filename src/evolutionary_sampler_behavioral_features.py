@@ -853,6 +853,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
         exemplar_index = 0
         for i, game_ast in enumerate(game_asts):
             game_preference_features, game_preference_asts = self(game_ast, should_postprocess=True, return_asts=True)
+
             while exemplar_index < len(self.exemplar_preference_ids) and i == self.exemplar_preference_ids[exemplar_index][0]:
                 self.exemplar_preference_indices.append(len(all_preference_features) + self.exemplar_preference_ids[exemplar_index][1])
                 exemplar_index += 1
@@ -862,7 +863,7 @@ class ExemplarPreferenceBCDistanceFeaturizer(ast_parser.ASTParser, BehavioralFea
 
         for exemplar_index in self.exemplar_preference_indices:
             self.exemplar_features[exemplar_index] = all_preference_features[exemplar_index]
-            self.exemplar_preference_asts[exemplar_index] = game_preference_asts[exemplar_index]
+            self.exemplar_preference_asts[exemplar_index] = all_preference_asts[exemplar_index]
 
 
     def get_game_features(self, game, features, partial_game: bool = False, should_postprocess=False):

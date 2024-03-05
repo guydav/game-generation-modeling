@@ -403,7 +403,14 @@ class GameDescriber():
 
         description = ""
 
-        pref_def = typing.cast(tatsu.ast.AST, preference_ast["definition"])
+        if "definition" in preference_ast.keys():
+            pref_def = typing.cast(tatsu.ast.AST, preference_ast["definition"])
+        else:
+            pref_def = preference_ast
+            self.preference_index = 0
+            self.preference_name_to_index = {}
+            self.external_forall_preference_mappings = {}
+
         rule = pref_def["parseinfo"].rule   # type: ignore
 
         if rule == "preference":

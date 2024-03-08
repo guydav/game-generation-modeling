@@ -303,6 +303,7 @@ class CommonSensePredicateStatisticsFullDatabase():
         if os.path.exists(self.trace_lengths_and_domains_filename):
             with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
                 trace_lengths_and_domains = pickle.load(f)
+                self.all_trace_ids = list(trace_lengths_and_domains.keys())
 
         else:
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")

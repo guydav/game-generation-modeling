@@ -304,6 +304,7 @@ class CommonSensePredicateStatisticsFullDatabase():
             with open_method(self.trace_lengths_and_domains_filename, 'rb') as f:
                 trace_lengths_and_domains = pickle.load(f)
                 self.all_trace_ids = list(trace_lengths_and_domains.keys())
+                self.trace_id_to_length = {trace_id: length for (trace_id, (length, _)) in trace_lengths_and_domains.items()}
 
         else:
             raise ValueError(f"Could not find file {self.trace_lengths_and_domains_filename}")
@@ -473,6 +474,13 @@ class CommonSensePredicateStatisticsFullDatabase():
         if predicate_name == 'near':
             predicate_name = 'adjacent'
 
+        # Second temporary hack: we don't have `adjacent_side` implemented yet, so we'll take `(adjacent a b)`
+        # to be a proxy that `(adjacent_side a s b)` is plausible
+        keep_indices = None
+        if predicate_name.startswith('adjacent_side'):
+            predicate_name = 'adjacent'
+            keep_indices = [0, 2]
+
         if table_name is not None:
             table_name = f"{table_name}."
         else:
@@ -488,6 +496,9 @@ class CommonSensePredicateStatisticsFullDatabase():
         except ValueError:
             logger.warn('Variable repeated in predicate arguments')
             raise MissingVariableException('Variable repeated in predicate arguments')
+
+        if keep_indices is not None:
+            variables = [variables[i] for i in keep_indices]
 
         used_variables = set(variables)
 

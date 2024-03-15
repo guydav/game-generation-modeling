@@ -23,14 +23,14 @@ import compile_predicate_statistics_full_database
 from compile_predicate_statistics_full_database import MissingVariableException, PredicateNotImplementedException
 from config import OBJECTS_BY_ROOM_AND_TYPE, SPECIFIC_NAMED_OBJECTS_BY_ROOM
 from game_handler import GameHandler
-from manual_run import _load_trace
+
 from utils import FullState
 
 
 sys.path.append((pathlib.Path(__file__).parents[1].resolve() / 'src').as_posix())
 import ast_printer
 import ast_parser
-from ast_utils import simplified_context_deepcopy
+from ast_utils import simplified_context_deepcopy, deepcopy_ast, ASTCopyType
 from fitness_energy_utils import load_data, save_data, load_data_from_path, save_data_to_path
 from ast_parser import SECTION_CONTEXT_KEY, VARIABLES_CONTEXT_KEY
 from evolutionary_sampler import *
@@ -64,12 +64,15 @@ parser.add_argument('--max-traces-per-game', type=int, default=None)
 parser.add_argument('--max-keys', type=int, default=None)
 parser.add_argument('--tqdm', action='store_true')
 parser.add_argument('--use-trace-intersection', action='store_true')
+parser.add_argument('--use-only-database-nonconfirmed-traces', action='store_true')
 parser.add_argument('--n-workers', type=int, default=1)
 parser.add_argument('--chunksize', type=int, default=1)
 parser.add_argument('--maxtasksperchild', default=None, type=int)
 parser.add_argument('--copy-traces-to-tmp', action='store_true')
 DEFAULT_START_METHOD = 'spawn'
 parser.add_argument('--parallel-start-method', type=str, default=DEFAULT_START_METHOD)
+DEFAULT_SAVE_INTERVAL = 8
+parser.add_argument('--save-interval', type=int, default=DEFAULT_SAVE_INTERVAL)
 DEFAULT_GRAMMAR_FILE = './dsl/dsl.ebnf'
 parser.add_argument('-g', '--grammar-file', default=DEFAULT_GRAMMAR_FILE)
 parser.add_argument('-t', '--test-file', default='./dsl/interactive-beta.pddl')
@@ -85,7 +88,7 @@ FULL_DATASET_TRACES_HASH = '028b3733'
 WILDCARD = '*'
 EMPTY_SET = '∅'
 # TODO: consuder adding support to `while_hold`
-FULL_PREDICATE_STATE_MACHINE_SUPPORTED_MODALS = set(('once', 'once_measure', 'hold'))
+FULL_PREDICATE_STATE_MACHINE_SUPPORTED_MODALS = set(('once', 'once_measure', 'hold', 'while_hold'))
 MERGE_IGNORE_COLUMNS = set(['domain', 'intervals'])
 LOGIC_EVALUATOR_MAX_MARGIN_STEPS = 1
 
@@ -502,20 +505,60 @@ class TraceFinderASTParser(ast_parser.ASTParser):
 
         modal_predicates = [modal[PREDICATE_IN_DATA_RULE_TO_CHILD[modal.parseinfo.rule]] for modal in modals]  # type: ignore
         modal_results = []
-        for pred in modal_predicates:
-            pred_results = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
-            if pred_results is None:
-                return
+        modal_result_rules = []
+        for i, (pred, modal_rule) in enumerate(zip(modal_predicates, modal_rules)):
+            if modal_rule == 'while_hold':
+                if pred.pred.parseinfo.rule != 'super_predicate_and':
+                    return
 
-            if isinstance(pred_results, str) and pred_results == EMPTY_SET:
-                return EMPTY_SET
+                modal = modals[i]
+                while_preds = modal['while_preds']
+                if not isinstance(while_preds, list):
+                    while_preds = [while_preds]
 
-            modal_results.append(pred_results)
+                base_pred_results = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
+                if base_pred_results is None:
+                    return
+
+                if isinstance(base_pred_results, str) and base_pred_results == EMPTY_SET:
+                    return EMPTY_SET
+
+                modal_results.append(base_pred_results)
+                modal_result_rules.append('hold')
+
+                for while_pred in while_preds:
+                    pred_copy = deepcopy_ast(pred, ASTCopyType.NODE)
+                    pred_copy.pred.and_args.append(while_pred)
+                    pred_copy_results = self._query_predicate_data(pred_copy, return_trace_ids=False, return_intervals=True, **kwargs)
+                    if pred_copy_results is None:
+                        return
+
+                    if isinstance(pred_copy_results, str) and pred_copy_results == EMPTY_SET:
+                        return EMPTY_SET
+
+                    modal_results.append(pred_copy_results)
+                    modal_result_rules.append('hold')
+
+                    modal_results.append(base_pred_results.copy(deep=True) if isinstance(base_pred_results, pd.DataFrame) else base_pred_results)
+                    modal_result_rules.append('hold')
+
+
+            else:
+                pred_results = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
+                if pred_results is None:
+                    return
+
+                if isinstance(pred_results, str) and pred_results == EMPTY_SET:
+                    return EMPTY_SET
+
+                modal_results.append(pred_results)
+                modal_result_rules.append(modal_rule)
+
 
         if all(isinstance(modal_result, str) and modal_result == WILDCARD for modal_result in modal_results):
             return WILDCARD
 
-        return set(self.preference_logic_evaluator.evaluate_then(modal_results, modal_rules))
+        return set(self.preference_logic_evaluator.evaluate_then(modal_results, modal_result_rules))
 
     def _handle_predicate_or_logical(self, ast: tatsu.ast.AST, section_or_preference_key: str, **kwargs):
         trace_ids = self._query_predicate_data(ast, return_trace_ids=True, **kwargs)
@@ -551,7 +594,9 @@ class TraceFinderASTParser(ast_parser.ASTParser):
         rule = typing.cast(str, ast.parseinfo.rule)  # type: ignore
 
         if rule in ('setup_game_conserved', 'setup_game_optional'):
-            if None not in self.setup_partial_results and EMPTY_SET not in self.setup_partial_results:
+            # if None not in self.setup_partial_results and EMPTY_SET not in self.setup_partial_results:
+            if not any(x is None or (isinstance(x, str) and x == EMPTY_SET) for x in self.setup_partial_results):
+
                 pred = typing.cast(tatsu.ast.AST, ast[PREDICATE_IN_DATA_RULE_TO_CHILD[rule]])
                 result = self._query_predicate_data(pred, return_trace_ids=False, return_intervals=True, **kwargs)
                 if result is not None:
@@ -617,7 +662,7 @@ class TraceGameEvaluator:
     save_interval: int
     save_relative_path: str
     stop_after_count: int
-    traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]]
+    traces_by_population_key: typing.Dict[typing.Union[KeyTypeAnnotation, int], typing.Tuple[typing.List[str], typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]]
     traces_by_population_key_cache_path: str
     trace_id_to_domain: typing.Dict[str, str]
     trace_finder: TraceFinderASTParser
@@ -627,7 +672,8 @@ class TraceGameEvaluator:
 
     def __init__(self, trace_names_hash: str, population: typing.Union[typing.Dict[KeyTypeAnnotation, ASTType], typing.List[ASTType]],
                  map_elites_model_identifier: str,
-                 use_trace_intersection: bool = False, stop_after_count: int = DEFAULT_STOP_AFTER_COUNT,
+                 use_trace_intersection: bool = False, use_only_database_nonconfirmed_traces: bool = False,
+                 stop_after_count: int = DEFAULT_STOP_AFTER_COUNT,
                  max_traces_per_game: typing.Optional[int] = None, force_trace_ids: typing.Optional[typing.List[str]] = None,
                  base_trace_path: str = compile_predicate_statistics_database.DEFAULT_BASE_TRACE_PATH,
                  traces_by_population_key_cache_path: str = TRACES_BY_POPULATION_KEY_CACHE_PATH,
@@ -644,6 +690,7 @@ class TraceGameEvaluator:
         self.population = population
         self.map_elites_model_identifier = map_elites_model_identifier
         self.use_trace_intersection = use_trace_intersection
+        self.use_only_database_nonconfirmed_traces = use_only_database_nonconfirmed_traces
         self.stop_after_count = stop_after_count
         self.max_traces_per_game = max_traces_per_game
         self.force_trace_ids = force_trace_ids
@@ -657,6 +704,7 @@ class TraceGameEvaluator:
         self.chunksize = chunksize
         self.maxtasksperchild = maxtasksperchild
         self.verbose = verbose
+        self.traces_precomputed = False
 
         self.traces_by_population_key = {}
         if self.traces_by_population_key_cache_path is not None:
@@ -669,6 +717,7 @@ class TraceGameEvaluator:
         self.cache = cachetools.LRUCache(maxsize=max_cache_size)
         self.trace_finder = TraceFinderASTParser(self.trace_names_hash)
         self.trace_id_to_domain = _query_trace_id_to_domain(self.trace_finder.predicate_data_estimator.con)
+        self.trace_id_to_length = self.trace_finder.predicate_data_estimator.trace_id_to_length
 
         self.result_summary_by_key = {}
         self.full_result_by_key = {}
@@ -681,8 +730,9 @@ class TraceGameEvaluator:
         state = self.__dict__.copy()
 
         # Avoid having these serialized since the worker processes don't need them
-        if 'trace_finder' in state:
-            del state['trace_finder']
+        if self.traces_precomputed:
+            if 'trace_finder' in state:
+                del state['trace_finder']
 
         if 'result_summary_by_key' in state:
             del state['result_summary_by_key']
@@ -715,7 +765,7 @@ class TraceGameEvaluator:
         for idx, event in enumerate(trace):
             yield (event, idx == len(trace) - 1)
 
-    def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]:
+    def _find_key_traces(self, key: typing.Union[KeyTypeAnnotation, int]) -> typing.Tuple[typing.Union[KeyTypeAnnotation, int], typing.List[str], typing.List[str], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]]:
         if key not in self.traces_by_population_key:
             # logger.debug(f'Finding traces for key {key} since not in cache')
 
@@ -723,7 +773,7 @@ class TraceGameEvaluator:
             retval = typing.cast(typing.Tuple[typing.Dict[str, typing.Set[str]], typing.Set[str], typing.Dict[str, typing.Dict[str, typing.List[str]]]], self.trace_finder(sample))
             if isinstance(retval, str):
                 if retval == EMPTY_SET:
-                    self.traces_by_population_key[key] = [], set(), {}
+                    self.traces_by_population_key[key] = [], [], set(), {}
 
                 else:
                     raise ValueError(f'Unexpected return value from trace finder: {retval}')
@@ -737,6 +787,8 @@ class TraceGameEvaluator:
 
                 all_traces = set()
                 traces = []
+                non_database_confirmed_trace_set = set()
+                non_database_confirmed_traces = []
                 initial_traces = True
 
                 if self.use_trace_intersection:
@@ -755,6 +807,8 @@ class TraceGameEvaluator:
                             all_traces.intersection_update(trace_set)
 
                     traces = list(all_traces)
+                    # this doesn't really make sense when we're looking at intersections, so return the full list
+                    non_database_confirmed_traces = traces
 
                 else:
                     trace_sets_by_length = sorted(traces_by_key.values(), key=len)
@@ -763,12 +817,18 @@ class TraceGameEvaluator:
                         traces.extend(new_traces)
                         all_traces.update(new_traces)
 
-                self.traces_by_population_key[key] = traces, expected_keys, database_confirmed_traces_by_key
+                    for pref_key, pref_key_traces in traces_by_key.items():
+                        if pref_key not in database_confirmed_traces_by_key or not database_confirmed_traces_by_key[pref_key]:
+                            non_database_confirmed_trace_set.update(pref_key_traces)
+
+                    non_database_confirmed_traces = list(non_database_confirmed_trace_set)
+
+                self.traces_by_population_key[key] = traces, non_database_confirmed_traces, expected_keys, database_confirmed_traces_by_key
 
         return (key, *self.traces_by_population_key[key])
 
-    def _process_key_traces_databse_results(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False) -> typing.Tuple[typing.List[str], typing.Dict[str, typing.Dict[str, int]], typing.Dict[str, int], typing.Dict[str, int]]:
-        _, all_traces, expected_keys, database_keys_to_traces = self._find_key_traces(key)
+    def _process_key_traces_databse_results(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False) -> typing.Tuple[typing.List[str], typing.List[str], typing.Dict[str, typing.Dict[str, int]], typing.Dict[str, int], typing.Dict[str, int]]:
+        _, all_traces, non_database_confirmed_traces, expected_keys, database_keys_to_traces = self._find_key_traces(key)
 
         if print_results:
             remaining_keys = set(expected_keys) - set(database_keys_to_traces.keys())
@@ -790,13 +850,13 @@ class TraceGameEvaluator:
             stop_count_by_key[pref_key] = min(self.stop_after_count, n_traces)
             total_count_by_key[pref_key] = n_traces
 
-        return all_traces, counts_by_trace_and_key, stop_count_by_key, total_count_by_key
+        return all_traces, non_database_confirmed_traces, counts_by_trace_and_key, stop_count_by_key, total_count_by_key
 
     def handle_single_game_cache_no_traces(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False):
         if self.force_trace_ids:
             return False, key
 
-        all_traces, counts_by_trace_and_key, stop_count_by_key, _ = self._process_key_traces_databse_results(key, print_results)
+        all_traces, non_database_confirmed_traces, counts_by_trace_and_key, stop_count_by_key, _ = self._process_key_traces_databse_results(key, print_results)
 
         # If we have no new traces, just got based on the information we already have
         if len(all_traces) == 0:
@@ -804,60 +864,137 @@ class TraceGameEvaluator:
 
         return False, key
 
+    def _handle_single_game_single_trace_args_tuple(self, args_tuple) -> typing.Tuple[typing.Dict[str, typing.Dict[str, int]], typing.Dict[str, int], typing.Dict[str, int]]:
+        return self._handle_single_game_single_trace(*args_tuple)
+
+    def _handle_single_game_single_trace(self, trace: str, sample: ASTType, expected_keys: typing.Set[str], ignore_keys: typing.List[str]) -> typing.Tuple[typing.Dict[str, typing.Dict[str, int]], typing.Dict[str, int], typing.Dict[str, int]]:
+        domain = self.trace_id_to_domain[trace]
+        game_handler = GameHandler(sample,  # type: ignore
+                                    force_domain=domain, ignore_preference_names=ignore_keys,
+                                    ignore_setup=ast_parser.SETUP in ignore_keys)
+
+        for state, is_final in self._iterate_trace(trace):
+            state = FullState.from_state_dict(state)
+            score = game_handler.process(state, is_final, ignore_terminals=True)
+            if score is not None:
+                break
+
+        score = game_handler.score(game_handler.scoring)
+        # scores_by_trace[trace] = score
+
+        counts_by_trace_and_key = {key: {} for key in expected_keys}
+        stop_count_by_key = {key: 0 for key in expected_keys}
+        total_count_by_key = {key: 0 for key in expected_keys}
+
+        if ast_parser.SETUP in expected_keys:
+            counts_by_trace_and_key[ast_parser.SETUP][trace] = game_handler.setup_met
+            stop_count_by_key[ast_parser.SETUP] += int(game_handler.setup_met)
+
+        for preference_name in expected_keys:
+            if preference_name in game_handler.preference_satisfactions:
+                n_preference_satisfcations = len(game_handler.preference_satisfactions[preference_name])
+                counts_by_trace_and_key[preference_name][trace] = n_preference_satisfcations
+                stop_count_by_key[preference_name] += int(n_preference_satisfcations > 0)
+                total_count_by_key[preference_name] += n_preference_satisfcations
+
+        return counts_by_trace_and_key, stop_count_by_key, total_count_by_key
+
+
     def handle_single_game(self, key: typing.Union[KeyTypeAnnotation, int], print_results: bool = False):
-        all_traces, counts_by_trace_and_key, stop_count_by_key, total_count_by_key = self._process_key_traces_databse_results(key, print_results)
+        all_traces, non_database_confirmed_traces, counts_by_trace_and_key, stop_count_by_key, total_count_by_key = self._process_key_traces_databse_results(key, print_results)
 
         if self.force_trace_ids:
-            all_traces = self.force_trace_ids
+            traces = self.force_trace_ids
+
+        elif self.use_only_database_nonconfirmed_traces:
+            traces = non_database_confirmed_traces
+
+        else:
+            traces = all_traces
 
         # If we have no new traces, just got based on the information we already have
-        if len(all_traces) == 0:
+        if len(traces) == 0:
             return key, min(stop_count_by_key.values()), counts_by_trace_and_key
 
         if self.max_traces_per_game is not None:
-            all_traces = list(all_traces)[:self.max_traces_per_game]
+            traces = list(traces)[:self.max_traces_per_game]
 
-        trace_iter = all_traces
-        if self.tqdm and self.n_workers <= 1:
+        sorted_traces = list(sorted(traces, key=lambda trace: self.trace_id_to_length[trace]))
+        trace_iter = sorted_traces
+        if self.tqdm: # and self.n_workers <= 1:
             trace_iter = tqdm(trace_iter, desc=f'Traces for key {key}')
 
         sample = self.population[key]
 
-        _, _, expected_keys, database_keys_to_traces = self._find_key_traces(key)
+        _, _, _, expected_keys, database_keys_to_traces = self._find_key_traces(key)
 
         try:
-            for trace in trace_iter:
-                domain = self.trace_id_to_domain[trace]
-                game_handler = GameHandler(sample,  # type: ignore
-                                           force_domain=domain, ignore_preference_names=list(database_keys_to_traces.keys()),
-                                           ignore_setup=ast_parser.SETUP in database_keys_to_traces)
+            if self.n_workers > 1:
+                with multiprocessing.Pool(min(self.n_workers, len(traces)), maxtasksperchild=self.maxtasksperchild) as pool:
+                    logger.info(f'Pool started for key {key}')
+                    ignore_keys = list(database_keys_to_traces.keys())
+                    # build iter for trace with args
+                    trace_and_args_iter = zip(
+                        sorted_traces,
+                        itertools.repeat(sample),
+                        itertools.repeat(expected_keys),
+                        itertools.repeat(ignore_keys),
+                    )
 
-                for state, is_final in self._iterate_trace(trace):
-                    state = FullState.from_state_dict(state)
-                    score = game_handler.process(state, is_final, ignore_terminals=True)
-                    if score is not None:
-                        break
+                    pbar = None
+                    if self.tqdm:
+                        pbar = tqdm(total=len(traces), desc=f'Traces for key {key}')
 
-                score = game_handler.score(game_handler.scoring)
-                # scores_by_trace[trace] = score
+                    for trace_counts_by_trace_and_key, trace_stop_count_by_key, trace_total_count_by_key in pool.imap_unordered(self._handle_single_game_single_trace_args_tuple, trace_and_args_iter, chunksize=self.chunksize):
+                        for pref_key in trace_counts_by_trace_and_key:
+                            counts_by_trace_and_key[pref_key].update(trace_counts_by_trace_and_key[pref_key])
 
-                if ast_parser.SETUP in expected_keys:
-                    counts_by_trace_and_key[ast_parser.SETUP][trace] = game_handler.setup_met
-                    stop_count_by_key[ast_parser.SETUP] += int(game_handler.setup_met)
+                        for pref_key in trace_stop_count_by_key:
+                            stop_count_by_key[pref_key] += trace_stop_count_by_key[pref_key]
 
-                for preference_name in expected_keys:
-                    if preference_name in game_handler.preference_satisfactions:
-                        n_preference_satisfcations = len(game_handler.preference_satisfactions[preference_name])
-                        counts_by_trace_and_key[preference_name][trace] = n_preference_satisfcations
-                        stop_count_by_key[preference_name] += int(n_preference_satisfcations > 0)
-                        total_count_by_key[preference_name] += n_preference_satisfcations
+                        for pref_key in trace_total_count_by_key:
+                            total_count_by_key[pref_key] += trace_total_count_by_key[pref_key]
 
-                if self.verbose:
-                    n_satisfactions_by_pref = " ".join(f'{k}: {len(v)}/{total_count_by_key[k]}' for k, v in game_handler.preference_satisfactions.items())
-                    logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
+                        if pbar is not None:
+                            pbar.update(1)
+                            pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
-                if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
-                    return key, self.stop_after_count, counts_by_trace_and_key
+                        if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
+                            return key, self.stop_after_count, counts_by_trace_and_key
+
+            else:
+                for trace in trace_iter:
+                    domain = self.trace_id_to_domain[trace]
+                    game_handler = GameHandler(sample,  # type: ignore
+                                            force_domain=domain, ignore_preference_names=list(database_keys_to_traces.keys()),
+                                            ignore_setup=ast_parser.SETUP in database_keys_to_traces)
+
+                    for state, is_final in self._iterate_trace(trace):
+                        state = FullState.from_state_dict(state)
+                        score = game_handler.process(state, is_final, ignore_terminals=True)
+                        if score is not None:
+                            break
+
+                    score = game_handler.score(game_handler.scoring)
+                    # scores_by_trace[trace] = score
+
+                    if ast_parser.SETUP in expected_keys:
+                        counts_by_trace_and_key[ast_parser.SETUP][trace] = game_handler.setup_met
+                        stop_count_by_key[ast_parser.SETUP] += int(game_handler.setup_met)
+
+                    for preference_name in expected_keys:
+                        if preference_name in game_handler.preference_satisfactions:
+                            n_preference_satisfcations = len(game_handler.preference_satisfactions[preference_name])
+                            counts_by_trace_and_key[preference_name][trace] = n_preference_satisfcations
+                            stop_count_by_key[preference_name] += int(n_preference_satisfcations > 0)
+                            total_count_by_key[preference_name] += n_preference_satisfcations
+
+                    if self.verbose:
+                        n_satisfactions_by_pref = " ".join(f'{k}: {len(v)}/{total_count_by_key[k]}' for k, v in game_handler.preference_satisfactions.items())
+                        logger.info(f'For trace {trace} | setup met: {game_handler.setup_met} | satisfaction count: {n_satisfactions_by_pref}')
+
+                    if all(stop_count >= self.stop_after_count for stop_count in stop_count_by_key.values()):
+                        return key, self.stop_after_count, counts_by_trace_and_key
 
             if print_results:
                 for preference_name in expected_keys:
@@ -890,10 +1027,11 @@ class TraceGameEvaluator:
 
             logger.info(f'Filtering {key}')
             self.handle_single_game(key, print_results=True)
-        else:
 
+        else:
             if self.n_workers > 1:
                 key_iter, population_size = self._build_key_iter(max_keys, sort_keys_by_traces)
+
                 logger.info(f'Traces by population keys length: {len(self.traces_by_population_key)}')
 
                 keys_with_traces = []
@@ -913,27 +1051,35 @@ class TraceGameEvaluator:
                 population_size = len(keys_with_traces)
                 logger.info(f'After fast processing and filtering previously processed keys, {population_size} keys have traces for full processing')
 
+                if population_size <= 20:
+                    logger.info(f'Keys with relevant traces:')
+                    for key_with_traces in keys_with_traces:
+                        _, all_traces, non_database_confirmed_traces, expected_keys, database_keys_to_traces =  self._find_key_traces(key_with_traces)
+                        remaining_keys = [pref_key for pref_key in expected_keys if pref_key not in database_keys_to_traces]
+                        logger.info(f'    - {key_with_traces} | {len(all_traces)} traces | {len(expected_keys)} expected keys | {len(non_database_confirmed_traces)} traces for remaining keys | remaining keys: {remaining_keys}')
+
+
                 if population_size == 0:
                     return self.result_summary_by_key, self.full_result_by_key
 
                 # We shouldn't need it from here on out, and it will speed up creating subprocesses
                 del(self.trace_finder)
 
-                with multiprocessing.Pool(min(self.n_workers, population_size), maxtasksperchild=self.maxtasksperchild) as pool:
-                    logger.info('Pool started')
-                    pbar = tqdm(desc='MAP-Elites samples with traces', total=population_size)
-                    count_since_save = 0
 
-                    for key, min_count, counts_by_trace_and_key in pool.imap_unordered(self.handle_single_game, keys_with_traces, chunksize=self.chunksize):
-                        self.result_summary_by_key[key] = min_count
-                        self.full_result_by_key[key] = counts_by_trace_and_key
-                        pbar.update(1)
-                        pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+                pbar = tqdm(desc='MAP-Elites samples with traces', total=population_size)
+                count_since_save = 0
 
-                        count_since_save += 1
-                        if count_since_save >= self.save_interval:
-                            self.save_outputs(overwrite=True)
-                            count_since_save = 0
+                for key_with_traces in keys_with_traces:
+                    key, min_count, counts_by_trace_and_key = self.handle_single_game(key_with_traces)
+                    self.result_summary_by_key[key] = min_count
+                    self.full_result_by_key[key] = counts_by_trace_and_key
+                    pbar.update(1)
+                    pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+
+                    count_since_save += 1
+                    if count_since_save >= self.save_interval:
+                        self.save_outputs(overwrite=True)
+                        count_since_save = 0
 
             else:
                 key_iter, _ = self._build_key_iter(max_keys, sort_keys_by_traces)
@@ -966,8 +1112,8 @@ class TraceGameEvaluator:
                 logger.info('Precompute traces by population key pool started')
                 key_to_missing_pref_keys = {}
                 for retval in pool.imap_unordered(self._find_key_traces, missing_keys, chunksize=24):
-                    key, all_traces, expected_keys, ignore_keys_to_traces = retval
-                    self.traces_by_population_key[key] = (all_traces, expected_keys, ignore_keys_to_traces)
+                    key, all_traces, non_database_confirmed_traces, expected_keys, ignore_keys_to_traces = retval
+                    self.traces_by_population_key[key] = (all_traces, non_database_confirmed_traces, expected_keys, ignore_keys_to_traces)
                     # TODO: Temporary, remove
 
                     remaining_keys = set(expected_keys) - set(ignore_keys_to_traces.keys())
@@ -1008,6 +1154,8 @@ class TraceGameEvaluator:
 
     def _build_key_iter(self, max_keys: typing.Optional[int] = None, sort_keys_by_traces: bool = True):
         self._precompute_traces_by_population_key()
+        self.traces_precomputed = True
+
         population_size = len(self.population)
         keys = list(self.population.keys())
 
@@ -1028,14 +1176,18 @@ class TraceGameEvaluator:
         save_data(data=output, folder=self.save_folder, name=f'trace_filter_results_{self.map_elites_model_identifier}', relative_path=self.save_relative_path, overwrite=overwrite)
 
     def load_partial_outputs(self):
-        output_path = get_data_path(folder=self.save_folder, name=f'trace_filter_results_{self.map_elites_model_identifier}', relative_path=self.save_relative_path)
-        if os.path.exists(output_path):
-            logger.info(f'Loading partial outputs from {output_path}')
-            output = load_data_from_path(output_path)
-            self.result_summary_by_key = output['summary']
-            self.full_result_by_key = output['full']
-        else:
-            logger.info(f'No partial outputs found at {output_path}')
+        for days_back in range(3):
+            output_path = get_data_path(folder=self.save_folder, name=f'trace_filter_results_{self.map_elites_model_identifier}',
+                                        relative_path=self.save_relative_path, delta=timedelta(days=days_back))
+
+            if os.path.exists(output_path):
+                logger.info(f'Loading partial outputs from {output_path}')
+                output = load_data_from_path(output_path)
+                self.result_summary_by_key = output['summary']
+                self.full_result_by_key = output['full']
+                return
+
+        logger.info(f'No partial outputs found at {output_path}')
 
 
 def main(args: argparse.Namespace):
@@ -1053,7 +1205,7 @@ def main(args: argparse.Namespace):
             grammar = open(args.grammar_file).read()
             grammar_parser = tatsu.compile(grammar)
             population = list(cached_load_and_parse_games_from_file(args.test_file, grammar_parser, False, relative_path='.'))  # type: ignore
-            model_identifier = args.test_file
+            model_identifier = os.path.basename(args.test_file)
 
         else:
             spec = None
@@ -1093,6 +1245,7 @@ def main(args: argparse.Namespace):
                                              population,  # type: ignore
                                              map_elites_model_identifier=model_identifier,
                                              use_trace_intersection=args.use_trace_intersection,
+                                             use_only_database_nonconfirmed_traces=args.use_only_database_nonconfirmed_traces,
                                              stop_after_count=args.stop_after_count,
                                              max_traces_per_game=args.max_traces_per_game,
                                              force_trace_ids=args.force_trace_ids,
@@ -1100,7 +1253,8 @@ def main(args: argparse.Namespace):
                                              traces_by_population_key_cache_path=args.traces_by_population_key_cache_path,
                                              save_folder=args.map_elites_model_folder, save_relative_path=args.relative_path,
                                              tqdm=args.tqdm, n_workers=args.n_workers, chunksize=args.chunksize,
-                                             maxtasksperchild=args.maxtasksperchild, verbose=args.verbose)
+                                             save_interval=args.save_interval, maxtasksperchild=args.maxtasksperchild, verbose=args.verbose)
+
 
         key = None
         if args.single_key is not None:

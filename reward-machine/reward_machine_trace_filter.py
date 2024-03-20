@@ -1014,9 +1014,9 @@ class TraceGameEvaluator:
         for pref_key in trace_total_count_by_key:
             self.current_total_count_by_key[pref_key] += trace_total_count_by_key[pref_key]
 
-        if self.current_pbar is not None:
-            self.current_pbar.update(1)
-            self.current_pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
+        # if self.current_pbar is not None:
+        #     self.current_pbar.update(1)
+        #     self.current_pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S')))
 
         if all(stop_count >= self.stop_after_count for stop_count in self.current_stop_count_by_key.values()):
             self.current_sufficient_done = True
@@ -1101,6 +1101,7 @@ class TraceGameEvaluator:
                         results = [result for result in results if not result.ready()]
                         current_n_results_remaining = len(results)
                         if self.current_pbar is not None and current_n_results_remaining < n_results_remaining:
+                            self.current_pbar.update(n_results_remaining - current_n_results_remaining)
                             self.current_pbar.set_postfix(dict(timestamp=datetime.now().strftime('%H:%M:%S'), remaining=current_n_results_remaining))
                             n_results_remaining = current_n_results_remaining
 
@@ -1223,11 +1224,14 @@ class TraceGameEvaluator:
                 # We shouldn't need it from here on out, and it will speed up creating subprocesses
                 del(self.trace_finder)
 
-
                 pbar = tqdm(desc='MAP-Elites samples with traces', total=population_size)
                 count_since_save = 0
 
-                for key_with_traces in keys_with_traces:
+                sort_index = 2 if self.use_only_database_nonconfirmed_traces else 1
+                keys_with_traces_and_n_traces = [(key_with_traces, len(self._find_key_traces(key_with_traces)[sort_index])) for key_with_traces in keys_with_traces]
+                keys_with_traces_and_n_traces.sort(key=lambda x: x[1])
+
+                for key_with_traces, _ in keys_with_traces_and_n_traces:
                     key, min_count, counts_by_trace_and_key = self.handle_single_game(key_with_traces)
                     self.result_summary_by_key[key] = min_count
                     self.full_result_by_key[key] = counts_by_trace_and_key

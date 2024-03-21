@@ -111,13 +111,13 @@ MAP_ELITES_MODELS = {
     'ablation_max_exemplar_preferences_by_bcs_with_expected_values_no_custom_ops': MapElitesModelSpec(
         'map_elites_minimal_counting_grammar_use_forall_L2_no_cognitive_ops_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2024_01_18',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC | No custom ops',
-        None
+        '2024_03_20',
     ),
 
     'ablation_max_exemplar_preferences_by_bcs_with_expected_values_no_custom_ops_no_crossover': MapElitesModelSpec(
         'map_elites_minimal_counting_grammar_use_forall_L2_no_cognitive_ops_no_crossover_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2024_01_17',
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC | No custom ops and no crossover',
-        None
+        '2024_03_20',
     ),
 
 

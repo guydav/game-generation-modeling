@@ -119,6 +119,4 @@ MAP_ELITES_MODELS = {
         'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC | No custom ops and no crossover',
         '2024_03_20',
     ),
-
-
 }

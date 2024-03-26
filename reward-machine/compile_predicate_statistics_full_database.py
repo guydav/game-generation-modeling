@@ -498,6 +498,17 @@ class CommonSensePredicateStatisticsFullDatabase():
             raise MissingVariableException('Variable repeated in predicate arguments')
 
         if keep_indices is not None:
+            if len(variables) <= max(keep_indices):
+                pred_str = ''
+                try:
+                    pred_str = ast_section_to_string(predicate, PREFERENCES)
+                except:
+                    pass
+
+                logger.warn(f'Argument length mismatch in {predicate_name} with keep indices {keep_indices}: {pred_str}')
+
+                raise MissingVariableException('Not enough variables for the keep indices')
+
             variables = [variables[i] for i in keep_indices]
 
         used_variables = set(variables)

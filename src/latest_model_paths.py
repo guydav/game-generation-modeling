@@ -126,10 +126,10 @@ MAP_ELITES_MODELS = {
         '2024_03_26',
     ),
 
-    # 'ablation_max_exemplar_preferences_by_bcs_with_expected_values_no_coherence_features': MapElitesModelSpec(
-    #     'map_elites_minimal_counting_grammar_use_forall_L2_no_game_element_disjointness_features_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2024_03_26',
-    #     'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC | No coherence features',
-    #     '2024_03_26',
-    # ),
+    'ablation_max_exemplar_preferences_by_bcs_with_expected_values_no_coherence_features': MapElitesModelSpec(
+        'map_elites_minimal_counting_grammar_use_forall_L2_no_game_element_disjointness_features_exemplar_preferences_bc_max_prefs_expected_values_uniform_seed_42_gen_8192_final_2024_03_26',
+        'Exemplar Preferenecs BCs | Count BCs, with max preference count | Using "Goodness" BC | No coherence features',
+        '2024_03_26',
+    ),
 
 }
